@@ -1,0 +1,1 @@
+{"id":8010,"rom_num":8010,"name":"제니산 입구","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,0,0,0,0,0,0,0],"track":"북서","exits":[{"name":"남","room":8006,"flags":[0,0,0,0],"key":0},{"name":"북서","room":8011,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":" 험준한 제니산의 입구이다.\n 벌써부터 힘이 드는 것 같다.\n ","obj_desc":""}

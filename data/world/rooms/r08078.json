@@ -1,0 +1,1 @@
+{"id":8078,"rom_num":8078,"name":"무덤 안","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,16,4,0,0,0,0,0],"track":"","exits":[{"name":"위","room":8076,"flags":[0,0,0,0],"key":0},{"name":"동","room":8084,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"여기가 어딜까. 기사 환의 무덤인 것 같은데.","obj_desc":""}

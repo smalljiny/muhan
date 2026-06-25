@@ -1,0 +1,1 @@
+{"id":242,"rom_num":242,"name":"석채 마당","lolevel":0,"hilevel":0,"special":0,"trap":1,"flags":[0,0,64,1,0,0,0,0],"track":"서","exits":[{"name":"서","room":243,"flags":[0,0,0,0],"key":0},{"name":"북","room":241,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"석채 옆에 만들어져 있는 마당이다.\n바닥믈 어떻게 깎았는지 모르지만 아주 매끈매끈하게 깎여져\n있다.\n서족으로 마당이 이어져 있다.\n  ","obj_desc":""}

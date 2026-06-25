@@ -1,0 +1,1 @@
+{"id":3566,"rom_num":3566,"name":"이상한 방","lolevel":30,"hilevel":0,"special":0,"trap":0,"flags":[0,16,0,16,2,0,0,0],"track":"밖","exits":[{"name":"밖","room":3565,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":" 방안에는 이상한 몸이 머리가 없이 돌아다니며 닥치는 대로 마구 부시고\n있다.\n 여기저기 여러종류의 시체가 널려져 있다.\n 이상한 몸이 당신에게 달려들며 공격을 가할려고 한다.\n ","obj_desc":""}

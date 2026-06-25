@@ -1,0 +1,1 @@
+{"id":4139,"rom_num":4139,"name":"위나라 막사 앞","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,16,32,16,0,0,0,0],"track":"","exits":[{"name":"동","room":4137,"flags":[0,0,0,0],"key":0},{"name":"서","room":4140,"flags":[0,0,0,0],"key":0},{"name":"막사","room":4138,"flags":[124,0,0,0],"key":57}],"monsters":[],"items":[],"short_desc":"","long_desc":"","obj_desc":""}

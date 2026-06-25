@@ -1,0 +1,1 @@
+{"id":3700,"rom_num":3700,"name":"정보&바람의 방","lolevel":0,"hilevel":0,"special":119,"trap":0,"flags":[0,16,0,16,16,1,0,0],"track":"밖","exits":[{"name":"밖","room":3219,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[{"name":"사물함","description":"물건을 몇개 넣어둘수 있는 사물함입니다.","value":100,"contains":[]}],"short_desc":"","long_desc":"","obj_desc":""}

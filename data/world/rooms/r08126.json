@@ -1,0 +1,1 @@
+{"id":8126,"rom_num":8126,"name":"정원","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,16,0,16,0,0,0,0],"track":"북서","exits":[{"name":"북서","room":8125,"flags":[0,0,0,0],"key":0}],"monsters":[{"name":"궁인","rom_num":8126,"inventory":[]}],"items":[],"short_desc":"","long_desc":"햇빛이 따갑게 비춘다.. 꽃들은 만발하고. 새들이 지저귀흔\n소리가 들려온다.\n아~~~ 여기가 오데지.","obj_desc":""}

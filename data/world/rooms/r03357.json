@@ -1,0 +1,1 @@
+{"id":3357,"rom_num":3357,"name":"트래쉬 광장","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,16,0,16,32,0,0,0],"track":"북","exits":[{"name":"북","room":3313,"flags":[0,0,0,0],"key":0},{"name":"밖","room":77,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"","obj_desc":""}

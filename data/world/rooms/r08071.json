@@ -1,0 +1,1 @@
+{"id":8071,"rom_num":8071,"name":"영광의 벌판","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,16,4,0,0,0,0,0],"track":"","exits":[{"name":"남","room":8070,"flags":[0,0,0,0],"key":0},{"name":"북","room":8072,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"쓸쓸한 바람만이 스쳐 지나가고..\n살아 있는 생물체는 존재 하지 않는 것 같다.","obj_desc":""}

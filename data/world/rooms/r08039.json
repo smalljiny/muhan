@@ -1,0 +1,1 @@
+{"id":8039,"rom_num":8039,"name":"화룡의 사냥터","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,16,0,16,0,0,0,0],"track":"남","exits":[{"name":"남","room":8038,"flags":[0,0,0,0],"key":0},{"name":"북","room":8041,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":" 화룡의 사냥터다... 아직은 깊이 안 들어 온거 같다.. 점점 무서움이\n엄습해 오는게 돌아 가는 것이 좋을 거 같다.","obj_desc":""}

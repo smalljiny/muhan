@@ -1,0 +1,1 @@
+{"id":6418,"rom_num":6418,"name":"소림사 단주방","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,80,0,144,0,0,0,0],"track":"밖","exits":[{"name":"밖","room":6415,"flags":[0,0,0,0],"key":0}],"monsters":[{"name":"","rom_num":6418,"inventory":[]}],"items":[],"short_desc":"","long_desc":"소림사 단주방입니다.\n단주님이 조용히 명상에 잠겨져 있습니다.\n  ","obj_desc":""}

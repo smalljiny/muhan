@@ -1,0 +1,1 @@
+{"id":6020,"rom_num":6020,"name":"대피소","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,1,1,0,0,0,0,0],"track":"위","exits":[{"name":"위","room":6161,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"돌연변이 공룡의 공격을 피하기 위해서 특별히 만든 대피소입니다.\n공간이 좀 좁지만 그럭저럭 견딜만 합니다.\n ","obj_desc":""}

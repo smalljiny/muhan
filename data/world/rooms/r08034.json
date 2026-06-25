@@ -1,0 +1,1 @@
+{"id":8034,"rom_num":8034,"name":"드레이아 왕국 궁전 안","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,16,4,0,0,0,0,0],"track":"","exits":[{"name":"성문","room":8033,"flags":[0,0,0,0],"key":0},{"name":"동","room":8035,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"궁전으로 들어 왔다. 어디로 가면 국왕을 만 날 수 있을까.","obj_desc":""}

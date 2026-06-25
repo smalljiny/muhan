@@ -1,0 +1,1 @@
+{"id":251,"rom_num":251,"name":"모래밭","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,0,64,1,0,0,0,0],"track":"서","exits":[{"name":"동","room":252,"flags":[0,0,0,0],"key":0},{"name":"서","room":250,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"발이 닿으면 푹푹 빠지는 모래밭이다.\n모래바닥이 움찔거리며 움직이는 것이 그 아래에 무언가가 \n숨어있는것 같다.\n  ","obj_desc":""}

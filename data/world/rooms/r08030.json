@@ -1,0 +1,1 @@
+{"id":8030,"rom_num":8030,"name":"광장의 동쪽","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,16,0,16,0,0,0,0],"track":"서","exits":[{"name":"서","room":8027,"flags":[0,0,0,0],"key":0}],"monsters":[{"name":"시민","rom_num":8030,"inventory":[]}],"items":[],"short_desc":"","long_desc":" 광장의 동쪽이다.. 모두들 환한 웃음을 띄고 있어 위험은 찾을 수 없다..\n ","obj_desc":""}

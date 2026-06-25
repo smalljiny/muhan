@@ -1,0 +1,1 @@
+{"id":317,"rom_num":317,"name":"귀신나무 뿌리 동굴","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,1,32,0,0,0,0,0],"track":"남","exits":[{"name":"남","room":316,"flags":[0,0,0,0],"key":0},{"name":"북","room":318,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"나무 뿌리인듯한 것들이 바닥과 벽으로 뱀처럼 기어 다니고 있다.\n  \n\" 이녀석들은 뱀이야..? 뭐야...? \"\n  ","obj_desc":""}

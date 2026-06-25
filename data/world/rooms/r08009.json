@@ -1,0 +1,1 @@
+{"id":8009,"rom_num":8009,"name":"장로의 집","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,0,0,0,0,0,0,0],"track":"문","exits":[{"name":"문","room":8007,"flags":[0,0,0,0],"key":0}],"monsters":[{"name":"마을 장로","rom_num":8009,"inventory":[]}],"items":[],"short_desc":"","long_desc":" 마을의 장로가 의자에 앉아 있다.. 그의 얼굴에는 시름이 가득한게. 그에게 물어\n보면 마을의 상황을 알 것 같다.. \n ","obj_desc":""}

@@ -1,0 +1,1 @@
+{"id":8112,"rom_num":8112,"name":"주방으로 가는 길","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,16,0,16,0,0,0,0],"track":"북","exits":[{"name":"남","room":8111,"flags":[0,0,0,0],"key":0},{"name":"북","room":8113,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"흐음~~~ 구수한 냄새 빨리 가서 밥이나 먹을 까\n배속에서 꼬르륵 ~~~~ 거리는 군","obj_desc":""}

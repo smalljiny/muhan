@@ -1,0 +1,1 @@
+{"id":8049,"rom_num":8049,"name":"화룡의 사냥터","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,16,0,16,0,0,0,0],"track":"남","exits":[{"name":"남","room":8047,"flags":[0,0,0,0],"key":0},{"name":"북","room":8050,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":" 화룡의 울부짖는 소리가 들리는 것 같다. 빨리 여길 빠져 나가고\n싶은데 ","obj_desc":""}

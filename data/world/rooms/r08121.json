@@ -1,0 +1,1 @@
+{"id":8121,"rom_num":8121,"name":"대신들의 회의실","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,16,0,16,0,0,0,0],"track":"서","exits":[{"name":"서","room":8120,"flags":[0,0,0,0],"key":0},{"name":"남동","room":8125,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"대신들이 모여서 회의를 하고 있습니다.","obj_desc":""}

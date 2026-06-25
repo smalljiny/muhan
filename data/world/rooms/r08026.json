@@ -1,0 +1,1 @@
+{"id":8026,"rom_num":8026,"name":"수도의 입구","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,16,0,16,0,0,0,0],"track":"북","exits":[{"name":"남","room":8025,"flags":[0,0,0,0],"key":0},{"name":"북","room":8027,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":" 많은 사람들이 있다.. 얼마만에 보는 모습인가.. 반가운 마음에 말을 걸어\n보고 싶다..\n ","obj_desc":""}

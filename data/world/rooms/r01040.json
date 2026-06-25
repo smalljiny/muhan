@@ -1,0 +1,1 @@
+{"id":1040,"rom_num":1040,"name":"우체국","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,12,2,0,0,0,0,0],"track":"밖","exits":[{"name":"밖","room":1050,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"다른 플레이어들에게 편지를 보낼 수 있는 우체국이다. \n하지만 편지가 영적에너지로 상대방에게 전달되기 때문에 우표와 주소가 \n필요 없을것 같다.\n  ","obj_desc":""}

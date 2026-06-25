@@ -1,0 +1,1 @@
+{"id":8114,"rom_num":8114,"name":"주방","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,16,0,16,0,0,0,0],"track":"서","exits":[{"name":"서","room":8113,"flags":[0,0,0,0],"key":0},{"name":"동","room":8115,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"주방장이 우뚝서서 요리사들에게 명령을 하고 있다.\n흐 나도 여기 취직해서 요리나 실컷 먹을까","obj_desc":""}

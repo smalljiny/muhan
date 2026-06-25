@@ -1,0 +1,1 @@
+{"id":8109,"rom_num":8109,"name":"레인의 방","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,16,0,16,0,0,0,0],"track":"밑","exits":[{"name":"밑","room":8108,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"  대 마법사 레인의 미이라가 낡은 의자에 앉아 있다.","obj_desc":""}

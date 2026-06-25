@@ -1,0 +1,1 @@
+{"id":3330,"rom_num":3330,"name":"흑전사 입구","lolevel":0,"hilevel":0,"special":4,"trap":0,"flags":[0,16,0,16,32,0,0,0],"track":"밖","exits":[{"name":"밖","room":67,"flags":[0,0,0,0],"key":0},{"name":"북","room":3304,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"","obj_desc":""}

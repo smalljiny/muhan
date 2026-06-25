@@ -1,0 +1,1 @@
+{"id":272,"rom_num":272,"name":"통로","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,2,0,0,0,0,0,0],"track":"서","exits":[{"name":"서","room":270,"flags":[0,0,0,0],"key":0},{"name":"북","room":273,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"여느 쌀더미 사이의 통로와 다를바 없지만 이곳을 관리\n안한지가 오래 되어서인지 바닥으로 쥐가 겁도 없이 당\n신의 옆으로 지나가고 있다.\n  ","obj_desc":""}

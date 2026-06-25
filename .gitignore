@@ -1,0 +1,20 @@
+# 의존성
+node_modules/
+
+# 빌드 산출물
+dist/
+build/
+
+# 지식그래프 생성물 (재생성 가능)
+graphify-out/
+
+# 원본 배포 아카이브 (바이너리, legacy/muhan에 압축해제본 있음)
+legacy/muhan_1.3_ubuntu_ed.tar.gz
+
+# OS / 에디터
+.DS_Store
+*.log
+
+# 환경설정
+.env
+.env.local

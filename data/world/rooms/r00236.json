@@ -1,0 +1,1 @@
+{"id":236,"rom_num":236,"name":"자갈밭","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,0,64,1,0,0,0,0],"track":"북","exits":[{"name":"북","room":237,"flags":[0,0,0,0],"key":0},{"name":"남","room":235,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"이곳은 자갈밭이 깔려 있어 그런대로 잘 나아갈 수 있다.\n북쪽으로 자갈밭이 보이고 남쪽으로 시커먼 모래밭이 보인\n다.\n  ","obj_desc":""}

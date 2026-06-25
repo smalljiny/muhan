@@ -1,0 +1,1 @@
+{"id":6017,"rom_num":6017,"name":"숨은 둥지","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,33,1,0,0,0,0,0],"track":"위","exits":[{"name":"위","room":6086,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"사람 3명만 들어갈수 있을 정도로 좁은 공간입니다.\n갑작스런 공룡의 공격에 잠시 피할 수 있는 공간입니다.\n그리고, 여기에서는 이상하게도 회복력이 다른 곳에 비하면 빠르다는 것을\n느낍니다.\n ","obj_desc":""}

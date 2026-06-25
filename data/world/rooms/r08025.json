@@ -1,0 +1,1 @@
+{"id":8025,"rom_num":8025,"name":"수도로 가는 길","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,0,0,0,0,0,0,0],"track":"북","exits":[{"name":"남","room":8024,"flags":[0,0,0,0],"key":0},{"name":"북","room":8026,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":" 드디어 거의 다 온 것 같다.. 멀리 수도가 보인다. 여기부터는 안심\n하고 갈 수 있을 거 같다.\n ","obj_desc":""}

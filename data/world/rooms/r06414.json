@@ -1,0 +1,1 @@
+{"id":6414,"rom_num":6414,"name":"소림사 절당 안","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,16,0,16,0,0,0,0],"track":"서","exits":[{"name":"서","room":6415,"flags":[0,0,0,0],"key":0},{"name":"남","room":6413,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"소림사 절당 안입니다.\n은은한 향냄새와 큰 불상이 보입니다.\n너무 정숙하여 말도 할 수 없는 지경입니다.\n   ","obj_desc":""}

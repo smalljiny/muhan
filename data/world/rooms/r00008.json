@@ -1,0 +1,1 @@
+{"id":8,"rom_num":8,"name":"이벤트 회사","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,0,0,0,0,0,0,0],"track":"밖","exits":[{"name":"밖","room":1007,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"이벤트 회사 사물실입니다\n한쪽에는 슈퍼컴퓨터한대가 있고, 그 옆에는\n이쁜 선희님이 열심히 무엇인가를 생각하고 있습니다.\n선희님을 쳐다 보니까.. 선희님 와\n  \n'Can I help you? '\n  ","obj_desc":""}

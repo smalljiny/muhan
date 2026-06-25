@@ -1,0 +1,1 @@
+{"id":8088,"rom_num":8088,"name":"기사 환의 무덤","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,0,0,0,0,0,0,0],"track":"서","exits":[{"name":"서","room":8087,"flags":[0,0,0,0],"key":0}],"monsters":[{"name":"기사 환의 미이라","rom_num":8088,"inventory":[]}],"items":[],"short_desc":"","long_desc":"드디어 기사 환의 무덤에 도달했다. 여기까지 오는데 너무\n고생을 했는데.. 기사 환은 죽어서 미라만이 남아 있다.","obj_desc":""}

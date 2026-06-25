@@ -1,0 +1,1 @@
+{"id":8082,"rom_num":8082,"name":"영광의 벌판","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,16,4,0,0,0,0,0],"track":"","exits":[{"name":"남","room":8080,"flags":[0,0,0,0],"key":0},{"name":"북","room":8083,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"영광의 벌판이 끝나는 곳인 것 같다.. 여기부터는\n바람도 불지 않고.. 약간의 풀들이 자라고 있다.","obj_desc":""}

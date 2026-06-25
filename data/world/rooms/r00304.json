@@ -1,0 +1,1 @@
+{"id":304,"rom_num":304,"name":"귀신나무 뿌리 동굴","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,1,32,0,0,0,0,0],"track":"남","exits":[{"name":"동","room":305,"flags":[0,0,0,0],"key":0},{"name":"남","room":303,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"이곳에 들어서자 갑자기 조용한 점적감이 감돌고 있다.\n폭풍전야라고 할까...?","obj_desc":""}

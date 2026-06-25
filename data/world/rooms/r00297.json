@@ -1,0 +1,1 @@
+{"id":297,"rom_num":297,"name":"귀신나무 뿌리 동굴","lolevel":0,"hilevel":0,"special":0,"trap":0,"flags":[0,1,32,0,0,0,0,0],"track":"북","exits":[{"name":"북","room":298,"flags":[0,0,0,0],"key":0},{"name":"동","room":296,"flags":[0,0,0,0],"key":0}],"monsters":[],"items":[],"short_desc":"","long_desc":"굴의 벽에 나무의 뿌리인듯한 것들이 뱀처럼 뒤엉켜 있어 마치\n살아 있는것 같다.\n북쪽으로부터 적들의 거친 숨소리가 들려온다.","obj_desc":""}
