@@ -18,3 +18,17 @@ legacy/muhan_1.3_ubuntu_ed.tar.gz
 # 환경설정
 .env
 .env.local
+
+# BEGIN harness local ignores
+.harness-backups/
+docs/_local/
+# END harness local ignores
+
+# 하네스/도구 로컬 인프라 — 이 저장소에 커밋하지 않음
+.claude/
+.codex/
+.harness/
+.serena/
+.mcp.json
+AGENTS.md
+CLAUDE.md
