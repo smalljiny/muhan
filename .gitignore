@@ -4,9 +4,15 @@ node_modules/
 # 빌드 산출물
 dist/
 build/
+.turbo/
 
-# 지식그래프 생성물 (재생성 가능)
-graphify-out/
+# 파이썬 가상환경 (graphify CLI)
+.venv/
+
+# 지식그래프 생성물 (재생성 가능, 사람용 요약·비용만 tracked)
+graphify-out/*
+!graphify-out/GRAPH_REPORT.md
+!graphify-out/cost.json
 
 # 원본 배포 아카이브 (바이너리, legacy/muhan에 압축해제본 있음)
 legacy/muhan_1.3_ubuntu_ed.tar.gz
