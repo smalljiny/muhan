@@ -1,0 +1,7 @@
+{
+  "name": "@muhan/port",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "1993 디스크 포맷 파서·변환기 (순수 Node.js, 빌드 없음, Node 직접 실행)"
+}
