@@ -13,9 +13,11 @@
   },
   "scripts": {
     "build": "tsc",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "lint": "eslint ."
   },
   "devDependencies": {
+    "eslint": "catalog:",
     "typescript": "catalog:"
   }
 }
