@@ -9,6 +9,7 @@ export default defineConfig({
     projects: ['packages/*/vitest.config.ts'],
     coverage: {
       provider: 'v8',
+      reporter: ['text', 'lcov'],
       all: true,
       include: ['packages/*/src/**/*.ts'],
       exclude: [

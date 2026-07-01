@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # pnpm 버전은 package.json의 packageManager(pnpm@10.33.0)에서 핀 고정한다.
+      # lockfile 생성 버전과 동일 major(10)라 v11 lockfile 비호환을 회피한다.
+      # version 입력과 packageManager를 동시에 주면 action-setup v4가 mismatch로 실패하므로
+      # packageManager를 단일 출처로 둔다.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build, type-check, lint, test
+        run: pnpm turbo run build type-check lint test
