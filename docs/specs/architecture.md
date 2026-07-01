@@ -79,7 +79,9 @@ account 1급 + `account 1:N character`. argon2id 해시 + 상수시간 비교(�
 
 ### 3.8 프로젝트 구성 (D8)
 
-pnpm workspaces monorepo. 패키지: `shared`(프로토콜 Zod 스키마·조사 유틸·게임 데이터 스키마) / `server`(게임 엔진·`ws`·영속화) / `client`(웹 UI) / `port`(기존 변환기 유지, 순수 JS). 빌드: 클라 Vite, 서버 tsup. TypeScript. 공유 타입은 `shared` 단일 출처로 서버·클라가 import(빌드 시 타입 소거).
+pnpm workspaces monorepo. 패키지: `shared`(프로토콜 Zod 스키마·조사 유틸·게임 데이터 스키마) / `server`(게임 엔진·`ws`·영속화) / `client`(웹 UI) / `port`(기존 변환기 유지, 순수 JS). 빌드: 클라 Vite, **서버 tsc(번들러 없음, dev=tsx)**. TypeScript. 공유 타입은 `shared` 단일 출처로 서버·클라가 import(빌드 시 타입 소거).
+
+> **서버 번들러 보정 (E1, 2026-07-02).** 원래 "서버 tsup"은 채택하지 않는다. 착수 리서치에서 tsup 유지보수 정체(공식 README가 후속작 tsdown 권장)·tsdown 미성숙이 드러났고, 서버는 실행 앱이라 번들이 불필요하며 Fastify의 플러그인 오토로드·pino 워커 등 동적 require가 번들러와 충돌한다. E1은 **서버=tsc(`dist/` 산출)·dev=tsx·start=`node dist/index.js`**로 확정했다. 번들 필요 시점에 tsdown을 재평가한다. 태스크 오케스트레이션·캐시는 **Turborepo 2.x**(`turbo run`, build/type-check/lint/test)가 담당한다. 구현·툴체인 정본은 [`monorepo.md`](monorepo.md) 참조.
 
 ### 3.9 테스트 전략 (D7)
 
@@ -102,7 +104,7 @@ C oracle을 behavioral oracle로 삼는 **frozen 골든 fixture**(characterizati
 | D5 i18n | UTF-8 전용, 클라 조사 렌더 + ㄹ 예외 수정 | A3(변환 1지점·조사 콘텐츠·ㄹ 버그); 확정 |
 | D6 인증 | account/character, argon2id, RBAC, WS 핸드셰이크 | A12(account 승격·평문 교체·FSM), A13(RBAC·DM defer) |
 | D7 테스트 | frozen 골든 fixture(oracle=생성기) + property | A5~A8 공식·버그 목록; characterization/approval/oracle 대조(Feathers·ApprovalTests·Fallout2-RE) |
-| D8 구성 | pnpm monorepo(shared/server/client/port) + Vite/tsup | D4 공유 타입; MongoDB 문서 스키마; monorepo 타입 공유 선례 |
+| D8 구성 | pnpm monorepo(shared/server/client/port) + Turborepo; 클라 Vite, **서버 tsc(번들러 없음, dev=tsx) — tsup 미채택 보정(E1)** | D4 공유 타입; MongoDB 문서 스키마; monorepo 타입 공유 선례. **tsup 유지보수 정체·서버=실행앱 번들 불필요·Fastify 동적 require 충돌 → tsc; §3.8 보정 참조** |
 | 동시 접속 규모 | 소규모(~수십~수백 CCU) | 원본 fd 제한 256; 확정 → D0·D1·D3 단일 프로세스 근거 |
 
 ## 5. 범위 밖 (Non-goals)
