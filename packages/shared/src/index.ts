@@ -7,3 +7,5 @@
 
 /** `/health` 엔드포인트 응답 형태. server·client가 함께 참조한다. */
 export type HealthStatus = { status: 'ok' }
+
+export { loadWorldFile } from './worldLoader.js'

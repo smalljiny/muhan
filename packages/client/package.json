@@ -13,6 +13,7 @@
     "shared": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "eslint": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"
