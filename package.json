@@ -6,5 +6,14 @@
   "packageManager": "pnpm@10.33.0",
   "engines": {
     "node": ">=24"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "type-check": "turbo run type-check",
+    "lint": "turbo run lint",
+    "test": "turbo run test"
+  },
+  "devDependencies": {
+    "turbo": "catalog:"
   }
 }
