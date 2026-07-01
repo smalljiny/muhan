@@ -32,3 +32,5 @@ docs/_local/
 .mcp.json
 AGENTS.md
 CLAUDE.md
+.agents
+skills-lock.json
