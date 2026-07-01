@@ -5,6 +5,10 @@ on:
     branches: [develop, main]
   pull_request:
 
+# GITHUB_TOKEN을 최소 권한(읽기 전용)으로 발급 — 빌드·의존성 스텝이 write 토큰에 노출되지 않게 한다.
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest

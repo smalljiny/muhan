@@ -22,9 +22,9 @@ legacy/muhan_1.3_ubuntu_ed.tar.gz
 .DS_Store
 *.log
 
-# 환경설정
+# 환경설정 (모든 .env 변형 — 시크릿 커밋 방지)
 .env
-.env.local
+.env.*
 
 # BEGIN harness local ignores
 .harness-backups/
