@@ -1,0 +1,18 @@
+# 의존성·산출물
+node_modules
+**/dist
+**/coverage
+.turbo
+.venv
+graphify-out
+pnpm-lock.yaml
+
+# 읽기 전용 oracle·변환 산출물 (포맷 대상 아님)
+legacy
+data
+
+# port — 1993 파생 무변환 이관 (verbatim 보존)
+packages/port
+
+# 문서 (별도 포맷 정책)
+docs
