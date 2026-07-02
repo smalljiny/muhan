@@ -1,20 +1,31 @@
 import { buildApp } from './app.js'
+import { getConfig } from './config/env.js'
+import { connectMongo } from './db/connection.js'
+import { pingDb } from './db/health.js'
 
-// 부팅 엔트리 — 앱을 구성하고 리슨한다. 커버리지에서 제외(배선 코드).
-const app = buildApp()
-const port = Number(process.env.PORT ?? 3000)
+// 부팅 엔트리 — env 검증(fail-fast) → DB 연결(fail-fast) → 앱 구성 → listen.
+// 커버리지에서 제외(배선 코드). PORT는 getConfig().PORT 단일 출처를 쓴다(인라인 파싱 소거).
+async function boot(): Promise<void> {
+  const config = getConfig()
 
-if (!Number.isInteger(port) || port < 0 || port > 65535) {
-  app.log.error(`invalid PORT: ${String(process.env.PORT)}`)
-  process.exit(1)
+  // 부팅 시 DB 연결. 실패하면 connectMongo가 throw → 아래 boot().catch에서 fail-fast.
+  const conn = await connectMongo(config.MONGODB_URI, config.MONGODB_DB_NAME)
+
+  // ping을 /health의 진실 원천으로 주입한다.
+  const app = buildApp({ pingDb: () => pingDb(conn.db) })
+
+  try {
+    const address = await app.listen({ port: config.PORT, host: '0.0.0.0' })
+    app.log.info(`server listening at ${address}`)
+  } catch (err) {
+    app.log.error(err)
+    await conn.close()
+    process.exit(1)
+  }
 }
 
-app
-  .listen({ port, host: '0.0.0.0' })
-  .then((address) => {
-    app.log.info(`server listening at ${address}`)
-  })
-  .catch((err: unknown) => {
-    app.log.error(err)
-    process.exit(1)
-  })
+boot().catch((err: unknown) => {
+  // env·DB 연결 fail-fast 경로. 자격증명(URI)이 로그로 새지 않도록 메시지만 출력한다.
+  console.error('부팅 실패:', err instanceof Error ? err.message : err)
+  process.exit(1)
+})
