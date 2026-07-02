@@ -61,7 +61,9 @@
 
 ### 3.4 영속화 (D2)
 
-라이브 권위 상태 = 프로세스 메모리 객체 그래프(방 2341 부팅 시 전량 로드, 원본 `load_rom` LRU+write-back 폐기). MongoDB = 영속화 계층이며 hot-path 왕복 금지. **세이브 정책은 DB-네이티브로 신규 설계**(원본의 이벤트-only 세이브 타이밍은 파일 시대 형상 P2): (1) 플레이어=dirty-flag 주기 flush(60~300초) + 중요 이벤트(레벨업·거래·로그아웃) 즉시 write, (2) 월드 변경(문·리스폰 타임스탬프)=비동기 배치, (3) 경제·은행=트랜잭션(원자성). "객체 그래프가 아니라 값을 저장"(안정 ID·평문·version 필드). account/character는 별도 문서, 인벤토리·통화는 character에 임베드. 금화 무결성 가드(상한·음수·트랜잭션) 필수.
+라이브 권위 상태 = 프로세스 메모리 객체 그래프(방 2341 부팅 시 전량 로드, 원본 `load_rom` LRU+write-back 폐기). MongoDB = 영속화 계층이며 hot-path 왕복 금지. **세이브 정책은 DB-네이티브로 신규 설계**(원본의 이벤트-only 세이브 타이밍은 파일 시대 형상 P2): (1) 플레이어=dirty-flag 주기 flush(60~300초) + 중요 이벤트(레벨업·거래·로그아웃) 즉시 write, (2) 월드 변경(문·리스폰 타임스탬프)=비동기 배치, (3) 경제·은행=트랜잭션(원자성). "객체 그래프가 아니라 값을 저장"(안정 ID·평문·version 필드). account/character는 별도 문서, 통화(gold)는 character·bankAccount에 스칼라 필드로 임베드. 금화 무결성 가드(상한·음수·트랜잭션) 필수.
+
+**불변식 5 범위 명확화(E2-1 구현 반영)** — 불변식 5의 "참조 컨테이너"는 **라이브 인메모리 참조 모델**이다: 부팅 그래프에서 방·몹·플레이어가 object 인스턴스를 참조한다(§3.3 런타임 모델·`docs/specs/persistence.md` 부팅 월드 그래프가 준수). **영속 계층은 이를 단일 소유권 `object.owner` 필드로 materialize한다** — object 문서마다 `owner:{type:'character'|'bank', id}`를 두어 소유를 canonical하게 못박고, character·bank는 인벤토리/보관을 권위 배열로 저장하지 않고 `objects`를 owner로 쿼리해 파생한다(드리프트 제거·구조적 dupe 차단, 원작 세이브-타이밍 복제 결함 봉쇄). 즉 `object.owner`는 불변식 5를 supersede하는 게 아니라 영속 계층의 표현 선택이며, 라이브 참조 모델과 모순되지 않는다. E2-1 세부는 `docs/specs/persistence.md` 참조.
 
 ### 3.5 전송·브로드캐스트 (D0·D3)
 
