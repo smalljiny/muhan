@@ -5,6 +5,7 @@ import { pingDb } from './db/health.js'
 import { ObjectRepository } from './repo/objectRepository.js'
 import { CharacterRepository } from './repo/characterRepository.js'
 import { BankRepository } from './repo/bankRepository.js'
+import { loadWorldGraph } from './world/worldGraph.js'
 
 // 부팅 엔트리 — env 검증(fail-fast) → DB 연결(fail-fast) → 앱 구성 → listen.
 // 커버리지에서 제외(배선 코드). PORT는 getConfig().PORT 단일 출처를 쓴다(인라인 파싱 소거).
@@ -20,8 +21,12 @@ async function boot(): Promise<void> {
   const bank = new BankRepository(conn.db, objects)
   await Promise.all([objects.init(), characters.init(), bank.init()])
 
+  // 정본 방 번들을 인메모리 그래프로 로드한다(부팅 스코프에 보관). 템플릿·리스폰은 E4 범위.
+  const world = loadWorldGraph()
+
   // ping을 /health의 진실 원천으로 주입한다.
   const app = buildApp({ pingDb: () => pingDb(conn.db) })
+  app.log.info(`world graph loaded: ${world.size} rooms`)
 
   try {
     const address = await app.listen({ port: config.PORT, host: '0.0.0.0' })
