@@ -9,3 +9,6 @@
 export type HealthStatus = { status: 'ok' }
 
 export { loadWorldFile } from './worldLoader.js'
+
+// 영속 스키마 + z.infer 파생 도메인 타입(캐릭터·오브젝트·은행·방 상태).
+export * from './schema/index.js'
