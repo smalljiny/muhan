@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import type { Db } from 'mongodb'
 import type { RoomState } from 'shared'
 import { WorldRepository } from './worldRepository.js'
+import { DocumentNotFoundError } from './types.js'
 import { createMongoTestDb, type MongoTestDb } from './mongoTestDb.testutil.js'
 
 /** 테스트용 유효 RoomState 팩토리 — _id 없음, roomId가 자연키. */
@@ -90,5 +91,9 @@ describe('WorldRepository (integration)', () => {
     const { schemaVersion, ...partial } = makeRoomState()
     void schemaVersion
     await expect(repo.upsert(partial as RoomState)).rejects.toThrow()
+  })
+
+  it('존재하지 않는 roomId deleteByRoomId는 DocumentNotFoundError를 던진다', async () => {
+    await expect(repo.deleteByRoomId(999)).rejects.toThrow(DocumentNotFoundError)
   })
 })

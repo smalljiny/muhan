@@ -1,6 +1,6 @@
 import type { Collection, Db, Filter } from 'mongodb'
 import { characterSchema, type Character, type ObjectInstance } from 'shared'
-import type { IRepository } from './types.js'
+import { DocumentNotFoundError, type IRepository } from './types.js'
 import type { ObjectRepository } from './objectRepository.js'
 
 const COLLECTION_NAME = 'characters'
@@ -52,11 +52,14 @@ export class CharacterRepository implements IRepository<Character> {
 
   async updateById(id: string, patch: Partial<Omit<Character, '_id'>>): Promise<void> {
     const validated = characterPatchSchema.parse(patch)
-    await this.collection.updateOne({ _id: id }, { $set: validated })
+    // matchedCount로 판정 — 멱등 갱신(matched=1, modified=0)은 성공, 0건 매칭은 fail-loud.
+    const result = await this.collection.updateOne({ _id: id }, { $set: validated })
+    if (result.matchedCount === 0) throw new DocumentNotFoundError(COLLECTION_NAME, id)
   }
 
   async deleteById(id: string): Promise<void> {
-    await this.collection.deleteOne({ _id: id })
+    const result = await this.collection.deleteOne({ _id: id })
+    if (result.deletedCount === 0) throw new DocumentNotFoundError(COLLECTION_NAME, id)
   }
 
   /**

@@ -1,6 +1,6 @@
 import type { Collection, Db, Filter } from 'mongodb'
 import { bankAccountSchema, type BankAccount, type ObjectInstance } from 'shared'
-import type { IRepository } from './types.js'
+import { DocumentNotFoundError, type IRepository } from './types.js'
 import type { ObjectRepository } from './objectRepository.js'
 
 const COLLECTION_NAME = 'bankAccounts'
@@ -56,11 +56,14 @@ export class BankRepository implements IRepository<BankAccount> {
   async updateById(id: string, patch: Partial<Omit<BankAccount, '_id'>>): Promise<void> {
     // 부분 갱신도 경계 검증한다 — gold가 있으면 int 0..300_000_000를 강제(불변식 6).
     const validated = bankAccountPatchSchema.parse(patch)
-    await this.collection.updateOne({ _id: id }, { $set: validated })
+    // matchedCount로 판정 — 0건 매칭(stale 계좌 id)이면 fail-loud로 lost write를 막는다.
+    const result = await this.collection.updateOne({ _id: id }, { $set: validated })
+    if (result.matchedCount === 0) throw new DocumentNotFoundError(COLLECTION_NAME, id)
   }
 
   async deleteById(id: string): Promise<void> {
-    await this.collection.deleteOne({ _id: id })
+    const result = await this.collection.deleteOne({ _id: id })
+    if (result.deletedCount === 0) throw new DocumentNotFoundError(COLLECTION_NAME, id)
   }
 
   /**

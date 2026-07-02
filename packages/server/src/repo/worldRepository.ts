@@ -1,5 +1,6 @@
 import type { Collection, Db } from 'mongodb'
 import { roomStateSchema, type RoomState } from 'shared'
+import { DocumentNotFoundError } from './types.js'
 
 const COLLECTION_NAME = 'roomStates'
 
@@ -55,6 +56,7 @@ export class WorldRepository {
   }
 
   async deleteByRoomId(roomId: number): Promise<void> {
-    await this.collection.deleteOne({ _id: roomId })
+    const result = await this.collection.deleteOne({ _id: roomId })
+    if (result.deletedCount === 0) throw new DocumentNotFoundError(COLLECTION_NAME, String(roomId))
   }
 }

@@ -1,6 +1,6 @@
 import type { Collection, Db, Filter } from 'mongodb'
 import { objectSchema, type ObjectInstance, type ObjectOwner } from 'shared'
-import type { IRepository } from './types.js'
+import { DocumentNotFoundError, type IRepository } from './types.js'
 
 const COLLECTION_NAME = 'objects'
 
@@ -64,10 +64,13 @@ export class ObjectRepository implements IRepository<ObjectInstance> {
   async updateById(id: string, patch: Partial<Omit<ObjectInstance, '_id'>>): Promise<void> {
     // 부분 갱신도 경계 검증한다($set 전체 필드 교체 시맨틱과 정합).
     const validated = objectPatchSchema.parse(patch)
-    await this.collection.updateOne({ _id: id }, { $set: validated })
+    const result = await this.collection.updateOne({ _id: id }, { $set: validated })
+    // matchedCount(NOT modifiedCount)로 판정 — 멱등 갱신(matched=1, modified=0)은 성공이다.
+    if (result.matchedCount === 0) throw new DocumentNotFoundError(COLLECTION_NAME, id)
   }
 
   async deleteById(id: string): Promise<void> {
-    await this.collection.deleteOne({ _id: id })
+    const result = await this.collection.deleteOne({ _id: id })
+    if (result.deletedCount === 0) throw new DocumentNotFoundError(COLLECTION_NAME, id)
   }
 }

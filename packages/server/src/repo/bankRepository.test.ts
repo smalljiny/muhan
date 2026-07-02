@@ -3,6 +3,7 @@ import type { Db, Filter } from 'mongodb'
 import type { BankAccount, ObjectInstance } from 'shared'
 import { BankRepository } from './bankRepository.js'
 import { ObjectRepository } from './objectRepository.js'
+import { DocumentNotFoundError } from './types.js'
 import { createMongoTestDb, type MongoTestDb } from './mongoTestDb.testutil.js'
 
 /** 테스트용 유효 BankAccount 팩토리. */
@@ -149,5 +150,13 @@ describe('BankRepository (integration)', () => {
 
     expect((await repo.findById('bank-lo'))?.gold).toBe(0)
     expect((await repo.findById('bank-hi'))?.gold).toBe(300_000_000)
+  })
+
+  it('존재하지 않는 계좌 updateById는 DocumentNotFoundError를 던진다(silent lost write 방지)', async () => {
+    await expect(repo.updateById('missing', { gold: 10 })).rejects.toThrow(DocumentNotFoundError)
+  })
+
+  it('존재하지 않는 계좌 deleteById는 DocumentNotFoundError를 던진다', async () => {
+    await expect(repo.deleteById('missing')).rejects.toThrow(DocumentNotFoundError)
   })
 })

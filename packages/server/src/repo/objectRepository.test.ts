@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import type { Db } from 'mongodb'
 import type { ObjectInstance } from 'shared'
 import { ObjectRepository } from './objectRepository.js'
+import { DocumentNotFoundError } from './types.js'
 import { createMongoTestDb, type MongoTestDb } from './mongoTestDb.testutil.js'
 
 /** 테스트용 유효 ObjectInstance 팩토리 — 스키마 shape를 정확히 만족한다. */
@@ -115,5 +116,22 @@ describe('ObjectRepository (integration)', () => {
 
     const found = await repo.findById(doc._id)
     expect(found).toBeNull()
+  })
+
+  it('존재하지 않는 id updateById는 DocumentNotFoundError를 던진다(silent lost write 방지)', async () => {
+    await expect(repo.updateById('missing', { equipped: true })).rejects.toThrow(
+      DocumentNotFoundError,
+    )
+  })
+
+  it('빈 패치로 기존 문서를 updateById하면 던지지 않는다(멱등, matched=1)', async () => {
+    const doc = makeObject()
+    await repo.insert(doc)
+    // 빈 $set은 matched=1, modified=0 — 성공으로 취급해야 한다(modifiedCount 함정 방어).
+    await expect(repo.updateById(doc._id, {})).resolves.toBeUndefined()
+  })
+
+  it('존재하지 않는 id deleteById는 DocumentNotFoundError를 던진다', async () => {
+    await expect(repo.deleteById('missing')).rejects.toThrow(DocumentNotFoundError)
   })
 })

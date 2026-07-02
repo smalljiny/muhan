@@ -3,6 +3,7 @@ import type { Db, Filter } from 'mongodb'
 import type { Character, ObjectInstance } from 'shared'
 import { CharacterRepository } from './characterRepository.js'
 import { ObjectRepository } from './objectRepository.js'
+import { DocumentNotFoundError } from './types.js'
 import { createMongoTestDb, type MongoTestDb } from './mongoTestDb.testutil.js'
 
 /** 테스트용 유효 Character 팩토리 — 스키마 shape를 정확히 만족한다. */
@@ -138,5 +139,13 @@ describe('CharacterRepository (integration)', () => {
     // _id는 다르게, name만 동일하게 — 실패가 name 인덱스에서 나야 한다(_id 충돌 아님).
     await repo.insert(makeCharacter({ _id: 'char-x', name: '중복이름' }))
     await expect(repo.insert(makeCharacter({ _id: 'char-y', name: '중복이름' }))).rejects.toThrow()
+  })
+
+  it('존재하지 않는 id updateById는 DocumentNotFoundError를 던진다', async () => {
+    await expect(repo.updateById('missing', { gold: 10 })).rejects.toThrow(DocumentNotFoundError)
+  })
+
+  it('존재하지 않는 id deleteById는 DocumentNotFoundError를 던진다', async () => {
+    await expect(repo.deleteById('missing')).rejects.toThrow(DocumentNotFoundError)
   })
 })
