@@ -47,7 +47,7 @@ muhan/
 
 ### 공유 의존성 버전 (pnpm catalog)
 
-`pnpm-workspace.yaml`의 `catalog:`가 공유 devDependency 버전을 단일화한다. `catalogMode` strict는 미강제(팀 1인).
+`pnpm-workspace.yaml`의 `catalog:`가 공유 의존성(런타임·dev) 버전을 단일화한다. `catalogMode` strict는 미강제(팀 1인).
 
 | 항목 | 핀 |
 |------|-----|
@@ -60,6 +60,11 @@ muhan/
 | vite | ^7.0.0 |
 | tsx | ^4.19.0 |
 | @types/node | ^22.10.0 |
+| mongodb | ^7.4.0 |
+| zod | ^4.4.3 |
+| mongodb-memory-server | ^11.2.0 |
+
+런타임 의존성은 소비 패키지의 `dependencies`에 `catalog:`로 참조한다: `zod`는 `shared`(스키마)·`server`, `mongodb`는 `server`, `mongodb-memory-server`는 `server` devDependency(통합 테스트). E2-1 영속화 계층이 추가했다(`docs/specs/persistence.md`).
 
 pnpm 버전은 루트 `package.json`의 `packageManager: "pnpm@10.33.0"`가 단일 출처다.
 
@@ -71,7 +76,7 @@ pnpm 버전은 루트 `package.json`의 `packageManager: "pnpm@10.33.0"`가 단�
 
 - `build`: `dependsOn: ["^build"]`(의존 패키지 먼저), `outputs: ["dist/**"]`.
 - `type-check`·`lint`: `dependsOn: []`(독립).
-- `test`: `dependsOn: []`, `outputs: ["coverage/**"]`.
+- `test`: `dependsOn: ["^build"]`, `outputs: ["coverage/**"]`. vitest는 워크스페이스 패키지(`shared`)를 `exports`로 `dist/`에서 해석하므로, `test` 전에 의존 패키지를 빌드해야 stale/부재 `dist`로 인한 clean-CI 실패를 막는다(E2-1이 `[]`→`["^build"]`로 정정). `type-check`는 tsconfig `paths`로 `shared/src`를 직접 읽어 이 의존이 불필요하다.
 
 로컬·CI 모두 증분 캐시로 미변경 패키지 태스크를 스킵한다(`>>> FULL TURBO`). 원격 캐시는 미도입.
 
@@ -85,11 +90,11 @@ pnpm 버전은 루트 `package.json`의 `packageManager: "pnpm@10.33.0"`가 단�
 - **server**: 번들러 없음. `build`=`tsc -p tsconfig.build.json` → `dist/`, `dev`=`tsx watch src/index.ts`, `start`=`node dist/index.js`. 서버는 실행 앱이라 번들이 불필요하고, Fastify 동적 require가 번들러와 충돌하므로 tsc를 쓴다.
 - **port**: 무빌드. Node로 스크립트 직접 실행.
 
-서버 엔트리(`server/src/index.ts`)는 `buildApp()`으로 Fastify 인스턴스를 구성하고 `PORT`(기본 3000, 0–65535 검증) `0.0.0.0`에 리슨한다. `/health`는 200을 반환하며 응답 형태는 `shared`의 `HealthStatus`(`{ status: 'ok' }`)다. 배선 엔트리(`index.ts`)는 커버리지에서 제외하고, 앱 팩토리(`app.ts`)를 `inject`로 스모크 테스트한다.
+서버 엔트리(`server/src/index.ts`)는 부팅 시퀀스를 오케스트레이션한다: `getConfig()`(env fail-fast) → `connectMongo`(DB fail-fast) → repository 인덱스 `init()` → `loadWorldGraph`(방 2341 인메모리) → `buildApp({ pingDb })` → `PORT`(`getConfig().PORT`, 0–65535) `0.0.0.0` 리슨(E2-1이 확장; 상세는 `docs/specs/persistence.md`). `/health`는 DB ping 기반으로 `shared`의 `HealthStatus`(`{ status: 'ok'|'degraded', db: 'up'|'down' }`)를 반환한다. 배선 엔트리(`index.ts`)는 커버리지에서 제외하고, 앱 팩토리(`app.ts`)를 `inject`로 스모크 테스트한다.
 
 ### 테스트·커버리지
 
-루트 `vitest.config.ts`가 `projects: ['packages/*/vitest.config.ts']`로 vitest.config를 가진 패키지만 프로젝트로 묶는다(`port` 제외). 커버리지는 v8 provider, 리포터 `['text','lcov']`, 임계 80%(lines/functions/branches/statements). `include: packages/*/src/**/*.ts`, 제외 대상은 부팅 엔트리(`server/src/index.ts`)·client `main.ts`·`port/**`·`**/*.test.ts`. 임계는 루트 문서화 지점이며 실제 강제는 패키지별 `vitest.config.ts`가 담당하고 두 exclude 목록을 일관되게 유지한다.
+루트 `vitest.config.ts`가 `projects: ['packages/*/vitest.config.ts']`로 vitest.config를 가진 패키지만 프로젝트로 묶는다(`port` 제외). 커버리지는 v8 provider, 리포터 `['text','lcov']`, 임계 80%(lines/functions/branches/statements). `include: packages/*/src/**/*.ts`, 제외 대상은 부팅 엔트리(`server/src/index.ts`)·client `main.ts`·`port/**`·`**/*.test.ts`·테스트 헬퍼(`**/*.testutil.ts`). 임계는 루트 문서화 지점이며 실제 강제는 패키지별 `vitest.config.ts`가 담당하고 두 exclude 목록을 일관되게 유지한다. 테스트 헬퍼는 `*.testutil.ts` 컨벤션으로 `tsconfig.build.json`(dist 미포함)과 커버리지 양쪽에서 제외한다 — 프로덕션 코드가 아니라 테스트 인프라이기 때문이다.
 
 ### lint / format
 

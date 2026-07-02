@@ -6,6 +6,12 @@
  */
 
 /** `/health` 엔드포인트 응답 형태. server·client가 함께 참조한다. */
-export type HealthStatus = { status: 'ok' }
+export type HealthStatus = { status: 'ok' | 'degraded'; db: 'up' | 'down' }
 
 export { loadWorldFile } from './worldLoader.js'
+
+// 인메모리 월드 그래프 런타임 타입(방 노드·출구 엣지·아이템 인스턴스). 영속 스키마와 별개.
+export type { ExitEdge, ItemInstance, RoomNode } from './worldGraph.js'
+
+// 영속 스키마 + z.infer 파생 도메인 타입(캐릭터·오브젝트·은행·방 상태).
+export * from './schema/index.js'

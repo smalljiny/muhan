@@ -1,0 +1,64 @@
+import { loadWorldFile } from 'shared'
+import type { ExitEdge, ItemInstance, RoomNode } from 'shared'
+
+// data/world/rooms.json 파싱 입력 형태(raw 디스크 산출물). loadWorldFile이 이 shape를 준다.
+type RawExit = { name: string; room: number; flags: number[]; key: number }
+type RawItem = { name: string; description: string; value: number; contains: RawItem[] }
+type RawRoom = {
+  id: number
+  name: string
+  exits: RawExit[]
+  items: RawItem[]
+  short_desc: string
+  long_desc: string
+}
+
+// raw 출구를 런타임 엣지로 매핑한다. room(대상 방 번호) → targetRoomId, timer는 런타임 기본 0.
+// dangling 대상은 그대로 유지한다(해석은 Map.has 지연 조회).
+function toExitEdge(raw: RawExit): ExitEdge {
+  // flags는 복사한다 — 노드가 폐기될 raw 번들과 배열을 공유하지 않게(items deep-copy와 정합).
+  return { name: raw.name, targetRoomId: raw.room, flags: [...raw.flags], key: raw.key, timer: 0 }
+}
+
+// raw 아이템을 인메모리 인스턴스로 재귀 변환한다.
+// instanceId 스킴: `${roomId}:${path}` — path는 방 아이템 트리의 인덱스 경로를 점으로 이은 값.
+// 예: 방50 첫 아이템=`50:0`, 그 컨테이너의 첫 중첩=`50:0.0`. 방 id가 Map 키로 유일하고
+// 경로가 방 내에서 유일하므로 전역 유일성이 보장된다. 결정적·순수(Math.random/Date.now 미사용).
+function toItemInstance(raw: RawItem, roomId: number, path: string): ItemInstance {
+  return {
+    instanceId: `${roomId}:${path}`,
+    name: raw.name,
+    description: raw.description,
+    value: raw.value,
+    contains: raw.contains.map((child, i) => toItemInstance(child, roomId, `${path}.${i}`)),
+  }
+}
+
+function toRoomNode(raw: RawRoom): RoomNode {
+  return {
+    roomId: raw.id,
+    name: raw.name,
+    shortDesc: raw.short_desc,
+    longDesc: raw.long_desc,
+    exits: raw.exits.map(toExitEdge),
+    items: raw.items.map((item, i) => toItemInstance(item, raw.id, String(i))),
+  }
+}
+
+/**
+ * 부팅 시 정본 방 번들을 인메모리 그래프로 로드한다.
+ *
+ * rooms.json 배열을 한 번 읽어 `room.id`를 키로 하는 Map을 구성한다. 출구는 엣지로,
+ * 바닥 아이템은 고유 id를 가진 ItemInstance로 물질화한다. objmon 템플릿·리스폰·몬스터
+ * 로딩은 하지 않는다(E4 범위). 순수 함수 — 전역·부수효과 없이 Map만 반환한다.
+ *
+ * @param worldRoot data/world 루트 오버라이드(기본: 저장소 data/world) — 테스트 격리용
+ */
+export function loadWorldGraph(worldRoot?: string): Map<number, RoomNode> {
+  const rooms = loadWorldFile<RawRoom[]>('rooms.json', worldRoot)
+  const graph = new Map<number, RoomNode>()
+  for (const raw of rooms) {
+    graph.set(raw.id, toRoomNode(raw))
+  }
+  return graph
+}
