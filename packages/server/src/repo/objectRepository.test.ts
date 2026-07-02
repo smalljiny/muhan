@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
-import { MongoMemoryServer } from 'mongodb-memory-server'
-import { MongoClient, type Db } from 'mongodb'
+import type { Db } from 'mongodb'
 import type { ObjectInstance } from 'shared'
 import { ObjectRepository } from './objectRepository.js'
+import { createMongoTestDb, type MongoTestDb } from './mongoTestDb.testutil.js'
 
 /** 테스트용 유효 ObjectInstance 팩토리 — 스키마 shape를 정확히 만족한다. */
 function makeObject(overrides: Partial<ObjectInstance> = {}): ObjectInstance {
@@ -21,21 +21,17 @@ function makeObject(overrides: Partial<ObjectInstance> = {}): ObjectInstance {
 }
 
 describe('ObjectRepository (integration)', () => {
-  let mongod: MongoMemoryServer
-  let client: MongoClient
+  let harness: MongoTestDb
   let db: Db
   let repo: ObjectRepository
 
   beforeAll(async () => {
-    mongod = await MongoMemoryServer.create()
-    client = new MongoClient(mongod.getUri())
-    await client.connect()
-    db = client.db('muhan_object_repo_test')
+    harness = await createMongoTestDb('muhan_object_repo_test')
+    db = harness.db
   }, 60_000)
 
   afterAll(async () => {
-    await client.close()
-    await mongod.stop()
+    await harness.cleanup()
   })
 
   beforeEach(async () => {
@@ -60,7 +56,7 @@ describe('ObjectRepository (integration)', () => {
     const charA1 = makeObject({ _id: 'a1', owner: { type: 'character', id: 'char-A' } })
     const charA2 = makeObject({ _id: 'a2', owner: { type: 'character', id: 'char-A' } })
     const charB = makeObject({ _id: 'b1', owner: { type: 'character', id: 'char-B' } })
-    const bank = makeObject({ _id: 'k1', owner: { type: 'bank', id: 'char-A' } })
+    const bank = makeObject({ _id: 'k1', owner: { type: 'bank', id: 'bank-A' } })
     await repo.insert(charA1)
     await repo.insert(charA2)
     await repo.insert(charB)
@@ -69,7 +65,7 @@ describe('ObjectRepository (integration)', () => {
     const ownedByCharA = await repo.findByOwner({ type: 'character', id: 'char-A' })
     expect(ownedByCharA.map((o) => o._id).sort()).toEqual(['a1', 'a2'])
 
-    const ownedByBank = await repo.findByOwner({ type: 'bank', id: 'char-A' })
+    const ownedByBank = await repo.findByOwner({ type: 'bank', id: 'bank-A' })
     expect(ownedByBank.map((o) => o._id)).toEqual(['k1'])
   })
 

@@ -17,6 +17,7 @@ export default defineConfig({
         'packages/client/src/main.ts',
         'packages/port/**',
         '**/*.test.ts',
+        'packages/*/src/**/*.testutil.ts',
       ],
       thresholds: {
         lines: 80,
