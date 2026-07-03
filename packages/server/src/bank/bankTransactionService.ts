@@ -32,6 +32,14 @@ import { DocumentNotFoundError } from '../repo/types.js'
  * Open Q 3(character.gold 상한 유예): character 스키마는 min0-only(상한 없음)다. 출금
  * 크레딧은 character.gold에 상한을 부과하지 않는다 — 상한 정책이 확정되면 이 seam에
  * 대칭 가드를 추가한다.
+ *
+ * 쓰기 경로 조정 계약(후속 caller-wiring 토픽 필수): 이 서비스는 gold를 Mongo 트랜잭션으로
+ * 직접 쓴다. 같은 characters·bankAccounts 문서가 SaveEngine의 write-behind 경로(markDirty→
+ * 주기 flush)로도 흘러가면, 트랜잭션 커밋 이후 도착한 stale 스냅샷 flush가 gold를 되돌릴 수
+ * 있다(무성 revert/손실). 현재는 gold를 dirty로 마킹하는 caller가 없어 도달 불가하지만, 게임플레이
+ * 호출처를 배선할 때 두 경로를 조정해야 한다 — (a) 트랜잭션 전후로 두 키를 SaveEngine에서
+ * evict/quiesce하고 커밋 후 최신 스냅샷으로 재-mark하거나, (b) gold 변이를 write-behind 밖에
+ * 두어 단일 authoritative 경로로 유지한다. 조정 없이 gold 엔티티를 두 경로로 흘리지 않는다.
  */
 
 // 불변식 6(은행 gold 상한 3억)의 단일 출처는 shared의 MAX_BANK_GOLD다 — 스키마 `.max()`와
