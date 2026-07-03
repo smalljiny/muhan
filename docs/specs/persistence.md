@@ -11,7 +11,7 @@
 1. **인메모리 권위 그래프 ↔ MongoDB 경계** — `data/world` JSON이 콘텐츠 정본이며 부팅 시 `Map<roomNumber, RoomNode>`로 전량 로드된다. MongoDB는 플레이어 소유 상태(character·object·bankAccount)와 방 런타임 상태(roomState)만 담당한다.
 2. **단일소유 `object.owner` ↔ 파생 뷰 경계** — character·bankAccount는 인벤토리/보관 배열을 권위 데이터로 저장하지 않고, `object.owner`를 역참조해 조회 시점에 파생한다.
 
-**범위 밖**(후속 토픽): 세이브 정책·dirty-flag flush·이동 트랜잭션 원자성은 E2-2, 인증·`accountId`·account:character 1:N은 E5, 출구 타이머 틱·몬스터 리스폰 로직·objmon 템플릿 로딩은 E4.
+**범위 밖**(후속 토픽): 세이브 정책·dirty-flag flush·은행 트랜잭션 원자성은 E2-2([`save-policy.md`](save-policy.md), 구현 완료), 인증·`accountId`·account:character 1:N은 E5, 출구 타이머 틱·몬스터 리스폰 로직·objmon 템플릿 로딩·이동 트랜잭션 원자성은 E4.
 
 ## 구조 / 스키마
 
@@ -109,12 +109,12 @@ objmon 템플릿 카탈로그(`objects.json`/`creatures.json`) 로딩과 몬스�
 
 ## 제약사항
 
-- **세이브 정책·flush·이동 원자성은 E2-2** — roomState 스키마는 완전 정의됐으나 Mongo 오버레이·flush 메커니즘, dirty-flag 추적, 이동 트랜잭션 원자성은 이 토픽에 없다.
+- **세이브 정책·flush·은행 트랜잭션 원자성은 E2-2([`save-policy.md`](save-policy.md), 구현 완료)** — 이 토픽(E2-1)은 roomState 스키마를 완전 정의하고, Mongo 오버레이·주기 flush 메커니즘·dirty-flag 추적·은행 gold 이동 트랜잭션 원자성은 E2-2 세이브 정책 엔진이 구현한다. 이동 트랜잭션 원자성은 E4.
 - **인증·account는 E5** — character는 크리덴셜 없는 순수 게임 엔티티다. `accountId`, account:character 1:N, 소셜 로그인, 해싱, 로그인 FSM은 이 토픽 범위 밖.
 - **타이머·리스폰은 E4** — `roomStateSchema.respawn` 필드는 상태 스키마만 정의하며, 출구 타이머 틱·몬스터 리스폰 로직·objmon 템플릿 카탈로그 로딩은 이 토픽에 없다.
 - **방 바닥 아이템은 non-durable** — `ItemInstance`는 인메모리 전용이며 Mongo에 저장되지 않는다. 서버 재시작 시 방 JSON에 임베드된 `items`에서 재로드된다(실측 2341방 중 items 219개·monsters 482개 임베드, monsters는 E4 로딩 대상).
 - **라이브 상태 핸드오프 미구현** — `index.ts` boot의 `loadWorldGraph()` 결과 `Map`과 4개 repository 인스턴스는 현재 `boot()` 함수 스코프의 지역 변수다. 게임 루프·요청 핸들러가 이 라이브 그래프·repository에 접근하려면 후속 토픽에서 보존·핸드오프 메커니즘(모듈 상태·앱 데코레이트·컨텍스트 객체)이 필요하다.
 - **콘텐츠 SoT는 `data/world` JSON** — Mongo는 콘텐츠를 시드하지 않는다. 방·템플릿의 안정 ID는 JSON 번호 자연키, character/object/bankAccount는 합성 `_id`+도메인 unique 인덱스.
-- **repository 필터 인자는 런타임 미검증** — `findById(id)`/`findByOwner(owner)`/`updateById`의 `{_id:id}` 필터 절반은 컴파일 타임 타입(`string`/`ObjectOwner`)만 강제되고 런타임 가드가 없다. 현재는 모든 caller가 검증된 문자열을 전달해 미악용 상태이나, 사용자 제어 id가 route 경계에서 repository로 직접 전달되기 시작하면(E5 인증·HTTP route) NoSQL operator 주입 가능성이 생긴다. write body는 이미 `schema.partial().parse`(strictObject가 `$`-키 차단)로 안전하다. `WorldRepository`는 `roomId: number`라 안전.
+- **repository 필터 인자는 런타임 미검증** — `findById(id)`/`findByOwner(owner)`/`updateById`의 `{_id:id}` 필터 절반은 컴파일 타임 타입(`string`/`ObjectOwner`)만 강제되고 런타임 가드가 없다. 현재는 모든 caller가 검증된 문자열을 전달해 미악용 상태이나, 사용자 제어 id가 route 경계에서 repository로 직접 전달되기 시작하면(E5 인증·HTTP route) NoSQL operator 주입 가능성이 생긴다. write body는 이미 `schema.partial().parse`(strictObject가 `$`-키 차단)로 안전하다. `WorldRepository`는 `roomId: number`라 안전. E2-2([`save-policy.md`](save-policy.md))의 `BankTransactionService`·`saveNow`는 repo 계층을 우회하는 money·세이브 진입점에서 id 문자열 가드를 자체 추가했으나, repository 계층 자체의 필터는 여전히 미검증이다 — E5 route 경계에서 통합 검증이 필요하다.
 - **테스트 전략** — 스키마 검증(unit)·env 파싱 fail-fast(unit)·그래프 구성(unit)은 순수 함수 테스트. 연결·ping·재연결, `ObjectRepository` owner 조회·인덱스, 하이드레이트·unique·금화 가드는 `mongodb-memory-server` 통합 테스트. 각 패키지 vitest 커버리지 80%+ 게이트(배선 엔트리 `index.ts` 제외).
 - **`character.gold`는 상한 없음** — `bankAccount.gold`(3억 상한, 불변식 6)와 달리 캐릭터 소지 gold는 `z.int().min(0)`만 강제한다. 원작 오라클이 소지 gold에도 상한을 뒀는지는 미확인이며, 확인 후 후속 토픽에서 조정될 수 있다.
