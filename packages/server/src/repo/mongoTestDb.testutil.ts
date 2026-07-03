@@ -17,6 +17,10 @@ import { MongoClient, type Db } from 'mongodb'
  */
 export type MongoTestDb = {
   db: Db
+  // MongoClient를 노출한다 — session.withTransaction은 client.startSession()이 필요하므로
+  // 트랜잭션 서비스를 테스트에서 조립하려면 client 핸들이 있어야 한다. 기존 소비자는
+  // { db, cleanup }만 구조분해하므로 이 필드 추가는 하위호환이다.
+  client: MongoClient
   cleanup: () => Promise<void>
 }
 
@@ -31,5 +35,5 @@ export async function createMongoTestDb(dbName: string): Promise<MongoTestDb> {
     await replset.stop()
   }
 
-  return { db, cleanup }
+  return { db, client, cleanup }
 }

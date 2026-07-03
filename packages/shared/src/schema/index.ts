@@ -10,7 +10,7 @@ export {
   type ObjectInstance,
   type ObjectOwner,
 } from './object.js'
-export { bankAccountSchema, type BankAccount } from './bankAccount.js'
+export { bankAccountSchema, MAX_BANK_GOLD, type BankAccount } from './bankAccount.js'
 export {
   roomStateSchema,
   exitStateSchema,
