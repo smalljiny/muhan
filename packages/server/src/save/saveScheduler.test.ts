@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { DirtyEntry } from './dirtyTracker.js'
 import { DirtyTracker } from './dirtyTracker.js'
-import { AsyncWriteQueue, NOOP_LOGGER, type WriteAdapter } from './asyncWriteQueue.js'
+import { AsyncWriteQueue, type WriteAdapter } from './asyncWriteQueue.js'
+import { NOOP_LOGGER } from './logger.js'
 import {
   SaveScheduler,
   DEFAULT_INTERVAL_MS,
-  NOOP_SCHEDULER_LOGGER,
   type IntervalHandle,
   type SchedulerClock,
   type WriteEnqueue,
@@ -306,8 +306,8 @@ describe('SaveScheduler', () => {
   })
 
   describe('기본 clock·logger seam', () => {
-    it('NOOP_SCHEDULER_LOGGER.error는 아무것도 하지 않는다', () => {
-      expect(() => NOOP_SCHEDULER_LOGGER.error({}, 'x')).not.toThrow()
+    it('NOOP_LOGGER.error는 아무것도 하지 않는다', () => {
+      expect(() => NOOP_LOGGER.error({}, 'x')).not.toThrow()
     })
 
     it('clock 미주입 시 전역 setInterval/clearInterval을 사용하고 stop으로 정리된다', () => {

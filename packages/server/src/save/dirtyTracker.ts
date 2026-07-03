@@ -56,6 +56,18 @@ export class DirtyTracker {
     return entries
   }
 
+  /**
+   * 단일 collection·id 항목을 registry에서 제거한다(없으면 no-op).
+   *
+   * SaveEngine.saveNow가 즉시 write 직전에 호출해 write-loss를 봉쇄한다 — markDirty로 쌓인
+   * stale 스냅샷이 이후 주기 flush의 drain()으로 꺼내져 saveNow의 최신 write를 덮어쓰는 것을
+   * 막는다. drain()과 달리 전체를 비우지 않고 지정 키만 지운다.
+   */
+  evict(collection: string, id: string): void {
+    const key = `${collection}:${id}`
+    this.registry.delete(key)
+  }
+
   /** pending 항목 개수. */
   get size(): number {
     return this.registry.size

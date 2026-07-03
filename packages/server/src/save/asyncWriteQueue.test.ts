@@ -4,9 +4,9 @@ import {
   AsyncWriteQueue,
   DEFAULT_CAPACITY,
   MAX_RETRIES,
-  NOOP_LOGGER,
   type WriteAdapter,
 } from './asyncWriteQueue.js'
+import { NOOP_LOGGER } from './logger.js'
 import { DocumentNotFoundError } from '../repo/types.js'
 import { ZodError } from 'zod'
 

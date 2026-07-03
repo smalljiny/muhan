@@ -49,6 +49,7 @@
 
 import { ZodError } from 'zod'
 import type { DirtyEntry } from './dirtyTracker.js'
+import type { SaveLogger } from './logger.js'
 import { DocumentNotFoundError } from '../repo/types.js'
 
 /** 기본 pending 상한. capacity를 초과하면 enqueue가 backpressure로 block한다. */
@@ -66,11 +67,6 @@ export type WriteAdapter = (id: string, snapshot: unknown) => Promise<void>
 /** collection 이름 → write 어댑터 맵. */
 export type DispatchMap = Record<string, WriteAdapter>
 
-/** 폐기·실패를 기록하는 최소 logger seam(console 금지). */
-export interface WriteQueueLogger {
-  error(context: Record<string, unknown>, message: string): void
-}
-
 /** AsyncWriteQueue 생성 옵션. */
 export interface AsyncWriteQueueOptions {
   /** pending 상한(기본 DEFAULT_CAPACITY). */
@@ -83,12 +79,6 @@ export interface AsyncWriteQueueOptions {
   readonly baseDelayMs?: number
 }
 
-/**
- * 아무것도 하지 않는 logger. 생성자 기본값이 아니라 **테스트 편의용**으로만 노출한다
- * (프로덕션은 실제 logger 주입이 필수 — 무흔적 폐기 방지).
- */
-export const NOOP_LOGGER: WriteQueueLogger = { error: () => undefined }
-
 /** 기본 backoff sleep — 실제 setTimeout. */
 const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms))
@@ -99,7 +89,7 @@ export class AsyncWriteQueue {
   private readonly maxRetries: number
   private readonly sleep: (ms: number) => Promise<void>
   private readonly baseDelayMs: number
-  private readonly logger: WriteQueueLogger
+  private readonly logger: SaveLogger
 
   /** pending job — 키(collection:id)당 최신 스냅샷 1건(coalescing + FIFO). */
   private readonly pending = new Map<string, DirtyEntry>()
@@ -114,7 +104,7 @@ export class AsyncWriteQueue {
 
   constructor(
     dispatch: DispatchMap,
-    logger: WriteQueueLogger,
+    logger: SaveLogger,
     options: AsyncWriteQueueOptions = {},
   ) {
     this.dispatch = dispatch

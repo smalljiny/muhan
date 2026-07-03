@@ -3,10 +3,10 @@ import type { Db } from 'mongodb'
 import type { BankAccount, Character, RoomState } from 'shared'
 import {
   AsyncWriteQueue,
-  NOOP_LOGGER,
   type DispatchMap,
   type WriteAdapter,
 } from './asyncWriteQueue.js'
+import { NOOP_LOGGER } from './logger.js'
 import type { DirtyEntry } from './dirtyTracker.js'
 import { CharacterRepository } from '../repo/characterRepository.js'
 import { BankRepository } from '../repo/bankRepository.js'

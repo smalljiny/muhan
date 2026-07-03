@@ -36,6 +36,8 @@
  */
 
 import type { DirtyEntry } from './dirtyTracker.js'
+import type { SaveLogger } from './logger.js'
+import { NOOP_LOGGER } from './logger.js'
 
 /** 기본 flush 간격(ms) — 120초. 생성자 옵션으로 override 가능하다. */
 export const DEFAULT_INTERVAL_MS = 120_000
@@ -63,23 +65,15 @@ export interface WriteEnqueue {
   enqueue(job: DirtyEntry): Promise<void>
 }
 
-/** flush 실패를 기록하는 최소 logger seam(console 금지). */
-export interface SchedulerLogger {
-  error(context: Record<string, unknown>, message: string): void
-}
-
 /** SaveScheduler 생성 옵션. */
 export interface SaveSchedulerOptions {
   /** flush 간격 ms(기본 DEFAULT_INTERVAL_MS). */
   readonly intervalMs?: number
   /** tick seam(기본 defaultClock — 전역 setInterval/clearInterval). */
   readonly clock?: SchedulerClock
-  /** flush 에러 logger(기본 NOOP_SCHEDULER_LOGGER). */
-  readonly logger?: SchedulerLogger
+  /** flush 에러 logger(기본 NOOP_LOGGER). */
+  readonly logger?: SaveLogger
 }
-
-/** 아무것도 하지 않는 logger — 미주입 시 조용한 방어용 기본값. */
-export const NOOP_SCHEDULER_LOGGER: SchedulerLogger = { error: () => undefined }
 
 /** 전역 setInterval/clearInterval에 위임하는 기본 clock. */
 const defaultClock: SchedulerClock = {
@@ -92,7 +86,7 @@ export class SaveScheduler {
   private readonly queue: WriteEnqueue
   private readonly intervalMs: number
   private readonly clock: SchedulerClock
-  private readonly logger: SchedulerLogger
+  private readonly logger: SaveLogger
 
   /** 활성 interval 핸들(정지 상태면 null). */
   private handle: IntervalHandle | null = null
@@ -108,7 +102,7 @@ export class SaveScheduler {
     this.queue = queue
     this.intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS
     this.clock = options.clock ?? defaultClock
-    this.logger = options.logger ?? NOOP_SCHEDULER_LOGGER
+    this.logger = options.logger ?? NOOP_LOGGER
   }
 
   /** 실행 중이면 true(테스트·검사용). */

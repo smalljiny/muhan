@@ -70,4 +70,37 @@ describe('DirtyTracker', () => {
     tracker.markDirty('characters', 'char-2', {})
     expect(tracker.size).toBe(2)
   })
+
+  describe('evict (per-key 삭제)', () => {
+    it('해당 collection:id 항목만 registry에서 제거하고 다른 키는 남긴다', () => {
+      tracker.markDirty('characters', 'char-1', { v: 1 })
+      tracker.markDirty('characters', 'char-2', { v: 2 })
+
+      tracker.evict('characters', 'char-1')
+
+      expect(tracker.size).toBe(1)
+      const drained = tracker.drain()
+      expect(drained).toHaveLength(1)
+      expect(drained[0]).toEqual({ collection: 'characters', id: 'char-2', snapshot: { v: 2 } })
+    })
+
+    it('존재하지 않는 키를 evict하면 no-op이다(throw 없음, size 불변)', () => {
+      tracker.markDirty('characters', 'char-1', { v: 1 })
+
+      expect(() => tracker.evict('characters', 'ghost')).not.toThrow()
+      expect(() => tracker.evict('bankAccounts', 'char-1')).not.toThrow()
+      expect(tracker.size).toBe(1)
+    })
+
+    it('evict한 키를 이후 markDirty하면 다시 pending에 들어간다', () => {
+      tracker.markDirty('characters', 'char-1', { v: 1 })
+      tracker.evict('characters', 'char-1')
+      expect(tracker.size).toBe(0)
+
+      tracker.markDirty('characters', 'char-1', { v: 2 })
+
+      expect(tracker.size).toBe(1)
+      expect(tracker.drain()[0]).toEqual({ collection: 'characters', id: 'char-1', snapshot: { v: 2 } })
+    })
+  })
 })

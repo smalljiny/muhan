@@ -5,10 +5,15 @@ import { pingDb } from './db/health.js'
 import { ObjectRepository } from './repo/objectRepository.js'
 import { CharacterRepository } from './repo/characterRepository.js'
 import { BankRepository } from './repo/bankRepository.js'
+import { WorldRepository } from './repo/worldRepository.js'
+import { SaveEngine } from './save/saveEngine.js'
+import type { SaveLogger } from './save/logger.js'
 import { loadWorldGraph } from './world/worldGraph.js'
 
-// 부팅 엔트리 — env 검증(fail-fast) → DB 연결(fail-fast) → 앱 구성 → listen.
+// 부팅 엔트리 — env 검증(fail-fast) → DB 연결(fail-fast) → 앱 구성 → SaveEngine 배선 → listen.
 // 커버리지에서 제외(배선 코드). PORT는 getConfig().PORT 단일 출처를 쓴다(인라인 파싱 소거).
+// SaveEngine.shutdown()의 drain+flush 로직은 테스트 가능한 곳(saveEngine.ts)에 두고, 여기서는
+// 시그널 핸들러 등록만 한다.
 async function boot(): Promise<void> {
   const config = getConfig()
 
@@ -19,14 +24,46 @@ async function boot(): Promise<void> {
   const objects = new ObjectRepository(conn.db)
   const characters = new CharacterRepository(conn.db, objects)
   const bank = new BankRepository(conn.db, objects)
+  const world = new WorldRepository(conn.db)
   await Promise.all([objects.init(), characters.init(), bank.init()])
 
   // 정본 방 번들을 인메모리 그래프로 로드한다(부팅 스코프에 보관). 템플릿·리스폰은 E4 범위.
-  const world = loadWorldGraph()
+  const worldGraph = loadWorldGraph()
 
   // ping을 /health의 진실 원천으로 주입한다.
   const app = buildApp({ pingDb: () => pingDb(conn.db) })
-  app.log.info(`world graph loaded: ${world.size} rooms`)
+  app.log.info(`world graph loaded: ${worldGraph.size} rooms`)
+
+  // console 금지 — SaveLogger를 fastify app.log.error에 위임하는 어댑터로 구성한다.
+  const saveLogger: SaveLogger = {
+    error: (context, message) => app.log.error(context, message),
+  }
+  const saveEngine = new SaveEngine(characters, bank, world, saveLogger)
+  saveEngine.start()
+
+  // graceful shutdown — SaveEngine.shutdown()으로 잔여 dirty를 flush·drain한 뒤 DB 연결을 닫는다.
+  // 캐시된 Promise로 idempotent 보장: SIGTERM 중복 도착이나 shutdown 진행 중 재수신 시 같은
+  // Promise를 반환해 두 번 실행하지 않는다.
+  let shuttingDown: Promise<void> | null = null
+  const gracefulShutdown = (signal: string): Promise<void> => {
+    if (shuttingDown !== null) return shuttingDown
+    shuttingDown = (async () => {
+      app.log.info(`${signal} 수신 — graceful shutdown 시작`)
+      await saveEngine.shutdown()
+      await conn.close()
+      process.exit(0)
+    })()
+    return shuttingDown
+  }
+  // async 핸들러의 unhandled rejection을 차단한다(void + catch). 실패 시 로그 후 비정상 종료.
+  const onSignal = (signal: string): void => {
+    void gracefulShutdown(signal).catch((err: unknown) => {
+      app.log.error(err)
+      process.exit(1)
+    })
+  }
+  process.on('SIGTERM', () => onSignal('SIGTERM'))
+  process.on('SIGINT', () => onSignal('SIGINT'))
 
   try {
     const address = await app.listen({ port: config.PORT, host: '0.0.0.0' })
