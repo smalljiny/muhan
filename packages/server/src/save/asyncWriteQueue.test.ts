@@ -328,6 +328,42 @@ describe('AsyncWriteQueue (unit)', () => {
       const queue = new AsyncWriteQueue({}, NOOP_LOGGER, { sleep: immediate })
       await expect(queue.evict('characters', 'missing')).resolves.toBeUndefined()
     })
+
+    it('회귀(deadlock): pending 키 evict가 capacity로 block된 enqueue를 깨운다', async () => {
+      let release!: () => void
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const adapter = vi.fn<WriteAdapter>(async () => {
+        await gate
+      })
+      const queue = new AsyncWriteQueue({ characters: adapter }, NOOP_LOGGER, {
+        capacity: 1,
+        sleep: immediate,
+      })
+
+      // in-flight 1건(a) — 워커가 가져가 gate에서 hang.
+      await queue.enqueue(job('characters', 'a', {}))
+      await flush()
+      // pending 1건(stale b)로 capacity(1) 포화.
+      await queue.enqueue(job('characters', 'b', { gold: 1 }))
+      // 세 번째 enqueue(c)는 capacity로 block.
+      let cSettled = false
+      const eC = queue.enqueue(job('characters', 'c', {})).then(() => {
+        cSettled = true
+      })
+      await Promise.resolve()
+      expect(cSettled).toBe(false)
+
+      // stale b를 evict — 슬롯이 비므로 block된 c가 깨어나야 한다(방치 시 deadlock).
+      await queue.evict('characters', 'b')
+      await eC
+      expect(cSettled).toBe(true)
+
+      release()
+      await queue.drain()
+      expect(queue.pendingSize).toBe(0)
+    })
   })
 
   describe('drain', () => {

@@ -122,6 +122,26 @@ describe('SaveEngine', () => {
       expect(spies.worldUpsert).toHaveBeenCalledWith({ roomId: 42, open: true })
     })
 
+    it('전체 문서 스냅샷(_id 포함)도 patch 컬렉션은 _id를 벗겨 updateById로 넘긴다', async () => {
+      const engine = makeEngine(spies, clock)
+      // 호출자가 라이브 전체 문서를 스냅샷으로 넘긴 경우 — _id가 $set에 실리면 Mongo immutable 에러.
+      engine.markDirty('characters', 'c1', { _id: 'c1', gold: 10, name: '타이' })
+      engine.markDirty('bankAccounts', 'b1', { _id: 'b1', gold: 500 })
+
+      engine.start()
+      clock.tick()
+      await barrier()
+
+      expect(spies.charUpdate).toHaveBeenCalledWith('c1', { gold: 10, name: '타이' })
+      expect(spies.bankUpdate).toHaveBeenCalledWith('b1', { gold: 500 })
+    })
+
+    it('saveNow도 전체 문서 스냅샷의 _id를 벗겨 updateById로 넘긴다', async () => {
+      const engine = makeEngine(spies, clock)
+      await engine.saveNow('characters', 'c1', { _id: 'c1', gold: 99 }, 'logout')
+      expect(spies.charUpdate).toHaveBeenCalledWith('c1', { gold: 99 })
+    })
+
     it('실 logger를 queue에 주입한다 — permanent 실패 시 logger.error로 기록한다(무흔적 폐기 방지)', async () => {
       spies.charUpdate.mockRejectedValue(new DocumentNotFoundError('characters', 'c1'))
       const logger = { error: vi.fn() }

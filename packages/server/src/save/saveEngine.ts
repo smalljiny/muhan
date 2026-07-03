@@ -63,6 +63,24 @@ function assertSaveId(id: string): void {
   }
 }
 
+/**
+ * patch 스냅샷에서 불변 필드 `_id`를 제거한다. characters·bankAccounts 어댑터는 스냅샷을
+ * updateById(patch)로 넘기는데, 호출자가 전체 문서 스냅샷(라이브 객체 그대로)을 markDirty/saveNow에
+ * 넘기면 `_id`가 `$set`에 실려 Mongo immutable-`_id` 에러가 난다(재시도 소진 폐기 또는 saveNow throw).
+ * 전체·부분 스냅샷 계약의 비대칭(roomStates는 전체, patch 컬렉션은 부분)을 어댑터 경계에서 흡수한다.
+ * 객체가 아니거나 `_id`가 없으면 그대로 반환한다(repo Zod 경계가 나머지 검증을 담당).
+ */
+function stripImmutableId(snapshot: unknown): unknown {
+  if (typeof snapshot !== 'object' || snapshot === null || !('_id' in snapshot)) {
+    return snapshot
+  }
+  const rest: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(snapshot)) {
+    if (key !== '_id') rest[key] = value
+  }
+  return rest
+}
+
 /** SaveEngine 생성 옵션 — 테스트 주입 seam(clock·interval·queue). */
 export interface SaveEngineOptions {
   /** 주기 flush 간격 ms(기본 DEFAULT_INTERVAL_MS=120초). */
@@ -95,11 +113,13 @@ export class SaveEngine {
     // 여전히 `collection:id` 키로 동작한다. 따라서 roomStates 호출자는 반드시 id를 roomId에서
     // 파생한 값(`String(roomId)`)으로 넘겨야 evict·coalescing 키가 upsert가 쓰는 roomId와 정렬된다.
     // id가 어긋나면 markDirty 코얼레싱과 saveNow evict가 잘못된 키를 대상으로 삼는다.
+    // characters·bankAccounts는 patch로 갱신하므로 불변 `_id`를 벗겨 전체 문서 스냅샷도 안전하게
+    // 수용한다. roomStates는 upsert가 전체 RoomState를 요구하므로 벗기지 않는다.
     this.dispatch = {
       characters: (id, snapshot) =>
-        characterRepo.updateById(id, snapshot as Partial<Omit<Character, '_id'>>),
+        characterRepo.updateById(id, stripImmutableId(snapshot) as Partial<Omit<Character, '_id'>>),
       bankAccounts: (id, snapshot) =>
-        bankRepo.updateById(id, snapshot as Partial<Omit<BankAccount, '_id'>>),
+        bankRepo.updateById(id, stripImmutableId(snapshot) as Partial<Omit<BankAccount, '_id'>>),
       roomStates: (_id, snapshot) => worldRepo.upsert(snapshot as RoomState),
     }
     this.tracker = new DirtyTracker()

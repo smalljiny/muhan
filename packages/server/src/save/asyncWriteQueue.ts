@@ -169,7 +169,12 @@ export class AsyncWriteQueue {
    */
   async evict(collection: string, id: string): Promise<void> {
     const key = `${collection}:${id}`
-    this.pending.delete(key)
+    // pending에서 실제로 제거했으면 슬롯 1개가 비므로 capacity로 block된 enqueue 하나를 깨운다.
+    // 이를 빠뜨리면 워커가 이 키를 take하며 슬롯을 비우는 유일한 경로가 사라져(evict가 대신 제거),
+    // capacity 대기자가 영구히 방치돼 flush/shutdown이 hang한다(deadlock).
+    if (this.pending.delete(key)) {
+      this.releaseWaiter()
+    }
     if (this.inFlightKey === key && this.inFlightSettled !== null) {
       await this.inFlightSettled
     }
