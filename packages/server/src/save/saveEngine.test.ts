@@ -205,6 +205,45 @@ describe('SaveEngine', () => {
       expect(spies.charUpdate).toHaveBeenCalledWith('c1', { gold: 3 })
     })
 
+    it('회귀(write-loss): flush로 큐에 in-flight인 stale write가 saveNow의 최신 write를 덮어쓰지 않는다', async () => {
+      // 레이스: markDirty(snap_old) → 주기 flush가 snap_old를 큐로 옮겨 워커가 in-flight로 가져간다
+      // → saveNow(snap_new). tracker.evict는 이미 drain된 키라 no-op이므로, in-flight snap_old write가
+      // saveNow의 snap_new write보다 나중에 완료되면 최신값을 덮어쓴다(무성 데이터 손실). saveNow가
+      // 큐의 pending 취소 + in-flight write await까지 수행해야 이 창이 봉쇄된다.
+      const writeLog: unknown[] = []
+      let releaseStale!: () => void
+      let firstCall = true
+      spies.charUpdate.mockImplementation((_id: string, patch: unknown) => {
+        if (firstCall) {
+          firstCall = false
+          // snap_old — 큐 워커가 in-flight로 가져간 뒤 hang. 나중에 release한다.
+          return new Promise<void>((resolve) => {
+            releaseStale = () => {
+              writeLog.push(patch)
+              resolve()
+            }
+          })
+        }
+        writeLog.push(patch)
+        return Promise.resolve()
+      })
+      const engine = makeEngine(spies, clock)
+
+      engine.markDirty('characters', 'c1', { gold: 1 }) // snap_old (stale)
+      engine.start()
+      clock.tick() // 주기 flush — snap_old를 큐로 enqueue
+      await barrier() // 워커가 snap_old를 in-flight로 가져가 hang
+
+      // snap_new 즉시 저장 — 이 시점 snap_old는 큐에서 in-flight.
+      const p = engine.saveNow('characters', 'c1', { gold: 99 }, 'logout')
+
+      releaseStale() // in-flight snap_old write 완료
+      await p
+
+      // 최종 write는 snap_new여야 한다 — stale snap_old가 나중에 완료돼 덮어쓰면 안 된다.
+      expect(writeLog.at(-1)).toEqual({ gold: 99 })
+    })
+
     it('saveNow write 실패 시 rethrow한다(fail-loud, 재-mark 없음) + reason을 실패 로그에 담는다', async () => {
       spies.charUpdate.mockRejectedValue(new DocumentNotFoundError('characters', 'c1'))
       const logger = { error: vi.fn() }
@@ -226,6 +265,24 @@ describe('SaveEngine', () => {
       const engine = makeEngine(spies, clock, logger)
 
       await expect(engine.saveNow('unknownColl', 'x', {}, 'test')).resolves.toBeUndefined()
+      expect(logger.error).toHaveBeenCalledTimes(1)
+      expect(spies.charUpdate).not.toHaveBeenCalled()
+    })
+
+    it('id가 문자열이 아니면 saveNow가 throw한다(Mongo _id 연산자 주입 차단)', async () => {
+      const engine = makeEngine(spies, clock)
+
+      await expect(
+        engine.saveNow('characters', { $ne: '' } as unknown as string, { gold: 1 }, 'logout'),
+      ).rejects.toThrow()
+      expect(spies.charUpdate).not.toHaveBeenCalled()
+    })
+
+    it('prototype 키(__proto__) collection saveNow는 hasOwn 가드로 no-op(어댑터 오인 없음)', async () => {
+      const logger = { error: vi.fn() }
+      const engine = makeEngine(spies, clock, logger)
+
+      await expect(engine.saveNow('__proto__', 'x', {}, 'test')).resolves.toBeUndefined()
       expect(logger.error).toHaveBeenCalledTimes(1)
       expect(spies.charUpdate).not.toHaveBeenCalled()
     })

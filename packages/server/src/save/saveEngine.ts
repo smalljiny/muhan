@@ -10,17 +10,21 @@
  *   무결성상 필수다.
  *
  * saveNow evict 근거(핵심 correctness — write-loss 봉쇄):
- *   `markDirty(K, snap_old)` 후 `saveNow(K, snap_new)`가 즉시 최신값을 쓰면, 이후 주기 flush가
- *   drain()으로 stale snap_old를 꺼내 최신 저장을 덮어쓸 수 있다(write-loss). 이를 막기 위해
- *   saveNow는 **write 직전에 evict**한다(evict-before-write). 이 순서를 택한 이유:
- *     (1) stale 항목이 어떤 flush보다 먼저 사라지므로, saveNow 진행 중 주기 flush가 끼어들어도
- *         drain이 그 키를 못 꺼낸다 — stale 덮어쓰기가 구조적으로 불가능하다.
- *     (2) write를 await하는 동안 도착한 더 새로운 markDirty(K, snap_newer)는 evict 이후라 tracker에
- *         그대로 남아 다음 flush로 영속화된다. write-후-evict 순서였다면 post-await evict가 그
- *         snap_newer를 지워 유실시킨다(logic bug). 그래서 write-후-evict를 채택하지 않는다.
- *   write 실패 시에는 재-markDirty 없이 rethrow한다(fail-loud). 재-mark하면 (2)의 snap_newer를
- *   snap_new로 덮어쓸 위험이 있고, repo 계층(DocumentNotFoundError)과 일관되게 호출자가 실패를
- *   인지해 대응하도록 둔다.
+ *   `markDirty(K, snap_old)` 후 `saveNow(K, snap_new)`가 즉시 최신값을 쓰면, stale snap_old가
+ *   두 경로로 최신 저장을 덮어쓸 수 있다(write-loss). saveNow는 write 직전에 **두 계층을 모두
+ *   evict**해 둘 다 봉쇄한다(evict-before-write):
+ *     (A) tracker: 아직 flush되지 않은 snap_old를 tracker.evict로 제거한다 — 이후 주기 flush의
+ *         drain()이 그 키를 못 꺼내므로 재-dispatch되지 않는다.
+ *     (B) queue: 이미 flush돼 큐에 있는 snap_old를 queue.evict로 제거한다 — pending이면 취소하고,
+ *         워커가 in-flight로 가져간 상태면 그 write 완료를 await한 뒤 진행한다. tracker-evict만으로는
+ *         (B) 경로(flush 후 in-flight)가 남아 stale 덮어쓰기가 가능하다 — 두 evict가 함께라야
+ *         구조적으로 봉쇄된다.
+ *   evict-before-write 순서를 택한 이유: write를 await하는 동안 도착한 더 새로운
+ *   markDirty(K, snap_newer)는 evict 이후라 tracker에 그대로 남아 다음 flush로 영속화된다.
+ *   write-후-evict 순서였다면 post-await evict가 그 snap_newer를 지워 유실시킨다(logic bug).
+ *   write 실패 시에는 재-markDirty 없이 rethrow한다(fail-loud). 재-mark하면 snap_newer를 snap_new로
+ *   덮어쓸 위험이 있고, repo 계층(DocumentNotFoundError)과 일관되게 호출자가 실패를 인지해
+ *   대응하도록 둔다.
  *
  * shutdown 순서:
  *   (1) scheduler.stop() — 이후 주기 tick이 flush를 트리거하지 않는다.
@@ -47,6 +51,17 @@ import {
 } from './asyncWriteQueue.js'
 import { SaveScheduler, type SchedulerClock } from './saveScheduler.js'
 import type { SaveLogger } from './logger.js'
+
+/**
+ * id가 비어 있지 않은 문자열인지 검증한다 — repo 어댑터가 id를 Mongo `_id` 필터에 그대로 싣기
+ * 때문에, 객체가 유입되면 연산자 주입(`{$ne:...}` 등)으로 임의 문서를 대상 삼을 수 있다. money·세이브
+ * 경로 진입점에서 형태를 강제해 호출자 검증에 의존하지 않는다(defense-in-depth, coding-style.md).
+ */
+function assertSaveId(id: string): void {
+  if (typeof id !== 'string' || id.length === 0) {
+    throw new Error(`saveNow id는 비어 있지 않은 문자열이어야 합니다: ${String(id)}`)
+  }
+}
 
 /** SaveEngine 생성 옵션 — 테스트 주입 seam(clock·interval·queue). */
 export interface SaveEngineOptions {
@@ -118,13 +133,19 @@ export class SaveEngine {
    * reason은 관측용 파라미터다 — 알 수 없는 collection·실패 로깅 컨텍스트로만 최소 사용한다.
    */
   async saveNow(collection: string, id: string, snapshot: unknown, reason: string): Promise<void> {
-    const adapter = this.dispatch[collection]
+    assertSaveId(id)
+    // hasOwn 가드 — collection이 '__proto__' 등 prototype 키일 때 Object.prototype 멤버가 어댑터로
+    // 오인돼 undefined 가드를 우회하는 것을 막는다(security.md 동적 키 접근).
+    const adapter = Object.hasOwn(this.dispatch, collection) ? this.dispatch[collection] : undefined
     if (adapter === undefined) {
       this.logger.error({ collection, id, reason }, 'saveNow: 알 수 없는 collection — 폐기한다')
       return
     }
-    // evict-before-write — stale 항목을 어떤 flush보다 먼저 제거한다(write-loss 구조적 봉쇄).
+    // evict-before-write — stale 항목을 두 계층에서 제거한다(write-loss 구조적 봉쇄).
+    // (A) tracker: 아직 flush 안 된 stale mark 제거. (B) queue: 이미 flush된 stale write를 취소하고
+    // in-flight면 완료를 await한다(파일 상단 "saveNow evict 근거" 참조).
     this.tracker.evict(collection, id)
+    await this.queue.evict(collection, id)
     try {
       await adapter(id, snapshot)
     } catch (error) {

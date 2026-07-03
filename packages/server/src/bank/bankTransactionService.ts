@@ -63,6 +63,18 @@ function assertPositiveIntAmount(amount: number): void {
   }
 }
 
+/**
+ * id가 비어 있지 않은 문자열인지 검증한다. TypeScript 타입은 런타임에 소거되므로, characterId·
+ * bankAccountId가 객체로 유입되면 findOneAndUpdate 필터의 `_id` 자리에서 Mongo 연산자 주입
+ * (`{$ne:...}`, `{$gt:''}` 등)으로 임의 문서를 대상 삼아 gold를 이동시킬 수 있다. 이 서비스는
+ * repo 계층의 Zod 경계를 우회하므로, money 이동 진입점에서 id 형태를 직접 강제한다(security.md).
+ */
+function assertDocumentId(value: string, label: string): void {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`${label}는 비어 있지 않은 문자열이어야 합니다`)
+  }
+}
+
 export class BankTransactionService {
   // 생성자 주입: MongoClient(startSession용)와 Db. 전역 싱글턴을 조회하지 않는다.
   constructor(
@@ -87,6 +99,8 @@ export class BankTransactionService {
    */
   async deposit(characterId: string, bankAccountId: string, amount: number): Promise<void> {
     assertPositiveIntAmount(amount)
+    assertDocumentId(characterId, 'characterId')
+    assertDocumentId(bankAccountId, 'bankAccountId')
 
     const session = this.client.startSession()
     try {
@@ -123,6 +137,8 @@ export class BankTransactionService {
    */
   async withdraw(characterId: string, bankAccountId: string, amount: number): Promise<void> {
     assertPositiveIntAmount(amount)
+    assertDocumentId(characterId, 'characterId')
+    assertDocumentId(bankAccountId, 'bankAccountId')
 
     const session = this.client.startSession()
     try {

@@ -269,6 +269,65 @@ describe('AsyncWriteQueue (unit)', () => {
       expect(logger.error).toHaveBeenCalledTimes(1)
       expect(queue.pendingSize).toBe(0)
     })
+
+    it('prototype 키(__proto__) collection은 hasOwn 가드로 폐기된다(어댑터 오인 없음)', async () => {
+      const logger = { error: vi.fn() }
+      const queue = new AsyncWriteQueue({}, logger, { sleep: immediate })
+
+      await queue.enqueue(job('__proto__', 'x', {}))
+      await expect(queue.drain()).resolves.toBeUndefined()
+
+      expect(logger.error).toHaveBeenCalledTimes(1)
+      expect(queue.pendingSize).toBe(0)
+    })
+  })
+
+  describe('evict (saveNow 협조 — pending 취소 + in-flight await)', () => {
+    it('pending인 키를 evict하면 write되지 않고 취소된다', async () => {
+      const adapter = vi.fn<WriteAdapter>(() => Promise.resolve())
+      const queue = new AsyncWriteQueue({ characters: adapter }, NOOP_LOGGER, { sleep: immediate })
+
+      // enqueue 직후(동기) pending에만 있고 워커는 microtask라 아직 시작 전.
+      const enq = queue.enqueue(job('characters', 'c1', { gold: 1 }))
+      await queue.evict('characters', 'c1')
+      await enq
+      await queue.drain()
+
+      expect(adapter).not.toHaveBeenCalled()
+      expect(queue.pendingSize).toBe(0)
+    })
+
+    it('in-flight인 키를 evict하면 그 write 완료를 await한 뒤 반환한다', async () => {
+      let release!: () => void
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      let done = false
+      const adapter = vi.fn<WriteAdapter>(async () => {
+        await gate
+        done = true
+      })
+      const queue = new AsyncWriteQueue({ characters: adapter }, NOOP_LOGGER, { sleep: immediate })
+
+      await queue.enqueue(job('characters', 'c1', { gold: 1 }))
+      await flush() // 워커가 in-flight로 가져가 gate에서 hang
+
+      let evictSettled = false
+      const evictP = queue.evict('characters', 'c1').then(() => {
+        evictSettled = true
+      })
+      await Promise.resolve()
+      expect(evictSettled).toBe(false) // in-flight write가 안 끝났으면 evict도 미완료
+
+      release()
+      await evictP
+      expect(done).toBe(true) // in-flight write가 완료된 뒤 evict가 반환됐다
+    })
+
+    it('없는 키를 evict하면 즉시 반환한다(no-op)', async () => {
+      const queue = new AsyncWriteQueue({}, NOOP_LOGGER, { sleep: immediate })
+      await expect(queue.evict('characters', 'missing')).resolves.toBeUndefined()
+    })
   })
 
   describe('drain', () => {

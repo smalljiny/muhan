@@ -97,6 +97,10 @@ export class AsyncWriteQueue {
   private readonly waiters: Array<() => void> = []
   /** 현재 어댑터가 write 중인 in-flight job 수(drain 완료 판정용). */
   private inFlight = 0
+  /** 현재 in-flight write의 키(collection:id) — 없으면 null. evict가 이 write 완료를 await한다. */
+  private inFlightKey: string | null = null
+  /** 현재 in-flight write의 완료 신호 — 없으면 null. work()가 write 시작 시 생성, 종료 시 resolve·null한다. */
+  private inFlightSettled: Promise<void> | null = null
   /** 활성 워커 루프 promise(없으면 null). */
   private workerPromise: Promise<void> | null = null
   /** 워커 시작이 microtask로 예약됐는지 여부(중복 예약 방지). */
@@ -154,6 +158,24 @@ export class AsyncWriteQueue {
   }
 
   /**
+   * 지정 키를 큐 write 경로에서 제거한다 — pending에 있으면 취소하고, 이미 in-flight면 그 write가
+   * 끝날 때까지 await한다. SaveEngine.saveNow가 즉시 write 직전에 호출해, 같은 키의 stale 큐 write가
+   * saveNow의 최신 write보다 나중에 커밋돼 덮어쓰는 것을 pending·in-flight 양쪽에서 봉쇄한다.
+   *
+   * 반환 후 이 키의 미완료 큐 write는 남지 않는다 — coalescing으로 키당 pending 1건, 단일 워커로
+   * in-flight 1건뿐이므로 pending 삭제 + in-flight await로 둘 다 소진된다. saveNow는 이 호출 전에
+   * tracker.evict로 stale mark를 제거하므로, await 도중 주기 flush가 이 키를 재-enqueue하는 일도 없다
+   * (await 중 도착한 더 새로운 markDirty는 evict 이후라 tracker에 남아 다음 flush로 영속화된다).
+   */
+  async evict(collection: string, id: string): Promise<void> {
+    const key = `${collection}:${id}`
+    this.pending.delete(key)
+    if (this.inFlightKey === key && this.inFlightSettled !== null) {
+      await this.inFlightSettled
+    }
+  }
+
+  /**
    * 워커 시작을 microtask로 지연 예약한다. 동기 burst enqueue가 모두 pending에 쌓인 뒤
    * 워커가 첫 항목을 가져가도록 해 coalescing을 "최종 write 1회"로 성립시킨다.
    */
@@ -193,6 +215,12 @@ export class AsyncWriteQueue {
         // take 시점에 슬롯 1개를 비우고 대기 중인 enqueue 하나를 깨운다(pending-only backpressure).
         this.releaseWaiter()
         this.inFlight += 1
+        // in-flight 창을 노출한다 — evict(collection,id)가 이 키의 write 완료를 await할 수 있게 한다.
+        this.inFlightKey = key
+        let settleInFlight!: () => void
+        this.inFlightSettled = new Promise<void>((resolve) => {
+          settleInFlight = resolve
+        })
         try {
           await this.writeWithRetry(entry)
         } catch {
@@ -200,6 +228,9 @@ export class AsyncWriteQueue {
           // 다음 job으로 진행하게 한다. 바깥 catch만 두면 여기서 루프를 이탈해 후속 job이 유실된다.
         } finally {
           this.inFlight -= 1
+          this.inFlightKey = null
+          this.inFlightSettled = null
+          settleInFlight()
         }
       }
     } catch {
@@ -218,7 +249,11 @@ export class AsyncWriteQueue {
    * (permanent·소진·미지 collection 모두 logger 기록 후 return) — 워커 루프 생존 보장.
    */
   private async writeWithRetry(entry: DirtyEntry): Promise<void> {
-    const adapter = this.dispatch[entry.collection]
+    // hasOwn 가드 — collection은 unconstrained string이므로 '__proto__' 등 prototype 키가
+    // Object.prototype 멤버로 해석돼 undefined 가드를 우회하는 것을 막는다(security.md 동적 키 접근).
+    const adapter = Object.hasOwn(this.dispatch, entry.collection)
+      ? this.dispatch[entry.collection]
+      : undefined
     if (adapter === undefined) {
       this.logger.error(
         { collection: entry.collection, id: entry.id },
