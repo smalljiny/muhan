@@ -33,7 +33,7 @@
 3. **전송 계층 확정** — 손수 `ws` + in-process EventEmitter 채널(Colyseus 반려).
 4. **프로토콜 확정** — 구조화 JSON command/event 계약 + Zod 단일 출처 + 공유 타입.
 5. **입력·i18n 확정** — 구조화 UI + 자유 텍스트 병행, UTF-8 전용, 조사 규칙 클라 렌더.
-6. **인증·권한 확정** — account/character 분리, argon2id, RBAC, WS 핸드셰이크.
+6. **인증·권한 확정** — account/character 분리, ~~argon2id~~ **Firebase Auth(세션 쿠키)**(§3.7 보정), RBAC, WS 핸드셰이크.
 7. **테스트 전략 확정** — C oracle 대조 frozen 골든 fixture + property 테스트.
 8. **프로젝트 구성 확정** — pnpm monorepo + Vite/tsup.
 9. **정책 명문화** — §4의 두 전역 정책(as-shipped 재현 / 형상 개선)과 전역 불변식.
@@ -73,11 +73,13 @@
 
 ### 3.6 프로토콜·입력·i18n (D4·D4-b·D5)
 
-command(클라→서버)·event(서버→클라) 계약을 명시 분리. 메시지당 Zod 스키마 1개 + `z.infer`로 TS 타입 파생(병렬 `type` 금지), `domain:action` discriminator 봉투. 명령 인자는 5개 패턴으로 수렴(무인자 / 대상+서수 / 대상+보조대상 / 자유텍스트 / 대화형 다단). 권한=미들웨어 레이어(입력 파싱과 분리). 좌표=클라 파생(서버는 그래프 권위, A4). **입력=구조화 UI + 자유 텍스트 병행**(명령=버튼·메뉴·타겟, 말·이모트=자유 채팅, 파워유저 자유 명령줄 옵션; 한글 동사-후치 파싱은 자유 모드 한정 콘텐츠). **i18n**: UTF-8 전용(EUC-KR→UTF-8은 `port/`에서 1회), 런타임 변환 경계 없음. 조사=Unicode 산술(`(code-0xAC00)%28`) 클라 i18n 레이어 렌더(서버는 명사+조사 슬롯 코드 전송), `으로/로` ㄹ 예외 수정(형상 P2).
+command(클라→서버)·event(서버→클라) 계약을 명시 분리. 메시지당 Zod 스키마 1개 + `z.infer`로 TS 타입 파생(병렬 `type` 금지), `domain:action` discriminator 래퍼. 명령 인자는 5개 패턴으로 수렴(무인자 / 대상+서수 / 대상+보조대상 / 자유텍스트 / 대화형 다단). 권한=미들웨어 레이어(입력 파싱과 분리). 좌표=클라 파생(서버는 그래프 권위, A4). **입력=구조화 UI + 자유 텍스트 병행**(명령=버튼·메뉴·타겟, 말·이모트=자유 채팅, 파워유저 자유 명령줄 옵션; 한글 동사-후치 파싱은 자유 모드 한정 콘텐츠). **i18n**: UTF-8 전용(EUC-KR→UTF-8은 `port/`에서 1회), 런타임 변환 경계 없음. 조사=Unicode 산술(`(code-0xAC00)%28`) 클라 i18n 레이어 렌더(서버는 명사+조사 슬롯 코드 전송), `으로/로` ㄹ 예외 수정(형상 P2).
 
 ### 3.7 인증·권한 (D6)
 
 account 1급 + `account 1:N character`. argon2id 해시 + 상수시간 비교(평문 교체). 세션 FSM 명시(상태 enum + 핸들러 맵, `io->fn` 함수 포인터 대체). WS 핸드셰이크 + TLS, identd·telnet 협상 폐기. 로그인 실패 잠금 → rate-limit. authz=RBAC 역할(builder/moderator/admin, 원본 클래스 계급 이상현상 재현 안 함, P2), 빌더/운영 권한 분리·감사 로그 유지. `system()` 셸 호출 제거(DB soft-delete). DM/빌더 표면은 post-MVP defer(별도 토픽).
+
+> **인증 방식 보정 (E3, 2026-07-06, 이슈 #32).** 위 "argon2id 해시 + 상수시간 비교(평문 교체)"는 **Firebase Auth(Google OAuth) 위임으로 대체**한다. account = Firebase uid이며 서버는 비밀번호 해시를 보관하지 않는다. 인증 토폴로지: 브라우저가 Firebase 로그인 → HTTP 엔드포인트(`/session/login`)가 `createSessionCookie`로 HttpOnly·Secure·SameSite 세션 쿠키 발급 → WS 핸드셰이크의 `@fastify/websocket` **preValidation 훅**에서 `verifySessionCookie` + Origin allowlist(CSWSH 방어)로 검증. **세션 FSM·RBAC·감사 로그·soft-delete 결정은 불변** — 인증 크리덴셜 저장·검증 메커니즘만 바뀐다. 원작 "이름=크리덴셜, 평문 비번"(A12)은 여전히 폐기 대상이며, 이 보정은 그 대체 형상을 argon2id 자체 해싱에서 Firebase 위임으로 변경한 것이다. 세부·근거는 이슈 #32 인증 seam 코멘트, 파급 스코프는 E5(#35). **P2 형상 정책(§5) 및 D6 요약표의 argon2id 표기도 이 보정으로 갱신됨.**
 
 ### 3.8 프로젝트 구성 (D8)
 
@@ -96,7 +98,7 @@ C oracle을 behavioral oracle로 삼는 **frozen 골든 fixture**(characterizati
 | 항목 | 결정 | 근거 |
 |------|------|------|
 | P1 재현 정책 | as-shipped 기본 + 항목별 결정 | 포팅 원칙 "동작 충실 재현"; A5·A6·A7·A9·A10 버그 목록. 확정 2026-07-01 |
-| P2 형상 정책 | 형상은 신규 스택으로 개선 | 형상 개선 원칙 2026-07-01; 노트 전반(telnet→WS·평문→argon2id·파일→Mongo) |
+| P2 형상 정책 | 형상은 신규 스택으로 개선 | 형상 개선 원칙 2026-07-01; 노트 전반(telnet→WS·평문→Firebase Auth 세션 쿠키(§3.7 E3 보정)·파일→Mongo) |
 | D0 전송 | 손수 `ws` + EventEmitter (Colyseus 반려); **Fastify HTTP 호스트 + `@fastify/websocket` 보정(E1)** | 장르 부적합·A10 소셜 밀도·상태 커플링·소규모는 단일 프로세스 충분; StateView 대규모 필터 비권장(Colyseus 문서); 단일 프로세스 3만~10만 WS 연결(Stack Harbor). **Fastify=HTTP 호스트(정적·`/health`·인증 REST), 게임 소켓=`@fastify/websocket`(내부 `ws`) → "손수 `ws`"·EventEmitter·Colyseus 반려 모두 불변; §3.5 보정 참조** |
 | D1 런타임 | 단일 프로세스, 1Hz heartbeat, next-action 큐 | A1(update_game 1Hz), A9(활성 집합 이벤트 구동), A11(스크립팅 불요); LuminariMUD·Evennia·LPMud 선례 |
 | D2 영속화 | 메모리 그래프 권위 + MongoDB, DB-네이티브 세이브 신규 설계 | A4(load_rom 폐기·전량 로드), A12(원본 세이브 타이밍=형상 재분류), A8(은행·금화); AlgoDaily 스냅샷 경계·dirty-flag autosave |
@@ -104,7 +106,7 @@ C oracle을 behavioral oracle로 삼는 **frozen 골든 fixture**(characterizati
 | D4 프로토콜 | 구조화 JSON command/event, Zod 단일 출처, 공유 타입 | A2(명령=구조화 이벤트·5 패턴), A3·A11; zod-sockets·OpenFrontIO·tRPC 선례 |
 | D4-b 입력 | 구조화 UI + 자유 텍스트 병행 | A2 §arch(자유 모드 한정 동사-후치); 확정 |
 | D5 i18n | UTF-8 전용, 클라 조사 렌더 + ㄹ 예외 수정 | A3(변환 1지점·조사 콘텐츠·ㄹ 버그); 확정 |
-| D6 인증 | account/character, argon2id, RBAC, WS 핸드셰이크 | A12(account 승격·평문 교체·FSM), A13(RBAC·DM defer) |
+| D6 인증 | account/character, ~~argon2id~~ **Firebase Auth 세션 쿠키**(§3.7 보정·E3), RBAC, WS 핸드셰이크 | A12(account 승격·평문 교체·FSM), A13(RBAC·DM defer); Firebase 위임 보정 이슈 #32 |
 | D7 테스트 | frozen 골든 fixture(oracle=생성기) + property | A5~A8 공식·버그 목록; characterization/approval/oracle 대조(Feathers·ApprovalTests·Fallout2-RE) |
 | D8 구성 | pnpm monorepo(shared/server/client/port) + Turborepo; 클라 Vite, **서버 tsc(번들러 없음, dev=tsx) — tsup 미채택 보정(E1)** | D4 공유 타입; MongoDB 문서 스키마; monorepo 타입 공유 선례. **tsup 유지보수 정체·서버=실행앱 번들 불필요·Fastify 동적 require 충돌 → tsc; §3.8 보정 참조** |
 | 동시 접속 규모 | 소규모(~수십~수백 CCU) | 원본 fd 제한 256; 확정 → D0·D1·D3 단일 프로세스 근거 |
