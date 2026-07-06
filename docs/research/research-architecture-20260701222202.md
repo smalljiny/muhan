@@ -25,7 +25,7 @@
 
 - **incoming command 계약과 outgoing event 계약을 명시적으로 분리.** `zod-sockets`는 incoming을 "Action"(input+ack 스키마), outgoing을 "Emission"으로 형식화하고 설정을 프론트로 export해 계약을 강제하며 AsyncAPI 생성 ([RobinTail/zod-sockets](https://github.com/RobinTail/zod-sockets)). 4X 게임은 공유 패키지에 `GameCommand`/`GameEvent` 분리 ([Ernest.dev](https://ernest.dev/2026/05/31/aonw-how-i-built-multiplayer-for-a-turn-based-4x-game-with-flutter-dart-websockets-and-postgresql/)). D4의 5개 인자 패턴·구조화 이벤트와 정합.
 - **메시지당 Zod 스키마 1개 + `z.infer`로 TS 타입 파생, 병렬 `type` 수동 관리 금지.** 스키마를 client/server 공용 위치(내부 npm 패키지·monorepo 폴더)에 둔다 ([DEV/Nevavuori](https://dev.to/jussinevavuori/end-to-end-typesafe-apis-with-typescript-and-shared-zod-schemas-4jmo)). 프로덕션 RTS OpenFrontIO는 모든 클라 액션을 `Intent` discriminated union(`z.infer` 멤버)으로 모델링 ([OpenFrontIO Schemas.ts](https://github.com/openfrontio/OpenFrontIO/blob/20bc311c/src/core/Schemas.ts)). D4의 "Zod 단일 출처 + monorepo shared" 결정을 직접 검증.
-- **네임스페이스 `action`/`type` discriminator 봉투**(`domain:action`, `table:join` 등)로 서버가 라우팅, 수신 시 Zod discriminated-union 파싱 ([Shoehive command-system](https://github.com/jtay/shoehive/blob/main/docs/pages/api/6_command-system.md)).
+- **네임스페이스 `action`/`type` discriminator 래퍼**(`domain:action`, `table:join` 등)로 서버가 라우팅, 수신 시 Zod discriminated-union 파싱 ([Shoehive command-system](https://github.com/jtay/shoehive/blob/main/docs/pages/api/6_command-system.md)).
 - 타입 공유 옵션 순위: (1) monorepo 공유 패키지, (2) OpenAPI/GraphQL, (3) tRPC. 라우터를 `/packages/api`에 dev dependency로 두면 타입은 빌드 시 소거돼 서버 코드 미배포로 타입 안전 확보 ([tRPC Discussion #6980](https://github.com/trpc/trpc/discussions/6980); [r/typescript](https://www.reddit.com/r/typescript/comments/1cjvvln/best_practices_for_sharing_types_between_backend/)). D8 pnpm monorepo shared 패키지 결정 뒷받침.
 - (컨텍스트 의존, 단일 출처) 턴제 게임은 mutating command를 HTTP로, WS는 서버 푸시 알림 전용으로 두고 `event_offset` 리플레이 로그를 두기도 한다 ([Ernest.dev](https://ernest.dev/2026/05/31/aonw-how-i-built-multiplayer-for-a-turn-based-4x-game-with-flutter-dart-websockets-and-postgresql/)) — 실시간 MUD는 명령을 소켓에 유지 가능.
 
@@ -73,7 +73,7 @@
 14. [RobinTail/zod-sockets](https://github.com/RobinTail/zod-sockets) — Action(incoming)/Emission(outgoing) Zod 검증, 계약 export.
 15. [DEV/Nevavuori: shared Zod schemas](https://dev.to/jussinevavuori/end-to-end-typesafe-apis-with-typescript-and-shared-zod-schemas-4jmo) — z.infer/monorepo 공유.
 16. [OpenFrontIO Schemas.ts](https://github.com/openfrontio/OpenFrontIO/blob/20bc311c/src/core/Schemas.ts) — Intent discriminated union.
-17. [Shoehive command-system](https://github.com/jtay/shoehive/blob/main/docs/pages/api/6_command-system.md) — `domain:action` 봉투·MessageRouter.
+17. [Shoehive command-system](https://github.com/jtay/shoehive/blob/main/docs/pages/api/6_command-system.md) — `domain:action` 래퍼·MessageRouter.
 18. [tRPC Discussion #6980](https://github.com/trpc/trpc/discussions/6980) — router in /packages/api, 빌드시 타입 소거 (r/typescript 병기).
 19. [SO: Redis pub/sub vs EventEmitter](https://stackoverflow.com/questions/65772945/redis-pub-sub-vs-node-js-eventemitter-for-only-once-processed-events) — in-process once-only vs 크로스노드.
 20. [Stack Harbor: WS scaling](https://stackharbor.com/en/knowledge-base/nodejs-websocket-scaling-pattern/) — 3만~10만 conn/process, stickiness/broadcast/presence, Socket.IO Redis adapter.
