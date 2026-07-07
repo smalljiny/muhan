@@ -12,6 +12,7 @@
     "test": "vitest run --coverage"
   },
   "dependencies": {
+    "@fastify/websocket": "catalog:",
     "fastify": "catalog:",
     "mongodb": "catalog:",
     "shared": "workspace:*",
