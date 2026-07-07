@@ -1,12 +1,24 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { Server as HttpsServer } from 'node:https'
 import { buildApp } from '../app.js'
 import { GAME_SOCKET_PATH, MAX_FRAME_BYTES } from './plugin.js'
+import { resetConfigForTests } from '../config/env.js'
 import { waitForMessage, waitForClose, waitFor } from './wsTestClient.testutil.js'
 
 // T3.6 — transport 배선의 RED 스펙. injectWS로 실 upgrade를 태워 라우트 마운트·프레임 하드닝·
 // per-connection 정리·https pass-through를 관찰한다. 인증·라우팅은 이 Story 범위 밖이라 검증하지 않는다.
 describe('WS transport', () => {
+  // 연결 핸들러가 getConfig()를 호출하므로(하트비트 튜닝값) 필수 env를 채워 fail-fast를 피한다.
+  beforeAll(() => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    resetConfigForTests()
+  })
+
+  afterAll(() => {
+    delete process.env.MONGODB_URI
+    resetConfigForTests()
+  })
+
   it('게임 소켓 연결을 수락한다', async () => {
     const app = buildApp()
     await app.ready()
@@ -54,6 +66,22 @@ describe('WS transport', () => {
     expect(app.wsConnections.size).toBe(1)
 
     ws.terminate()
+    await app.close()
+  })
+
+  it('연결 수락 시 하트비트 타이머를 시작해 ctx.heartbeat에 배선한다', async () => {
+    const app = buildApp()
+    await app.ready()
+
+    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    await waitFor(() => app.wsConnections.size === 1)
+
+    // 하트비트 start()가 반환한 타이머 핸들이 ctx에 배선돼야 한다(cleanup·누수 방지 seam).
+    const ctx = [...app.wsConnections.values()][0]
+    expect(ctx?.heartbeat).not.toBeNull()
+
+    ws.terminate()
+    await waitFor(() => app.wsConnections.size === 0)
     await app.close()
   })
 

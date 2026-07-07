@@ -8,6 +8,8 @@ import {
   type ConnectionContext,
 } from './connection.js'
 import { handleHandshakeFrame } from './handshake.js'
+import { createHeartbeat } from './heartbeat.js'
+import { getConfig } from '../config/env.js'
 
 /** switch 완전성 컴파일 강제 — 도달하면 union에 미처리 variant가 생긴 것이다. */
 function assertNever(value: never): never {
@@ -74,6 +76,20 @@ export function registerWebsocket(app: FastifyInstance): void {
       const ctx = createConnectionContext()
       connections.set(socket, ctx)
 
+      // 서버 주도 하트비트를 시작해 죽은 연결을 감지·정리한다. env로 튜닝된 간격·임계를 매니저에 넘기고,
+      // 반환된 타이머 핸들을 ctx.heartbeat에 배선해 cleanup 경로가 이를 clear할 수 있게 한다.
+      const config = getConfig()
+      const heartbeat = createHeartbeat(socket, {
+        pingIntervalMs: config.WS_HEARTBEAT_PING_INTERVAL_MS,
+        maxMissed: config.WS_HEARTBEAT_MAX_MISSED,
+      })
+      ctx.heartbeat = heartbeat.start()
+
+      // pong 수신은 매니저에 알려 미스 카운터를 리셋한다(연결이 살아 있다는 신호).
+      socket.on('pong', () => {
+        heartbeat.notePong()
+      })
+
       // 연결 직후 서버 버전을 알리는 system:hello를 push한다. 버전은 per-connection 권위인
       // ctx.protocolVersion을 단일 출처로 쓴다(핸드셰이크 대조와 같은 값). 동기 push는 injectWS
       // 클라이언트가 message 리스너를 붙이기 전에 발화해 프레임이 드롭되는 레이스를 만든다 — setImmediate로
@@ -120,6 +136,8 @@ export function registerWebsocket(app: FastifyInstance): void {
       })
 
       socket.on('close', () => {
+        // 매니저 stop()으로 ping 타이머를 정지하고, cleanupConnection이 ctx.heartbeat를 한 번 더 clear한다.
+        heartbeat.stop()
         cleanupConnection(connections, socket)
       })
     })

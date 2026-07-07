@@ -23,12 +23,18 @@ export function createConnectionContext(): ConnectionContext {
 /**
  * 연결 종료 시 per-connection 리소스를 정리한다.
  *
- * 현재는 레지스트리에서 컨텍스트를 제거하는 것이 전부다. 하트비트 타이머 clear 지점은
- * Story 5-6에서 `heartbeat` 슬롯이 채워질 때 여기에 추가한다.
+ * `heartbeat` 슬롯에 남은 ping 타이머를 clear해 누수를 막고(방어선), 레지스트리에서 컨텍스트를 제거한다.
+ * 하트비트 매니저의 `stop()`도 같은 타이머를 정리하지만, 어느 경로로 close되더라도 타이머가 살아남지
+ * 않도록 여기서 한 번 더 clear한다(clearInterval은 idempotent).
  */
 export function cleanupConnection(
   connections: Map<WebSocket, ConnectionContext>,
   socket: WebSocket,
 ): void {
+  const ctx = connections.get(socket)
+  if (ctx?.heartbeat != null) {
+    clearInterval(ctx.heartbeat)
+    ctx.heartbeat = null
+  }
   connections.delete(socket)
 }
