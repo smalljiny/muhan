@@ -1,0 +1,157 @@
+# 전송·프로토콜 기반 (E3-1)
+
+> `@fastify/websocket` 게임 소켓 배선·`shared` Zod 프로토콜 계약(단일 출처)·1회 버전 협상 핸드셰이크·서버 주도 하트비트·`Map<type,handler>` 라우터의 정본. 무인증 `debug:echo` 왕복으로 end-to-end 검증한다.
+
+## 개요
+
+무한 포팅의 실시간 전송·프로토콜 계층 토대다. [`persistence.md`](persistence.md)(E2)가 세운 `buildApp()` Fastify 호스트와 `shared` 도메인 패키지 위에, ADR([`architecture.md`](architecture.md) D0 전송·D4 프로토콜)이 규정한 **구조화 WebSocket+JSON** 배선을 구체화한다. 원작 무한의 telnet `parse()`+`cmdlist[]` 선형 탐색·`str_compare` deepness·IAC 에코 협상·identd는 전부 **형상**으로 폐기하고(게임 분석 A2·A12 §7), 클라이언트가 명령과 인자를 이미 분리해 보내는 구조화 프로토콜로 재설계한다.
+
+이 토픽은 **transport-only**다 — 연결 수락·종료 수명주기, 프로토콜 봉투 계약, 버전 협상, 하트비트, 라우팅만 확립한다. 세 경계가 핵심이다.
+
+1. **client→server 명령 ↔ server→client 이벤트 경계** — `shared/protocol/`이 두 방향을 명시 분리된 두 판별 유니온(`clientCommandSchema`·`serverEventSchema`)으로 둔다. 서버 입력 검증은 command 유니온으로만, 클라 입력 검증은 event 유니온으로만 한다.
+2. **핸드셰이크 ↔ 라우팅 경계** — 첫 프레임은 버전 협상(`handleHandshakeFrame`)이 소비하고, 핸드셰이크 완료(`ctx.ready=true`) 이후 프레임만 라우터(`dispatch`)로 넘어간다. 두 단계 모두 부수효과 없는 순수 함수가 상태 전이·응답을 계산하고, message 핸들러가 I/O를 실행한다.
+3. **transport ↔ 인증 경계(seam)** — `verifyClient`·`preValidation`을 쓰지 않고 인증 seam만 라우트 옵션 자리에 주석으로 남긴다. 세션 쿠키 검증·Origin·`SessionAuthPort`는 T2가 이 자리에 얹는다.
+
+**범위 밖**(후속 토픽): 세션 쿠키 검증·세션 FSM(waiting→login→command)·prompt/response 다단 대화는 T2, 재연결·세션 레지스트리·상태 복원은 T3, 실제 124 게임 명령 핸들러는 후속 명령 구현 토픽, 브로드캐스트 채널은 월드 상태 엔진 에픽, 프로덕션 TLS 종단·프록시 설정은 배포/인프라 토픽이다.
+
+## 구조 / 스키마
+
+### 프로토콜 계약 (`packages/shared/src/protocol/`)
+
+`shared`의 기존 `schema/`(영속·도메인)와 **별개 모듈**이다 — 프로토콜은 와이어 메시지 계약, `schema/`는 저장 도메인 모델이다. 모든 TS 타입은 `z.infer`로만 파생하며 병렬 수기 타입을 두지 않는다. `index.ts` 배럴이 스키마·타입·`PROTOCOL_VERSION`을 함께 재노출하고, `shared/src/index.ts`가 이를 `export *`로 상위 노출한다. DOM 전역(`Event`·`Command`)과 충돌하지 않도록 파생 타입은 `ClientCommand`·`ServerEvent`로 한정 명명한다.
+
+**`version.ts`** — `PROTOCOL_VERSION = 1`. 계약이 하위 비호환으로 바뀔 때마다 1씩 단조 증가시키는 정수(semver 미채택 — 와이어 호환성만 판단하면 되므로 정수 동등 비교가 단순). 핸드셰이크가 이 값을 실어 client·server가 같은 계약 세대를 쓰는지 대조한다.
+
+**`payloads.ts`** — 명령 인자 패턴 building block 4종. 무한 명령 어휘가 인자 구조상 수렴하는 4패턴을 독립 `z.strictObject`로 못박아 command 봉투가 재사용한다. 다단 대화(prompt/response) payload는 T2 경계라 여기 두지 않는다.
+
+| 스키마 | shape | 용도 |
+|------|------|------|
+| `noArgsPayloadSchema` | `{}` | (a) 무인자 — 대상·텍스트 없이 동작만(예: 둘러보기) |
+| `targetOrdinalPayloadSchema` | `{ target: string, ordinal?: int }` | (b) 대상+서수 — 동명 대상이 여럿일 때 n번째 지목(생략 시 첫 번째) |
+| `targetSecondaryPayloadSchema` | `{ target: string, secondary: string }` | (c) 대상+보조대상 — 두 대상을 엮음(예: 상자에 열쇠 사용) |
+| `freeTextPayloadSchema` | `{ text: string }` | (d) 자유 텍스트 — 임의 문자열 한 덩어리(예: 말하기·echo) |
+
+**`commands.ts`** — `clientCommandSchema = z.discriminatedUnion('type', [...])`. top-level `type` 리터럴로 명령을 판별하며, 각 variant는 리터럴 discriminator를 둔 `strictObject`다.
+
+- `{ type: 'system:ready', protocolVersion: int }` — 핸드셰이크 개시. client가 아는 프로토콜 버전을 실어 첫 메시지로 보낸다.
+- `{ type: 'debug:echo', text: string(min 1), id?: string }` — 진단용 echo 요청. `freeTextPayloadSchema.shape`를 새 strictObject에 spread해 재사용하되 리터럴 discriminator·strict를 보존한다. `id`는 client가 응답을 짝짓는 optional 상관 키.
+
+**`events.ts`** — `serverEventSchema = z.discriminatedUnion('type', [...])` + `errorCodeSchema`.
+
+- `{ type: 'system:hello', protocolVersion: int }` — 연결 직후 서버가 자기 버전을 push.
+- `{ type: 'system:reload', reason: string(min 1) }` — 버전 불일치 시 재연결·재동기 지시. `reason`은 사람용 사유.
+- `{ type: 'debug:echo:result', text: string(min 1), correlationId?: string }` — echo 응답. `correlationId`는 요청 `id`와 짝짓는 상관 키.
+- `{ type: 'error', code: ErrorCode, message: string(min 1), correlationId?: string }` — 오류 통지. `code`는 기계 판독, `message`는 사람용.
+
+`errorCodeSchema = z.enum(['handshake_required', 'unknown_type', 'bad_payload', 'internal'])` — `handshake_required`(핸드셰이크 전 명령 수신), `unknown_type`(미지 discriminator), `bad_payload`(payload 형식 위반), `internal`(핸들러/처리 중 서버 내부 오류).
+
+### 전송 배선 (`packages/server/src/ws/`)
+
+`plugin.ts`가 배선의 중심이다. `GAME_SOCKET_PATH = '/game'`, `MAX_FRAME_BYTES = 64 * 1024`.
+
+- **`connection.ts`** — per-connection 컨텍스트. `ConnectionContext { protocolVersion: number(불변, 서버 권위), ready: boolean(핸드셰이크 완료 여부), heartbeat: NodeJS.Timeout | null }`. `createConnectionContext()`가 `PROTOCOL_VERSION`·`ready=false`·`heartbeat=null`로 초기화. `cleanupConnection()`이 남은 ping 타이머를 `clearInterval`(멱등)로 정리하고 레지스트리에서 컨텍스트를 제거한다.
+- **`frame.ts`** — 파싱된 프레임(`unknown`)에서 payload 스키마 검증 이전에 필드를 안전하게 읽는 primitive. `readField(parsed, key)`(객체·non-null·키 존재 가드 후 값 반환, 아니면 undefined), `readStringField(parsed, key)`(문자열일 때만 반환, 빈 문자열은 유효). null 가드가 load-bearing이다 — 없으면 `key in null`이 message 핸들러 안에서 throw한다. `key`는 호출부 리터럴이라 동적 키 주입 표면이 아니다.
+- **`heartbeat.ts`** — per-connection 하트비트 매니저. 아래 §동작 참조.
+- **`router.ts`** — `Map<type, handler>` 레지스트리·`dispatch` 순수 함수. 아래 §동작 참조.
+- **`handlers/echo.ts`** — 무인증 `echoHandler`.
+
+`FastifyInstance`에 `wsConnections: Map<WebSocket, ConnectionContext>`를 module augmentation으로 선언하고 `app.decorate`로 노출한다 — 진단·하트비트 스윕·테스트 관찰의 단일 출처다.
+
+## 동작
+
+### 앱 배선 (`packages/server/src/app.ts`)
+
+`buildApp(deps?)`가 `/health` REST 뒤에 `registerWebsocket(app)`을 무조건 호출한다. `deps.https`(`node:https` `ServerOptions`)를 넘기면 Fastify가 https 서버를 만들어 `wss` 종단을 지원한다(TLS-ready pass-through) — Fastify 타입 오버로드가 http 경로에 https 키를 거부하므로 분기한다. dev는 평문 loopback을 쓰므로 미주입이 기본이다.
+
+`registerWebsocket(app)`은 `@fastify/websocket`을 `{ options: { maxPayload: MAX_FRAME_BYTES } }`로 먼저 등록한 뒤, 별도 encapsulated 플러그인에서 `/game` 라우트를 `{ websocket: true }`로 마운트한다("라우트보다 먼저 플러그인 등록" 관례를 top-level await 없이 만족). `verifyClient`은 쓰지 않는다(transport-only). `MAX_FRAME_BYTES`는 프로토콜 레이어(`maxPayload`)로 강제해 버퍼 완성 전에 초과 프레임을 1009 close로 거부한다 — 핸들러 안에서 크기를 재면 이미 버퍼링된 뒤라 방어가 안 된다.
+
+명령 레지스트리는 무상태 핸들러 배선표라 연결 간 공유 안전해 모듈 로드 시 1회 조립한다(`createCommandRegistry()`).
+
+### 연결 수명주기
+
+소켓 accept 시 message 핸들러가 다음을 배선한다.
+
+1. `createConnectionContext()`로 컨텍스트를 만들어 `wsConnections`에 등록.
+2. `getConfig()`의 튜닝값으로 `createHeartbeat(socket, ...)`을 만들고 `start()` 타이머 핸들을 `ctx.heartbeat`에 배선. `socket.on('pong')`이 `notePong()`으로 미스 카운터를 리셋.
+3. `setImmediate`로 `system:hello{protocolVersion}`를 push. 동기 push는 injectWS 클라이언트가 message 리스너를 붙이기 전에 발화해 프레임이 드롭되는 레이스를 만들므로, 리스너 부착(promise 기반, `process.nextTick`보다 늦음) 뒤로 지연시킨다. 버전은 per-connection 권위인 `ctx.protocolVersion`을 단일 출처로 쓴다.
+4. `socket.on('close')`가 `heartbeat.stop()` + `cleanupConnection()`으로 타이머를 정지·정리한다.
+
+모든 서버→클라 전송은 `safeSend(socket, event)`를 거친다 — `readyState === OPEN`만 전송하고, 프레임 수신과 응답 사이에 피어가 닫아 `send`가 throw하는 경우를 삼킨다(곧 `close`가 발화해 cleanup이 돈다). 서버 종료 시 소켓 닫기는 `@fastify/websocket` 기본 `preClose`가 맡는다.
+
+### 메시지 처리 파이프라인
+
+`socket.on('message')`가 프레임마다 다음 순서를 실행한다.
+
+1. **JSON 파싱** — `frameToText(RawData)`(nodebuffer/Array/기타를 UTF-8로 정규화) 후 `JSON.parse`. 실패 시 `error{bad_payload}`로 응답하고 종료(type 판별보다 우선).
+2. **핸드셰이크 게이트** — `handleHandshakeFrame(ctx, parsed)`가 반환한 `HandshakeResult`를 message 핸들러가 해석한다. 전체를 try/catch로 감싸 어떤 throw든 `error{internal}`로 격리하고 소켓을 생존시킨다(fastify errorHandler가 message 핸들러 예외를 잡지 못하므로 방어적 확장).
+
+`handleHandshakeFrame`은 부수효과 없는 순수 함수이며, 상태 전이표는(malformed JSON은 이 함수 도달 전에 걸러진다):
+
+| 상태 | 입력 | 결과 action | 부수효과 |
+|------|------|-------------|----------|
+| pre-ready | `system:ready` + 버전 정확 일치 | `accept` | `ctx.ready = true` |
+| pre-ready | `system:ready` + 버전 불일치(누락·문자열·소수 포함) | `reload` | `system:reload` push 후 다음 tick에 `socket.close()` |
+| pre-ready | `system:ready` 아님 | `error` | `error{handshake_required}` push |
+| ready | `system:ready`(중복) | `error` | `error{handshake_required}` push |
+| ready | 그 외 | `pass` | 라우터로 디스패치 |
+
+버전 대조는 **서버 권위 정확 비교**(`readField(parsed, 'protocolVersion') === ctx.protocolVersion`, 강제 변환 없음)다. 핸드셰이크는 type+버전만 게이트하고 `clientCommandSchema` strict 파싱을 돌리지 않는다 — 여분 필드가 실려도 `ready`로 전이하나, ready 이후 모든 command는 라우터가 strict 검증하므로 우회 표면이 없다. `reload`는 프레임을 먼저 보내고 `setImmediate`로 close한다(같은 tick close가 프레임 플러시를 앞질러 클라이언트가 reload를 못 받는 injectWS 특이 동작 회피).
+
+### 라우터·핸들러 레지스트리 (`router.ts`)
+
+`dispatch(registry, parsed)`는 핸드셰이크를 통과(`pass`)한 프레임을 O(1) 디스패치하는 순수 함수다. 레이어 순서가 distinct error code를 강제하기 위해 load-bearing이다.
+
+1. `readStringField(parsed, 'type')` 없음 → `error{unknown_type}`(상관 키 없음).
+2. `registry.get(type)` 실패 → `error{unknown_type}`. **allowlist 가드** — 미등록/미지 type 차단. 레지스트리가 plain object가 아닌 실제 `Map`이라 `get('__proto__')`가 prototype 속성에 도달하지 않고 undefined를 반환해 prototype-pollution 우회를 원천 차단한다.
+3. `clientCommandSchema.safeParse` 실패 → `error{bad_payload}`. 등록된 type이지만 payload 위반. discriminator가 등록 type임을 확인한 뒤 파싱하므로 정확히 그 variant를 검증한다(shared 계약 단일 출처).
+4. `handler(parsed)` throw → `error{internal}`. 핸들러 예외를 격리해 소켓을 생존시킨다.
+
+상관 키 `id`는 type 판별 직후·payload 검증 이전에 `readStringField`로 추출해(빈 문자열도 유효 → `typeof`로 판별), `bad_payload`·`internal` 응답도 상관 키를 실어 클라이언트가 실패를 상관지을 수 있게 한다. `unknown_type`은 type 판별 이전이라 상관 키를 싣지 않는다. `errorEvent()`는 `correlationId`가 있을 때만 키를 포함한다(undefined 키 금지).
+
+`createCommandRegistry()`는 이 계층에서 무인증 `debug:echo` 하나만 배선한다(`new Map([['debug:echo', echoHandler]])`). 레지스트리는 의도적으로 `clientCommandSchema`보다 좁은 런타임 디스패치 집합이다 — `system:ready`는 스키마에 있으나 핸드셰이크가 `pass` 이전에 소비하므로 등록하지 않는다. 신규 핸들러는 반드시 `clientCommandSchema`에도 variant를 추가해야 한다(스키마에 없는 type의 핸들러는 `safeParse`가 매칭하지 못해 영구히 `bad_payload`로 떨어진다).
+
+`echoHandler(command)`는 `debug:echo{text, id?}` → `debug:echo:result{text, correlationId?}`로 되돌린다. 라우터가 이미 검증한 `ClientCommand`만 받으므로 payload를 재검증하지 않는다. `id`가 있을 때만(`!== undefined`, 빈 문자열도 유효) `correlationId` 키를 싣는다.
+
+### 하트비트 (`heartbeat.ts`)
+
+서버 주도 canonical 패턴(`ws` `isAlive`/`ping`/`terminate`)의 **단일 인터벌(isAlive) 모델**이다. `createHeartbeat(socket, opts)`가 상태(미스 카운트·`awaitingPong`·타이머 핸들)를 클로저에 캡슐화하고 `{ start, stop, notePong }`을 반환한다.
+
+- `start()` — `missedPongs=0`·`awaitingPong=false`로 초기화하고 `pingIntervalMs`마다 `tick`을 도는 인터벌 타이머 핸들을 반환.
+- `tick()` — `awaitingPong`이면(직전 ping의 pong 미수신) `missedPongs += 1`, `maxMissed` 도달 시 `socket.terminate()` + `stop()`. 이후 `awaitingPong=true`로 세우고 `socket.ping()`.
+- `notePong()` — `missedPongs=0`·`awaitingPong=false`로 리셋(연결 생존 신호).
+- `stop()` — 타이머 clear(멱등).
+
+타이머는 주입 가능(`setIntervalFn`/`clearIntervalFn`)이라 fake clock으로 결정적 단위 테스트가 가능하고, 미주입 시 전역 타이머를 쓴다. 첫 인터벌은 미스를 세지 않고 ping만 보내므로 종료까지 ≈ `pingIntervalMs × (maxMissed + 1)`이다(기본값 25s·3 → ≈ 100s).
+
+### Env config (`packages/server/src/config/env.ts`)
+
+`EnvSchema`에 하트비트 튜닝 3필드를 추가한다(모두 `z.coerce.number().int().min(1)`).
+
+- `WS_HEARTBEAT_PING_INTERVAL_MS`(기본 25000) — ping 간격·유효 per-pong 마감.
+- `WS_HEARTBEAT_MAX_MISSED`(기본 3) — 연속 미스 종료 임계.
+- `WS_HEARTBEAT_PONG_TIMEOUT_MS`(기본 10000) — **예약 seam**. 현재 단일 인터벌 모델은 소비하지 않는다(유효 마감은 이 값이 아니라 `PING_INTERVAL`) — 향후 이중 타이머 모델 도입 시 소비. 운영자 오도를 막기 위해 무효임을 스키마 주석에 명시한다.
+
+`getConfig()`는 `plugin.ts`가 연결마다 읽어 `createHeartbeat`에 `pingIntervalMs`·`maxMissed`를 넘긴다.
+
+### 테스트 전략 (`packages/server/src/ws/`)
+
+**실서버(포트 0)+실 `ws` 클라이언트+Vitest**가 이 스택 최적이다(리서치 `ws-e2e-cli-tools-20260706.md` 확정). `wsTestClient.testutil.ts`가 injectWS 클라이언트(단위)와 실 `ws` 클라이언트(E2E)를 함께 관찰하는 헬퍼를 제공한다.
+
+- `waitForMessage(ws)`/`waitForClose(ws)`/`waitForOpen(ws)` — 최소 emitter 계약(`{ once(event, cb) }`)에만 의존해 injectWS·실 `ws` 클라이언트가 동일하게 충족. `waitForMessage`는 `serverEventSchema.parse`로 검증·파싱하고 계약 밖 이벤트는 clean reject한다. `send` 전에 리스너를 먼저 걸어 `system:hello` 드롭 레이스를 없앤다.
+- `waitFor(predicate)` — 서버측 상태 전이(연결 레지스트리 크기 등)를 경합 없이 폴링.
+- `startTestServer(app)` — 포트 0·`127.0.0.1`(IPv4 loopback 명시, `localhost`의 ::1 resolve로 인한 간헐 ECONNREFUSED 회피)로 리슨시켜 `ws://` URL 반환.
+- `newClient(url, opts)` — open을 기다리지 않고 동기 반환해 리스너를 먼저 걸게 함. `autoPong: false`로 프로토콜 레벨 자동 pong을 억제해 하트비트-miss terminate를 실 소켓으로 강제할 수 있다.
+
+각 패키지 vitest 커버리지 80%+ 게이트(배선 엔트리 제외, 앱 팩토리는 injectWS 스모크).
+
+## 제약사항
+
+- **인증·세션은 T2** — handshake는 transport-only다. 세션 쿠키 검증·Origin 체크·`SessionAuthPort`·`preValidation` 훅은 이 토픽 밖이며, `plugin.ts`의 `/game` 라우트 옵션 자리에 SEAM 주석만 남긴다. 세션 FSM(waiting→login→command)·prompt/response 다단 대화·평문→해시 비밀번호 교체·checkdouble 동시접속 방어도 T2.
+- **재연결은 T3** — 세션 레지스트리·상태 복원(onReconnect)은 이 토픽에 없다.
+- **실 게임 명령 핸들러는 후속 토픽** — 이 계층은 5 인자 패턴 스키마 + 무인증 `debug:echo` 하나만 배선한다. 실제 124 게임 명령(이동·전투·마법·아이템·소셜·DM) 핸들러와 명령→구조화 이벤트 매핑은 후속 명령 구현 토픽. 어떤 실게임 command가 "직접 응답 있음(질의형)"인지의 correlationId 반향 대상 목록도 그때 정해진다.
+- **다단 대화 payload 없음** — `payloads.ts`는 4패턴(무인자/대상+서수/대상+보조대상/자유텍스트)만 정의한다. 5번째 prompt/response 다단 payload는 T2 경계다.
+- **`debug:echo`는 무권한 노출** — 진단·파이프라인 검증 전용이다. 프로덕션 빌드 제거/플래그 게이트 여부는 후속 하드닝에서 재검토한다.
+- **`WS_HEARTBEAT_PONG_TIMEOUT_MS`는 미소비 예약 seam** — 현재 단일 인터벌 모델의 유효 per-pong 마감은 `PING_INTERVAL`이다. 이 필드를 낮춰도 종료 타이밍은 바뀌지 않는다.
+- **TLS는 TLS-ready pass-through만** — `buildApp`이 `https` 서버 옵션을 Fastify로 pass-through해 `wss`를 지원한다. dev는 평문 loopback `ws`. 프로덕션 TLS 종단 지점(Fastify https vs 리버스 프록시)과 하트비트 인터벌 확정값(프록시 idle timeout 75% 규칙)은 배포/인프라 토픽에서 재조정한다.
+- **`protocolVersion` bump 정책 미확정** — 형식은 정수 `1`로 확정. *언제* 올리는가(호환 불가 변경 기준·문서화)는 프로토콜이 커질 때 별도로 정한다.
+- **브로드캐스트·한글 자유 텍스트 파서 없음** — 단일 소켓 왕복만 다룬다. EventEmitter 토픽·구독 필터·방=채널은 월드 상태 엔진/소셜 에픽, 동사-후치 자유 텍스트 파서는 자유 모드 UI 토픽(구조화 명령은 클라가 이미 분리 전송), 조사 i18n 렌더·클라이언트 UI는 프론트엔드 토픽이다.
