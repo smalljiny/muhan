@@ -35,6 +35,10 @@ export function buildApp(deps?: {
 
   // 게임 소켓 transport를 무조건 등록한다. injectWS·실 upgrade가 완성된 app에서만 동작하고,
   // 라우트가 안 쓰이면 기존 /health 경로엔 영향이 없다.
+  //
+  // 등록 순서: @fastify/websocket "라우트보다 먼저 등록" 관례는 WS 라우트에 대한 것이다. 유일한 WS 라우트
+  // `/game`은 registerWebsocket 내부에서 플러그인 등록 뒤에 마운트되므로 관례를 충족한다. 앞선 `/health`는
+  // 평문 GET이라 upgrade 대상이 아니고, 이 앱에 `/game` 외 WS upgrade 대상이 없어 순서로 인한 영향이 없다.
   registerWebsocket(app)
 
   return app

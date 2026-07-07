@@ -56,6 +56,10 @@ export function handleHandshakeFrame(ctx: ConnectionContext, parsed: unknown): H
   }
 
   // 서버 권위 정확 비교(강제 변환 없음). 누락·문자열·소수 등 어떤 불일치도 reload로 보낸다.
+  // 의도적 설계: 핸드셰이크는 type+버전만 게이트하고 `clientCommandSchema` strict 파싱을 돌리지 않는다.
+  // 계약 밖 여분 필드가 실려도 ready로 전이하나, ready 이후 모든 command는 router가 clientCommandSchema로
+  // strict 검증하므로 우회 표면이 없다. 여기서 strict 파싱하면 "문자열/누락 protocolVersion → reload"
+  // 계약이 bad_payload로 바뀌어(handshake.test.ts) 버전 협상 의미가 달라진다 — 그래서 type-only 게이트를 유지한다.
   if (readField(parsed, 'protocolVersion') === ctx.protocolVersion) {
     return { action: 'accept' }
   }
