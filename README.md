@@ -32,8 +32,10 @@
 | 스택·아키텍처 결정 (ADR, 이슈 #14) | ✅ 확정 |
 | **E1** monorepo 스캐폴딩 (이슈 #30) | ✅ 완료 |
 | **E2-1** 영속화 기반 (연결·스키마·repository·부팅 로드, 이슈 #39) | ✅ 완료 |
-| **E2-2** 세이브 정책 엔진 (이슈 #40) | 🔜 다음 |
-| E3 전송·세션 · E4 월드 엔진 · E5 인증 · E6 게임 규칙 · E7 소셜 · E8 테스트 인프라 | ⏳ 예정 |
+| **E2-2** 세이브 정책 엔진 (이슈 #40) | ✅ 완료 |
+| **E3-1** 전송·프로토콜 기반 (WS 배선·프로토콜 계약·버전 협상·하트비트·라우터, 이슈 #45) | ✅ 완료 |
+| **E3** 세션·재연결 (T2 세션·인증 · T3 재연결, 에픽 #32) | 🔜 다음 |
+| E4 월드 엔진 · E5 인증 · E6 게임 규칙 · E7 소셜 · E8 테스트 인프라 | ⏳ 예정 |
 
 ---
 
@@ -63,7 +65,7 @@ muhan/
 ├── data/world/   # port/로 변환된 JSON 월드 데이터 (산출물, 정본)
 ├── legacy/muhan/ # 원본 C 소스·월드·세이브 (읽기 전용 oracle, EUC-KR)
 └── docs/
-    ├── specs/    # 정본 스펙 (architecture · monorepo · persistence)
+    ├── specs/    # 정본 스펙 (architecture · monorepo · persistence · save-policy · transport-protocol)
     ├── notes/    # 게임 분석 노트 A1–A13
     └── research/ # 아키텍처·스캐폴딩 리서치 보고서
 ```
@@ -144,5 +146,7 @@ node packages/port/convertWorld.js legacy/muhan data/world --pretty
 | [`docs/specs/architecture.md`](docs/specs/architecture.md) | 서버·클라이언트 스택과 8개 결정 축의 정본 ADR (이슈 #14) |
 | [`docs/specs/monorepo.md`](docs/specs/monorepo.md) | pnpm + Turborepo 4패키지 스캐폴딩·툴체인 (E1) |
 | [`docs/specs/persistence.md`](docs/specs/persistence.md) | MongoDB 연결·문서 스키마·repository·부팅 월드 로드 (E2-1) |
+| [`docs/specs/save-policy.md`](docs/specs/save-policy.md) | dirty-flag 추적·주기 flush·은행 트랜잭션 원자성 세이브 엔진 (E2-2) |
+| [`docs/specs/transport-protocol.md`](docs/specs/transport-protocol.md) | WS 게임 소켓 배선·Zod 프로토콜 계약·버전 협상·하트비트·라우터 (E3-1) |
 | `docs/notes/game-analysis-20260625/` | 게임 분석 노트 A1–A13 (런타임·전투·마법·경제·소셜·세션) |
 | `docs/research/` | 아키텍처·스캐폴딩 리서치 보고서 (결정 근거 출처) |
