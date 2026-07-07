@@ -7,6 +7,12 @@ import {
   createConnectionContext,
   type ConnectionContext,
 } from './connection.js'
+import { handleHandshakeFrame } from './handshake.js'
+
+/** switch 완전성 컴파일 강제 — 도달하면 union에 미처리 variant가 생긴 것이다. */
+function assertNever(value: never): never {
+  throw new Error(`처리되지 않은 HandshakeResult: ${JSON.stringify(value)}`)
+}
 
 /**
  * 게임 소켓 경로. 인증·핸드셰이크·라우팅 없이 transport만 마운트한다(Story 4-6에서 로직 추가).
@@ -64,21 +70,52 @@ export function registerWebsocket(app: FastifyInstance): void {
   app.register((instance, _opts, done) => {
     // T3.4 SEAM (Story 4-6): 인증 preValidation 훅은 여기 라우트 옵션에 붙는다(현재 미부착).
     instance.get(GAME_SOCKET_PATH, { websocket: true }, (socket) => {
-      // T3.4 SEAM (Story 4-6): 인증·핸드셰이크는 여기 이전에 preValidation 훅으로 게이트된다.
-      // transport-only인 이 Story는 seam만 남기고 인증·라우팅 로직을 넣지 않는다.
-      connections.set(socket, createConnectionContext())
+      // T3.4 SEAM (Story 4-6): 인증은 여기 이전에 preValidation 훅으로 게이트된다(현재 미부착).
+      const ctx = createConnectionContext()
+      connections.set(socket, ctx)
+
+      // 연결 직후 서버 버전을 알리는 system:hello를 push한다. 버전은 per-connection 권위인
+      // ctx.protocolVersion을 단일 출처로 쓴다(핸드셰이크 대조와 같은 값). 동기 push는 injectWS
+      // 클라이언트가 message 리스너를 붙이기 전에 발화해 프레임이 드롭되는 레이스를 만든다 — setImmediate로
+      // 지연시켜 클라이언트의 promise 기반 리스너 부착(process.nextTick보다 늦음) 뒤에 나가게 한다.
+      setImmediate(() => {
+        safeSend(socket, { type: 'system:hello', protocolVersion: ctx.protocolVersion })
+      })
 
       socket.on('message', (data: RawData) => {
         // message 핸들러가 던진 에러는 fastify errorHandler가 잡지 못하므로 자체 try/catch로 감싼다.
+        let parsed: unknown
         try {
-          // Story 4-6: 파싱된 명령을 라우터로 디스패치한다. transport-only인 이 Story는 파싱만 검증한다.
-          JSON.parse(frameToText(data))
+          parsed = JSON.parse(frameToText(data))
         } catch {
-          safeSend(socket, {
-            type: 'error',
-            code: 'bad_payload',
-            message: 'JSON 파싱 실패',
-          })
+          // 파싱 실패는 핸드셰이크 게이트보다 우선한다(type 판별 이전에 실패).
+          safeSend(socket, { type: 'error', code: 'bad_payload', message: 'JSON 파싱 실패' })
+          return
+        }
+
+        // 핸드셰이크 상태 전이는 순수 함수가 계산하고, 여기서 부수효과(전송·close·상태 변이)를 실행한다.
+        const result = handleHandshakeFrame(ctx, parsed)
+        switch (result.action) {
+          case 'accept':
+            ctx.ready = true
+            break
+          case 'error':
+            safeSend(socket, result.event)
+            break
+          case 'reload':
+            // reload 프레임을 먼저 보내고 다음 tick에 close한다 — 같은 tick 내 close가 프레임 플러시를
+            // 앞질러 클라이언트가 reload를 못 받는 injectWS 특이 동작을 피한다(서버 권위 종료).
+            safeSend(socket, result.event)
+            setImmediate(() => {
+              if (socket.readyState === socket.OPEN) socket.close()
+            })
+            break
+          case 'pass':
+            // Story 6 라우터로 디스패치할 자리. 이 Story는 no-op.
+            break
+          default:
+            // HandshakeResult에 action이 추가되면(Story 6) 컴파일 타임에 여기서 걸린다 — 조용한 no-op 방지.
+            assertNever(result)
         }
       })
 

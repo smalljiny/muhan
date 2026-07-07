@@ -42,8 +42,9 @@ describe('WS transport', () => {
     await app.ready()
 
     const ws = await app.injectWS(GAME_SOCKET_PATH)
-    await waitFor(() => app.wsConnections.size === 1)
+    await waitForMessage(ws) // 연결 직후 push되는 system:hello를 먼저 소비한다.
 
+    // malformed JSON은 파싱이 핸드셰이크 게이트보다 먼저 실패하므로 pre-ready에서도 bad_payload다.
     const received = waitForMessage(ws)
     ws.send('{ this is not json')
     const event = await received
@@ -68,6 +69,97 @@ describe('WS transport', () => {
     await waitFor(() => app.wsConnections.size === 0)
     expect(app.wsConnections.size).toBe(0)
 
+    await app.close()
+  })
+
+  it('연결 직후 system:hello{protocolVersion}를 push한다', async () => {
+    const app = buildApp()
+    await app.ready()
+
+    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    const hello = await waitForMessage(ws)
+
+    expect(hello).toMatchObject({ type: 'system:hello', protocolVersion: 1 })
+
+    ws.terminate()
+    await app.close()
+  })
+
+  it('ready 이전 non-ready 명령을 handshake_required로 거부하고 소켓은 생존한다', async () => {
+    const app = buildApp()
+    await app.ready()
+
+    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    await waitForMessage(ws) // system:hello 소비
+
+    const rejected = waitForMessage(ws)
+    ws.send(JSON.stringify({ type: 'debug:echo', text: '핑' }))
+    const event = await rejected
+
+    expect(event).toMatchObject({ type: 'error', code: 'handshake_required' })
+    expect(ws.readyState).toBe(ws.OPEN)
+
+    ws.terminate()
+    await app.close()
+  })
+
+  it('버전 일치 system:ready로 핸드셰이크를 완료한다 (ready=true)', async () => {
+    const app = buildApp()
+    await app.ready()
+
+    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    const hello = await waitForMessage(ws)
+    expect(hello).toMatchObject({ type: 'system:hello', protocolVersion: 1 })
+
+    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
+    await waitFor(() => [...app.wsConnections.values()][0]?.ready === true)
+
+    expect([...app.wsConnections.values()][0]?.ready).toBe(true)
+    expect(ws.readyState).toBe(ws.OPEN)
+
+    ws.terminate()
+    await app.close()
+  })
+
+  it('버전 불일치 system:ready는 system:reload push 후 소켓을 닫는다', async () => {
+    const app = buildApp()
+    await app.ready()
+
+    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    await waitForMessage(ws) // system:hello 소비
+
+    // reload 프레임이 close 전에 확실히 플러시되도록 두 리스너를 send 전에 건다.
+    const reloadReceived = waitForMessage(ws)
+    const closed = waitForClose(ws)
+    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 999 }))
+
+    const reload = await reloadReceived
+    expect(reload).toMatchObject({ type: 'system:reload' })
+
+    const code = await closed
+    expect(typeof code).toBe('number')
+
+    await app.close()
+  })
+
+  it('핸드셰이크 완료 후 중복 system:ready를 error로 거부한다', async () => {
+    const app = buildApp()
+    await app.ready()
+
+    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    await waitForMessage(ws) // system:hello 소비
+
+    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
+    await waitFor(() => [...app.wsConnections.values()][0]?.ready === true)
+
+    const rejected = waitForMessage(ws)
+    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
+    const event = await rejected
+
+    expect(event).toMatchObject({ type: 'error' })
+    expect(ws.readyState).toBe(ws.OPEN)
+
+    ws.terminate()
     await app.close()
   })
 
