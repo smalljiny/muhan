@@ -1,5 +1,6 @@
 import type { ServerEvent } from 'shared'
 import type { ConnectionContext } from './connection.js'
+import { readField, readStringField } from './frame.js'
 
 /**
  * 핸드셰이크 프레임 처리 결과 — message 핸들러가 수행할 부수효과를 순수 함수로 기술한 명령.
@@ -12,22 +13,6 @@ export type HandshakeResult =
   | { readonly action: 'pass' }
   | { readonly action: 'error'; readonly event: ServerEvent }
   | { readonly action: 'reload'; readonly event: ServerEvent }
-
-/**
- * 파싱된 프레임(unknown)에서 고정 키 필드를 안전하게 꺼낸다. 객체가 아니거나 null이거나 키가 없으면
- * undefined. null 가드는 load-bearing이다 — 이게 없으면 `key in null`이 message 핸들러 안에서 throw한다.
- * `key`는 호출부의 리터럴('type'·'protocolVersion')이라 동적 키 주입 표면이 아니다.
- */
-function readField(parsed: unknown, key: string): unknown {
-  if (typeof parsed !== 'object' || parsed === null || !(key in parsed)) return undefined
-  return (parsed as Record<string, unknown>)[key]
-}
-
-/** 파싱된 프레임의 `type` 리터럴을 추출한다. 객체·문자열 type이 아니면 undefined. */
-function frameType(parsed: unknown): string | undefined {
-  const type = readField(parsed, 'type')
-  return typeof type === 'string' ? type : undefined
-}
 
 /**
  * 1회 버전 협상 핸드셰이크의 상태 전이를 계산한다(순수 함수 — 부수효과 없음).
@@ -43,7 +28,7 @@ function frameType(parsed: unknown): string | undefined {
  * 불일치도 reload 경로로 보낸다(clientCommandSchema 전체 파싱은 Story 6 라우터의 몫).
  */
 export function handleHandshakeFrame(ctx: ConnectionContext, parsed: unknown): HandshakeResult {
-  const type = frameType(parsed)
+  const type = readStringField(parsed, 'type')
 
   if (ctx.ready) {
     if (type === 'system:ready') {

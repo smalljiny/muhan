@@ -191,6 +191,28 @@ describe('WS transport', () => {
     await app.close()
   })
 
+  it('핸드셰이크 완료 후 debug:echo를 debug:echo:result로 되돌린다', async () => {
+    const app = buildApp()
+    await app.ready()
+
+    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    const hello = await waitForMessage(ws)
+    expect(hello).toMatchObject({ type: 'system:hello', protocolVersion: 1 })
+
+    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
+    await waitFor(() => [...app.wsConnections.values()][0]?.ready === true)
+
+    const result = waitForMessage(ws)
+    ws.send(JSON.stringify({ type: 'debug:echo', text: '핑', id: 'c1' }))
+    const event = await result
+
+    expect(event).toMatchObject({ type: 'debug:echo:result', text: '핑', correlationId: 'c1' })
+    expect(ws.readyState).toBe(ws.OPEN)
+
+    ws.terminate()
+    await app.close()
+  })
+
   it('https 옵션을 Fastify 서버로 pass-through한다 (TLS-ready)', async () => {
     const secure = buildApp({ https: {} })
     expect(secure.server).toBeInstanceOf(HttpsServer)

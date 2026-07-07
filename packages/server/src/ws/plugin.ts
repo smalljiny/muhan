@@ -9,6 +9,7 @@ import {
 } from './connection.js'
 import { handleHandshakeFrame } from './handshake.js'
 import { createHeartbeat } from './heartbeat.js'
+import { createCommandRegistry, dispatch } from './router.js'
 import { getConfig } from '../config/env.js'
 
 /** switch 완전성 컴파일 강제 — 도달하면 union에 미처리 variant가 생긴 것이다. */
@@ -17,7 +18,8 @@ function assertNever(value: never): never {
 }
 
 /**
- * 게임 소켓 경로. 인증·핸드셰이크·라우팅 없이 transport만 마운트한다(Story 4-6에서 로직 추가).
+ * 게임 소켓 경로. transport 위에 버전 협상 핸드셰이크(Story 4)와 명령 라우팅(Story 6)이 배선돼 있다.
+ * 인증(T2)만 seam으로 남아 미구현이다.
  */
 export const GAME_SOCKET_PATH = '/game'
 
@@ -27,6 +29,9 @@ export const GAME_SOCKET_PATH = '/game'
  * 이미 버퍼링된 뒤라 방어가 되지 않는다.
  */
 export const MAX_FRAME_BYTES = 64 * 1024
+
+// 명령 레지스트리는 무상태 핸들러의 배선표라 연결 간 공유 안전하다 — 모듈 로드 시 1회 조립한다.
+const commandRegistry = createCommandRegistry()
 
 // app에 per-connection 레지스트리를 노출한다. 진단·하트비트 스윕(Story 5-6)·테스트 관찰의 단일 출처.
 declare module 'fastify' {
@@ -126,11 +131,15 @@ export function registerWebsocket(app: FastifyInstance): void {
               if (socket.readyState === socket.OPEN) socket.close()
             })
             break
-          case 'pass':
-            // Story 6 라우터로 디스패치할 자리. 이 Story는 no-op.
+          case 'pass': {
+            // 핸드셰이크를 통과한 프레임을 라우터로 디스패치한다. 이미 파싱된 객체를 재파싱 없이 넘기고,
+            // 순수 라우터가 계산한 응답 이벤트가 있을 때만 전송한다(예외 격리는 dispatch 내부가 담당).
+            const event = dispatch(commandRegistry, parsed)
+            if (event !== undefined) safeSend(socket, event)
             break
+          }
           default:
-            // HandshakeResult에 action이 추가되면(Story 6) 컴파일 타임에 여기서 걸린다 — 조용한 no-op 방지.
+            // HandshakeResult에 새 action이 추가되면 컴파일 타임에 여기서 걸린다 — 조용한 no-op 방지.
             assertNever(result)
         }
       })
