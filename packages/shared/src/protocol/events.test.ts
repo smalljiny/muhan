@@ -1,0 +1,112 @@
+import { describe, it, expect } from 'vitest'
+import { serverEventSchema, errorCodeSchema } from './events.js'
+
+describe('errorCodeSchema', () => {
+  it.each(['handshake_required', 'unknown_type', 'bad_payload', 'internal'])(
+    '%s 코드를 통과시킨다',
+    (code) => {
+      expect(errorCodeSchema.safeParse(code).success).toBe(true)
+    },
+  )
+
+  it('알 수 없는 코드를 거부한다', () => {
+    expect(errorCodeSchema.safeParse('teapot').success).toBe(false)
+  })
+})
+
+describe('serverEventSchema (server→client 봉투)', () => {
+  describe('system:hello', () => {
+    it('protocolVersion(정수)이 있으면 통과한다', () => {
+      expect(
+        serverEventSchema.safeParse({ type: 'system:hello', protocolVersion: 1 }).success,
+      ).toBe(true)
+    })
+
+    it('protocolVersion이 정수가 아니면 거부한다', () => {
+      expect(
+        serverEventSchema.safeParse({ type: 'system:hello', protocolVersion: 1.5 }).success,
+      ).toBe(false)
+    })
+  })
+
+  describe('system:reload', () => {
+    it('reason(문자열)이 있으면 통과한다', () => {
+      expect(
+        serverEventSchema.safeParse({ type: 'system:reload', reason: '월드 리로드' }).success,
+      ).toBe(true)
+    })
+
+    it('reason이 없으면 거부한다', () => {
+      expect(serverEventSchema.safeParse({ type: 'system:reload' }).success).toBe(false)
+    })
+  })
+
+  describe('debug:echo:result', () => {
+    it('text만 있으면 통과한다 (correlationId 생략)', () => {
+      const parsed = serverEventSchema.safeParse({ type: 'debug:echo:result', text: '퐁' })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'debug:echo:result') {
+        expect(parsed.data.correlationId).toBeUndefined()
+      }
+    })
+
+    it('text + correlationId가 있으면 통과한다', () => {
+      const parsed = serverEventSchema.safeParse({
+        type: 'debug:echo:result',
+        text: '퐁',
+        correlationId: 'c1',
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'debug:echo:result') {
+        expect(parsed.data.correlationId).toBe('c1')
+      }
+    })
+
+    it('알 수 없는 키를 거부한다 (재사용 후에도 strict 유지)', () => {
+      expect(
+        serverEventSchema.safeParse({ type: 'debug:echo:result', text: '퐁', extra: 1 }).success,
+      ).toBe(false)
+    })
+  })
+
+  describe('error', () => {
+    it('code + message가 있으면 통과한다 (correlationId 생략)', () => {
+      const parsed = serverEventSchema.safeParse({
+        type: 'error',
+        code: 'bad_payload',
+        message: '형식 오류',
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'error') {
+        expect(parsed.data.correlationId).toBeUndefined()
+      }
+    })
+
+    it('code + message + correlationId가 있으면 통과한다', () => {
+      const parsed = serverEventSchema.safeParse({
+        type: 'error',
+        code: 'handshake_required',
+        message: '핸드셰이크 필요',
+        correlationId: 'c9',
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'error') {
+        expect(parsed.data.correlationId).toBe('c9')
+      }
+    })
+
+    it('알 수 없는 code를 거부한다', () => {
+      expect(
+        serverEventSchema.safeParse({ type: 'error', code: 'teapot', message: 'x' }).success,
+      ).toBe(false)
+    })
+  })
+
+  it('command 전용 type(debug:echo)을 거부한다', () => {
+    expect(serverEventSchema.safeParse({ type: 'debug:echo', text: '핑' }).success).toBe(false)
+  })
+
+  it('알 수 없는 discriminator를 거부한다', () => {
+    expect(serverEventSchema.safeParse({ type: 'nope' }).success).toBe(false)
+  })
+})
