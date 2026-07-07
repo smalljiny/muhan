@@ -9,13 +9,17 @@ import { waitForMessage, waitForClose, waitFor } from './wsTestClient.testutil.j
 // per-connection 정리·https pass-through를 관찰한다. 인증·라우팅은 이 Story 범위 밖이라 검증하지 않는다.
 describe('WS transport', () => {
   // 연결 핸들러가 getConfig()를 호출하므로(하트비트 튜닝값) 필수 env를 채워 fail-fast를 피한다.
+  // 앰비언트 env를 덮어쓰지 않도록 snapshot-restore로 복원한다(E2E 스위트와 동일한 격리 패턴).
+  let savedEnv: NodeJS.ProcessEnv
+
   beforeAll(() => {
+    savedEnv = { ...process.env }
     process.env.MONGODB_URI = 'mongodb://localhost:27017'
     resetConfigForTests()
   })
 
   afterAll(() => {
-    delete process.env.MONGODB_URI
+    process.env = savedEnv
     resetConfigForTests()
   })
 

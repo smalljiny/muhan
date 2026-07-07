@@ -104,43 +104,51 @@ export function registerWebsocket(app: FastifyInstance): void {
       })
 
       socket.on('message', (data: RawData) => {
-        // message 핸들러가 던진 에러는 fastify errorHandler가 잡지 못하므로 자체 try/catch로 감싼다.
+        // 프레임 파싱 실패는 핸드셰이크 게이트보다 우선한다(type 판별 이전). 파싱만 별도 try로 감싸
+        // bad_payload로 응답하고 종료한다.
         let parsed: unknown
         try {
           parsed = JSON.parse(frameToText(data))
         } catch {
-          // 파싱 실패는 핸드셰이크 게이트보다 우선한다(type 판별 이전에 실패).
           safeSend(socket, { type: 'error', code: 'bad_payload', message: 'JSON 파싱 실패' })
           return
         }
 
-        // 핸드셰이크 상태 전이는 순수 함수가 계산하고, 여기서 부수효과(전송·close·상태 변이)를 실행한다.
-        const result = handleHandshakeFrame(ctx, parsed)
-        switch (result.action) {
-          case 'accept':
-            ctx.ready = true
-            break
-          case 'error':
-            safeSend(socket, result.event)
-            break
-          case 'reload':
-            // reload 프레임을 먼저 보내고 다음 tick에 close한다 — 같은 tick 내 close가 프레임 플러시를
-            // 앞질러 클라이언트가 reload를 못 받는 injectWS 특이 동작을 피한다(서버 권위 종료).
-            safeSend(socket, result.event)
-            setImmediate(() => {
-              if (socket.readyState === socket.OPEN) socket.close()
-            })
-            break
-          case 'pass': {
-            // 핸드셰이크를 통과한 프레임을 라우터로 디스패치한다. 이미 파싱된 객체를 재파싱 없이 넘기고,
-            // 순수 라우터가 계산한 응답 이벤트가 있을 때만 전송한다(예외 격리는 dispatch 내부가 담당).
-            const event = dispatch(commandRegistry, parsed)
-            if (event !== undefined) safeSend(socket, event)
-            break
+        // 핸드셰이크·라우팅은 순수 함수(handshake.ts·router.ts)가 계산하고 여기서 부수효과(전송·close·
+        // 상태 변이)를 실행한다. fastify errorHandler가 message 핸들러 예외를 잡지 못하므로, 현재 경로가
+        // throw-safe하더라도 방어적으로 전체를 감싸 어떤 throw든 error{internal}로 격리하고 소켓을
+        // 생존시킨다(네트워크 진입점 견고성 — 원래 의도된 불변식을 핸들러 전체로 확장).
+        try {
+          const result = handleHandshakeFrame(ctx, parsed)
+          switch (result.action) {
+            case 'accept':
+              ctx.ready = true
+              break
+            case 'error':
+              safeSend(socket, result.event)
+              break
+            case 'reload':
+              // reload 프레임을 먼저 보내고 다음 tick에 close한다 — 같은 tick 내 close가 프레임 플러시를
+              // 앞질러 클라이언트가 reload를 못 받는 injectWS 특이 동작을 피한다(서버 권위 종료).
+              safeSend(socket, result.event)
+              setImmediate(() => {
+                if (socket.readyState === socket.OPEN) socket.close()
+              })
+              break
+            case 'pass': {
+              // 핸드셰이크를 통과한 프레임을 라우터로 디스패치한다. 이미 파싱된 객체를 재파싱 없이 넘기고,
+              // 순수 라우터가 계산한 응답 이벤트가 있을 때만 전송한다(핸들러 예외 격리는 dispatch 내부가 담당).
+              const event = dispatch(commandRegistry, parsed)
+              if (event !== undefined) safeSend(socket, event)
+              break
+            }
+            default:
+              // HandshakeResult에 새 action이 추가되면 컴파일 타임에 여기서 걸린다 — 조용한 no-op 방지.
+              assertNever(result)
           }
-          default:
-            // HandshakeResult에 새 action이 추가되면 컴파일 타임에 여기서 걸린다 — 조용한 no-op 방지.
-            assertNever(result)
+        } catch {
+          // 방어선: handshake/dispatch 경로의 예상치 못한 throw를 격리한다. 원인은 클라이언트에 노출하지 않는다.
+          safeSend(socket, { type: 'error', code: 'internal', message: '메시지 처리 중 서버 오류가 발생했다' })
         }
       })
 
