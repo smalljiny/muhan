@@ -12,6 +12,7 @@
     "test": "vitest run --coverage"
   },
   "dependencies": {
+    "@fastify/websocket": "catalog:",
     "fastify": "catalog:",
     "mongodb": "catalog:",
     "shared": "workspace:*",
@@ -19,11 +20,13 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/ws": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "eslint": "catalog:",
     "mongodb-memory-server": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "ws": "catalog:"
   }
 }

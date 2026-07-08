@@ -80,4 +80,57 @@ describe('getConfig', () => {
 
     expect(config.MONGODB_URI).toBe('mongodb://h1:27017,h2:27017/muhan_db_dev?replicaSet=rs0')
   })
+
+  it('하트비트 env가 없으면 기본값을 채운다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    delete process.env.WS_HEARTBEAT_PING_INTERVAL_MS
+    delete process.env.WS_HEARTBEAT_PONG_TIMEOUT_MS
+    delete process.env.WS_HEARTBEAT_MAX_MISSED
+
+    const config = getConfig()
+
+    expect(config.WS_HEARTBEAT_PING_INTERVAL_MS).toBe(25000)
+    expect(config.WS_HEARTBEAT_PONG_TIMEOUT_MS).toBe(10000)
+    expect(config.WS_HEARTBEAT_MAX_MISSED).toBe(3)
+  })
+
+  it('하트비트 env 문자열을 숫자로 강제 변환한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_HEARTBEAT_PING_INTERVAL_MS = '5000'
+    process.env.WS_HEARTBEAT_PONG_TIMEOUT_MS = '2000'
+    process.env.WS_HEARTBEAT_MAX_MISSED = '5'
+
+    const config = getConfig()
+
+    expect(config.WS_HEARTBEAT_PING_INTERVAL_MS).toBe(5000)
+    expect(config.WS_HEARTBEAT_PONG_TIMEOUT_MS).toBe(2000)
+    expect(config.WS_HEARTBEAT_MAX_MISSED).toBe(5)
+  })
+
+  it('WS_HEARTBEAT_MAX_MISSED 하한(1) 미만이면 fail-fast로 종료한다', () => {
+    // 임계가 0이면 첫 라운드에 즉시 terminate되어 하트비트가 무의미하므로 최소 1을 강제한다.
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_HEARTBEAT_MAX_MISSED = '0'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('WS_HEARTBEAT_PING_INTERVAL_MS가 하한(1) 미만이면 fail-fast로 종료한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_HEARTBEAT_PING_INTERVAL_MS = '0'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
 })

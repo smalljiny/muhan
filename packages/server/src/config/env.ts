@@ -10,6 +10,15 @@ export const EnvSchema = z.object({
   MONGODB_URI: z.string().min(1),
   MONGODB_DB_NAME: z.string().min(1).default('muhan_db_dev'),
   PORT: z.coerce.number().int().min(0).max(65535).default(3000),
+  // 서버 주도 하트비트 튜닝(Story 5). ping 간격마다 직전 라운드 pong 미수신을 세고, 연속 미수신이
+  // MAX_MISSED에 도달하면 소켓을 terminate한다. 첫 인터벌은 미스를 세지 않고 ping만 보내므로(초기
+  // awaitingPong=false) 종료까지 ≈ PING_INTERVAL × (MAX_MISSED + 1)이다(기본값 25s·3 → ≈ 100s).
+  WS_HEARTBEAT_PING_INTERVAL_MS: z.coerce.number().int().min(1).default(25000),
+  // 예약 seam: 현재 단일 인터벌(isAlive) 모델은 이 값을 소비하지 않는다. 유효 per-pong 마감은
+  // 이 값이 아니라 PING_INTERVAL이다 — 이 필드를 낮춰도 종료 타이밍은 바뀌지 않는다(향후 이중
+  // 타이머 모델이 도입되면 소비). 운영자 오도를 막기 위해 무효임을 명시한다.
+  WS_HEARTBEAT_PONG_TIMEOUT_MS: z.coerce.number().int().min(1).default(10000),
+  WS_HEARTBEAT_MAX_MISSED: z.coerce.number().int().min(1).default(3),
 })
 
 export type Env = z.infer<typeof EnvSchema>

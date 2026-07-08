@@ -15,3 +15,6 @@ export type { ExitEdge, ItemInstance, RoomNode } from './worldGraph.js'
 
 // 영속 스키마 + z.infer 파생 도메인 타입(캐릭터·오브젝트·은행·방 상태).
 export * from './schema/index.js'
+
+// 와이어 프로토콜 계약 + z.infer 파생 타입(명령·이벤트 봉투·payload building block).
+export * from './protocol/index.js'
