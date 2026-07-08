@@ -1,9 +1,13 @@
-import { serverEventSchema, type ServerEvent } from 'shared'
+import { serverEventSchema, PROTOCOL_VERSION, type ServerEvent } from 'shared'
 import type { FastifyInstance } from 'fastify'
 import { WebSocket } from 'ws'
 import { GAME_SOCKET_PATH } from './plugin.js'
 import { buildApp } from '../app.js'
-import { SEED_VALID_COOKIE, createSeededAuthAdapter } from '../auth/inMemorySessionAuthAdapter.js'
+import {
+  SEED_VALID_COOKIE,
+  SEED_CHARACTER_ID,
+  createSeededAuthAdapter,
+} from '../auth/inMemorySessionAuthAdapter.js'
 
 /**
  * WS transport 테스트 헬퍼 — injectWS 클라이언트(단위)와 실 `ws` 클라이언트(E2E)를 함께 관찰하는 유틸.
@@ -69,6 +73,50 @@ export function waitForMessage(ws: MessageEmitter, timeoutMs = 1000): Promise<Se
       }
     }),
   )
+}
+
+/** 프레임을 순서대로 하나씩 꺼내는 리더. 유실 없이 다중 동기 프레임을 소비한다. */
+export interface MessageReader {
+  next(timeoutMs?: number): Promise<ServerEvent>
+}
+
+/**
+ * 소켓에 영구 `message` 리스너 하나를 걸어 도착 프레임을 버퍼링하는 리더를 만든다.
+ *
+ * `waitForMessage`는 `once`라 프레임당 리스너 하나만 대기시킨다 — 서버가 같은 턴에 2프레임 이상을
+ * 동기 발화하면(핸드셰이크 accept의 characterList+prompt) 배치 도착분이 유실되거나 두 `once`가 같은
+ * 프레임을 중복 소비한다. 이 리더는 영구 리스너로 모든 프레임을 큐에 쌓아 `next()`가 순서대로 꺼내게
+ * 한다(유실 없음). 파싱 실패(계약 밖 이벤트)는 리스너에서 throw하지 않고 다음 `next()`에 표면화한다
+ * (공유 유틸의 unhandled rejection 방지). 소켓당 리더는 하나만 쓴다 — `waitForMessage`와 혼용하면 두
+ * 리스너가 프레임을 이중 소비한다.
+ */
+export function createMessageReader(ws: WebSocket): MessageReader {
+  const queue: Array<{ ok: true; value: ServerEvent } | { ok: false; error: Error }> = []
+  const waiters: Array<(item: { ok: true; value: ServerEvent } | { ok: false; error: Error }) => void> = []
+
+  ws.on('message', (data: unknown) => {
+    let item: { ok: true; value: ServerEvent } | { ok: false; error: Error }
+    try {
+      item = { ok: true, value: serverEventSchema.parse(JSON.parse(String(data))) }
+    } catch (err) {
+      item = { ok: false, error: err instanceof Error ? err : new Error(String(err)) }
+    }
+    const waiter = waiters.shift()
+    if (waiter !== undefined) waiter(item)
+    else queue.push(item)
+  })
+
+  return {
+    next(timeoutMs = 1000): Promise<ServerEvent> {
+      const buffered = queue.shift()
+      if (buffered !== undefined) {
+        return buffered.ok ? Promise.resolve(buffered.value) : Promise.reject(buffered.error)
+      }
+      return waitForEvent<ServerEvent>(timeoutMs, 'reader.next', (settle, fail) => {
+        waiters.push((item) => (item.ok ? settle(item.value) : fail(item.error)))
+      })
+    },
+  }
 }
 
 /**
@@ -183,4 +231,31 @@ export function waitForUnexpectedResponse(ws: WebSocket, timeoutMs = 2000): Prom
     ws.once('unexpected-response', (_req, res) => settle(res.statusCode ?? 0))
     ws.once('open', () => fail(new Error('거부되어야 할 upgrade가 열렸다')))
   })
+}
+
+// ── 세션 FSM(Story 4) 종단 배선 헬퍼 ──────────────────────────────────────────
+
+/**
+ * 소켓을 connect→hello→ready→characterList→prompt→selectCharacter→entered→command 경로로 왕복시켜
+ * command 상태에 도달시킨다(Lock B — Story 4·5·7이 공유하는 단일 traversal).
+ *
+ * 유실 없는 `createMessageReader`로 핸드셰이크 accept가 동기 발화하는 2프레임(characterList+prompt)을
+ * 안전히 소비한다. injectWS 소켓은 이미 OPEN이라 open 대기를 건너뛰고, 실 `ws` 소켓은 open을 먼저
+ * 기다린 뒤 send한다(send-before-open throw 회피). 반환된 리더로 호출자가 이후 프레임(예: echo:result)을
+ * 이어서 읽는다 — 같은 소켓에 `waitForMessage`를 섞지 않는다(이중 소비).
+ *
+ * 리더는 어떤 프레임도 발화되기 전에 리스너를 걸어야 하므로, 이 헬퍼는 소켓 생성 직후(첫 send·open 전)
+ * 호출한다.
+ */
+export async function enterCommandState(ws: WebSocket, timeoutMs = 1000): Promise<MessageReader> {
+  const reader = createMessageReader(ws)
+  if (ws.readyState !== ws.OPEN) await waitForOpen(ws, timeoutMs)
+
+  await reader.next(timeoutMs) // system:hello
+  ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: PROTOCOL_VERSION }))
+  await reader.next(timeoutMs) // session:characterList
+  await reader.next(timeoutMs) // session:prompt(selectCharacter)
+  ws.send(JSON.stringify({ type: 'session:selectCharacter', characterId: SEED_CHARACTER_ID }))
+  await reader.next(timeoutMs) // session:entered
+  return reader
 }

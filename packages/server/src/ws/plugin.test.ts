@@ -9,8 +9,12 @@ import {
   waitForMessage,
   waitForClose,
   waitFor,
+  createMessageReader,
+  enterCommandState,
   DEFAULT_TEST_ORIGIN,
 } from './wsTestClient.testutil.js'
+import { ConnectionState } from './fsm/sessionFsm.js'
+import { SEED_CHARACTER_ID } from '../auth/inMemorySessionAuthAdapter.js'
 
 // T3.6 — transport 배선 스펙. injectWS로 유효 쿠키+허용 Origin upgrade를 태워 라우트 마운트·프레임
 // 하드닝·per-connection 정리·https pass-through를 관찰한다(E3-1 회귀 방어). 인증 게이트 자체 검증은
@@ -188,14 +192,16 @@ describe('WS transport', () => {
     await app.ready()
 
     const ws = await injectAuthedWS(app)
-    await waitForMessage(ws) // system:hello 소비
-
+    // accept가 characterList+prompt 2프레임을 동기 발화하므로 유실 없는 리더로 소비한다(Lock A/B).
+    const reader = createMessageReader(ws)
+    await reader.next() // system:hello
     ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
+    await reader.next() // session:characterList
+    await reader.next() // session:prompt
     await waitFor(() => [...app.wsConnections.values()][0]?.ready === true)
 
-    const rejected = waitForMessage(ws)
     ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
-    const event = await rejected
+    const event = await reader.next()
 
     expect(event).toMatchObject({ type: 'error' })
     expect(ws.readyState).toBe(ws.OPEN)
@@ -204,22 +210,66 @@ describe('WS transport', () => {
     await app.close()
   })
 
-  it('핸드셰이크 완료 후 debug:echo를 debug:echo:result로 되돌린다', async () => {
+  it('핸드셰이크 완료 시 characterSelect로 진입해 characterList+prompt를 발화한다', async () => {
     const app = buildSeededApp()
     await app.ready()
 
     const ws = await injectAuthedWS(app)
-    const hello = await waitForMessage(ws)
-    expect(hello).toMatchObject({ type: 'system:hello', protocolVersion: 1 })
+    const reader = createMessageReader(ws)
+    await reader.next() // system:hello
 
     ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
-    await waitFor(() => [...app.wsConnections.values()][0]?.ready === true)
+    const list = await reader.next()
+    const prompt = await reader.next()
 
-    const result = waitForMessage(ws)
+    expect(list).toMatchObject({
+      type: 'session:characterList',
+      characters: [{ characterId: SEED_CHARACTER_ID }],
+    })
+    expect(prompt).toMatchObject({ type: 'session:prompt', kind: 'selectCharacter' })
+    expect([...app.wsConnections.values()][0]?.state).toBe(ConnectionState.characterSelect)
+
+    ws.terminate()
+    await app.close()
+  })
+
+  it('소유 캐릭터 선택 시 entered 발화 후 command로 전이하고 이후 debug:echo가 라우터에 도달한다', async () => {
+    const app = buildSeededApp()
+    await app.ready()
+
+    const ws = await injectAuthedWS(app)
+    // hello→ready→characterList→prompt→selectCharacter→entered까지 왕복해 command 도달.
+    const reader = await enterCommandState(ws)
+    expect([...app.wsConnections.values()][0]?.state).toBe(ConnectionState.command)
+
+    // command 상태이므로 debug:echo가 라우터 dispatch에 도달해야 한다.
     ws.send(JSON.stringify({ type: 'debug:echo', text: '핑', id: 'c1' }))
-    const event = await result
+    const event = await reader.next()
 
     expect(event).toMatchObject({ type: 'debug:echo:result', text: '핑', correlationId: 'c1' })
+    expect(ws.readyState).toBe(ws.OPEN)
+
+    ws.terminate()
+    await app.close()
+  })
+
+  it('소유하지 않은 캐릭터 선택은 unauthorized error로 거부하고 characterSelect에 머문다', async () => {
+    const app = buildSeededApp()
+    await app.ready()
+
+    const ws = await injectAuthedWS(app)
+    const reader = createMessageReader(ws)
+    await reader.next() // system:hello
+    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
+    await reader.next() // characterList
+    await reader.next() // prompt
+
+    ws.send(JSON.stringify({ type: 'session:selectCharacter', characterId: 'not-owned' }))
+    const event = await reader.next()
+
+    expect(event).toMatchObject({ type: 'error', code: 'unauthorized' })
+    // command 미도달 — 여전히 characterSelect라 라우터로 넘어가지 않는다.
+    expect([...app.wsConnections.values()][0]?.state).toBe(ConnectionState.characterSelect)
     expect(ws.readyState).toBe(ws.OPEN)
 
     ws.terminate()

@@ -6,6 +6,12 @@ import { cleanupConnection, createConnectionContext, type ConnectionContext } fr
 import { handleHandshakeFrame } from './handshake.js'
 import { createHeartbeat } from './heartbeat.js'
 import { createCommandRegistry, dispatch } from './router.js'
+import {
+  ConnectionState,
+  enterInitialState,
+  handleSessionFrame,
+  type SessionContext,
+} from './fsm/sessionFsm.js'
 import { getConfig } from '../config/env.js'
 import type { AccountIdentity, SessionAuthPort } from '../auth/sessionAuthPort.js'
 import { extractSessionCookie } from './cookies.js'
@@ -63,6 +69,25 @@ function safeSend(socket: WebSocket, event: ServerEvent): void {
   } catch {
     // 전송 직전 소켓이 닫힌 경우. 곧 'close'가 발화해 cleanup이 돌므로 무시한다.
   }
+}
+
+/**
+ * 세션 컨텍스트를 조립한다 — FSM 핸들러가 포트 호출·이벤트 발화에 쓸 컨텍스트(Lock E).
+ *
+ * `ctx.account`를 여기서 1회 narrow한다: preValidation 게이트가 non-null을 보장하므로 null이면 배선
+ * 불변식 위반이라 throw한다(message 핸들러의 방어 try가 error{internal}로 격리). 이후 FSM 호출에
+ * `account?.`를 스레드하지 않는다. `emit`은 주입 콜백으로 `safeSend`를 감싸 — 핸들러는 소켓을 직접
+ * 만지지 않고 이 콜백으로만 이벤트를 내보낸다(3층 경계: 소켓은 셸에만 있다).
+ */
+function buildSession(
+  ctx: ConnectionContext,
+  sessionAuth: SessionAuthPort,
+  socket: WebSocket,
+): SessionContext {
+  if (ctx.account === null) {
+    throw new Error('세션 불변식 위반: 인증 게이트를 통과했으나 account가 없다')
+  }
+  return { account: ctx.account, sessionAuth, emit: (event) => safeSend(socket, event) }
 }
 
 /**
@@ -172,7 +197,11 @@ export function registerWebsocket(app: FastifyInstance, sessionAuth: SessionAuth
             const result = handleHandshakeFrame(ctx, parsed)
             switch (result.action) {
               case 'accept':
+                // 핸드셰이크 완료 → characterSelect로 진입시킨다. enterInitialState가 같은 message-handler
+                // 턴에 characterList + prompt를 동기 발화한다(setImmediate 금지 — 대화 중 클라이언트는 이미
+                // 리스너를 붙였다). ctx.state 변이는 FSM(enterState) 단일 지점에서만 일어난다(Lock D).
                 ctx.ready = true
+                enterInitialState(ctx, buildSession(ctx, sessionAuth, socket))
                 break
               case 'error':
                 safeSend(socket, result.event)
@@ -186,10 +215,15 @@ export function registerWebsocket(app: FastifyInstance, sessionAuth: SessionAuth
                 })
                 break
               case 'pass': {
-                // 핸드셰이크를 통과한 프레임을 라우터로 디스패치한다. 이미 파싱된 객체를 재파싱 없이 넘기고,
-                // 순수 라우터가 계산한 응답 이벤트가 있을 때만 전송한다(핸들러 예외 격리는 dispatch 내부가 담당).
-                const event = dispatch(commandRegistry, parsed)
-                if (event !== undefined) safeSend(socket, event)
+                // 핸드셰이크를 통과한 프레임의 위임처는 세션 상태로 갈린다: command 상태면 라우터(dispatch)로,
+                // 그 이전(characterSelect·create)이면 FSM handleInput으로 보낸다(Lock C). 이미 파싱된 객체를
+                // 재파싱 없이 넘긴다.
+                if (ctx.state === ConnectionState.command) {
+                  const event = dispatch(commandRegistry, parsed)
+                  if (event !== undefined) safeSend(socket, event)
+                } else {
+                  handleSessionFrame(ctx, buildSession(ctx, sessionAuth, socket), parsed)
+                }
                 break
               }
               default:

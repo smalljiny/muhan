@@ -10,6 +10,7 @@ import {
   waitForOpen,
   waitForMessage,
   waitForClose,
+  enterCommandState,
   DEFAULT_TEST_ORIGIN,
   type AuthHeaderOptions,
   type RealClientOptions,
@@ -75,19 +76,17 @@ describe('WS transport E2E (실 소켓)', () => {
     return helloReceived
   }
 
-  it('실 클라이언트가 hello→ready→echo→echo:result 전체 왕복을 통과한다', async () => {
+  it('실 클라이언트가 hello→ready→선택→command→echo 전체 왕복을 통과한다', async () => {
     // 기본 하트비트 간격(25s)이라 테스트 중 ping이 발화해 간섭하지 않는다.
     const url = await startTracked(buildSeededApp())
     const client = trackedClient(url)
 
-    const hello = await consumeHello(client)
-    expect(hello).toMatchObject({ type: 'system:hello', protocolVersion: 1 })
+    // enterCommandState가 hello 소비·open 대기·핸드셰이크·캐릭터 선택까지 실 소켓으로 왕복해 command 도달.
+    const reader = await enterCommandState(client)
 
-    // 버전 일치 ready는 ack 이벤트를 만들지 않는다(ready=true) — 응답을 기다리지 않고 바로 echo.
-    client.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
-    const result = waitForMessage(client)
+    // command 상태이므로 debug:echo가 라우터 dispatch에 도달해 echo:result로 돌아온다.
     client.send(JSON.stringify({ type: 'debug:echo', text: '핑', id: 'c1' }))
-    const event = await result
+    const event = await reader.next()
 
     expect(event).toMatchObject({
       type: 'debug:echo:result',
