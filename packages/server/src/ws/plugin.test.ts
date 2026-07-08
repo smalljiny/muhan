@@ -11,9 +11,15 @@ import {
   waitFor,
   createMessageReader,
   enterCommandState,
+  enterCreateFlow,
   DEFAULT_TEST_ORIGIN,
 } from './wsTestClient.testutil.js'
-import { ConnectionState } from './fsm/sessionFsm.js'
+import {
+  ConnectionState,
+  SELECT_CHARACTER_PROMPT_ID,
+  CREATE_SENTINEL,
+  CREATE_PROMPT_IDS,
+} from './fsm/sessionFsm.js'
 import { SEED_CHARACTER_ID } from '../auth/inMemorySessionAuthAdapter.js'
 
 // T3.6 — transport 배선 스펙. injectWS로 유효 쿠키+허용 Origin upgrade를 태워 라우트 마운트·프레임
@@ -271,6 +277,79 @@ describe('WS transport', () => {
     // command 미도달 — 여전히 characterSelect라 라우터로 넘어가지 않는다.
     expect([...app.wsConnections.values()][0]?.state).toBe(ConnectionState.characterSelect)
     expect(ws.readyState).toBe(ws.OPEN)
+
+    ws.terminate()
+    await app.close()
+  })
+
+  it('create 다단 대화를 완주하면 entered 후 command에 도달하고 이후 debug:echo가 라우터에 도달한다', async () => {
+    const app = buildSeededApp()
+    await app.ready()
+
+    const ws = await injectAuthedWS(app)
+    // select prompt→create 신호→이름→클래스→종족→확인→entered까지 왕복해 command 도달.
+    const reader = await enterCreateFlow(ws)
+    expect([...app.wsConnections.values()][0]?.state).toBe(ConnectionState.command)
+    // 대화 상태는 command 진입 시 정리됐다.
+    expect([...app.wsConnections.values()][0]?.createProgress).toBeNull()
+
+    ws.send(JSON.stringify({ type: 'debug:echo', text: '핑', id: 'c1' }))
+    const event = await reader.next()
+    expect(event).toMatchObject({ type: 'debug:echo:result', text: '핑', correlationId: 'c1' })
+
+    ws.terminate()
+    await app.close()
+  })
+
+  it('create 첫 단계에서 미일치 promptId 응답은 session_state error로 거부하고 create에 머문다', async () => {
+    const app = buildSeededApp()
+    await app.ready()
+
+    const ws = await injectAuthedWS(app)
+    const reader = createMessageReader(ws)
+    await reader.next() // system:hello
+    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
+    await reader.next() // characterList
+    await reader.next() // prompt(selectCharacter)
+    ws.send(JSON.stringify({ type: 'session:reply', promptId: SELECT_CHARACTER_PROMPT_ID, value: CREATE_SENTINEL }))
+    await reader.next() // prompt(create:name)
+
+    // 현재 단계는 name인데 confirm promptId로 답한다(미일치).
+    ws.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.confirm, value: '아무개' }))
+    const event = await reader.next()
+
+    expect(event).toMatchObject({ type: 'error', code: 'session_state' })
+    expect([...app.wsConnections.values()][0]?.state).toBe(ConnectionState.create)
+    expect(ws.readyState).toBe(ws.OPEN)
+
+    ws.terminate()
+    await app.close()
+  })
+
+  it('한 단계 전진 후 지나간 단계 promptId로 답하는 미해결 응답을 session_state error로 거부한다', async () => {
+    const app = buildSeededApp()
+    await app.ready()
+
+    const ws = await injectAuthedWS(app)
+    const reader = createMessageReader(ws)
+    await reader.next() // system:hello
+    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
+    await reader.next() // characterList
+    await reader.next() // prompt(selectCharacter)
+    ws.send(JSON.stringify({ type: 'session:reply', promptId: SELECT_CHARACTER_PROMPT_ID, value: CREATE_SENTINEL }))
+    await reader.next() // prompt(create:name)
+
+    // name에 정상 응답 → class 단계로 전진.
+    ws.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.name, value: '아무개' }))
+    await reader.next() // prompt(create:class)
+
+    // 이제 단계는 class인데 지나간 name promptId로 다시 답한다(stale·미해결).
+    ws.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.name, value: '재입력' }))
+    const event = await reader.next()
+
+    expect(event).toMatchObject({ type: 'error', code: 'session_state' })
+    // 단계가 전진하지 않고 class에 머문다.
+    expect([...app.wsConnections.values()][0]?.createProgress).toMatchObject({ step: 'class' })
 
     ws.terminate()
     await app.close()

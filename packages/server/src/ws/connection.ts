@@ -1,7 +1,7 @@
 import type { WebSocket } from 'ws'
 import { PROTOCOL_VERSION } from 'shared'
 import type { AccountIdentity } from '../auth/sessionAuthPort.js'
-import { ConnectionState } from './fsm/sessionFsm.js'
+import { ConnectionState, type CreateProgress } from './fsm/sessionFsm.js'
 
 /**
  * per-connection 컨텍스트 — 소켓 하나의 수명 동안 유지되는 transport 상태.
@@ -12,8 +12,10 @@ import { ConnectionState } from './fsm/sessionFsm.js'
  * `account`는 preValidation 게이트가 확정한 계정 신원으로, upgrade 성공 시 소켓 핸들러가 `req.account`를
  * 여기 대입한다(초기값 null — 게이트 통과 전이거나 배선 오류 시 null). `state`는 세션 FSM의 현재 상태로,
  * 핸드셰이크 완료(accept) 전엔 FSM 미진입이라 초기값 characterSelect를 두되 onEnter는 accept 시 구동한다
- * (`ready` 플래그가 진입 전/후를 구분). `ready`·`heartbeat`·`account`·`state`는 소켓 수명 동안 갱신되는
- * mutable 슬롯이라 `readonly`를 두지 않는다.
+ * (`ready` 플래그가 진입 전/후를 구분). `createProgress`는 create 다단 대화의 서브상태 슬롯으로, create
+ * 상태 밖에선 null이다(create.onEnter가 초기화, onExit가 정리). SessionContext가 매 프레임 재조립되므로
+ * 대화 상태는 소켓 수명 동안 유지되는 이 컨텍스트에 둔다. `ready`·`heartbeat`·`account`·`state`·
+ * `createProgress`는 소켓 수명 동안 갱신되는 mutable 슬롯이라 `readonly`를 두지 않는다.
  */
 export interface ConnectionContext {
   readonly protocolVersion: number
@@ -21,6 +23,7 @@ export interface ConnectionContext {
   heartbeat: NodeJS.Timeout | null
   account: AccountIdentity | null
   state: ConnectionState
+  createProgress: CreateProgress | null
 }
 
 /**
@@ -34,6 +37,7 @@ export function createConnectionContext(): ConnectionContext {
     heartbeat: null,
     account: null,
     state: ConnectionState.characterSelect,
+    createProgress: null,
   }
 }
 

@@ -44,8 +44,9 @@ export interface SessionAuthPort {
 
   /**
    * account에 최소 필드 dto로 캐릭터를 생성하고 그 요약을 반환한다.
-   * 입력 검증(이름 비어있지 않음·클래스/종족 정수·범위)은 호출자 계약이다 — 어댑터는
-   * 유효 DTO를 가정한다. Story 3의 소켓 경계(create 상태 핸들러)가 Zod로 검증한 뒤 호출한다.
+   * 입력 검증(이름 비어있지 않음·클래스/종족 정수)은 호출자 계약이다 — 어댑터는 유효 DTO를
+   * 가정한다. Story 5의 create 상태 핸들러가 Zod로 검증한 뒤 호출한다. 클래스/종족 코드의
+   * 범위·유효성 제약은 코드 테이블이 확정되는 E5로 유예한다(E3엔 테이블이 없어 강제하지 않는다).
    */
   createCharacter(accountId: string, dto: CreateCharacterInput): CharacterSummary
 

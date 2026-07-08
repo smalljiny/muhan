@@ -2,6 +2,12 @@ import { serverEventSchema, PROTOCOL_VERSION, type ServerEvent } from 'shared'
 import type { FastifyInstance } from 'fastify'
 import { WebSocket } from 'ws'
 import { GAME_SOCKET_PATH } from './plugin.js'
+import {
+  SELECT_CHARACTER_PROMPT_ID,
+  CREATE_SENTINEL,
+  CREATE_CONFIRM_VALUE,
+  CREATE_PROMPT_IDS,
+} from './fsm/sessionFsm.js'
 import { buildApp } from '../app.js'
 import {
   SEED_VALID_COOKIE,
@@ -256,6 +262,53 @@ export async function enterCommandState(ws: WebSocket, timeoutMs = 1000): Promis
   await reader.next(timeoutMs) // session:characterList
   await reader.next(timeoutMs) // session:prompt(selectCharacter)
   ws.send(JSON.stringify({ type: 'session:selectCharacter', characterId: SEED_CHARACTER_ID }))
+  await reader.next(timeoutMs) // session:entered
+  return reader
+}
+
+/** enterCreateFlow가 각 create 필드에 답할 값(생략 시 유효 기본값). class·race는 문자열로 실린다(reply.value). */
+export interface CreateFlowFields {
+  name?: string
+  class?: string
+  race?: string
+}
+
+/**
+ * 소켓을 connect→hello→ready→characterList→prompt→create 신호→이름→클래스→종족→확인→entered 경로로
+ * 왕복시켜 create 다단 대화를 완주하고 command 상태에 도달시킨다(Story 5·7이 공유하는 단일 create traversal).
+ *
+ * select prompt에 `session:reply{value: CREATE_SENTINEL}`로 답해 create로 전이시킨 뒤, 서버가 발화하는 각
+ * create prompt(create:name·class·race·confirm)에 상관된 promptId로 순차 응답한다. `enterCommandState`와
+ * 같은 유실 없는 리더 규약을 따르며(소켓 생성 직후 첫 send·open 전 호출), entered를 소비한 리더를 돌려줘
+ * 호출자가 이후 프레임을 이어 읽게 한다. Story 7 T7.2가 이 헬퍼를 재사용한다(인라인 walk 금지).
+ */
+export async function enterCreateFlow(
+  ws: WebSocket,
+  fields: CreateFlowFields = {},
+  timeoutMs = 1000,
+): Promise<MessageReader> {
+  const name = fields.name ?? '아무개'
+  const characterClass = fields.class ?? '2'
+  const race = fields.race ?? '3'
+
+  const reader = createMessageReader(ws)
+  if (ws.readyState !== ws.OPEN) await waitForOpen(ws, timeoutMs)
+
+  await reader.next(timeoutMs) // system:hello
+  ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: PROTOCOL_VERSION }))
+  await reader.next(timeoutMs) // session:characterList
+  await reader.next(timeoutMs) // session:prompt(selectCharacter)
+
+  // select prompt에 create sentinel로 답해 create로 전이시킨다.
+  ws.send(JSON.stringify({ type: 'session:reply', promptId: SELECT_CHARACTER_PROMPT_ID, value: CREATE_SENTINEL }))
+  await reader.next(timeoutMs) // session:prompt(create:name)
+  ws.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.name, value: name }))
+  await reader.next(timeoutMs) // session:prompt(create:class)
+  ws.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.class, value: characterClass }))
+  await reader.next(timeoutMs) // session:prompt(create:race)
+  ws.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.race, value: race }))
+  await reader.next(timeoutMs) // session:prompt(create:confirm)
+  ws.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.confirm, value: CREATE_CONFIRM_VALUE }))
   await reader.next(timeoutMs) // session:entered
   return reader
 }
