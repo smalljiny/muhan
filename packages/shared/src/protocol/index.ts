@@ -16,4 +16,12 @@ export {
 } from './payloads.js'
 export { clientCommandSchema, type ClientCommand } from './commands.js'
 export { serverEventSchema, errorCodeSchema, type ServerEvent, type ErrorCode } from './events.js'
+export {
+  characterSummarySchema,
+  promptKindSchema,
+  promptOptionSchema,
+  type CharacterSummary,
+  type PromptKind,
+  type PromptOption,
+} from './session.js'
 export { PROTOCOL_VERSION } from './version.js'

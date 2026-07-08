@@ -20,6 +20,19 @@ export const clientCommandSchema = z.discriminatedUnion('type', [
     ...freeTextPayloadSchema.shape,
     id: z.string().optional(),
   }),
+  // 세션 prompt 응답 — promptId가 지목한 질문에 value로 답한다. id는 응답을 짝짓는 상관 키.
+  z.strictObject({
+    type: z.literal('session:reply'),
+    promptId: z.string().min(1),
+    value: z.string().min(1),
+    id: z.string().optional(),
+  }),
+  // 캐릭터 선택 — characterId로 입장할 캐릭터를 지목한다. id는 응답을 짝짓는 상관 키.
+  z.strictObject({
+    type: z.literal('session:selectCharacter'),
+    characterId: z.string().min(1),
+    id: z.string().optional(),
+  }),
 ])
 
 export type ClientCommand = z.infer<typeof clientCommandSchema>
