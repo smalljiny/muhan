@@ -18,6 +18,7 @@ describe('getConfig', () => {
 
   it('유효한 env를 검증된 객체로 반환하고 기본값을 채운다', () => {
     process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
     delete process.env.MONGODB_DB_NAME
     delete process.env.PORT
 
@@ -30,6 +31,7 @@ describe('getConfig', () => {
 
   it('PORT 환경변수를 숫자로 강제 변환한다', () => {
     process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
     process.env.PORT = '8080'
 
     const config = getConfig()
@@ -39,6 +41,7 @@ describe('getConfig', () => {
 
   it('두 번 호출하면 동일 인스턴스를 반환한다(싱글턴)', () => {
     process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
 
     const first = getConfig()
     const second = getConfig()
@@ -46,8 +49,67 @@ describe('getConfig', () => {
     expect(first).toBe(second)
   })
 
+  it('WS_ALLOWED_ORIGINS 콤마 구분 문자열을 origin 배열로 파싱한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost,https://muhan.example'
+
+    const config = getConfig()
+
+    expect(config.WS_ALLOWED_ORIGINS).toEqual(['http://localhost', 'https://muhan.example'])
+  })
+
+  it('WS_ALLOWED_ORIGINS 항목의 공백을 trim하고 빈 항목을 버린다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = ' http://localhost , , https://muhan.example '
+
+    const config = getConfig()
+
+    expect(config.WS_ALLOWED_ORIGINS).toEqual(['http://localhost', 'https://muhan.example'])
+  })
+
+  it('WS_ALLOWED_ORIGINS가 없으면 fail-fast로 종료한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    delete process.env.WS_ALLOWED_ORIGINS
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('WS_ALLOWED_ORIGINS가 빈 문자열이면 fail-fast로 종료한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = ''
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('WS_ALLOWED_ORIGINS가 공백/콤마뿐이면 fail-fast로 종료한다(refine)', () => {
+    // 공백만·콤마만 → trim·filter 후 빈 배열 → .refine이 거부한다.
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = ' , '
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
   it('MONGODB_URI가 없으면 fail-fast로 종료한다', () => {
     delete process.env.MONGODB_URI
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
     const exitSpy = vi
       .spyOn(process, 'exit')
       .mockImplementation((() => undefined) as never)
@@ -62,6 +124,7 @@ describe('getConfig', () => {
   it('MONGODB_URI가 빈 문자열이면 fail-fast로 종료한다', () => {
     // 빈 문자열(.env의 MONGODB_URI= )은 z.string().min(1)에서 거부된다 — .default() 우회 방지.
     process.env.MONGODB_URI = ''
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
     const exitSpy = vi
       .spyOn(process, 'exit')
       .mockImplementation((() => undefined) as never)
@@ -75,6 +138,7 @@ describe('getConfig', () => {
   it('연결 문자열 검증은 드라이버에 위임한다 — seed-list 복제셋 URI를 통과시킨다', () => {
     // z.url()이었다면 false-reject했을 유효한 다중 호스트 seed-list URI가 통과해야 한다.
     process.env.MONGODB_URI = 'mongodb://h1:27017,h2:27017/muhan_db_dev?replicaSet=rs0'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
 
     const config = getConfig()
 
@@ -83,6 +147,7 @@ describe('getConfig', () => {
 
   it('하트비트 env가 없으면 기본값을 채운다', () => {
     process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
     delete process.env.WS_HEARTBEAT_PING_INTERVAL_MS
     delete process.env.WS_HEARTBEAT_PONG_TIMEOUT_MS
     delete process.env.WS_HEARTBEAT_MAX_MISSED
@@ -96,6 +161,7 @@ describe('getConfig', () => {
 
   it('하트비트 env 문자열을 숫자로 강제 변환한다', () => {
     process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
     process.env.WS_HEARTBEAT_PING_INTERVAL_MS = '5000'
     process.env.WS_HEARTBEAT_PONG_TIMEOUT_MS = '2000'
     process.env.WS_HEARTBEAT_MAX_MISSED = '5'
@@ -110,6 +176,7 @@ describe('getConfig', () => {
   it('WS_HEARTBEAT_MAX_MISSED 하한(1) 미만이면 fail-fast로 종료한다', () => {
     // 임계가 0이면 첫 라운드에 즉시 terminate되어 하트비트가 무의미하므로 최소 1을 강제한다.
     process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
     process.env.WS_HEARTBEAT_MAX_MISSED = '0'
     const exitSpy = vi
       .spyOn(process, 'exit')
@@ -123,6 +190,7 @@ describe('getConfig', () => {
 
   it('WS_HEARTBEAT_PING_INTERVAL_MS가 하한(1) 미만이면 fail-fast로 종료한다', () => {
     process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
     process.env.WS_HEARTBEAT_PING_INTERVAL_MS = '0'
     const exitSpy = vi
       .spyOn(process, 'exit')

@@ -1,20 +1,29 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { Server as HttpsServer } from 'node:https'
 import { buildApp } from '../app.js'
-import { GAME_SOCKET_PATH, MAX_FRAME_BYTES } from './plugin.js'
+import { MAX_FRAME_BYTES } from './plugin.js'
 import { resetConfigForTests } from '../config/env.js'
-import { waitForMessage, waitForClose, waitFor } from './wsTestClient.testutil.js'
+import {
+  buildSeededApp,
+  injectAuthedWS,
+  waitForMessage,
+  waitForClose,
+  waitFor,
+  DEFAULT_TEST_ORIGIN,
+} from './wsTestClient.testutil.js'
 
-// T3.6 — transport 배선의 RED 스펙. injectWS로 실 upgrade를 태워 라우트 마운트·프레임 하드닝·
-// per-connection 정리·https pass-through를 관찰한다. 인증·라우팅은 이 Story 범위 밖이라 검증하지 않는다.
+// T3.6 — transport 배선 스펙. injectWS로 유효 쿠키+허용 Origin upgrade를 태워 라우트 마운트·프레임
+// 하드닝·per-connection 정리·https pass-through를 관찰한다(E3-1 회귀 방어). 인증 게이트 자체 검증은
+// auth.gate.test.ts가 소유한다 — 여기선 게이트를 통과한 뒤의 transport 동작만 본다.
 describe('WS transport', () => {
-  // 연결 핸들러가 getConfig()를 호출하므로(하트비트 튜닝값) 필수 env를 채워 fail-fast를 피한다.
-  // 앰비언트 env를 덮어쓰지 않도록 snapshot-restore로 복원한다(E2E 스위트와 동일한 격리 패턴).
+  // 연결 핸들러가 getConfig()를 호출하고 preValidation 게이트가 WS_ALLOWED_ORIGINS를 소비하므로
+  // 필수 env를 채워 fail-fast를 피한다. 앰비언트 env를 덮어쓰지 않도록 snapshot-restore로 복원한다.
   let savedEnv: NodeJS.ProcessEnv
 
   beforeAll(() => {
     savedEnv = { ...process.env }
     process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = DEFAULT_TEST_ORIGIN
     resetConfigForTests()
   })
 
@@ -24,10 +33,10 @@ describe('WS transport', () => {
   })
 
   it('게임 소켓 연결을 수락한다', async () => {
-    const app = buildApp()
+    const app = buildSeededApp()
     await app.ready()
 
-    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    const ws = await injectAuthedWS(app)
     await waitFor(() => app.wsConnections.size === 1)
 
     expect(ws.readyState).toBe(ws.OPEN)
@@ -37,10 +46,10 @@ describe('WS transport', () => {
   })
 
   it('MAX_FRAME_BYTES 초과 프레임을 거부하고 연결을 닫는다', async () => {
-    const app = buildApp()
+    const app = buildSeededApp()
     await app.ready()
 
-    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    const ws = await injectAuthedWS(app)
     await waitFor(() => app.wsConnections.size === 1)
 
     // 프로토콜 레이어(maxPayload)가 버퍼 완성 전에 거부해야 한다 — 서버가 1009로 소켓을 닫는다.
@@ -54,10 +63,10 @@ describe('WS transport', () => {
   })
 
   it('파싱 불가 JSON은 error{code:bad_payload} 이벤트로 응답하고 소켓은 생존한다', async () => {
-    const app = buildApp()
+    const app = buildSeededApp()
     await app.ready()
 
-    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    const ws = await injectAuthedWS(app)
     await waitForMessage(ws) // 연결 직후 push되는 system:hello를 먼저 소비한다.
 
     // malformed JSON은 파싱이 핸드셰이크 게이트보다 먼저 실패하므로 pre-ready에서도 bad_payload다.
@@ -74,10 +83,10 @@ describe('WS transport', () => {
   })
 
   it('연결 수락 시 하트비트 타이머를 시작해 ctx.heartbeat에 배선한다', async () => {
-    const app = buildApp()
+    const app = buildSeededApp()
     await app.ready()
 
-    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    const ws = await injectAuthedWS(app)
     await waitFor(() => app.wsConnections.size === 1)
 
     // 하트비트 start()가 반환한 타이머 핸들이 ctx에 배선돼야 한다(cleanup·누수 방지 seam).
@@ -90,10 +99,10 @@ describe('WS transport', () => {
   })
 
   it('연결 종료 시 per-connection 컨텍스트를 정리한다', async () => {
-    const app = buildApp()
+    const app = buildSeededApp()
     await app.ready()
 
-    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    const ws = await injectAuthedWS(app)
     await waitFor(() => app.wsConnections.size === 1)
     expect(app.wsConnections.size).toBe(1)
 
@@ -105,10 +114,10 @@ describe('WS transport', () => {
   })
 
   it('연결 직후 system:hello{protocolVersion}를 push한다', async () => {
-    const app = buildApp()
+    const app = buildSeededApp()
     await app.ready()
 
-    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    const ws = await injectAuthedWS(app)
     const hello = await waitForMessage(ws)
 
     expect(hello).toMatchObject({ type: 'system:hello', protocolVersion: 1 })
@@ -118,10 +127,10 @@ describe('WS transport', () => {
   })
 
   it('ready 이전 non-ready 명령을 handshake_required로 거부하고 소켓은 생존한다', async () => {
-    const app = buildApp()
+    const app = buildSeededApp()
     await app.ready()
 
-    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    const ws = await injectAuthedWS(app)
     await waitForMessage(ws) // system:hello 소비
 
     const rejected = waitForMessage(ws)
@@ -136,10 +145,10 @@ describe('WS transport', () => {
   })
 
   it('버전 일치 system:ready로 핸드셰이크를 완료한다 (ready=true)', async () => {
-    const app = buildApp()
+    const app = buildSeededApp()
     await app.ready()
 
-    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    const ws = await injectAuthedWS(app)
     const hello = await waitForMessage(ws)
     expect(hello).toMatchObject({ type: 'system:hello', protocolVersion: 1 })
 
@@ -154,10 +163,10 @@ describe('WS transport', () => {
   })
 
   it('버전 불일치 system:ready는 system:reload push 후 소켓을 닫는다', async () => {
-    const app = buildApp()
+    const app = buildSeededApp()
     await app.ready()
 
-    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    const ws = await injectAuthedWS(app)
     await waitForMessage(ws) // system:hello 소비
 
     // reload 프레임이 close 전에 확실히 플러시되도록 두 리스너를 send 전에 건다.
@@ -175,10 +184,10 @@ describe('WS transport', () => {
   })
 
   it('핸드셰이크 완료 후 중복 system:ready를 error로 거부한다', async () => {
-    const app = buildApp()
+    const app = buildSeededApp()
     await app.ready()
 
-    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    const ws = await injectAuthedWS(app)
     await waitForMessage(ws) // system:hello 소비
 
     ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
@@ -196,10 +205,10 @@ describe('WS transport', () => {
   })
 
   it('핸드셰이크 완료 후 debug:echo를 debug:echo:result로 되돌린다', async () => {
-    const app = buildApp()
+    const app = buildSeededApp()
     await app.ready()
 
-    const ws = await app.injectWS(GAME_SOCKET_PATH)
+    const ws = await injectAuthedWS(app)
     const hello = await waitForMessage(ws)
     expect(hello).toMatchObject({ type: 'system:hello', protocolVersion: 1 })
 

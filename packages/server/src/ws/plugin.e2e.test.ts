@@ -1,15 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type { WebSocket } from 'ws'
-import { buildApp } from '../app.js'
 import { resetConfigForTests } from '../config/env.js'
 import type { ServerEvent } from 'shared'
 import {
+  buildSeededApp,
   startTestServer,
-  newClient,
+  newAuthedClient,
   waitForOpen,
   waitForMessage,
   waitForClose,
+  DEFAULT_TEST_ORIGIN,
+  type AuthHeaderOptions,
   type RealClientOptions,
 } from './wsTestClient.testutil.js'
 
@@ -30,6 +32,7 @@ describe('WS transport E2E (실 소켓)', () => {
   beforeEach(() => {
     savedEnv = { ...process.env }
     process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = DEFAULT_TEST_ORIGIN
     resetConfigForTests()
     apps = []
     clients = []
@@ -53,9 +56,9 @@ describe('WS transport E2E (실 소켓)', () => {
     return startTestServer(app)
   }
 
-  /** 실 클라이언트를 만들어 정리 목록에 등록한다. */
-  function trackedClient(url: string, options?: RealClientOptions): WebSocket {
-    const client = newClient(url, options)
+  /** 유효 쿠키+허용 Origin 실 클라이언트를 만들어 정리 목록에 등록한다(게이트 통과). */
+  function trackedClient(url: string, options?: AuthHeaderOptions & RealClientOptions): WebSocket {
+    const client = newAuthedClient(url, options)
     clients.push(client)
     return client
   }
@@ -74,7 +77,7 @@ describe('WS transport E2E (실 소켓)', () => {
 
   it('실 클라이언트가 hello→ready→echo→echo:result 전체 왕복을 통과한다', async () => {
     // 기본 하트비트 간격(25s)이라 테스트 중 ping이 발화해 간섭하지 않는다.
-    const url = await startTracked(buildApp())
+    const url = await startTracked(buildSeededApp())
     const client = trackedClient(url)
 
     const hello = await consumeHello(client)
@@ -96,7 +99,7 @@ describe('WS transport E2E (실 소켓)', () => {
   })
 
   it('버전 불일치 시 실 클라이언트가 system:reload를 수신하고 소켓이 닫힌다', async () => {
-    const url = await startTracked(buildApp())
+    const url = await startTracked(buildSeededApp())
     const client = trackedClient(url)
 
     await consumeHello(client)
@@ -122,7 +125,7 @@ describe('WS transport E2E (실 소켓)', () => {
     process.env.WS_HEARTBEAT_MAX_MISSED = '1'
     resetConfigForTests()
 
-    const url = await startTracked(buildApp())
+    const url = await startTracked(buildSeededApp())
 
     // autoPong:false가 없으면 클라이언트가 프로토콜 레벨에서 ping에 자동 pong해 절대 terminate되지
     // 않는다 — 자동 pong을 억제해 미응답을 강제한다.

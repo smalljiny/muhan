@@ -2,13 +2,15 @@ import { serverEventSchema, type ServerEvent } from 'shared'
 import type { FastifyInstance } from 'fastify'
 import { WebSocket } from 'ws'
 import { GAME_SOCKET_PATH } from './plugin.js'
+import { buildApp } from '../app.js'
+import { SEED_VALID_COOKIE, createSeededAuthAdapter } from '../auth/inMemorySessionAuthAdapter.js'
 
 /**
  * WS transport 테스트 헬퍼 — injectWS 클라이언트(단위)와 실 `ws` 클라이언트(E2E)를 함께 관찰하는 유틸.
  *
  * `waitForMessage`/`waitForClose`는 최소 emitter 계약(`{ once(event, cb) }`)에만 의존해 injectWS
  * 클라이언트와 실 `ws` 클라이언트가 동일하게 충족한다(injectWS는 `await app.ready()` 후 동작). Story 7의
- * `startTestServer`/`newClient`/`waitForOpen`은 포트 0 실 TCP 흐름을 세우는 헬퍼로 같은 관찰기를 재사용한다.
+ * `startTestServer`/`newAuthedClient`/`waitForOpen`은 포트 0 실 TCP 흐름을 세우는 헬퍼로 같은 관찰기를 재사용한다.
  */
 
 /** `waitForMessage`가 요구하는 최소 emitter 계약. `ws` WebSocket이 구조적으로 충족한다. */
@@ -109,18 +111,6 @@ export async function startTestServer(app: FastifyInstance, path = GAME_SOCKET_P
 }
 
 /**
- * 실 `ws` 클라이언트 소켓을 만들어 (open을 기다리지 않고) 동기 반환한다.
- *
- * open 전에 `waitForMessage`로 `message` 리스너를 먼저 걸 수 있게 해, 서버가 upgrade 직후
- * `setImmediate`로 push하는 `system:hello`가 리스너 부착 전에 발화해 드롭되는 레이스를 없앤다
- * (open 후 리스너를 걸면 hello 프레임이 이미 지나가 유실될 수 있다). WS 프레임은 open 이후에만
- * 도착하므로 open 전 리스너 부착은 안전하다.
- */
-export function newClient(url: string, options?: RealClientOptions): WebSocket {
-  return new WebSocket(url, options)
-}
-
-/**
  * 소켓이 `open`될 때까지 기다린다. `timeoutMs` 내에 열리지 않거나 `error`가 나면 reject한다.
  * `waitForMessage`로 hello 리스너를 먼저 건 다음 이 함수로 open을 확인하는 순서로 쓴다.
  */
@@ -128,5 +118,69 @@ export function waitForOpen(ws: WebSocket, timeoutMs = 1000): Promise<void> {
   return waitForEvent<void>(timeoutMs, 'waitForOpen', (settle, fail) => {
     ws.once('open', () => settle())
     ws.once('error', fail)
+  })
+}
+
+// ── 인증(Story 3) 테스트 헬퍼 ─────────────────────────────────────────────────
+
+/** preValidation 게이트를 통과하는 정규 테스트 Origin. env WS_ALLOWED_ORIGINS 값과 일치해야 한다. */
+export const DEFAULT_TEST_ORIGIN = 'http://localhost'
+
+/**
+ * cookie/Origin 주입 옵션. `undefined`(미지정)면 유효 기본값(시드 쿠키·허용 Origin)을 쓰고, `null`이면
+ * 해당 헤더를 아예 생략한다(부재 케이스 테스트). `cookie`는 `__session` 쿠키에 담길 순수 토큰 값이다.
+ */
+export interface AuthHeaderOptions {
+  cookie?: string | null
+  origin?: string | null
+}
+
+/** AuthHeaderOptions를 실제 upgrade 요청 헤더(`cookie`·`origin`)로 변환한다. */
+function buildAuthHeaders(opts?: AuthHeaderOptions): Record<string, string> {
+  const headers: Record<string, string> = {}
+  const cookie = opts?.cookie === undefined ? SEED_VALID_COOKIE : opts.cookie
+  if (cookie !== null) headers.cookie = `__session=${cookie}`
+  const origin = opts?.origin === undefined ? DEFAULT_TEST_ORIGIN : opts.origin
+  if (origin !== null) headers.origin = origin
+  return headers
+}
+
+/**
+ * 시드 세션 어댑터가 배선된 app을 만든다. preValidation 게이트가 유효 쿠키를 인식하도록, 모든 인증
+ * 테스트의 buildApp 진입점을 이 팩토리로 단일화한다(어댑터 시드 누락 방지). deps는 buildApp으로 전달된다.
+ */
+export function buildSeededApp(deps?: Parameters<typeof buildApp>[0]): FastifyInstance {
+  return buildApp({ ...deps, sessionAuth: deps?.sessionAuth ?? createSeededAuthAdapter() })
+}
+
+/**
+ * injectWS로 게임 소켓 upgrade를 시도한다(단위 테스트 진입점). 기본값은 유효 시드 쿠키+허용 Origin이라
+ * 게이트를 통과한다. 게이트 거부(non-101) 시 injectWS는 promise를 reject한다(`Unexpected server response: NNN`).
+ */
+export function injectAuthedWS(app: FastifyInstance, opts?: AuthHeaderOptions): Promise<WebSocket> {
+  return app.injectWS(GAME_SOCKET_PATH, { headers: buildAuthHeaders(opts) })
+}
+
+/**
+ * 실 `ws` 클라이언트를 cookie/Origin 헤더와 함께 만든다(E2E 진입점). 기본값은 유효 시드 쿠키+허용 Origin.
+ * `autoPong` 등 실 클라이언트 옵션도 함께 받아 하트비트 테스트가 재사용한다.
+ */
+export function newAuthedClient(
+  url: string,
+  opts?: AuthHeaderOptions & RealClientOptions,
+): WebSocket {
+  const { cookie, origin, ...realOpts } = opts ?? {}
+  return new WebSocket(url, { headers: buildAuthHeaders({ cookie, origin }), ...realOpts })
+}
+
+/**
+ * 실 `ws` upgrade 거부를 관찰한다. 거부된 upgrade는 `'error'`·`'close'`가 아니라 `'unexpected-response'`
+ * 이벤트로 statusCode(401·403)를 알린다 — 그 statusCode를 돌려준다. 예상과 달리 `'open'`되면 reject한다
+ * (소켓이 열려선 안 되는 거부 케이스의 강한 단언).
+ */
+export function waitForUnexpectedResponse(ws: WebSocket, timeoutMs = 2000): Promise<number> {
+  return waitForEvent<number>(timeoutMs, 'waitForUnexpectedResponse', (settle, fail) => {
+    ws.once('unexpected-response', (_req, res) => settle(res.statusCode ?? 0))
+    ws.once('open', () => fail(new Error('거부되어야 할 upgrade가 열렸다')))
   })
 }

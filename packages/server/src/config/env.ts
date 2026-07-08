@@ -8,6 +8,19 @@ import { z } from 'zod'
 // zod 4 관용: z.flattenError(구식 error.flatten() 대신).
 export const EnvSchema = z.object({
   MONGODB_URI: z.string().min(1),
+  // WS upgrade Origin allowlist. default 없이 fail-fast(MONGODB_URI 패턴 동일) — 미설정 부팅을
+  // 막아 CSWSH 방어 정책을 명시 설정으로 강제한다. 콤마 구분 문자열을 origin 배열로 transform하고,
+  // 각 항목을 trim·빈 항목 제거한 뒤 .refine으로 최소 1개를 보장한다(빈 문자열·공백뿐·콤마뿐 거부).
+  WS_ALLOWED_ORIGINS: z
+    .string()
+    .min(1)
+    .transform((s) =>
+      s
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean),
+    )
+    .refine((arr) => arr.length > 0, { message: '최소 하나의 origin이 필요하다' }),
   MONGODB_DB_NAME: z.string().min(1).default('muhan_db_dev'),
   PORT: z.coerce.number().int().min(0).max(65535).default(3000),
   // 서버 주도 하트비트 튜닝(Story 5). ping 간격마다 직전 라운드 pong 미수신을 세고, 연속 미수신이
