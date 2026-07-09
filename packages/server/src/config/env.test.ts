@@ -313,4 +313,67 @@ describe('getConfig', () => {
 
     expect(exitSpy).toHaveBeenCalledWith(1)
   })
+
+  it('WS_IDLE_TIMEOUT_MS가 없으면 기본값(300000)을 채운다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    delete process.env.WS_IDLE_TIMEOUT_MS
+
+    const config = getConfig()
+
+    expect(config.WS_IDLE_TIMEOUT_MS).toBe(300000)
+  })
+
+  it('WS_IDLE_TIMEOUT_MS 문자열을 숫자로 강제 변환한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_IDLE_TIMEOUT_MS = '120000'
+
+    const config = getConfig()
+
+    expect(config.WS_IDLE_TIMEOUT_MS).toBe(120000)
+  })
+
+  it('WS_IDLE_TIMEOUT_MS가 하한(1) 미만이면 fail-fast로 종료한다', () => {
+    // idle이 0이면 월드 진입 즉시 만료돼 무입력 감시가 무의미하므로 최소 1을 강제한다.
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_IDLE_TIMEOUT_MS = '0'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('WS_IDLE_TIMEOUT_MS가 음수이면 fail-fast로 종료한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_IDLE_TIMEOUT_MS = '-5'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('WS_IDLE_TIMEOUT_MS가 비수치이면 fail-fast로 종료한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_IDLE_TIMEOUT_MS = '오분'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
 })

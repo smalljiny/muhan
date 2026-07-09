@@ -207,10 +207,12 @@ export function registerWebsocket(
 
   // 월드 진입 등록·close 판정·grace 재연결 조율기. grace는 env WS_RECONNECT_GRACE_MS로 스케줄한다(하드코딩 금지).
   // graceMs는 thunk로 넘겨 스케줄 시점(연결 close)에 지연 조회한다 — 미설정 env로 buildApp을 막지 않는다.
+  // idleMs도 thunk로 넘겨 월드 진입 시점에 지연 조회한다(graceMs 관례 미러, 하드코딩 금지).
   const lifecycle = createSessionLifecycle({
     registry,
     resolveDisconnect,
     graceMs: () => getConfig().WS_RECONNECT_GRACE_MS,
+    idleMs: () => getConfig().WS_IDLE_TIMEOUT_MS,
   })
 
   // per-request 계정 신원 슬롯. null 기본값으로 데코레이트하고 preValidation 훅에서 요청별로 대입한다
@@ -306,6 +308,9 @@ export function registerWebsocket(
                 // 재파싱 없이 넘긴다.
                 if (ctx.state === ConnectionState.command) {
                   const result = dispatch(commandRegistry, parsed)
+                  // 유효 명령 처리 성공(handled)만 무입력 타이머를 재-arm한다 — 거부(rejected:
+                  // unknown_type·bad_payload·internal)가 flood로 타이머를 무한 연장하지 못하게 한다.
+                  if (result.outcome === 'handled') ctx.idle?.arm()
                   if (result.event !== undefined) safeSend(socket, result.event)
                 } else {
                   handleSessionFrame(

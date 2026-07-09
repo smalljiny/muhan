@@ -526,4 +526,73 @@ describe('WS transport', () => {
     ws2.terminate()
     await app.close()
   })
+
+  // ── Story 6 — 무입력(idle) 종료 종단 배선(재-arm·flood·만료) ─────────────────────────────────
+  // command 진입 후 idle 타이머가 arm되고, 유효 명령(dispatch handled)마다 재-arm되며, 거부(rejected)는
+  // 재-arm하지 않고, 무입력이 창을 넘으면 resolveDisconnect(idleTimeout)로 종결하는지 injectWS로 관측한다.
+
+  it('command handled 명령은 idle을 재-arm하고 rejected(unknown_type·bad_payload) flood는 재-arm하지 않는다', async () => {
+    const app = buildSeededApp()
+    await app.ready()
+
+    const ws = await injectAuthedWS(app)
+    const reader = await enterCommandState(ws)
+
+    // 실 idle 타이머를 스파이로 교체해 arm 호출을 관측한다(실 타이머는 먼저 clear해 누수를 막는다).
+    const ctx = [...app.wsConnections.values()][0]
+    ctx?.idle?.clear()
+    const armSpy = vi.fn()
+    if (ctx !== undefined) ctx.idle = { arm: armSpy, clear: vi.fn() }
+
+    // (1) handled: debug:echo → 재-arm 1회.
+    ws.send(JSON.stringify({ type: 'debug:echo', text: '핑', id: 'h1' }))
+    expect(await reader.next()).toMatchObject({ type: 'debug:echo:result', correlationId: 'h1' })
+    expect(armSpy).toHaveBeenCalledTimes(1)
+
+    // (2) rejected flood: unknown_type → 재-arm 안 함.
+    ws.send(JSON.stringify({ type: 'nope:1', id: 'r1' }))
+    expect(await reader.next()).toMatchObject({ type: 'error', code: 'unknown_type' })
+    // (3) rejected: bad_payload(등록 type이지만 text 누락) → 재-arm 안 함.
+    ws.send(JSON.stringify({ type: 'debug:echo', id: 'r2' }))
+    expect(await reader.next()).toMatchObject({ type: 'error', code: 'bad_payload' })
+    // (4) 다시 handled: debug:echo → 재-arm 2회째(rejected가 사이에 타이머를 연장하지 못했다).
+    ws.send(JSON.stringify({ type: 'debug:echo', text: '퐁', id: 'h2' }))
+    expect(await reader.next()).toMatchObject({ type: 'debug:echo:result', correlationId: 'h2' })
+
+    // 최종 arm 횟수는 handled 횟수(2)와 정확히 같다 — rejected 2건은 타이머를 연장하지 않았다.
+    expect(armSpy).toHaveBeenCalledTimes(2)
+
+    ws.terminate()
+    await app.close()
+  })
+
+  it('command 진입 후 무입력이 WS_IDLE_TIMEOUT_MS를 넘으면 resolveDisconnect(idleTimeout)로 종결하고 포트를 1회 호출한다', async () => {
+    // 실 setTimeout으로 idle을 발화시키려 창을 짧게 오버라이드한다(하트비트 25s·데드라인 60s는 이 창 안에 발화 안 함).
+    process.env.WS_IDLE_TIMEOUT_MS = '80'
+    resetConfigForTests()
+    const port = spyPort()
+    const app = buildSeededApp({ lifecyclePort: port })
+    await app.ready()
+
+    try {
+      const ws = await injectAuthedWS(app)
+      await enterCommandState(ws)
+      expect(app.wsSessionRegistry.get(SEED_CHARACTER_ID)?.link).toBe('live')
+
+      // 무입력 → idle 만료 → resolveDisconnect(idleTimeout). 포트가 idleTimeout으로 정확히 1회 호출된다.
+      await waitFor(() => port.onSessionEnd.mock.calls.length === 1, 2000)
+      expect(port.onSessionEnd).toHaveBeenCalledTimes(1)
+      expect(port.onSessionEnd).toHaveBeenCalledWith({
+        accountId: SEED_ACCOUNT_ID,
+        characterId: SEED_CHARACTER_ID,
+        reason: 'idleTimeout',
+      })
+      // 종결됐으므로 registry 엔트리가 제거된다.
+      expect(app.wsSessionRegistry.get(SEED_CHARACTER_ID)).toBeUndefined()
+    } finally {
+      await app.close()
+      delete process.env.WS_IDLE_TIMEOUT_MS
+      resetConfigForTests()
+    }
+  })
 })

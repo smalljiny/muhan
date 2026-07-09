@@ -3,7 +3,7 @@ import { createSessionLifecycle } from './sessionLifecycle.js'
 import { createSessionRegistry, type SessionRegistry } from './sessionRegistry.js'
 import { createResolveDisconnect } from './resolveDisconnect.js'
 import type { SessionLifecyclePort } from './sessionLifecyclePort.js'
-import { createConnectionContext, type ConnectionContext } from './connection.js'
+import { createConnectionContext, type ConnectionContext, type IdleTimer } from './connection.js'
 import { ConnectionState } from './fsm/sessionFsm.js'
 
 // createSessionLifecycle는 소켓·emit 없이 registry·resolveDisconnect·주입 setTimeoutFn만으로 동작하는
@@ -24,14 +24,26 @@ function makePort(): SessionLifecyclePort & { onSessionEnd: ReturnType<typeof vi
  * lifecycle 테스트 하네스 — 실 registry + 실 resolveDisconnect + 스파이 포트 + fake setTimeoutFn.
  * grace 콜백을 캡처해 fake clock으로 발화할 수 있게 한다(만료 시점을 테스트가 제어).
  */
-function makeHarness(graceMs = 30000): {
+/** 스파이 idle 타이머 — arm/clear를 관측하고 onExpire를 캡처해 fake 만료를 재현한다. */
+interface SpyIdle extends IdleTimer {
+  arm: ReturnType<typeof vi.fn>
+  clear: ReturnType<typeof vi.fn>
+  onExpire: () => void
+}
+
+function makeHarness(graceMs = 30000, idleMs = 300000): {
   registry: SessionRegistry
   port: SessionLifecyclePort & { onSessionEnd: ReturnType<typeof vi.fn> }
   teardown: ReturnType<typeof vi.fn>
   lifecycle: ReturnType<typeof createSessionLifecycle>
   setTimeoutFn: ReturnType<typeof vi.fn>
+  createIdle: ReturnType<typeof vi.fn>
+  idleMsThunk: ReturnType<typeof vi.fn>
+  idleTimers: SpyIdle[]
   fireGrace(): void
+  fireIdle(index?: number): void
   graceMs: number
+  idleMs: number
 } {
   const registry = createSessionRegistry({ clearTimeoutFn: vi.fn() as unknown as typeof clearTimeout })
   const port = makePort()
@@ -44,17 +56,31 @@ function makeHarness(graceMs = 30000): {
     clearTimeoutFn: vi.fn(),
   })
 
-  // fake setTimeoutFn — grace 콜백과 지연값을 캡처한다(fake clock).
+  // fake setTimeoutFn — grace 콜백과 지연값을 캡처한다(fake clock). idle은 별도 createIdle seam을 쓰므로
+  // 이 setTimeoutFn은 오직 grace만 관측한다(idle이 grace 관측을 오염시키지 않도록 seam을 분리한다).
   let graceCb: (() => void) | null = null
   const setTimeoutFn = vi.fn((cb: () => void) => {
     graceCb = cb
     return fakeHandle(1)
   })
 
+  // idle 팩토리 seam — 생성된 스파이 idle을 순서대로 기록하고 각 onExpire를 캡처한다.
+  const idleTimers: SpyIdle[] = []
+  const createIdle = vi.fn((onExpire: () => void): IdleTimer => {
+    const spy: SpyIdle = { arm: vi.fn(), clear: vi.fn(), onExpire }
+    idleTimers.push(spy)
+    return spy
+  })
+
+  // env 지연 조회를 흉내내는 thunk — 호출 여부로 "값을 env에서 읽는다"를 관측한다(하드코딩 없음).
+  const idleMsThunk = vi.fn(() => idleMs)
+
   const lifecycle = createSessionLifecycle({
     registry,
     resolveDisconnect,
     graceMs: () => graceMs,
+    idleMs: idleMsThunk,
+    createIdle: createIdle as unknown as (onExpire: () => void) => IdleTimer,
     setTimeoutFn: setTimeoutFn as unknown as typeof setTimeout,
   })
 
@@ -64,10 +90,19 @@ function makeHarness(graceMs = 30000): {
     teardown,
     lifecycle,
     setTimeoutFn,
+    createIdle,
+    idleMsThunk,
+    idleTimers,
     graceMs,
+    idleMs,
     fireGrace() {
       if (graceCb === null) throw new Error('grace 콜백이 스케줄되지 않았다')
       graceCb()
+    },
+    fireIdle(index = idleTimers.length - 1) {
+      const spy = idleTimers[index]
+      if (spy === undefined) throw new Error('idle 타이머가 생성되지 않았다')
+      spy.onExpire()
     },
   }
 }
@@ -299,6 +334,119 @@ describe('createSessionLifecycle', () => {
       expect(h.teardown).toHaveBeenCalledWith(bindingB)
       // 마지막 C가 map을 차지한다.
       expect(h.registry.get('char-1')?.connection).toBe(ctxC)
+    })
+  })
+
+  describe('idle 타이머 (§3.7 — 무입력 종료)', () => {
+    it('register 경로 월드 진입 시 ctx.idle을 생성·arm한다', () => {
+      const h = makeHarness()
+      const ctx = commandCtx()
+
+      h.lifecycle.enterWorld(ctx, 'acc-1', 'char-1')
+
+      // 팩토리로 idle을 1회 생성해 ctx.idle에 배선하고 arm했다.
+      // (idle 값이 env thunk에서 읽히는지는 아래 "기본 createIdle 미주입" 테스트가 소유한다.)
+      expect(h.createIdle).toHaveBeenCalledTimes(1)
+      expect(ctx.idle).toBe(h.idleTimers[0])
+      expect(h.idleTimers[0]?.arm).toHaveBeenCalledTimes(1)
+    })
+
+    it('rebind 경로 재접속 시 새 ctx.idle을 생성·arm하고 옛 바인딩 connection.idle을 clear한다', () => {
+      const h = makeHarness()
+      const ctxOld = commandCtx()
+      h.lifecycle.enterWorld(ctxOld, 'acc-1', 'char-1')
+      const oldIdle = h.idleTimers[0]
+      h.lifecycle.handleClose(ctxOld) // drop → link-dead (옛 idle clear)
+
+      const ctxNew = commandCtx()
+      expect(h.lifecycle.enterWorld(ctxNew, 'acc-1', 'char-1')).toBe('resumed')
+
+      // 새 ctx에 새 idle을 생성·arm했다(총 2개 생성, 새 ctx가 두 번째를 보유).
+      expect(h.createIdle).toHaveBeenCalledTimes(2)
+      expect(ctxNew.idle).toBe(h.idleTimers[1])
+      expect(h.idleTimers[1]?.arm).toHaveBeenCalledTimes(1)
+      // 옛 idle은 clear됐다(drop 시 markLinkDead + rebind 방어선 — 최소 1회).
+      expect(oldIdle?.clear).toHaveBeenCalled()
+    })
+
+    it('drop(handleClose markLinkDead) 시 ctx.idle을 clear한다', () => {
+      const h = makeHarness()
+      const ctx = commandCtx()
+      h.lifecycle.enterWorld(ctx, 'acc-1', 'char-1')
+      const idle = h.idleTimers[0]
+      expect(idle?.arm).toHaveBeenCalledTimes(1)
+
+      h.lifecycle.handleClose(ctx)
+
+      // 연결이 끊겨 무입력 감시가 불필요하므로 idle을 clear한다(grace가 재연결 창을 관할).
+      expect(idle?.clear).toHaveBeenCalled()
+      expect(h.registry.get('char-1')?.link).toBe('link-dead')
+    })
+
+    it('idle 만료(onExpire) 시 resolveDisconnect(idleTimeout)가 실행돼 포트가 1회 idleTimeout으로 호출되고 registry에서 제거된다', () => {
+      const h = makeHarness()
+      const ctx = commandCtx()
+      h.lifecycle.enterWorld(ctx, 'acc-1', 'char-1')
+
+      h.fireIdle()
+
+      expect(h.port.onSessionEnd).toHaveBeenCalledTimes(1)
+      expect(h.port.onSessionEnd).toHaveBeenCalledWith({
+        accountId: 'acc-1',
+        characterId: 'char-1',
+        reason: 'idleTimeout',
+      })
+      // 종결됐으므로 registry 엔트리가 제거되고 teardown이 1회 일어난다.
+      expect(h.registry.get('char-1')).toBeUndefined()
+      expect(h.teardown).toHaveBeenCalledTimes(1)
+    })
+
+    it('stale idle 만료(evict로 교체된 옛 바인딩)는 identity 가드로 no-op이다', () => {
+      const h = makeHarness()
+      const ctxOld = commandCtx()
+      h.lifecycle.enterWorld(ctxOld, 'acc-1', 'char-1')
+      // 같은 캐릭터 live 재로그인 → 옛 바인딩 evict, fresh 바인딩이 map을 차지.
+      const ctxNew = commandCtx()
+      h.lifecycle.enterWorld(ctxNew, 'acc-1', 'char-1')
+      h.port.onSessionEnd.mockClear()
+      h.teardown.mockClear()
+
+      // 옛 소켓의 idle이 뒤늦게 만료해도 캡처한 옛 바인딩이 map 엔트리와 불일치라 종결하지 않는다.
+      h.fireIdle(0)
+
+      expect(h.port.onSessionEnd).not.toHaveBeenCalled()
+      expect(h.teardown).not.toHaveBeenCalled()
+      // fresh 바인딩은 여전히 live로 유지된다.
+      expect(h.registry.get('char-1')?.link).toBe('live')
+      expect(h.registry.get('char-1')?.connection).toBe(ctxNew)
+    })
+
+    it('기본 createIdle 미주입 시 idleMs 값을 setTimeoutFn 지연으로 흘린다 (env 값 배선 — 하드코딩 없음)', () => {
+      // createIdle을 주입하지 않으면 기본 팩토리(createIdleTimer)가 idle에도 이 setTimeoutFn을 쓴다.
+      // enterWorld만 호출(grace 미개입)하므로 유일한 setTimeout 호출은 idle arm이고, 그 지연이 idleMs여야 한다.
+      const registry = createSessionRegistry({
+        clearTimeoutFn: vi.fn() as unknown as typeof clearTimeout,
+      })
+      const idleSetTimeout = vi.fn((_fn: () => void, _delay: number) => fakeHandle(1))
+      const lifecycle = createSessionLifecycle({
+        registry,
+        resolveDisconnect: createResolveDisconnect({
+          registry,
+          port: makePort(),
+          teardown: vi.fn(),
+          logPortFailure: vi.fn(),
+          clearTimeoutFn: vi.fn(),
+        }),
+        graceMs: () => 30000,
+        idleMs: () => 44444,
+        setTimeoutFn: idleSetTimeout as unknown as typeof setTimeout,
+      })
+
+      lifecycle.enterWorld(commandCtx(), 'acc-1', 'char-1')
+
+      // 기본 idle 팩토리가 env idleMs(44444)를 지연값으로 타이머를 설정한다(하드코딩 없음).
+      expect(idleSetTimeout).toHaveBeenCalledTimes(1)
+      expect(idleSetTimeout.mock.calls[0]?.[1]).toBe(44444)
     })
   })
 })
