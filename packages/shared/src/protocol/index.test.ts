@@ -7,6 +7,9 @@ import {
   noArgsPayloadSchema,
   targetOrdinalPayloadSchema,
   targetSecondaryPayloadSchema,
+  characterSummarySchema,
+  promptKindSchema,
+  promptOptionSchema,
   PROTOCOL_VERSION,
 } from '../index.js'
 
@@ -19,7 +22,26 @@ describe('shared 루트 배럴 re-export', () => {
     expect(noArgsPayloadSchema).toBeDefined()
     expect(targetOrdinalPayloadSchema).toBeDefined()
     expect(targetSecondaryPayloadSchema).toBeDefined()
+    expect(characterSummarySchema).toBeDefined()
+    expect(promptKindSchema).toBeDefined()
+    expect(promptOptionSchema).toBeDefined()
     expect(PROTOCOL_VERSION).toBe(1)
+  })
+
+  it('세션 command·event variant를 루트 배럴로 파싱한다', () => {
+    expect(
+      clientCommandSchema.safeParse({
+        type: 'session:selectCharacter',
+        characterId: 'char-1',
+      }).success,
+    ).toBe(true)
+    expect(
+      serverEventSchema.safeParse({
+        type: 'session:characterList',
+        characters: [{ characterId: 'char-1', name: '테스토스', class: 1, race: 2, level: 5 }],
+      }).success,
+    ).toBe(true)
+    expect(errorCodeSchema.safeParse('unauthorized').success).toBe(true)
   })
 
   it('핸드셰이크 왕복이 버전 상수로 정합한다', () => {

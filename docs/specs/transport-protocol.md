@@ -10,9 +10,9 @@
 
 1. **client→server 명령 ↔ server→client 이벤트 경계** — `shared/protocol/`이 두 방향을 명시 분리된 두 판별 유니온(`clientCommandSchema`·`serverEventSchema`)으로 둔다. 서버 입력 검증은 command 유니온으로만, 클라 입력 검증은 event 유니온으로만 한다.
 2. **핸드셰이크 ↔ 라우팅 경계** — 첫 프레임은 버전 협상(`handleHandshakeFrame`)이 소비하고, 핸드셰이크 완료(`ctx.ready=true`) 이후 프레임만 라우터(`dispatch`)로 넘어간다. 두 단계 모두 부수효과 없는 순수 함수가 상태 전이·응답을 계산하고, message 핸들러가 I/O를 실행한다.
-3. **transport ↔ 인증 경계(seam)** — `verifyClient`·`preValidation`을 쓰지 않고 인증 seam만 라우트 옵션 자리에 주석으로 남긴다. 세션 쿠키 검증·Origin·`SessionAuthPort`는 T2가 이 자리에 얹는다.
+3. **transport ↔ 인증 경계(seam)** — E3-1은 `verifyClient`·`preValidation`을 쓰지 않고 인증 seam만 라우트 옵션 자리에 주석으로 남겼다. **T2([`auth-session.md`](auth-session.md))가 이 자리에 `preValidation` 인증 게이트(세션 쿠키 검증·Origin allowlist)와 `SessionAuthPort`를 얹었다** — 여전히 `verifyClient`는 미사용이며 인증은 Fastify 수명주기 훅으로 upgrade 전에 게이트한다.
 
-**범위 밖**(후속 토픽): 세션 쿠키 검증·세션 FSM(waiting→login→command)·prompt/response 다단 대화는 T2, 재연결·세션 레지스트리·상태 복원은 T3, 실제 124 게임 명령 핸들러는 후속 명령 구현 토픽, 브로드캐스트 채널은 월드 상태 엔진 에픽, 프로덕션 TLS 종단·프록시 설정은 배포/인프라 토픽이다.
+**범위 밖**(후속 토픽): 세션 쿠키 검증·세션 FSM(`characterSelect→create→command`)·prompt/response 다단 대화는 **T2로 구현됨**([`auth-session.md`](auth-session.md)), 재연결·세션 레지스트리·상태 복원은 T3, 실제 124 게임 명령 핸들러는 후속 명령 구현 토픽, 브로드캐스트 채널은 월드 상태 엔진 에픽, 프로덕션 TLS 종단·프록시 설정은 배포/인프라 토픽이다.
 
 ## 구조 / 스키마
 
@@ -31,10 +31,20 @@
 | `targetSecondaryPayloadSchema` | `{ target: string, secondary: string }` | (c) 대상+보조대상 — 두 대상을 엮음(예: 상자에 열쇠 사용) |
 | `freeTextPayloadSchema` | `{ text: string }` | (d) 자유 텍스트 — 임의 문자열 한 덩어리(예: 말하기·echo) |
 
+**`session.ts`** (T2) — 세션 계열 와이어 building block. `events.ts`가 `session:prompt`·`session:characterList` variant에서 재사용한다(import 방향은 events → session 단방향, 순환 없음). 영속 스키마(`schema/character.ts`)와 독립한 와이어 전용 신설이다(Pick/파생하지 않음).
+
+| 스키마 | shape | 용도 |
+|------|------|------|
+| `promptKindSchema` | `z.enum(['selectCharacter', 'createField'])` | prompt 종류 — 선택 단계·생성 필드 입력 단계(확인도 createField) |
+| `promptOptionSchema` | `{ value: string(min 1), label: string(min 1) }` | prompt 선택지 — `value`는 `session:reply.value`와 정합하는 기계값, `label`은 사람용 표시 |
+| `characterSummarySchema` | `{ characterId, name, class: int, race: int, level: int }` | 캐릭터 선택 화면 와이어 요약 — 영속 `_id` 대신 `characterId`, persistence엔 없는 `level` 포함 |
+
 **`commands.ts`** — `clientCommandSchema = z.discriminatedUnion('type', [...])`. top-level `type` 리터럴로 명령을 판별하며, 각 variant는 리터럴 discriminator를 둔 `strictObject`다.
 
 - `{ type: 'system:ready', protocolVersion: int }` — 핸드셰이크 개시. client가 아는 프로토콜 버전을 실어 첫 메시지로 보낸다.
 - `{ type: 'debug:echo', text: string(min 1), id?: string }` — 진단용 echo 요청. `freeTextPayloadSchema.shape`를 새 strictObject에 spread해 재사용하되 리터럴 discriminator·strict를 보존한다. `id`는 client가 응답을 짝짓는 optional 상관 키.
+- `{ type: 'session:reply', promptId: string(min 1), value: string(min 1, max 256), id?: string }` — 세션 prompt 응답(T2). `promptId`가 지목한 질문에 `value`로 답한다. `value`는 자유 사용자 입력이라 거친 외곽 상한 `max 256`을 두고, 도메인별 세부 상한(캐릭터 이름 `max 40` 등)은 세션 핸들러가 추가로 강제한다(다층 방어).
+- `{ type: 'session:selectCharacter', characterId: string(min 1), id?: string }` — 캐릭터 선택(T2). `characterId`로 입장할 캐릭터를 지목한다.
 
 **`events.ts`** — `serverEventSchema = z.discriminatedUnion('type', [...])` + `errorCodeSchema`.
 
@@ -42,8 +52,11 @@
 - `{ type: 'system:reload', reason: string(min 1) }` — 버전 불일치 시 재연결·재동기 지시. `reason`은 사람용 사유.
 - `{ type: 'debug:echo:result', text: string(min 1), correlationId?: string }` — echo 응답. `correlationId`는 요청 `id`와 짝짓는 상관 키.
 - `{ type: 'error', code: ErrorCode, message: string(min 1), correlationId?: string }` — 오류 통지. `code`는 기계 판독, `message`는 사람용.
+- `{ type: 'session:prompt', promptId: string(min 1), kind: PromptKind, options?: PromptOption[] }` — 세션 prompt 제시(T2). `promptId`로 질문을 식별, `kind`로 단계(`selectCharacter`/`createField`)를, `options`로 선택지를 싣는다.
+- `{ type: 'session:characterList', characters: CharacterSummary[] }` — 캐릭터 선택 화면이 실을 와이어 전용 요약 배열(T2).
+- `{ type: 'session:entered', characterId: string(min 1) }` — 지목한 캐릭터로 월드 입장 확정 통지(T2).
 
-`errorCodeSchema = z.enum(['handshake_required', 'unknown_type', 'bad_payload', 'internal'])` — `handshake_required`(핸드셰이크 전 명령 수신), `unknown_type`(미지 discriminator), `bad_payload`(payload 형식 위반), `internal`(핸들러/처리 중 서버 내부 오류).
+`errorCodeSchema = z.enum(['handshake_required', 'unknown_type', 'bad_payload', 'internal', 'unauthorized', 'session_state'])` — `handshake_required`(핸드셰이크 전 명령 수신), `unknown_type`(미지 discriminator), `bad_payload`(payload 형식 위반), `internal`(핸들러/처리 중 서버 내부 오류), `unauthorized`(소유하지 않은 캐릭터 지목 등 인가 실패, T2), `session_state`(현재 세션 단계에서 허용되지 않는 명령, T2). WS upgrade **전** 게이트의 거부(`401 unauthenticated`·`403 forbidden_origin`)는 프로토콜 error 이벤트가 아니라 HTTP 응답이며 이 열거에 없다(auth-session.md 참조).
 
 ### 전송 배선 (`packages/server/src/ws/`)
 
@@ -146,7 +159,7 @@
 
 ## 제약사항
 
-- **인증·세션은 T2** — handshake는 transport-only다. 세션 쿠키 검증·Origin 체크·`SessionAuthPort`·`preValidation` 훅은 이 토픽 밖이며, `plugin.ts`의 `/game` 라우트 옵션 자리에 SEAM 주석만 남긴다. 세션 FSM(waiting→login→command)·prompt/response 다단 대화·평문→해시 비밀번호 교체·checkdouble 동시접속 방어도 T2.
+- **인증·세션은 T2에서 구현됨** — E3-1 handshake 자체는 transport-only다. 세션 쿠키 검증·Origin 체크·`SessionAuthPort`·`preValidation` 훅·세션 FSM(`characterSelect→create→command`)·prompt/response 다단 대화는 T2([`auth-session.md`](auth-session.md))가 이 위에 얹었다. 평문→해시 비밀번호 교체는 Firebase Auth 위임(발급 E5)으로 해소, checkdouble 동시접속 방어는 T3 세션 레지스트리 경계다.
 - **재연결은 T3** — 세션 레지스트리·상태 복원(onReconnect)은 이 토픽에 없다.
 - **실 게임 명령 핸들러는 후속 토픽** — 이 계층은 5 인자 패턴 스키마 + 무인증 `debug:echo` 하나만 배선한다. 실제 124 게임 명령(이동·전투·마법·아이템·소셜·DM) 핸들러와 명령→구조화 이벤트 매핑은 후속 명령 구현 토픽. 어떤 실게임 command가 "직접 응답 있음(질의형)"인지의 correlationId 반향 대상 목록도 그때 정해진다.
 - **다단 대화 payload 없음** — `payloads.ts`는 4패턴(무인자/대상+서수/대상+보조대상/자유텍스트)만 정의한다. 5번째 prompt/response 다단 payload는 T2 경계다.

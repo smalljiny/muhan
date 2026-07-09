@@ -3,11 +3,15 @@ import { serverEventSchema, errorCodeSchema } from './events.js'
 
 describe('errorCodeSchema', () => {
   it.each(['handshake_required', 'unknown_type', 'bad_payload', 'internal'])(
-    '%s 코드를 통과시킨다',
+    '기존 %s 코드를 통과시킨다 (회귀 보존)',
     (code) => {
       expect(errorCodeSchema.safeParse(code).success).toBe(true)
     },
   )
+
+  it.each(['unauthorized', 'session_state'])('신규 %s 코드를 통과시킨다', (code) => {
+    expect(errorCodeSchema.safeParse(code).success).toBe(true)
+  })
 
   it('알 수 없는 코드를 거부한다', () => {
     expect(errorCodeSchema.safeParse('teapot').success).toBe(false)
@@ -98,6 +102,128 @@ describe('serverEventSchema (server→client 봉투)', () => {
     it('알 수 없는 code를 거부한다', () => {
       expect(
         serverEventSchema.safeParse({ type: 'error', code: 'teapot', message: 'x' }).success,
+      ).toBe(false)
+    })
+  })
+
+  describe('session:prompt', () => {
+    it('promptId + kind만 있으면 통과한다 (options 생략)', () => {
+      const parsed = serverEventSchema.safeParse({
+        type: 'session:prompt',
+        promptId: 'p1',
+        kind: 'selectCharacter',
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'session:prompt') {
+        expect(parsed.data.promptId).toBe('p1')
+        expect(parsed.data.kind).toBe('selectCharacter')
+        expect(parsed.data.options).toBeUndefined()
+      }
+    })
+
+    it('구조화된 options 배열이 있으면 통과한다', () => {
+      const parsed = serverEventSchema.safeParse({
+        type: 'session:prompt',
+        promptId: 'p1',
+        kind: 'selectCharacter',
+        options: [
+          { value: 'char-1', label: '테스토스' },
+          { value: 'char-2', label: '타이' },
+        ],
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'session:prompt') {
+        expect(parsed.data.options?.[0]?.value).toBe('char-1')
+      }
+    })
+
+    it('kind가 유효하지 않으면 거부한다', () => {
+      expect(
+        serverEventSchema.safeParse({ type: 'session:prompt', promptId: 'p1', kind: 'confirm' })
+          .success,
+      ).toBe(false)
+    })
+
+    it('promptId가 빈 문자열이면 거부한다', () => {
+      expect(
+        serverEventSchema.safeParse({ type: 'session:prompt', promptId: '', kind: 'createField' })
+          .success,
+      ).toBe(false)
+    })
+
+    it('option 원소가 label을 빠뜨리면 거부한다', () => {
+      expect(
+        serverEventSchema.safeParse({
+          type: 'session:prompt',
+          promptId: 'p1',
+          kind: 'selectCharacter',
+          options: [{ value: 'char-1' }],
+        }).success,
+      ).toBe(false)
+    })
+
+    it('알 수 없는 키를 거부한다 (strict)', () => {
+      expect(
+        serverEventSchema.safeParse({
+          type: 'session:prompt',
+          promptId: 'p1',
+          kind: 'createField',
+          extra: true,
+        }).success,
+      ).toBe(false)
+    })
+  })
+
+  describe('session:characterList', () => {
+    it('CharacterSummary 배열이 있으면 통과한다', () => {
+      const parsed = serverEventSchema.safeParse({
+        type: 'session:characterList',
+        characters: [{ characterId: 'char-1', name: '테스토스', class: 1, race: 2, level: 5 }],
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'session:characterList') {
+        expect(parsed.data.characters[0]?.characterId).toBe('char-1')
+      }
+    })
+
+    it('빈 배열도 통과한다', () => {
+      expect(
+        serverEventSchema.safeParse({ type: 'session:characterList', characters: [] }).success,
+      ).toBe(true)
+    })
+
+    it('요약이 필수 필드를 빠뜨리면 거부한다', () => {
+      expect(
+        serverEventSchema.safeParse({
+          type: 'session:characterList',
+          characters: [{ characterId: 'char-1', name: '테스토스', class: 1, race: 2 }],
+        }).success,
+      ).toBe(false)
+    })
+  })
+
+  describe('session:entered', () => {
+    it('characterId가 있으면 통과한다', () => {
+      const parsed = serverEventSchema.safeParse({
+        type: 'session:entered',
+        characterId: 'char-1',
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'session:entered') {
+        expect(parsed.data.characterId).toBe('char-1')
+      }
+    })
+
+    it('characterId가 빈 문자열이면 거부한다', () => {
+      expect(
+        serverEventSchema.safeParse({ type: 'session:entered', characterId: '' }).success,
+      ).toBe(false)
+    })
+
+    it('알 수 없는 키를 거부한다 (strict)', () => {
+      expect(
+        serverEventSchema.safeParse({ type: 'session:entered', characterId: 'char-1', extra: 1 })
+          .success,
       ).toBe(false)
     })
   })

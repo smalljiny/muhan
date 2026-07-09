@@ -20,6 +20,21 @@ export const clientCommandSchema = z.discriminatedUnion('type', [
     ...freeTextPayloadSchema.shape,
     id: z.string().optional(),
   }),
+  // 세션 prompt 응답 — promptId가 지목한 질문에 value로 답한다. id는 응답을 짝짓는 상관 키.
+  // value는 자유 사용자 입력(이름·선택값)이라 거친 외곽 상한(256)을 둔다 — 도메인별 세부 상한은
+  // 각 prompt 핸들러(예: 캐릭터 이름 max 40)가 추가로 강제한다(다층 방어).
+  z.strictObject({
+    type: z.literal('session:reply'),
+    promptId: z.string().min(1),
+    value: z.string().min(1).max(256),
+    id: z.string().optional(),
+  }),
+  // 캐릭터 선택 — characterId로 입장할 캐릭터를 지목한다. id는 응답을 짝짓는 상관 키.
+  z.strictObject({
+    type: z.literal('session:selectCharacter'),
+    characterId: z.string().min(1),
+    id: z.string().optional(),
+  }),
 ])
 
 export type ClientCommand = z.infer<typeof clientCommandSchema>

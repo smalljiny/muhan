@@ -2,6 +2,8 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import type { ServerOptions as HttpsServerOptions } from 'node:https'
 import type { HealthStatus } from 'shared'
 import { registerWebsocket } from './ws/plugin.js'
+import type { SessionAuthPort } from './auth/sessionAuthPort.js'
+import { InMemorySessionAuthAdapter } from './auth/inMemorySessionAuthAdapter.js'
 
 /**
  * Fastify 앱 인스턴스를 구성한다 (listen 하지 않음).
@@ -14,10 +16,15 @@ import { registerWebsocket } from './ws/plugin.js'
  *
  * `deps.https`는 Fastify로 그대로 pass-through한다(TLS-ready seam). 값을 넘기면 https 서버가 뜬다.
  * dev는 평문 loopback을 쓰므로 미주입이 기본이다.
+ *
+ * `deps.sessionAuth`는 게임 소켓 preValidation 게이트가 쓰는 세션 인증 포트다. 미주입 시 빈
+ * 인메모리 어댑터(유효 쿠키 0개)를 기본값으로 조립한다 — 프로덕션 실 firebase 어댑터는 E5에서
+ * 이 자리에 주입한다. 테스트는 `createSeededAuthAdapter()`로 시드 어댑터를 주입한다(DIP seam).
  */
 export function buildApp(deps?: {
   pingDb?: () => Promise<boolean>
   https?: HttpsServerOptions
+  sessionAuth?: SessionAuthPort
 }): FastifyInstance {
   // logger를 활성화해 부팅/에러 경로 진단(index.ts의 listen 실패 처리)이 실제로 출력되게 한다.
   // https를 넘기면 Fastify가 https.Server를 만든다(TLS-ready pass-through). Fastify 타입 오버로드가
@@ -33,13 +40,16 @@ export function buildApp(deps?: {
     return up ? { status: 'ok', db: 'up' } : { status: 'degraded', db: 'down' }
   })
 
+  // 세션 인증 포트를 조립한다. 미주입 시 빈 인메모리 어댑터(유효 쿠키 없음)를 기본으로 세운다.
+  const sessionAuth = deps?.sessionAuth ?? new InMemorySessionAuthAdapter()
+
   // 게임 소켓 transport를 무조건 등록한다. injectWS·실 upgrade가 완성된 app에서만 동작하고,
   // 라우트가 안 쓰이면 기존 /health 경로엔 영향이 없다.
   //
   // 등록 순서: @fastify/websocket "라우트보다 먼저 등록" 관례는 WS 라우트에 대한 것이다. 유일한 WS 라우트
   // `/game`은 registerWebsocket 내부에서 플러그인 등록 뒤에 마운트되므로 관례를 충족한다. 앞선 `/health`는
   // 평문 GET이라 upgrade 대상이 아니고, 이 앱에 `/game` 외 WS upgrade 대상이 없어 순서로 인한 영향이 없다.
-  registerWebsocket(app)
+  registerWebsocket(app, sessionAuth)
 
   return app
 }
