@@ -175,10 +175,14 @@ export function registerWebsocket(app: FastifyInstance, sessionAuth: SessionAuth
         ctx.heartbeat = heartbeat.start()
 
         // 진행 데드라인(논리 진행, 하트비트와 별도 슬롯)을 만든다. 만료 시 graceful close(terminate 아님).
-        // arm은 명시 호출하지 않는다 — accept 시 enterInitialState → enterState(characterSelect) →
-        // rearmDeadline이 자동 무장한다(단일 메커니즘, 중복 arm 회피). ctx.deadline에 배선해 cleanup이 clear한다.
+        // socket-open 즉시 무장한다 — pre-handshake 창(open → system:ready)도 진행 데드라인으로 묶어,
+        // 인증 게이트를 통과했으나 핸드셰이크를 완료하지 않는(system:ready 미송신) 연결이 영구 잔존하는 것을
+        // 막는다. accept 시 enterInitialState → enterState(characterSelect) → rearmDeadline이 같은 타이머를
+        // 새로 무장하므로 중복 arm은 무해하다(rearm은 기존 타이머를 clear 후 재설정). ctx.deadline에 배선해
+        // cleanup이 clear한다.
         const deadline = createDeadline(socket, { deadlineMs: config.WS_SESSION_DEADLINE_MS })
         ctx.deadline = deadline
+        deadline.rearm()
 
         // pong 수신은 매니저에 알려 미스 카운터를 리셋한다(연결이 살아 있다는 신호).
         socket.on('pong', () => {
@@ -245,8 +249,11 @@ export function registerWebsocket(app: FastifyInstance, sessionAuth: SessionAuth
                 // HandshakeResult에 새 action이 추가되면 컴파일 타임에 여기서 걸린다 — 조용한 no-op 방지.
                 assertNever(result)
             }
-          } catch {
-            // 방어선: handshake/dispatch 경로의 예상치 못한 throw를 격리한다. 원인은 클라이언트에 노출하지 않는다.
+          } catch (error) {
+            // 방어선: handshake/dispatch 경로의 예상치 못한 throw를 격리한다. 원인은 클라이언트에 노출하지
+            // 않되(정적 internal 메시지), 서버에는 로깅해 운영 신호를 남긴다 — buildSession의 배선 불변식
+            // 위반(account null 등)이 여기로 올라오므로 로그 없이는 무증상 실패가 된다.
+            app.log.error({ err: error }, 'ws message handler failed')
             safeSend(socket, {
               type: 'error',
               code: 'internal',

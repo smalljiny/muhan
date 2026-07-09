@@ -173,8 +173,13 @@ export type CreateDecision =
     }
   | { readonly kind: 'complete'; readonly dto: CreateCharacterInput }
 
-/** 이름 검증 — 앞뒤 공백을 제거한 뒤 비어있지 않아야 한다(공백만 있는 이름 거부). */
-const createNameSchema = z.string().trim().min(1)
+/**
+ * 이름 검증 — 앞뒤 공백을 제거한 뒤 비어있지 않아야 하고(공백만 있는 이름 거부), 상한을 둔다.
+ * 상한 40은 원작 creature name 필드(80바이트 EUC-KR, 한글 2바이트 ≈ 40자)를 기준으로 한 방어적
+ * 캡이다 — 무한 길이 이름이 E5 영속 계층까지 미절단으로 도달하는 것을 막는다(프레임 64KB 캡의
+ * 세분화). 확정 영속 스키마가 서면 그 값과 정합시킨다.
+ */
+const createNameSchema = z.string().trim().min(1).max(40)
 
 /** class/race 검증·변환 — reply.value(string)를 정수로 강제 변환한다(비정수·비수치 거부). */
 const createIntSchema = z.coerce.number().int()

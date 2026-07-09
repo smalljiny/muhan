@@ -13,7 +13,7 @@ import {
   SEED_VALID_COOKIE,
   SEED_CHARACTER_ID,
   createSeededAuthAdapter,
-} from '../auth/inMemorySessionAuthAdapter.js'
+} from '../auth/seedSessionAuth.testutil.js'
 
 /**
  * WS transport 테스트 헬퍼 — injectWS 클라이언트(단위)와 실 `ws` 클라이언트(E2E)를 함께 관찰하는 유틸.

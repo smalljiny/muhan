@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import type { FastifyInstance } from 'fastify'
 import type { WebSocket } from 'ws'
 import { resetConfigForTests } from '../config/env.js'
-import { SEED_ACCOUNT_ID } from '../auth/inMemorySessionAuthAdapter.js'
+import { SEED_ACCOUNT_ID } from '../auth/seedSessionAuth.testutil.js'
 import {
   buildSeededApp,
   injectAuthedWS,

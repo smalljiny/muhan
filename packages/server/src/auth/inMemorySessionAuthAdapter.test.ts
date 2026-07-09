@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { characterSummarySchema } from 'shared'
+import { InMemorySessionAuthAdapter } from './inMemorySessionAuthAdapter.js'
 import {
-  InMemorySessionAuthAdapter,
   createSeededAuthAdapter,
   SEED_VALID_COOKIE,
   SEED_ACCOUNT_ID,
   SEED_CHARACTER_ID,
-} from './inMemorySessionAuthAdapter.js'
+} from './seedSessionAuth.testutil.js'
 import { OwnershipError } from './sessionAuthPort.js'
 
 /**

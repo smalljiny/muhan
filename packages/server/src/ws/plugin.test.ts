@@ -20,7 +20,7 @@ import {
   CREATE_SENTINEL,
   CREATE_PROMPT_IDS,
 } from './fsm/sessionFsm.js'
-import { SEED_CHARACTER_ID } from '../auth/inMemorySessionAuthAdapter.js'
+import { SEED_CHARACTER_ID } from '../auth/seedSessionAuth.testutil.js'
 
 // T3.6 — transport 배선 스펙. injectWS로 유효 쿠키+허용 Origin upgrade를 태워 라우트 마운트·프레임
 // 하드닝·per-connection 정리·https pass-through를 관찰한다(E3-1 회귀 방어). 인증 게이트 자체 검증은

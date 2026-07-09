@@ -4,7 +4,7 @@ import {
   createSeededAuthAdapter,
   SEED_ACCOUNT_ID,
   SEED_CHARACTER_ID,
-} from '../../auth/inMemorySessionAuthAdapter.js'
+} from '../../auth/seedSessionAuth.testutil.js'
 import {
   ConnectionState,
   SELECT_CHARACTER_PROMPT_ID,

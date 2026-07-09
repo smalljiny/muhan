@@ -22,7 +22,7 @@ import {
   CREATE_CONFIRM_VALUE,
   CREATE_PROMPT_IDS,
 } from './fsm/sessionFsm.js'
-import { SEED_CHARACTER_ID } from '../auth/inMemorySessionAuthAdapter.js'
+import { SEED_CHARACTER_ID } from '../auth/seedSessionAuth.testutil.js'
 
 // Story 7 — 실 네트워크 소켓 E2E. injectWS in-process 단위 테스트(plugin.test.ts)와 구별되는
 // 실 TCP 흐름을 증명한다: app을 포트 0(127.0.0.1)로 리슨시키고 실 `ws` 클라이언트로 연결해
