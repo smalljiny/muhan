@@ -80,7 +80,7 @@ function makeHarness(graceMs = 30000, idleMs = 300000): {
     resolveDisconnect,
     graceMs: () => graceMs,
     idleMs: idleMsThunk,
-    createIdle: createIdle as unknown as (onExpire: () => void) => IdleTimer,
+    createIdle,
     setTimeoutFn: setTimeoutFn as unknown as typeof setTimeout,
   })
 
@@ -427,7 +427,9 @@ describe('createSessionLifecycle', () => {
       const registry = createSessionRegistry({
         clearTimeoutFn: vi.fn() as unknown as typeof clearTimeout,
       })
-      const idleSetTimeout = vi.fn((_fn: () => void, _delay: number) => fakeHandle(1))
+      const idleSetTimeout = vi.fn<(fn: () => void, delay: number) => NodeJS.Timeout>(() =>
+        fakeHandle(1),
+      )
       const lifecycle = createSessionLifecycle({
         registry,
         resolveDisconnect: createResolveDisconnect({
