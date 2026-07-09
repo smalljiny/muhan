@@ -93,6 +93,11 @@ export interface SessionContext {
   // 전진마다 rearmDeadline이, command(in-world) 도달 시 clearDeadline이 호출된다.
   readonly rearmDeadline: () => void
   readonly clearDeadline: () => void
+  // 월드 진입 등록 seam(Story 5, emit·rearmDeadline 미러). enterCommand가 이 콜백으로 세션 레지스트리에
+  // 등록/재연결하고 그 outcome으로 발화할 이벤트를 고른다. 셸은 createSessionLifecycle.enterWorld를 이 ctx에
+  // 바인딩해 주입하고, 테스트는 vi.fn()으로 배선한다. required(optional 금지)라 주입 누락 시 컴파일에서 걸린다
+  // (배선을 빠뜨리면 월드 진입이 레지스트리에 등록되지 않아 재연결·evict가 무력화된다).
+  readonly enterWorld: (characterId: string) => 'entered' | 'resumed'
 }
 
 /**
@@ -250,9 +255,19 @@ function sessionStateError(message: string): ServerEvent {
  * 상태의 단일 출처). 향후 command 진입 부수효과(존재 등록 등)가 늘면 여기 한 곳만 고친다. 단, 진행
  * 데드라인 clear는 상태 대입과 순서가 맞아야 하므로 여기가 아니라 enterState의 command 분기에 있다
  * (enterCommand는 상태 대입 전에 실행되고, clear는 대입 시점에 일어난다).
+ *
+ * `enterWorld`를 **emit보다 먼저** 호출해 세션 레지스트리 등록/재연결을 확정한 뒤 이벤트를 발화한다
+ * (등록 상태 확정 후 이벤트). outcome이 'resumed'(link-dead 재연결 rebind)면 session:resumed를,
+ * 'entered'(신규 등록)면 session:entered를 발화한다. create 완주 경로도 이 함수를 공유하며 신규
+ * 캐릭터는 link-dead일 수 없어 항상 'entered'다.
  */
 function enterCommand(session: SessionContext, characterId: string): ConnectionState {
-  session.emit({ type: 'session:entered', characterId })
+  const outcome = session.enterWorld(characterId)
+  session.emit(
+    outcome === 'resumed'
+      ? { type: 'session:resumed', characterId }
+      : { type: 'session:entered', characterId },
+  )
   return ConnectionState.command
 }
 
