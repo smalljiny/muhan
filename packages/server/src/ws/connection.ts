@@ -2,6 +2,7 @@ import type { WebSocket } from 'ws'
 import { PROTOCOL_VERSION } from 'shared'
 import type { AccountIdentity } from '../auth/sessionAuthPort.js'
 import { ConnectionState, type CreateProgress } from './fsm/sessionFsm.js'
+import type { Deadline } from './deadline.js'
 
 /**
  * per-connection 컨텍스트 — 소켓 하나의 수명 동안 유지되는 transport 상태.
@@ -16,11 +17,15 @@ import { ConnectionState, type CreateProgress } from './fsm/sessionFsm.js'
  * 상태 밖에선 null이다(create.onEnter가 초기화, onExit가 정리). SessionContext가 매 프레임 재조립되므로
  * 대화 상태는 소켓 수명 동안 유지되는 이 컨텍스트에 둔다. `ready`·`heartbeat`·`account`·`state`·
  * `createProgress`는 소켓 수명 동안 갱신되는 mutable 슬롯이라 `readonly`를 두지 않는다.
+ *
+ * `deadline`은 하트비트(물리 생존)와 **별도** 진행 데드라인 슬롯(논리 진행, Story 6)이다. 셸이 연결 수락 시
+ * createDeadline 핸들을 대입하고, FSM이 주입 콜백(rearm/clear)으로 조작한다. cleanup이 clear로 누수를 막는다.
  */
 export interface ConnectionContext {
   readonly protocolVersion: number
   ready: boolean
   heartbeat: NodeJS.Timeout | null
+  deadline: Deadline | null
   account: AccountIdentity | null
   state: ConnectionState
   createProgress: CreateProgress | null
@@ -35,6 +40,7 @@ export function createConnectionContext(): ConnectionContext {
     protocolVersion: PROTOCOL_VERSION,
     ready: false,
     heartbeat: null,
+    deadline: null,
     account: null,
     state: ConnectionState.characterSelect,
     createProgress: null,
@@ -46,7 +52,8 @@ export function createConnectionContext(): ConnectionContext {
  *
  * `heartbeat` 슬롯에 남은 ping 타이머를 clear해 누수를 막고(방어선), 레지스트리에서 컨텍스트를 제거한다.
  * 하트비트 매니저의 `stop()`도 같은 타이머를 정리하지만, 어느 경로로 close되더라도 타이머가 살아남지
- * 않도록 여기서 한 번 더 clear한다(clearInterval은 idempotent).
+ * 않도록 여기서 한 번 더 clear한다(clearInterval은 idempotent). `deadline` 슬롯의 진행 데드라인 타이머도
+ * 같은 방어선으로 clear한다(deadline.clear는 idempotent) — 하트비트와 나란히 정리해 누수를 막는다.
  */
 export function cleanupConnection(
   connections: Map<WebSocket, ConnectionContext>,
@@ -56,6 +63,10 @@ export function cleanupConnection(
   if (ctx?.heartbeat != null) {
     clearInterval(ctx.heartbeat)
     ctx.heartbeat = null
+  }
+  if (ctx?.deadline != null) {
+    ctx.deadline.clear()
+    ctx.deadline = null
   }
   connections.delete(socket)
 }

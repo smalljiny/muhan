@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { ServerEvent } from 'shared'
 import {
   createSeededAuthAdapter,
@@ -31,17 +31,29 @@ import {
  * 3층 배선(applyTransition·enterInitialState·handleSessionFrame): ctx.state 변이 단일화·enter/exit 콜백 구동.
  */
 
-/** 배열 수집 emit과 시드 어댑터를 배선한 세션 컨텍스트를 만든다(소켓 없이 2층 테스트). */
-function makeSession(): { session: SessionContext; events: ServerEvent[] } {
+/**
+ * 배열 수집 emit과 시드 어댑터를 배선한 세션 컨텍스트를 만든다(소켓 없이 2층 테스트).
+ * rearmDeadline/clearDeadline은 vi.fn() 스파이로 배선해 데드라인 seam 호출을 관찰한다.
+ */
+function makeSession(): {
+  session: SessionContext
+  events: ServerEvent[]
+  rearmDeadline: ReturnType<typeof vi.fn>
+  clearDeadline: ReturnType<typeof vi.fn>
+} {
   const events: ServerEvent[] = []
+  const rearmDeadline = vi.fn()
+  const clearDeadline = vi.fn()
   const session: SessionContext = {
     account: { accountId: SEED_ACCOUNT_ID },
     sessionAuth: createSeededAuthAdapter(),
     emit: (event) => {
       events.push(event)
     },
+    rearmDeadline,
+    clearDeadline,
   }
-  return { session, events }
+  return { session, events, rearmDeadline, clearDeadline }
 }
 
 /** create 대화 상태를 담는 FsmContext를 만든다. 무상태 핸들러 테스트도 이 ctx를 넘긴다(사용하지 않아도 무해). */
@@ -176,6 +188,8 @@ describe('characterSelect StateHandler.handleInput (2층)', () => {
       emit: (event) => {
         events.push(event)
       },
+      rearmDeadline: vi.fn(),
+      clearDeadline: vi.fn(),
     }
 
     expect(() =>
@@ -316,11 +330,72 @@ describe('command 스텁 StateHandler (2층 — 라우터 위임 이전)', () =>
 
 describe('advanceCreate (서브스텝 진행 단일 지점 — BLOCKER 1 / Story 6 seam)', () => {
   it('ctx.createProgress를 다음 단계·누적 필드로 교체한다', () => {
+    const { session } = makeSession()
     const ctx: FsmContext = { state: ConnectionState.create, createProgress: { step: 'name', collected: {} } }
 
-    advanceCreate(ctx, 'class', { name: '아무개' })
+    advanceCreate(ctx, session, 'class', { name: '아무개' })
 
     expect(ctx.createProgress).toEqual({ step: 'class', collected: { name: '아무개' } })
+  })
+
+  it('progress 변이 후 rearmDeadline을 호출한다 (create 서브상태 전진 seam)', () => {
+    const { session, rearmDeadline } = makeSession()
+    const ctx: FsmContext = { state: ConnectionState.create, createProgress: { step: 'name', collected: {} } }
+
+    advanceCreate(ctx, session, 'class', { name: '아무개' })
+
+    expect(rearmDeadline).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('데드라인 seam (Story 6 — 진행 시 rearm, command 도달 시 clear)', () => {
+  it('characterSelect 진입 시 rearmDeadline을 호출한다 (미진행 연결 무장)', () => {
+    const { session, rearmDeadline, clearDeadline } = makeSession()
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+
+    enterInitialState(ctx, session)
+
+    expect(rearmDeadline).toHaveBeenCalled()
+    expect(clearDeadline).not.toHaveBeenCalled()
+  })
+
+  it('create 서브상태를 매 단계 전진할 때마다 rearmDeadline을 호출한다', () => {
+    const { session, rearmDeadline } = makeSession()
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+
+    // characterSelect 진입(rearm 1) → create 신호(create.onEnter의 advanceCreate rearm + enterState rearm).
+    enterInitialState(ctx, session)
+    const afterEnter = rearmDeadline.mock.calls.length
+
+    handleSessionFrame(ctx, session, {
+      type: 'session:reply',
+      promptId: SELECT_CHARACTER_PROMPT_ID,
+      value: CREATE_SENTINEL,
+    })
+    // create 진입으로 rearm이 추가 발생한다(enterState + onEnter advanceCreate).
+    expect(rearmDeadline.mock.calls.length).toBeGreaterThan(afterEnter)
+
+    const beforeName = rearmDeadline.mock.calls.length
+    handleSessionFrame(ctx, session, {
+      type: 'session:reply',
+      promptId: CREATE_PROMPT_IDS.name,
+      value: '아무개',
+    })
+    // name→class 서브상태 전진(advanceCreate)마다 rearm이 늘어난다.
+    expect(rearmDeadline.mock.calls.length).toBeGreaterThan(beforeName)
+  })
+
+  it('command 도달 시 clearDeadline을 호출한다 (in-world 도달점 — 진행 데드라인 해제)', () => {
+    const { session, clearDeadline } = makeSession()
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+
+    handleSessionFrame(ctx, session, {
+      type: 'session:selectCharacter',
+      characterId: SEED_CHARACTER_ID,
+    })
+
+    expect(ctx.state).toBe(ConnectionState.command)
+    expect(clearDeadline).toHaveBeenCalledTimes(1)
   })
 })
 

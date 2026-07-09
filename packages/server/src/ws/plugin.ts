@@ -5,6 +5,7 @@ import type { ServerEvent } from 'shared'
 import { cleanupConnection, createConnectionContext, type ConnectionContext } from './connection.js'
 import { handleHandshakeFrame } from './handshake.js'
 import { createHeartbeat } from './heartbeat.js'
+import { createDeadline, type Deadline } from './deadline.js'
 import { createCommandRegistry, dispatch } from './router.js'
 import {
   ConnectionState,
@@ -77,17 +78,25 @@ function safeSend(socket: WebSocket, event: ServerEvent): void {
  * `ctx.account`를 여기서 1회 narrow한다: preValidation 게이트가 non-null을 보장하므로 null이면 배선
  * 불변식 위반이라 throw한다(message 핸들러의 방어 try가 error{internal}로 격리). 이후 FSM 호출에
  * `account?.`를 스레드하지 않는다. `emit`은 주입 콜백으로 `safeSend`를 감싸 — 핸들러는 소켓을 직접
- * 만지지 않고 이 콜백으로만 이벤트를 내보낸다(3층 경계: 소켓은 셸에만 있다).
+ * 만지지 않고 이 콜백으로만 이벤트를 내보낸다(3층 경계: 소켓은 셸에만 있다). `rearmDeadline`/`clearDeadline`도
+ * 같은 방식으로 진행 데드라인 핸들(deadline)의 rearm/clear를 감싼 주입 콜백이다(Story 6, emit 미러).
  */
 function buildSession(
   ctx: ConnectionContext,
   sessionAuth: SessionAuthPort,
   socket: WebSocket,
+  deadline: Deadline,
 ): SessionContext {
   if (ctx.account === null) {
     throw new Error('세션 불변식 위반: 인증 게이트를 통과했으나 account가 없다')
   }
-  return { account: ctx.account, sessionAuth, emit: (event) => safeSend(socket, event) }
+  return {
+    account: ctx.account,
+    sessionAuth,
+    emit: (event) => safeSend(socket, event),
+    rearmDeadline: () => deadline.rearm(),
+    clearDeadline: () => deadline.clear(),
+  }
 }
 
 /**
@@ -165,6 +174,12 @@ export function registerWebsocket(app: FastifyInstance, sessionAuth: SessionAuth
         })
         ctx.heartbeat = heartbeat.start()
 
+        // 진행 데드라인(논리 진행, 하트비트와 별도 슬롯)을 만든다. 만료 시 graceful close(terminate 아님).
+        // arm은 명시 호출하지 않는다 — accept 시 enterInitialState → enterState(characterSelect) →
+        // rearmDeadline이 자동 무장한다(단일 메커니즘, 중복 arm 회피). ctx.deadline에 배선해 cleanup이 clear한다.
+        const deadline = createDeadline(socket, { deadlineMs: config.WS_SESSION_DEADLINE_MS })
+        ctx.deadline = deadline
+
         // pong 수신은 매니저에 알려 미스 카운터를 리셋한다(연결이 살아 있다는 신호).
         socket.on('pong', () => {
           heartbeat.notePong()
@@ -201,7 +216,7 @@ export function registerWebsocket(app: FastifyInstance, sessionAuth: SessionAuth
                 // 턴에 characterList + prompt를 동기 발화한다(setImmediate 금지 — 대화 중 클라이언트는 이미
                 // 리스너를 붙였다). ctx.state 변이는 FSM(enterState) 단일 지점에서만 일어난다(Lock D).
                 ctx.ready = true
-                enterInitialState(ctx, buildSession(ctx, sessionAuth, socket))
+                enterInitialState(ctx, buildSession(ctx, sessionAuth, socket, deadline))
                 break
               case 'error':
                 safeSend(socket, result.event)
@@ -222,7 +237,7 @@ export function registerWebsocket(app: FastifyInstance, sessionAuth: SessionAuth
                   const event = dispatch(commandRegistry, parsed)
                   if (event !== undefined) safeSend(socket, event)
                 } else {
-                  handleSessionFrame(ctx, buildSession(ctx, sessionAuth, socket), parsed)
+                  handleSessionFrame(ctx, buildSession(ctx, sessionAuth, socket, deadline), parsed)
                 }
                 break
               }
@@ -241,8 +256,10 @@ export function registerWebsocket(app: FastifyInstance, sessionAuth: SessionAuth
         })
 
         socket.on('close', () => {
-          // 매니저 stop()으로 ping 타이머를 정지하고, cleanupConnection이 ctx.heartbeat를 한 번 더 clear한다.
+          // 매니저 stop()으로 ping 타이머를 정지하고 진행 데드라인을 clear한 뒤, cleanupConnection이
+          // ctx.heartbeat·ctx.deadline을 한 번 더 정리한다(idempotent 방어선).
           heartbeat.stop()
+          deadline.clear()
           cleanupConnection(connections, socket)
         })
       },
