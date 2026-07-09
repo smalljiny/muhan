@@ -349,7 +349,7 @@ describe('advanceCreate (서브스텝 진행 단일 지점 — BLOCKER 1 / Story
 })
 
 describe('데드라인 seam (Story 6 — 진행 시 rearm, command 도달 시 clear)', () => {
-  it('characterSelect 진입 시 rearmDeadline을 호출한다 (미진행 연결 무장)', () => {
+  it('characterSelect 진입 시 rearmDeadline을 호출한다 (미진행 연결 설정)', () => {
     const { session, rearmDeadline, clearDeadline } = makeSession()
     const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
 

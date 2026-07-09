@@ -49,7 +49,7 @@ function makeDeadline(onExpire?: () => void) {
 }
 
 describe('createDeadline', () => {
-  it('rearm(무장) 후 데드라인이 경과하면 소켓을 close한다', () => {
+  it('rearm(설정) 후 데드라인이 경과하면 소켓을 close한다', () => {
     const { deadline, socket, clock } = makeDeadline()
 
     deadline.rearm()
@@ -58,7 +58,7 @@ describe('createDeadline', () => {
     expect(socket.close).toHaveBeenCalledTimes(1)
   })
 
-  it('무장 후 clear하면 만료되지 않는다', () => {
+  it('설정 후 clear하면 만료되지 않는다', () => {
     const { deadline, socket, clock } = makeDeadline()
 
     deadline.rearm()
@@ -68,11 +68,11 @@ describe('createDeadline', () => {
     expect(socket.close).not.toHaveBeenCalled()
   })
 
-  it('rearm은 이전 타이머를 취소하고 새로 무장한다 (rearm 직전까지 경과분 무시)', () => {
+  it('rearm은 이전 타이머를 취소하고 새로 설정한다 (rearm 직전까지 경과분 무시)', () => {
     const { deadline, socket, clock } = makeDeadline()
 
     deadline.rearm()
-    deadline.rearm() // 이전 타이머 취소 후 새 타이머 무장.
+    deadline.rearm() // 이전 타이머 취소 후 새 타이머 설정.
     clock.tick() // 새 타이머만 발화 — 이전 타이머는 취소됐으므로 close는 1회.
 
     expect(socket.close).toHaveBeenCalledTimes(1)
@@ -111,7 +111,7 @@ describe('createDeadline', () => {
     expect(onExpire).toHaveBeenCalledTimes(1)
   })
 
-  it('clear는 idempotent하다 (무장 없이 여러 번 호출해도 안전)', () => {
+  it('clear는 idempotent하다 (설정 없이 여러 번 호출해도 안전)', () => {
     const { deadline, socket, clock } = makeDeadline()
 
     deadline.clear()

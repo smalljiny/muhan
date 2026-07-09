@@ -175,10 +175,10 @@ export function registerWebsocket(app: FastifyInstance, sessionAuth: SessionAuth
         ctx.heartbeat = heartbeat.start()
 
         // 진행 데드라인(논리 진행, 하트비트와 별도 슬롯)을 만든다. 만료 시 graceful close(terminate 아님).
-        // socket-open 즉시 무장한다 — pre-handshake 창(open → system:ready)도 진행 데드라인으로 묶어,
+        // socket-open 즉시 설정한다 — pre-handshake 창(open → system:ready)도 진행 데드라인으로 묶어,
         // 인증 게이트를 통과했으나 핸드셰이크를 완료하지 않는(system:ready 미송신) 연결이 영구 잔존하는 것을
         // 막는다. accept 시 enterInitialState → enterState(characterSelect) → rearmDeadline이 같은 타이머를
-        // 새로 무장하므로 중복 arm은 무해하다(rearm은 기존 타이머를 clear 후 재설정). ctx.deadline에 배선해
+        // 새로 설정하므로 중복 arm은 무해하다(rearm은 기존 타이머를 clear 후 재설정). ctx.deadline에 배선해
         // cleanup이 clear한다.
         const deadline = createDeadline(socket, { deadlineMs: config.WS_SESSION_DEADLINE_MS })
         ctx.deadline = deadline

@@ -190,7 +190,7 @@ describe('WS transport E2E (실 소켓)', () => {
   })
 
   it('T7.4: 진행 데드라인 close — characterSelect에서 미진행 시 소켓이 close된다', async () => {
-    // 짧은 진행 데드라인(80ms) + 데드라인의 수십 배로 큰 하트비트 간격(2000ms)으로 무장한다. 하트비트
+    // 짧은 진행 데드라인(80ms) + 데드라인의 수십 배로 큰 하트비트 간격(2000ms)으로 설정한다. 하트비트
     // terminate는 ≈ interval×(maxMissed+1) ≈ 8s라 이 창에 절대 발화하지 않으므로, 80ms 근방의 close는
     // 오직 진행 데드라인(graceful close)이 원인임을 타이밍으로 격리한다(하트비트 terminate와 구별).
     // env 세팅 후 buildApp 전에 싱글턴을 초기화해 이 테스트만의 데드라인 튜닝이 적용되게 한다.
@@ -201,7 +201,7 @@ describe('WS transport E2E (실 소켓)', () => {
     const url = await startTracked(buildSeededApp())
     const client = trackedClient(url)
 
-    // characterSelect까지 진입하면 데드라인이 무장된다(enterInitialState→rearmDeadline). 이후 진행하지 않는다
+    // characterSelect까지 진입하면 데드라인이 설정된다(enterInitialState→rearmDeadline). 이후 진행하지 않는다
     // (selectCharacter/reply 미송신) — 데드라인이 만료되어 서버가 소켓을 close해야 한다.
     const { prompt } = await reachCharacterSelect(client)
     expect(prompt).toMatchObject({ type: 'session:prompt', promptId: SELECT_CHARACTER_PROMPT_ID })

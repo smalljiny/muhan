@@ -34,7 +34,7 @@ export const EnvSchema = z.object({
   WS_HEARTBEAT_MAX_MISSED: z.coerce.number().int().min(1).default(3),
   // per-connection 진행 데드라인(Story 6). 세션 FSM이 이 시간 안에 진행(상태 전이 또는 create 서브상태
   // 전진)하지 않으면 소켓을 graceful close(terminate 아님)한다. 하트비트(물리 생존)와 별도 슬롯으로
-  // 관리되는 논리 진행 데드라인이며, 상태 전이·서브상태 전진마다 재무장(rearm)된다. 0이면 진입 즉시
+  // 관리되는 논리 진행 데드라인이며, 상태 전이·서브상태 전진마다 재설정(rearm)된다. 0이면 진입 즉시
   // reap되어 무의미하므로 최소 1을 강제한다.
   WS_SESSION_DEADLINE_MS: z.coerce.number().int().min(1).default(60000),
 })

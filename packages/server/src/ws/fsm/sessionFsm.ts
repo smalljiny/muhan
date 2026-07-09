@@ -88,7 +88,7 @@ export interface SessionContext {
   readonly sessionAuth: SessionAuthPort
   readonly emit: (event: ServerEvent) => void
   // 진행 데드라인 seam(Story 6) — emit을 미러한 주입 부수효과 콜백. required(optional 금지)라 주입 누락 시
-  // 컴파일에서 걸린다(silent DoS 방지: 주입을 빠뜨리면 데드라인이 무장되지 않아 미진행 연결이 영구 잔존).
+  // 컴파일에서 걸린다(silent DoS 방지: 주입을 빠뜨리면 데드라인이 설정되지 않아 미진행 연결이 영구 잔존).
   // 셸은 createDeadline 핸들의 rearm/clear로, 테스트는 vi.fn() 스파이로 배선한다. 상태 전이·create 서브상태
   // 전진마다 rearmDeadline이, command(in-world) 도달 시 clearDeadline이 호출된다.
   readonly rearmDeadline: () => void
@@ -263,7 +263,7 @@ function enterCommand(session: SessionContext, characterId: string): ConnectionS
  * 본다(handleInput이 create를 반환해 no-op 전이). 그 서브스텝 전진을 이 단일 명명 지점으로 모아,
  * Story 6의 데드라인 reaper가 상태전이(enterState)뿐 아니라 대화 진행도 훅해 rearm할 수 있게 한다
  * (인라인 변이면 훅할 곳이 없어 이름 입력 중인 클라가 대화 도중 reap된다). progress를 변이한 뒤
- * session.rearmDeadline()으로 진행 데드라인을 재무장한다.
+ * session.rearmDeadline()으로 진행 데드라인을 재설정한다.
  */
 export function advanceCreate(
   ctx: FsmContext,
@@ -386,8 +386,8 @@ export const stateHandlers: Record<ConnectionState, StateHandler> = {
  *
  * 데드라인 seam: command(월드 진입, in-world 도달점)로 진입하면 진행 데드라인을 clear한다 — 이후 유휴는
  * 하트비트(물리 생존)가 관할하므로 논리 진행 데드라인은 불필요하다. 그 외 상태(characterSelect·create)로
- * 진입하면 rearm해 미진행 연결을 무장한다. create 진입 시 enterState rearm + onEnter의 advanceCreate rearm이
- * 이중 호출되나 무해하다(둘 다 같은 타이머를 새로 무장).
+ * 진입하면 rearm해 미진행 연결을 설정한다. create 진입 시 enterState rearm + onEnter의 advanceCreate rearm이
+ * 이중 호출되나 무해하다(둘 다 같은 타이머를 새로 설정).
  */
 function enterState(ctx: FsmContext, session: SessionContext, state: ConnectionState): void {
   ctx.state = state
