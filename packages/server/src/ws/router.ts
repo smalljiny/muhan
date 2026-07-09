@@ -28,6 +28,16 @@ export function createCommandRegistry(): HandlerRegistry {
   return new Map<string, CommandHandler>([['debug:echo', echoHandler]])
 }
 
+/**
+ * `dispatch`의 반환 타입 — 셸이 idle rearm 여부를 판단할 근거를 라우터가 명시 반환한다.
+ *
+ * `handled`는 정상 디스패치(핸들러가 이벤트를 냈거나 fire-and-forget으로 undefined를 낸 경우)를,
+ * `rejected`는 라우팅 레이어가 요청을 거부한 경우(unknown_type·bad_payload·internal)를 뜻한다.
+ * `rejected`는 항상 `event`(error 이벤트)를 동반한다.
+ */
+export type DispatchResult =
+  { outcome: 'handled'; event?: ServerEvent } | { outcome: 'rejected'; event: ServerEvent }
+
 /** 라우터가 낼 수 있는 오류 코드 — 핸드셰이크 전용 `handshake_required`를 뺀 shared enum의 부분집합. */
 type RouterErrorCode = Exclude<ErrorCode, 'handshake_required'>
 
@@ -54,16 +64,26 @@ function errorEvent(
  *
  * `id`는 type 판별 직후 payload 검증 이전에 추출해, bad_payload·internal 응답도 상관 키를 실어
  * 클라이언트가 실패를 상관지을 수 있게 한다. unknown_type은 type 판별 이전이라 상관 키를 싣지 않는다.
+ *
+ * 반환값은 `DispatchResult`다 — 핸들러가 성공(이벤트 또는 fire-and-forget undefined)하면 `handled`,
+ * 라우팅 레이어가 거부(unknown_type·bad_payload·internal)하면 `rejected`를 태그해 셸이 idle rearm
+ * 여부를 이 태그만으로 판단할 수 있게 한다.
  */
-export function dispatch(registry: HandlerRegistry, parsed: unknown): ServerEvent | undefined {
+export function dispatch(registry: HandlerRegistry, parsed: unknown): DispatchResult {
   const type = readStringField(parsed, 'type')
   if (type === undefined) {
-    return errorEvent('unknown_type', '알 수 없는 명령 type이다', undefined)
+    return {
+      outcome: 'rejected',
+      event: errorEvent('unknown_type', '알 수 없는 명령 type이다', undefined),
+    }
   }
 
   const handler = registry.get(type)
   if (handler === undefined) {
-    return errorEvent('unknown_type', `등록되지 않은 명령 type이다: ${type}`, undefined)
+    return {
+      outcome: 'rejected',
+      event: errorEvent('unknown_type', `등록되지 않은 명령 type이다: ${type}`, undefined),
+    }
   }
 
   // 상관 키 `id`는 payload 검증 이전에 추출한다(빈 문자열도 유효 → typeof로 판별). 그래야
@@ -72,13 +92,19 @@ export function dispatch(registry: HandlerRegistry, parsed: unknown): ServerEven
 
   const parseResult = clientCommandSchema.safeParse(parsed)
   if (!parseResult.success) {
-    return errorEvent('bad_payload', '명령 payload 형식이 올바르지 않다', correlationId)
+    return {
+      outcome: 'rejected',
+      event: errorEvent('bad_payload', '명령 payload 형식이 올바르지 않다', correlationId),
+    }
   }
 
   try {
-    return handler(parseResult.data)
+    return { outcome: 'handled', event: handler(parseResult.data) }
   } catch {
     // 핸들러 예외를 이벤트로 격리한다(기존 JSON.parse try/catch 미러). 원인은 클라이언트에 노출하지 않는다.
-    return errorEvent('internal', '명령 처리 중 서버 오류가 발생했다', correlationId)
+    return {
+      outcome: 'rejected',
+      event: errorEvent('internal', '명령 처리 중 서버 오류가 발생했다', correlationId),
+    }
   }
 }

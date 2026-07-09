@@ -66,6 +66,11 @@ export const serverEventSchema = z.discriminatedUnion('type', [
     type: z.literal('session:entered'),
     characterId: z.string().min(1),
   }),
+  // 세션 재개 확정 — 재연결 시 characterId가 지목한 기존 세션으로 복귀했음을 통지한다.
+  z.strictObject({
+    type: z.literal('session:resumed'),
+    characterId: z.string().min(1),
+  }),
 ])
 
 export type ErrorCode = z.infer<typeof errorCodeSchema>

@@ -16,6 +16,11 @@ import {
 import { getConfig } from '../config/env.js'
 import type { AccountIdentity, SessionAuthPort } from '../auth/sessionAuthPort.js'
 import { extractSessionCookie } from './cookies.js'
+import type { SessionLifecyclePort } from './sessionLifecyclePort.js'
+import { createNoopSessionLifecycleAdapter } from './noopSessionLifecycleAdapter.js'
+import { createSessionRegistry, type SessionRegistry } from './sessionRegistry.js'
+import { createResolveDisconnect } from './resolveDisconnect.js'
+import { createSessionLifecycle, type SessionLifecycle } from './sessionLifecycle.js'
 
 /** switch 완전성 컴파일 강제 — 도달하면 union에 미처리 variant가 생긴 것이다. */
 function assertNever(value: never): never {
@@ -45,10 +50,28 @@ const commandRegistry = createCommandRegistry()
 declare module 'fastify' {
   interface FastifyInstance {
     wsConnections: Map<WebSocket, ConnectionContext>
+    wsLifecyclePort: SessionLifecyclePort
+    // characterId → SessionBinding 색인. 진단·재연결·테스트 관찰의 단일 출처(wsConnections 관례 미러).
+    wsSessionRegistry: SessionRegistry
   }
   interface FastifyRequest {
     account: AccountIdentity | null
   }
+}
+
+/**
+ * ctx로 소켓을 역참조한다 — connections는 WebSocket→ctx 방향이라 종결 대상 바인딩의 ctx로부터 소켓을
+ * 찾으려면 역방향 스캔이 필요하다. 소켓이 이미 정리됐으면(drop 후 grace 경로) undefined를 돌려준다.
+ * 종결(teardown)은 세션당 드물어 O(n) 스캔이 허용된다(별도 역색인 유지의 동기화 부담을 피한다).
+ */
+function socketForContext(
+  connections: Map<WebSocket, ConnectionContext>,
+  ctx: ConnectionContext,
+): WebSocket | undefined {
+  for (const [socket, c] of connections) {
+    if (c === ctx) return socket
+  }
+  return undefined
 }
 
 /** ws 프레임(RawData)을 UTF-8 문자열로 정규화한다. 기본 binaryType(nodebuffer)에선 Buffer 경로를 탄다. */
@@ -80,22 +103,28 @@ function safeSend(socket: WebSocket, event: ServerEvent): void {
  * `account?.`를 스레드하지 않는다. `emit`은 주입 콜백으로 `safeSend`를 감싸 — 핸들러는 소켓을 직접
  * 만지지 않고 이 콜백으로만 이벤트를 내보낸다(3층 경계: 소켓은 셸에만 있다). `rearmDeadline`/`clearDeadline`도
  * 같은 방식으로 진행 데드라인 핸들(deadline)의 rearm/clear를 감싼 주입 콜백이다(Story 6, emit 미러).
+ * `enterWorld`도 같은 방식으로 `lifecycle.enterWorld`를 이 ctx·account에 바인딩한 주입 콜백이다 — FSM은
+ * characterId만 넘겨 등록/재연결하고, 셸이 registry 조작을 감춘다(3층 경계). account는 위에서 1회 narrow한
+ * 값을 캡처해 재확인 없이 쓴다.
  */
 function buildSession(
   ctx: ConnectionContext,
   sessionAuth: SessionAuthPort,
   socket: WebSocket,
   deadline: Deadline,
+  lifecycle: SessionLifecycle,
 ): SessionContext {
   if (ctx.account === null) {
     throw new Error('세션 불변식 위반: 인증 게이트를 통과했으나 account가 없다')
   }
+  const account = ctx.account
   return {
-    account: ctx.account,
+    account,
     sessionAuth,
     emit: (event) => safeSend(socket, event),
     rearmDeadline: () => deadline.rearm(),
     clearDeadline: () => deadline.clear(),
+    enterWorld: (characterId) => lifecycle.enterWorld(ctx, account.accountId, characterId),
   }
 }
 
@@ -141,10 +170,50 @@ function gameAuthPreValidation(
  * 게이트한다(Origin 403·세션 쿠키 401). 플러그인을 먼저 등록해 `onRoute` 훅이 자리잡은 뒤 별도 encapsulated
  * 플러그인에서 라우트를 마운트한다(등록 순서 의존을 top-level await 없이 만족). per-connection 정리는 소켓
  * `'close'` 이벤트가, 서버 종료 시 소켓 닫기는 플러그인 기본 preClose가 맡는다.
+ *
+ * `lifecyclePort`는 세션 종결 후처리(영속화 seam)를 담는 포트다. 미주입 시 app.log에 로깅만 하는 no-op
+ * 어댑터를 기본으로 세운다 — 실 저장 어댑터는 E4/E5에서 이 자리에 주입한다(sessionAuth 관례 미러).
+ * 종결 경로 배선(resolveDisconnect 호출)은 후속 Story가 붙이며, 여기서는 포트를 wsLifecyclePort로 노출해
+ * 후속 Story·테스트 관찰의 단일 출처로 둔다(wsConnections 데코레이션 관례 미러).
  */
-export function registerWebsocket(app: FastifyInstance, sessionAuth: SessionAuthPort): void {
+export function registerWebsocket(
+  app: FastifyInstance,
+  sessionAuth: SessionAuthPort,
+  lifecyclePort: SessionLifecyclePort = createNoopSessionLifecycleAdapter(app.log),
+): void {
   const connections = new Map<WebSocket, ConnectionContext>()
   app.decorate('wsConnections', connections)
+  app.decorate('wsLifecyclePort', lifecyclePort)
+
+  // 세션 레지스트리·종결 seam·수명주기 조율기를 registerWebsocket 1회에 인스턴스화해 연결 간 공유한다
+  // (per-connection이 아니다 — 재연결이 이전 소켓의 바인딩을 찾으려면 하나의 색인이어야 한다).
+  const registry = createSessionRegistry()
+  app.decorate('wsSessionRegistry', registry)
+
+  // 등록된 바인딩의 단일 종결 함수. teardown은 종결 대상 바인딩의 ctx로 소켓을 역참조해 transport를 정리하고
+  // 소켓을 닫는다 — 소켓은 registry가 아니라 셸의 connections(WebSocket→ctx)에만 있으므로 역방향으로 찾는다.
+  // 소켓을 못 찾으면(이미 drop된 grace 경로) no-op으로 스킵한다(포트 호출은 resolveDisconnect가 이미 완료).
+  const resolveDisconnect = createResolveDisconnect({
+    registry,
+    port: lifecyclePort,
+    teardown: (binding) => {
+      const sock = socketForContext(connections, binding.connection)
+      if (sock === undefined) return
+      cleanupConnection(connections, sock)
+      sock.close()
+    },
+    logPortFailure: (err) => app.log.error({ err }, 'session lifecycle port onSessionEnd failed'),
+  })
+
+  // 월드 진입 등록·close 판정·grace 재연결 조율기. grace는 env WS_RECONNECT_GRACE_MS로 스케줄한다(하드코딩 금지).
+  // graceMs는 thunk로 넘겨 스케줄 시점(연결 close)에 지연 조회한다 — 미설정 env로 buildApp을 막지 않는다.
+  // idleMs도 thunk로 넘겨 월드 진입 시점에 지연 조회한다(graceMs 관례 미러, 하드코딩 금지).
+  const lifecycle = createSessionLifecycle({
+    registry,
+    resolveDisconnect,
+    graceMs: () => getConfig().WS_RECONNECT_GRACE_MS,
+    idleMs: () => getConfig().WS_IDLE_TIMEOUT_MS,
+  })
 
   // per-request 계정 신원 슬롯. null 기본값으로 데코레이트하고 preValidation 훅에서 요청별로 대입한다
   // (객체 리터럴 데코레이트 금지 — 요청 간 공유 참조가 되어 신원이 교차 오염된다).
@@ -220,7 +289,7 @@ export function registerWebsocket(app: FastifyInstance, sessionAuth: SessionAuth
                 // 턴에 characterList + prompt를 동기 발화한다(setImmediate 금지 — 대화 중 클라이언트는 이미
                 // 리스너를 붙였다). ctx.state 변이는 FSM(enterState) 단일 지점에서만 일어난다(Lock D).
                 ctx.ready = true
-                enterInitialState(ctx, buildSession(ctx, sessionAuth, socket, deadline))
+                enterInitialState(ctx, buildSession(ctx, sessionAuth, socket, deadline, lifecycle))
                 break
               case 'error':
                 safeSend(socket, result.event)
@@ -238,10 +307,17 @@ export function registerWebsocket(app: FastifyInstance, sessionAuth: SessionAuth
                 // 그 이전(characterSelect·create)이면 FSM handleInput으로 보낸다(Lock C). 이미 파싱된 객체를
                 // 재파싱 없이 넘긴다.
                 if (ctx.state === ConnectionState.command) {
-                  const event = dispatch(commandRegistry, parsed)
-                  if (event !== undefined) safeSend(socket, event)
+                  const result = dispatch(commandRegistry, parsed)
+                  // 유효 명령 처리 성공(handled)만 무입력 타이머를 재-arm한다 — 거부(rejected:
+                  // unknown_type·bad_payload·internal)가 flood로 타이머를 무한 연장하지 못하게 한다.
+                  if (result.outcome === 'handled') ctx.idle?.arm()
+                  if (result.event !== undefined) safeSend(socket, result.event)
                 } else {
-                  handleSessionFrame(ctx, buildSession(ctx, sessionAuth, socket, deadline), parsed)
+                  handleSessionFrame(
+                    ctx,
+                    buildSession(ctx, sessionAuth, socket, deadline, lifecycle),
+                    parsed,
+                  )
                 }
                 break
               }
@@ -263,10 +339,16 @@ export function registerWebsocket(app: FastifyInstance, sessionAuth: SessionAuth
         })
 
         socket.on('close', () => {
-          // 매니저 stop()으로 ping 타이머를 정지하고 진행 데드라인을 clear한 뒤, cleanupConnection이
-          // ctx.heartbeat·ctx.deadline을 한 번 더 정리한다(idempotent 방어선).
+          // 매니저 stop()으로 ping 타이머를 정지하고 진행 데드라인을 clear한다.
           heartbeat.stop()
           deadline.clear()
+          // 도메인 판정(§3.4): command + 등록 + binding.connection===ctx면 markLinkDead로 grace 창을 연다.
+          // 미등록(characterSelect·create)·stale(옛 소켓)·비-command는 no-op이라 도메인 종결·포트 호출이 없다.
+          // binding.connection===ctx 가드가 load-bearing: 서버 주도 종료(evict/grace) 후 옛 소켓의 뒤늦은
+          // close가 새 세션을 markLinkDead하는 재진입을 막는다.
+          lifecycle.handleClose(ctx)
+          // transport 정리는 소켓 한정 — markLinkDead 여부와 무관하게 이 소켓의 heartbeat·deadline·idle을
+          // 정리하고 connections에서 제거한다(link-dead 바인딩은 registry에 유지, ctx 참조도 살아 있다).
           cleanupConnection(connections, socket)
         })
       },

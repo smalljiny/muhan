@@ -40,10 +40,13 @@ function makeSession(): {
   events: ServerEvent[]
   rearmDeadline: ReturnType<typeof vi.fn>
   clearDeadline: ReturnType<typeof vi.fn>
+  enterWorld: ReturnType<typeof vi.fn>
 } {
   const events: ServerEvent[] = []
   const rearmDeadline = vi.fn()
   const clearDeadline = vi.fn()
+  // enterWorld는 기본으로 'entered'를 반환한다(테스트가 재연결 경로를 볼 땐 mockReturnValue로 덮는다).
+  const enterWorld = vi.fn((): 'entered' | 'resumed' => 'entered')
   const session: SessionContext = {
     account: { accountId: SEED_ACCOUNT_ID },
     sessionAuth: createSeededAuthAdapter(),
@@ -52,8 +55,9 @@ function makeSession(): {
     },
     rearmDeadline,
     clearDeadline,
+    enterWorld,
   }
-  return { session, events, rearmDeadline, clearDeadline }
+  return { session, events, rearmDeadline, clearDeadline, enterWorld }
 }
 
 /** create 대화 상태를 담는 FsmContext를 만든다. 무상태 핸들러 테스트도 이 ctx를 넘긴다(사용하지 않아도 무해). */
@@ -116,8 +120,8 @@ describe('characterSelect StateHandler.onEnter (2층)', () => {
 })
 
 describe('characterSelect StateHandler.handleInput (2층)', () => {
-  it('소유 캐릭터 선택 시 session:entered 발화 후 command로 전이한다', () => {
-    const { session, events } = makeSession()
+  it('소유 캐릭터 선택 시 enterWorld 등록 후 session:entered 발화 후 command로 전이한다', () => {
+    const { session, events, enterWorld } = makeSession()
 
     const next = stateHandlers[ConnectionState.characterSelect].handleInput(makeCtx(), session, {
       type: 'session:selectCharacter',
@@ -125,7 +129,22 @@ describe('characterSelect StateHandler.handleInput (2층)', () => {
     })
 
     expect(next).toBe(ConnectionState.command)
+    // enterWorld가 emit보다 먼저 characterId로 호출된다(등록 확정 후 이벤트 발화).
+    expect(enterWorld).toHaveBeenCalledWith(SEED_CHARACTER_ID)
     expect(events).toEqual([{ type: 'session:entered', characterId: SEED_CHARACTER_ID }])
+  })
+
+  it('enterWorld가 resumed를 반환하면 session:resumed를 발화한다 (재연결 경로)', () => {
+    const { session, events, enterWorld } = makeSession()
+    enterWorld.mockReturnValue('resumed')
+
+    const next = stateHandlers[ConnectionState.characterSelect].handleInput(makeCtx(), session, {
+      type: 'session:selectCharacter',
+      characterId: SEED_CHARACTER_ID,
+    })
+
+    expect(next).toBe(ConnectionState.command)
+    expect(events).toEqual([{ type: 'session:resumed', characterId: SEED_CHARACTER_ID }])
   })
 
   it('select prompt에 CREATE_SENTINEL로 답하면 create로 전이한다 (이벤트 없이 전이만 요청)', () => {
@@ -190,6 +209,7 @@ describe('characterSelect StateHandler.handleInput (2층)', () => {
       },
       rearmDeadline: vi.fn(),
       clearDeadline: vi.fn(),
+      enterWorld: vi.fn((): 'entered' | 'resumed' => 'entered'),
     }
 
     expect(() =>

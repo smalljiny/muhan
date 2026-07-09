@@ -37,6 +37,16 @@ export const EnvSchema = z.object({
   // 관리되는 논리 진행 데드라인이며, 상태 전이·서브상태 전진마다 재설정(rearm)된다. 0이면 진입 즉시
   // reap되어 무의미하므로 최소 1을 강제한다.
   WS_SESSION_DEADLINE_MS: z.coerce.number().int().min(1).default(60000),
+  // 재연결 grace 창(Story 5, G3). command 상태 소켓의 클라 주도 drop 감지 시 바인딩을 즉시 제거하지 않고
+  // link-dead로 표시한 뒤 이 시간 안에 같은 캐릭터로 재접속하면 rebind(재연결)한다. 만료되면 disconnect
+  // 수렴 seam(resolveDisconnect(graceExpired))으로 정식 종료한다. 진행 데드라인·idle과 별개 타이머다.
+  // 0이면 link-dead 진입 즉시 만료돼 재연결 창이 무의미하므로 최소 1을 강제한다.
+  WS_RECONNECT_GRACE_MS: z.coerce.number().int().min(1).default(30000),
+  // 월드 진입(command) 후 무입력(idle) 종료 창(Story 6, G4). command 진입 시 arm하고 유효 명령 처리
+  // 성공(dispatch handled)마다 재-arm한다. 이 시간 안에 유효 명령이 없으면 disconnect 수렴 seam
+  // (resolveDisconnect(idleTimeout))으로 정식 종료한다. 하트비트(물리 생존)·진행 데드라인(핸드셰이크 진행)·
+  // grace(재연결 창)와 별개 타이머다. 0이면 진입 즉시 만료돼 무입력 감시가 무의미하므로 최소 1을 강제한다.
+  WS_IDLE_TIMEOUT_MS: z.coerce.number().int().min(1).default(300000),
 })
 
 export type Env = z.infer<typeof EnvSchema>

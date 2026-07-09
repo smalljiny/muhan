@@ -228,6 +228,36 @@ describe('serverEventSchema (server→client 봉투)', () => {
     })
   })
 
+  describe('session:resumed', () => {
+    it('characterId가 있으면 통과한다', () => {
+      const parsed = serverEventSchema.safeParse({
+        type: 'session:resumed',
+        characterId: 'char-1',
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'session:resumed') {
+        expect(parsed.data.characterId).toBe('char-1')
+      }
+    })
+
+    it('characterId가 빈 문자열이면 거부한다', () => {
+      expect(
+        serverEventSchema.safeParse({ type: 'session:resumed', characterId: '' }).success,
+      ).toBe(false)
+    })
+
+    it('characterId가 없으면 거부한다', () => {
+      expect(serverEventSchema.safeParse({ type: 'session:resumed' }).success).toBe(false)
+    })
+
+    it('알 수 없는 키를 거부한다 (strict)', () => {
+      expect(
+        serverEventSchema.safeParse({ type: 'session:resumed', characterId: 'char-1', extra: 1 })
+          .success,
+      ).toBe(false)
+    })
+  })
+
   it('command 전용 type(debug:echo)을 거부한다', () => {
     expect(serverEventSchema.safeParse({ type: 'debug:echo', text: '핑' }).success).toBe(false)
   })

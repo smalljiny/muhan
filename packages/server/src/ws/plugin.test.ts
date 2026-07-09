@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { Server as HttpsServer } from 'node:https'
+import { PROTOCOL_VERSION } from 'shared'
 import { buildApp } from '../app.js'
 import { MAX_FRAME_BYTES } from './plugin.js'
 import { resetConfigForTests } from '../config/env.js'
+import type { SessionLifecyclePort } from './sessionLifecyclePort.js'
 import {
   buildSeededApp,
   injectAuthedWS,
@@ -20,7 +22,7 @@ import {
   CREATE_SENTINEL,
   CREATE_PROMPT_IDS,
 } from './fsm/sessionFsm.js'
-import { SEED_CHARACTER_ID } from '../auth/seedSessionAuth.testutil.js'
+import { SEED_ACCOUNT_ID, SEED_CHARACTER_ID } from '../auth/seedSessionAuth.testutil.js'
 
 // T3.6 — transport 배선 스펙. injectWS로 유효 쿠키+허용 Origin upgrade를 태워 라우트 마운트·프레임
 // 하드닝·per-connection 정리·https pass-through를 관찰한다(E3-1 회귀 방어). 인증 게이트 자체 검증은
@@ -355,6 +357,23 @@ describe('WS transport', () => {
     await app.close()
   })
 
+  it('lifecyclePort 미주입 시 no-op 어댑터를 wsLifecyclePort로 배선한다', async () => {
+    const app = buildSeededApp()
+    await app.ready()
+
+    // 기본 경로(buildApp→registerWebsocket 2-arg)는 no-op 어댑터를 세운다 — onSessionEnd 표면이 존재한다.
+    expect(typeof app.wsLifecyclePort.onSessionEnd).toBe('function')
+    expect(() =>
+      app.wsLifecyclePort.onSessionEnd({
+        accountId: 'acc-1',
+        characterId: 'char-1',
+        reason: 'graceExpired',
+      }),
+    ).not.toThrow()
+
+    await app.close()
+  })
+
   it('https 옵션을 Fastify 서버로 pass-through한다 (TLS-ready)', async () => {
     const secure = buildApp({ https: {} })
     expect(secure.server).toBeInstanceOf(HttpsServer)
@@ -363,5 +382,217 @@ describe('WS transport', () => {
     const plain = buildApp()
     expect(plain.server).not.toBeInstanceOf(HttpsServer)
     await plain.close()
+  })
+
+  // ── Story 5 — 연결 수명주기 런타임(등록·close 판정·grace 재연결) 종단 배선 ──────────────────
+  // registry·resolveDisconnect·lifecycle가 실 소켓 close·재접속에 배선됐는지 injectWS로 관측한다.
+  // 종결 포트 호출 관측이 필요한 케이스는 스파이 lifecyclePort를 buildSeededApp으로 주입한다.
+
+  /** onSessionEnd를 스파이하는 lifecyclePort. buildSeededApp({ lifecyclePort })로 주입해 종결을 관측한다. */
+  function spyPort(): SessionLifecyclePort & { onSessionEnd: ReturnType<typeof vi.fn> } {
+    return { onSessionEnd: vi.fn() }
+  }
+
+  it('command 진입 시 세션 레지스트리에 live 바인딩을 등록한다', async () => {
+    const app = buildSeededApp()
+    await app.ready()
+
+    const ws = await injectAuthedWS(app)
+    await enterCommandState(ws)
+
+    const binding = app.wsSessionRegistry.get(SEED_CHARACTER_ID)
+    expect(binding?.link).toBe('live')
+    // 바인딩의 connection이 이 소켓의 ctx를 가리킨다(등록 seam이 ctx를 배선).
+    expect(binding?.connection).toBe([...app.wsConnections.values()][0])
+
+    ws.terminate()
+    await app.close()
+  })
+
+  it('command 소켓 클라 close 시 markLinkDead로 바인딩이 grace 동안 레지스트리에 유지된다', async () => {
+    const port = spyPort()
+    const app = buildSeededApp({ lifecyclePort: port })
+    await app.ready()
+
+    const ws = await injectAuthedWS(app)
+    await enterCommandState(ws)
+    expect(app.wsSessionRegistry.get(SEED_CHARACTER_ID)?.link).toBe('live')
+
+    ws.terminate()
+    // transport는 정리되지만(connections 비움) 도메인 바인딩은 link-dead로 registry에 남는다(기본 grace 30s).
+    await waitFor(() => app.wsConnections.size === 0)
+    await waitFor(() => app.wsSessionRegistry.get(SEED_CHARACTER_ID)?.link === 'link-dead')
+    // 클라 주도 drop은 grace 창일 뿐 종결이 아니다 — 포트는 호출되지 않는다.
+    expect(port.onSessionEnd).not.toHaveBeenCalled()
+
+    await app.close()
+  })
+
+  it('grace 내 같은 캐릭터 재접속·select 시 rebind되어 session:resumed 발화 + command 상태를 복원한다', async () => {
+    const app = buildSeededApp()
+    await app.ready()
+
+    // 첫 소켓으로 월드 진입 후 drop → link-dead.
+    const ws1 = await injectAuthedWS(app)
+    await enterCommandState(ws1)
+    const deadBinding = app.wsSessionRegistry.get(SEED_CHARACTER_ID)
+    ws1.terminate()
+    await waitFor(() => app.wsSessionRegistry.get(SEED_CHARACTER_ID)?.link === 'link-dead')
+
+    // grace 내 새 소켓으로 재접속해 같은 캐릭터를 select한다.
+    const ws2 = await injectAuthedWS(app)
+    const reader = createMessageReader(ws2)
+    await reader.next() // system:hello
+    ws2.send(JSON.stringify({ type: 'system:ready', protocolVersion: PROTOCOL_VERSION }))
+    await reader.next() // characterList
+    await reader.next() // prompt(selectCharacter)
+    ws2.send(JSON.stringify({ type: 'session:selectCharacter', characterId: SEED_CHARACTER_ID }))
+    const resumed = await reader.next()
+
+    // 재연결이라 entered가 아니라 resumed가 발화된다.
+    expect(resumed).toMatchObject({ type: 'session:resumed', characterId: SEED_CHARACTER_ID })
+    // 새 바인딩이 map을 차지한다(옛 link-dead 객체가 아니라 새 ctx를 가리키는 live 바인딩).
+    const rebound = app.wsSessionRegistry.get(SEED_CHARACTER_ID)
+    expect(rebound?.link).toBe('live')
+    expect(rebound).not.toBe(deadBinding)
+    expect(rebound?.connection).toBe([...app.wsConnections.values()][0])
+    // command 상태가 복원돼 debug:echo가 라우터에 도달한다.
+    ws2.send(JSON.stringify({ type: 'debug:echo', text: '핑', id: 'r1' }))
+    const echo = await reader.next()
+    expect(echo).toMatchObject({ type: 'debug:echo:result', text: '핑', correlationId: 'r1' })
+
+    ws2.terminate()
+    await app.close()
+  })
+
+  it('characterSelect 상태 close는 transport 정리만 하고 포트를 호출하지 않는다 (미등록)', async () => {
+    const port = spyPort()
+    const app = buildSeededApp({ lifecyclePort: port })
+    await app.ready()
+
+    const ws = await injectAuthedWS(app)
+    // ready까지만 진행해 characterSelect에 머문다(select 미송신 → 레지스트리 미등록).
+    const reader = createMessageReader(ws)
+    await reader.next() // system:hello
+    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: PROTOCOL_VERSION }))
+    await reader.next() // characterList
+    await reader.next() // prompt(selectCharacter)
+
+    ws.terminate()
+    await waitFor(() => app.wsConnections.size === 0)
+
+    // 미등록 연결의 close는 도메인 종결 대상이 아니다 — 포트 미호출·레지스트리 미등록.
+    expect(port.onSessionEnd).not.toHaveBeenCalled()
+    expect(app.wsSessionRegistry.get(SEED_CHARACTER_ID)).toBeUndefined()
+
+    await app.close()
+  })
+
+  it('같은 캐릭터 live 재로그인 시 기존 바인딩을 evictedByNewLogin으로 종결(포트 1회) 후 재등록한다', async () => {
+    const port = spyPort()
+    const app = buildSeededApp({ lifecyclePort: port })
+    await app.ready()
+
+    // 첫 소켓으로 월드 진입(live 등록).
+    const ws1 = await injectAuthedWS(app)
+    await enterCommandState(ws1)
+    const oldBinding = app.wsSessionRegistry.get(SEED_CHARACTER_ID)
+    expect(oldBinding?.link).toBe('live')
+
+    // 둘째 소켓으로 같은 캐릭터 재로그인 → register가 기존 live 바인딩을 evict한다.
+    const ws2 = await injectAuthedWS(app)
+    await enterCommandState(ws2)
+
+    // (a) 옛 바인딩이 evictedByNewLogin으로 종결돼 포트가 정확히 1회 호출됐다.
+    await waitFor(() => port.onSessionEnd.mock.calls.length === 1)
+    expect(port.onSessionEnd).toHaveBeenCalledTimes(1)
+    expect(port.onSessionEnd).toHaveBeenCalledWith({
+      accountId: SEED_ACCOUNT_ID,
+      characterId: SEED_CHARACTER_ID,
+      reason: 'evictedByNewLogin',
+    })
+    // (b) 레지스트리는 종결 후 fresh 바인딩을 보유한다(옛 객체가 아니다).
+    const fresh = app.wsSessionRegistry.get(SEED_CHARACTER_ID)
+    expect(fresh?.link).toBe('live')
+    expect(fresh).not.toBe(oldBinding)
+
+    // 서버 주도 종료로 옛 소켓(ws1)이 닫힌다.
+    await waitFor(() => ws1.readyState === ws1.CLOSED || ws1.readyState === ws1.CLOSING)
+    // §3.4 재진입 금지: 옛 소켓의 뒤늦은 close는 identity 불일치라 markLinkDead·포트 재호출을 하지 않는다
+    // (포트는 여전히 1회, fresh 바인딩은 여전히 live로 유지).
+    expect(port.onSessionEnd).toHaveBeenCalledTimes(1)
+    expect(app.wsSessionRegistry.get(SEED_CHARACTER_ID)?.link).toBe('live')
+
+    ws2.terminate()
+    await app.close()
+  })
+
+  // ── Story 6 — 무입력(idle) 종료 종단 배선(재-arm·flood·만료) ─────────────────────────────────
+  // command 진입 후 idle 타이머가 arm되고, 유효 명령(dispatch handled)마다 재-arm되며, 거부(rejected)는
+  // 재-arm하지 않고, 무입력이 창을 넘으면 resolveDisconnect(idleTimeout)로 종결하는지 injectWS로 관측한다.
+
+  it('command handled 명령은 idle을 재-arm하고 rejected(unknown_type·bad_payload) flood는 재-arm하지 않는다', async () => {
+    const app = buildSeededApp()
+    await app.ready()
+
+    const ws = await injectAuthedWS(app)
+    const reader = await enterCommandState(ws)
+
+    // 실 idle 타이머를 스파이로 교체해 arm 호출을 관측한다(실 타이머는 먼저 clear해 누수를 막는다).
+    const ctx = [...app.wsConnections.values()][0]
+    ctx?.idle?.clear()
+    const armSpy = vi.fn()
+    if (ctx !== undefined) ctx.idle = { arm: armSpy, clear: vi.fn() }
+
+    // (1) handled: debug:echo → 재-arm 1회.
+    ws.send(JSON.stringify({ type: 'debug:echo', text: '핑', id: 'h1' }))
+    expect(await reader.next()).toMatchObject({ type: 'debug:echo:result', correlationId: 'h1' })
+    expect(armSpy).toHaveBeenCalledTimes(1)
+
+    // (2) rejected flood: unknown_type → 재-arm 안 함.
+    ws.send(JSON.stringify({ type: 'nope:1', id: 'r1' }))
+    expect(await reader.next()).toMatchObject({ type: 'error', code: 'unknown_type' })
+    // (3) rejected: bad_payload(등록 type이지만 text 누락) → 재-arm 안 함.
+    ws.send(JSON.stringify({ type: 'debug:echo', id: 'r2' }))
+    expect(await reader.next()).toMatchObject({ type: 'error', code: 'bad_payload' })
+    // (4) 다시 handled: debug:echo → 재-arm 2회째(rejected가 사이에 타이머를 연장하지 못했다).
+    ws.send(JSON.stringify({ type: 'debug:echo', text: '퐁', id: 'h2' }))
+    expect(await reader.next()).toMatchObject({ type: 'debug:echo:result', correlationId: 'h2' })
+
+    // 최종 arm 횟수는 handled 횟수(2)와 정확히 같다 — rejected 2건은 타이머를 연장하지 않았다.
+    expect(armSpy).toHaveBeenCalledTimes(2)
+
+    ws.terminate()
+    await app.close()
+  })
+
+  it('command 진입 후 무입력이 WS_IDLE_TIMEOUT_MS를 넘으면 resolveDisconnect(idleTimeout)로 종결하고 포트를 1회 호출한다', async () => {
+    // 실 setTimeout으로 idle을 발화시키려 창을 짧게 오버라이드한다(하트비트 25s·데드라인 60s는 이 창 안에 발화 안 함).
+    process.env.WS_IDLE_TIMEOUT_MS = '80'
+    resetConfigForTests()
+    const port = spyPort()
+    const app = buildSeededApp({ lifecyclePort: port })
+    await app.ready()
+
+    try {
+      const ws = await injectAuthedWS(app)
+      await enterCommandState(ws)
+      expect(app.wsSessionRegistry.get(SEED_CHARACTER_ID)?.link).toBe('live')
+
+      // 무입력 → idle 만료 → resolveDisconnect(idleTimeout). 포트가 idleTimeout으로 정확히 1회 호출된다.
+      await waitFor(() => port.onSessionEnd.mock.calls.length === 1, 2000)
+      expect(port.onSessionEnd).toHaveBeenCalledTimes(1)
+      expect(port.onSessionEnd).toHaveBeenCalledWith({
+        accountId: SEED_ACCOUNT_ID,
+        characterId: SEED_CHARACTER_ID,
+        reason: 'idleTimeout',
+      })
+      // 종결됐으므로 registry 엔트리가 제거된다.
+      expect(app.wsSessionRegistry.get(SEED_CHARACTER_ID)).toBeUndefined()
+    } finally {
+      await app.close()
+      delete process.env.WS_IDLE_TIMEOUT_MS
+      resetConfigForTests()
+    }
   })
 })
