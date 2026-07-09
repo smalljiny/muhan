@@ -16,6 +16,8 @@ import {
 import { getConfig } from '../config/env.js'
 import type { AccountIdentity, SessionAuthPort } from '../auth/sessionAuthPort.js'
 import { extractSessionCookie } from './cookies.js'
+import type { SessionLifecyclePort } from './sessionLifecyclePort.js'
+import { createNoopSessionLifecycleAdapter } from './noopSessionLifecycleAdapter.js'
 
 /** switch 완전성 컴파일 강제 — 도달하면 union에 미처리 variant가 생긴 것이다. */
 function assertNever(value: never): never {
@@ -45,6 +47,7 @@ const commandRegistry = createCommandRegistry()
 declare module 'fastify' {
   interface FastifyInstance {
     wsConnections: Map<WebSocket, ConnectionContext>
+    wsLifecyclePort: SessionLifecyclePort
   }
   interface FastifyRequest {
     account: AccountIdentity | null
@@ -141,10 +144,20 @@ function gameAuthPreValidation(
  * 게이트한다(Origin 403·세션 쿠키 401). 플러그인을 먼저 등록해 `onRoute` 훅이 자리잡은 뒤 별도 encapsulated
  * 플러그인에서 라우트를 마운트한다(등록 순서 의존을 top-level await 없이 만족). per-connection 정리는 소켓
  * `'close'` 이벤트가, 서버 종료 시 소켓 닫기는 플러그인 기본 preClose가 맡는다.
+ *
+ * `lifecyclePort`는 세션 종결 후처리(영속화 seam)를 담는 포트다. 미주입 시 app.log에 로깅만 하는 no-op
+ * 어댑터를 기본으로 세운다 — 실 저장 어댑터는 E4/E5에서 이 자리에 주입한다(sessionAuth 관례 미러).
+ * 종결 경로 배선(resolveDisconnect 호출)은 후속 Story가 붙이며, 여기서는 포트를 wsLifecyclePort로 노출해
+ * 후속 Story·테스트 관찰의 단일 출처로 둔다(wsConnections 데코레이션 관례 미러).
  */
-export function registerWebsocket(app: FastifyInstance, sessionAuth: SessionAuthPort): void {
+export function registerWebsocket(
+  app: FastifyInstance,
+  sessionAuth: SessionAuthPort,
+  lifecyclePort: SessionLifecyclePort = createNoopSessionLifecycleAdapter(app.log),
+): void {
   const connections = new Map<WebSocket, ConnectionContext>()
   app.decorate('wsConnections', connections)
+  app.decorate('wsLifecyclePort', lifecyclePort)
 
   // per-request 계정 신원 슬롯. null 기본값으로 데코레이트하고 preValidation 훅에서 요청별로 대입한다
   // (객체 리터럴 데코레이트 금지 — 요청 간 공유 참조가 되어 신원이 교차 오염된다).

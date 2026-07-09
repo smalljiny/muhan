@@ -4,6 +4,7 @@ import {
   createConnectionContext,
   cleanupConnection,
   type ConnectionContext,
+  type IdleTimer,
 } from './connection.js'
 import type { Deadline } from './deadline.js'
 
@@ -20,10 +21,36 @@ function fakeDeadline(): Deadline & { clear: ReturnType<typeof vi.fn> } {
   return { rearm: vi.fn(), clear: vi.fn() }
 }
 
+/** clear를 스파이하는 fake IdleTimer. 팩토리는 Story 6이라 여기선 슬롯 clear만 검증한다. */
+function fakeIdle(): IdleTimer & { clear: ReturnType<typeof vi.fn> } {
+  return { arm: vi.fn(), clear: vi.fn() }
+}
+
 describe('cleanupConnection', () => {
   it('createConnectionContext는 deadline 슬롯을 null로 둔다', () => {
     const ctx = createConnectionContext()
     expect(ctx.deadline).toBeNull()
+  })
+
+  it('createConnectionContext는 idle 슬롯을 null로 둔다', () => {
+    const ctx = createConnectionContext()
+    expect(ctx.idle).toBeNull()
+  })
+
+  it('idle 슬롯이 non-null이면 clear한다(누수 방어선)', () => {
+    const socket = fakeSocket()
+    const idle = fakeIdle()
+    const connections = new Map<WebSocket, ConnectionContext>()
+    const ctx = createConnectionContext()
+    ctx.heartbeat = null
+    ctx.deadline = null
+    ctx.idle = idle
+    connections.set(socket, ctx)
+
+    cleanupConnection(connections, socket)
+
+    expect(idle.clear).toHaveBeenCalledTimes(1)
+    expect(connections.has(socket)).toBe(false)
   })
 
   it('deadline 슬롯이 non-null이면 clear한 뒤 null로 비운다(누수 방어선)', () => {

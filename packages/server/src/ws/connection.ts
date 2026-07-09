@@ -23,16 +23,31 @@ import type { Deadline } from './deadline.js'
  *
  * `deadline`은 하트비트(물리 생존)와 **별도** 진행 데드라인 슬롯(논리 진행, Story 6)이다. 셸이 연결 수락 시
  * createDeadline 핸들을 대입하고, FSM이 주입 콜백(rearm/clear)으로 조작한다. cleanup이 clear로 누수를 막는다.
+ *
+ * `idle`은 월드 입장 후 무입력(idle) 종료를 감시하는 슬롯(Story 6이 팩토리로 arm한다)이다. 여기서는 슬롯과
+ * 최소 인터페이스만 정의하고 초기값 null로 둔다 — resolveDisconnect·cleanupConnection이 종결 시 `clear`로
+ * 누수를 막는다(팩토리 arming 전까지 항상 null이라 clear는 no-op).
  */
 export interface ConnectionContext {
   readonly protocolVersion: number
   ready: boolean
   heartbeat: NodeJS.Timeout | null
   deadline: Deadline | null
+  idle: IdleTimer | null
   account: AccountIdentity | null
   state: ConnectionState
   createProgress: CreateProgress | null
   boundCharacterId: string | null
+}
+
+/**
+ * idle(무입력) 타이머 핸들의 최소 표면. `arm`은 타이머를 (재)설정하고, `clear`는 idempotent 해제다.
+ * 팩토리 구현은 Story 6이 붙인다 — 여기서는 종결 경로(resolveDisconnect·cleanupConnection)가 slot을
+ * clear할 수 있도록 타입만 먼저 고정한다(Deadline 인터페이스 관례 미러).
+ */
+export interface IdleTimer {
+  arm(): void
+  clear(): void
 }
 
 /**
@@ -45,6 +60,7 @@ export function createConnectionContext(): ConnectionContext {
     ready: false,
     heartbeat: null,
     deadline: null,
+    idle: null,
     account: null,
     state: ConnectionState.characterSelect,
     createProgress: null,
@@ -59,6 +75,7 @@ export function createConnectionContext(): ConnectionContext {
  * 하트비트 매니저의 `stop()`도 같은 타이머를 정리하지만, 어느 경로로 close되더라도 타이머가 살아남지
  * 않도록 여기서 한 번 더 clear한다(clearInterval은 idempotent). `deadline` 슬롯의 진행 데드라인 타이머도
  * 같은 방어선으로 clear한다(deadline.clear는 idempotent) — 하트비트와 나란히 정리해 누수를 막는다.
+ * `idle` 슬롯의 무입력 타이머(Story 6)도 같은 방어선으로 clear한다.
  */
 export function cleanupConnection(
   connections: Map<WebSocket, ConnectionContext>,
@@ -72,6 +89,11 @@ export function cleanupConnection(
   if (ctx?.deadline != null) {
     ctx.deadline.clear()
     ctx.deadline = null
+  }
+  // idle 타이머 슬롯도 같은 방어선으로 clear한다(clear는 idempotent). 팩토리는 Story 6이라 현재는 항상 null.
+  if (ctx?.idle != null) {
+    ctx.idle.clear()
+    ctx.idle = null
   }
   connections.delete(socket)
 }

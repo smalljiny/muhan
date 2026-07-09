@@ -355,6 +355,23 @@ describe('WS transport', () => {
     await app.close()
   })
 
+  it('lifecyclePort 미주입 시 no-op 어댑터를 wsLifecyclePort로 배선한다', async () => {
+    const app = buildSeededApp()
+    await app.ready()
+
+    // 기본 경로(buildApp→registerWebsocket 2-arg)는 no-op 어댑터를 세운다 — onSessionEnd 표면이 존재한다.
+    expect(typeof app.wsLifecyclePort.onSessionEnd).toBe('function')
+    expect(() =>
+      app.wsLifecyclePort.onSessionEnd({
+        accountId: 'acc-1',
+        characterId: 'char-1',
+        reason: 'graceExpired',
+      }),
+    ).not.toThrow()
+
+    await app.close()
+  })
+
   it('https 옵션을 Fastify 서버로 pass-through한다 (TLS-ready)', async () => {
     const secure = buildApp({ https: {} })
     expect(secure.server).toBeInstanceOf(HttpsServer)
