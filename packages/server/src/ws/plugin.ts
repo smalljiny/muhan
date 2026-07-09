@@ -238,8 +238,8 @@ export function registerWebsocket(app: FastifyInstance, sessionAuth: SessionAuth
                 // 그 이전(characterSelect·create)이면 FSM handleInput으로 보낸다(Lock C). 이미 파싱된 객체를
                 // 재파싱 없이 넘긴다.
                 if (ctx.state === ConnectionState.command) {
-                  const event = dispatch(commandRegistry, parsed)
-                  if (event !== undefined) safeSend(socket, event)
+                  const result = dispatch(commandRegistry, parsed)
+                  if (result.event !== undefined) safeSend(socket, result.event)
                 } else {
                   handleSessionFrame(ctx, buildSession(ctx, sessionAuth, socket, deadline), parsed)
                 }
