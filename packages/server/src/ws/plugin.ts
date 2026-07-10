@@ -7,6 +7,7 @@ import { handleHandshakeFrame } from './handshake.js'
 import { createHeartbeat } from './heartbeat.js'
 import { createDeadline, type Deadline } from './deadline.js'
 import { createCommandRegistry, dispatch } from './router.js'
+import { buildActorContext } from './actorContext.js'
 import {
   ConnectionState,
   enterInitialState,
@@ -307,7 +308,9 @@ export function registerWebsocket(
                 // 그 이전(characterSelect·create)이면 FSM handleInput으로 보낸다(Lock C). 이미 파싱된 객체를
                 // 재파싱 없이 넘긴다.
                 if (ctx.state === ConnectionState.command) {
-                  const result = dispatch(commandRegistry, parsed)
+                  // buildActorContext의 배선 불변식 throw(account/boundCharacterId null)는 메시지 핸들러의
+                  // 방어 try/catch가 error{internal}로 격리한다 — 추가 배선 없이 기존 방어선을 재사용한다.
+                  const result = dispatch(commandRegistry, parsed, buildActorContext(ctx))
                   // 유효 명령 처리 성공(handled)만 무입력 타이머를 재-arm한다 — 거부(rejected:
                   // unknown_type·bad_payload·internal)가 flood로 타이머를 무한 연장하지 못하게 한다.
                   if (result.outcome === 'handled') ctx.idle?.arm()

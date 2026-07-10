@@ -1,14 +1,16 @@
 import { clientCommandSchema, type ClientCommand, type ErrorCode, type ServerEvent } from 'shared'
 import { echoHandler } from './handlers/echo.js'
 import { readStringField } from './frame.js'
+import type { ActorContext } from './actorContext.js'
 
 /**
  * 검증된 명령을 소비해 응답 이벤트(또는 응답 없음=undefined)를 계산하는 핸들러.
  *
  * 핸들러는 `clientCommandSchema`로 이미 검증된 `ClientCommand`만 받는다(payload 재검증 불필요).
- * fire-and-forget 명령은 undefined를 반환한다.
+ * `actor`는 이 명령을 실행하는 행위자 컨텍스트로, 권한·게임 규칙 판정 핸들러(Story 2~3)가 소비한다.
+ * 무권한 핸들러(echo)는 actor를 받되 무시한다. fire-and-forget 명령은 undefined를 반환한다.
  */
-export type CommandHandler = (command: ClientCommand) => ServerEvent | undefined
+export type CommandHandler = (command: ClientCommand, actor: ActorContext) => ServerEvent | undefined
 
 /** type 리터럴 → 핸들러 레지스트리. 반드시 실제 `Map`이라 prototype-chain 키에도 안전하다. */
 export type HandlerRegistry = Map<string, CommandHandler>
@@ -68,8 +70,15 @@ function errorEvent(
  * 반환값은 `DispatchResult`다 — 핸들러가 성공(이벤트 또는 fire-and-forget undefined)하면 `handled`,
  * 라우팅 레이어가 거부(unknown_type·bad_payload·internal)하면 `rejected`를 태그해 셸이 idle rearm
  * 여부를 이 태그만으로 판단할 수 있게 한다.
+ *
+ * `actor`는 이 명령을 실행하는 행위자 컨텍스트다. dispatch는 actor를 해석하지 않고 검증 통과 후
+ * 핸들러에 그대로 전달만 한다(권한·규칙 판정은 핸들러 책임 — Story 2~3).
  */
-export function dispatch(registry: HandlerRegistry, parsed: unknown): DispatchResult {
+export function dispatch(
+  registry: HandlerRegistry,
+  parsed: unknown,
+  actor: ActorContext,
+): DispatchResult {
   const type = readStringField(parsed, 'type')
   if (type === undefined) {
     return {
@@ -99,7 +108,7 @@ export function dispatch(registry: HandlerRegistry, parsed: unknown): DispatchRe
   }
 
   try {
-    return { outcome: 'handled', event: handler(parseResult.data) }
+    return { outcome: 'handled', event: handler(parseResult.data, actor) }
   } catch {
     // 핸들러 예외를 이벤트로 격리한다(기존 JSON.parse try/catch 미러). 원인은 클라이언트에 노출하지 않는다.
     return {
