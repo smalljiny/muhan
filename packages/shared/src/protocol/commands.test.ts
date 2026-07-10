@@ -195,6 +195,18 @@ describe('clientCommandSchema (client→server 봉투)', () => {
       ).toBe(false)
     })
 
+    it('text가 상한(512)을 넘으면 거부한다 (전파 대상 필드 DoS floor)', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'chat:message', channel: 'say', text: 'ㄱ'.repeat(513) })
+          .success,
+      ).toBe(false)
+      // 상한 이내는 통과한다(경계값).
+      expect(
+        clientCommandSchema.safeParse({ type: 'chat:message', channel: 'say', text: 'ㄱ'.repeat(512) })
+          .success,
+      ).toBe(true)
+    })
+
     it('알 수 없는 키를 거부한다 (strict)', () => {
       expect(
         clientCommandSchema.safeParse({
@@ -241,6 +253,20 @@ describe('clientCommandSchema (client→server 봉투)', () => {
 
     it('emote가 빈 문자열이면 거부한다', () => {
       expect(clientCommandSchema.safeParse({ type: 'chat:emote', emote: '' }).success).toBe(false)
+    })
+
+    it('emote·target·text가 상한을 넘으면 거부한다 (DoS floor)', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'chat:emote', emote: 'ㄱ'.repeat(65) }).success,
+      ).toBe(false)
+      expect(
+        clientCommandSchema.safeParse({ type: 'chat:emote', emote: '웃음', target: 'ㄱ'.repeat(65) })
+          .success,
+      ).toBe(false)
+      expect(
+        clientCommandSchema.safeParse({ type: 'chat:emote', emote: '웃음', text: 'ㄱ'.repeat(513) })
+          .success,
+      ).toBe(false)
     })
 
     it('알 수 없는 키를 거부한다 (strict)', () => {
