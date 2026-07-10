@@ -8,7 +8,8 @@
     "build": "vite build",
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "vitest run --coverage"
+    "test": "vitest run --coverage",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "react": "catalog:",
@@ -16,6 +17,7 @@
     "shared": "workspace:*"
   },
   "devDependencies": {
+    "@playwright/test": "catalog:",
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",
     "@testing-library/user-event": "catalog:",
