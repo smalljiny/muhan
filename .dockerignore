@@ -1,0 +1,39 @@
+# 빌드 컨텍스트에서 제외 — 이미지 크기·빌드 시간·컨텍스트 밖 심볼릭 링크 오류를 줄인다.
+
+# 의존성·빌드 산출물(컨테이너에서 재생성)
+**/node_modules
+**/dist
+**/coverage
+**/.turbo
+
+# VCS·에디터
+.git
+.gitignore
+**/*.log
+.DS_Store
+
+# 워크트리 하네스 주입물 — 컨텍스트 밖(/Users/mario/Workspace/muhan)을 가리키는 심볼릭 링크.
+# COPY 시 dangling으로 실패하므로 제외한다. 서버 런타임과 무관.
+.claude
+.codex
+.agents
+.serena
+.mcp.json
+AGENTS.md
+CLAUDE.md
+
+# 시크릿·환경설정(이미지에 넣지 않음 — env는 compose가 주입)
+.secrets
+.env
+.env.*
+
+# 서버 런타임에 불필요한 대용량·문서 자산
+legacy
+docs
+graphify-out
+.harness
+.harness-backups
+.github
+
+# 파이썬 가상환경(graphify CLI)
+.venv

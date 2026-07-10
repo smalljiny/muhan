@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1
+#
+# dev/test 전용 서버 이미지(Story 6, G4 SUT). tsx로 소스에서 서버를 실행한다 —
+# 프로덕션 배포용 멀티스테이지 최적화·distroless는 여기 범위가 아니다(E9-1 Non-goal).
+#
+# pnpm 워크스페이스라 server 하나만 격리 빌드하지 않고 워크스페이스를 통째로 install한 뒤
+# shared를 빌드한다: server는 'shared' 배럴(→ packages/shared/dist)을 resolve하고,
+# worldLoader가 packages/shared/dist 기준 상대경로로 repo/data/world를 읽으므로
+# dist가 존재하고 data/world가 이미지에 있어야 부팅이 성립한다.
+FROM node:24-slim
+
+# corepack으로 lockfile과 동일한 pnpm 버전을 고정한다(package.json packageManager와 일치).
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+
+WORKDIR /app
+
+# 워크스페이스 소스 전체를 복사한다(.dockerignore가 node_modules·dist·legacy 등을 제외).
+# dev 이미지라 레이어 캐시보다 단순성을 택한다.
+COPY . .
+
+# 워크스페이스 의존성 설치 후 shared를 빌드한다(server tsx가 'shared' dist를 resolve).
+RUN pnpm install --frozen-lockfile \
+  && pnpm --filter shared build
+
+# 서버 기본 PORT(env.ts default 3000).
+EXPOSE 3000
+
+# tsx watch로 소스에서 직접 부팅한다(dev 스택 — 재현 가능한 로컬 하네스).
+CMD ["pnpm", "--filter", "server", "dev"]
