@@ -1,7 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import type { FastifyInstance } from 'fastify'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { WebSocket } from 'ws'
 import { resetConfigForTests } from '../config/env.js'
+import type { SessionAuthPort } from '../auth/sessionAuthPort.js'
+import { gameAuthPreValidation } from './plugin.js'
+import { createConnectionQuota } from './connectionQuota.js'
 import {
   buildSeededApp,
   injectAuthedWS,
@@ -160,5 +163,37 @@ describe('WS 정원 게이트 (preValidation quota)', () => {
     const c4 = newAuthedClient(url)
     sockets.push(c4)
     await expect(waitForUnexpectedResponse(c4)).resolves.toBe(503)
+  })
+
+  // 이미 파괴된 upgrade 소켓에서의 정원 슬롯 누수 회귀 방어. hook 진입 시점에 raw 소켓이 이미 destroyed면
+  // Node의 once-only 'close'가 과거에 발화하고 끝났으므로 배선한 releaseOnce 리스너가 영영 안 돈다 →
+  // reserve한 슬롯이 영구 누수된다. 실 TCP abort 레이스는 flaky하므로 exported gameAuthPreValidation을
+  // 결정적 단위 경로로 직접 호출해 고정한다(injectWS는 destroyed 소켓 상태를 재현하지 못한다).
+  it('hook 진입 시 이미 파괴된 소켓의 예약 슬롯을 누수하지 않는다(동기 already-destroyed 경로)', async () => {
+    process.env.WS_ALLOWED_ORIGINS = DEFAULT_TEST_ORIGIN
+    resetConfigForTests()
+
+    // maxGlobal 1: destroyed 소켓의 예약이 반납되지 않으면 유일한 슬롯이 잠겨 다음 reserve가 503난다.
+    const quota = createConnectionQuota(() => ({ maxGlobal: 1, maxPerAccount: 100 }))
+    // 무조건 신원을 반환하는 fake — 쿠키 게이트를 통과해 reserve까지 도달시킨다.
+    const fakeSessionAuth = {
+      validateSessionCookie: () => ({ accountId: 'acc-1' }),
+    } as unknown as SessionAuthPort
+
+    const fakeReq = {
+      headers: { origin: DEFAULT_TEST_ORIGIN, cookie: '__session=any-token' },
+      raw: { socket: { destroyed: true, once: vi.fn() } },
+      account: null,
+      releaseQuota: null,
+    } as unknown as FastifyRequest
+    const fakeReply = {
+      code: vi.fn().mockReturnThis(),
+      send: vi.fn(),
+    } as unknown as FastifyReply
+
+    await gameAuthPreValidation(fakeSessionAuth, quota)(fakeReq, fakeReply)
+
+    // destroyed 소켓의 예약이 반납됐다면 maxGlobal 1의 슬롯이 다시 비어 다른 예약이 성공한다.
+    expect(quota.reserve('other')).toEqual({ ok: true })
   })
 })

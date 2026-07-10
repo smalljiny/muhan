@@ -75,14 +75,27 @@ describe('createSafeSend', () => {
     expect(socket.send).not.toHaveBeenCalled()
   })
 
-  it('bufferedAmount가 상한 이하이면 send하고 close하지 않는다', () => {
+  it('bufferedAmount에 payload를 더해도 상한 이하이면 send하고 close하지 않는다', () => {
     const log = createFakeLog()
-    const socket = createFakeSocket({ bufferedAmount: 1000 })
+    // 900 + payloadBytes(<100)이 상한(1000) 이하라 hard cap을 통과한다.
+    const socket = createFakeSocket({ bufferedAmount: 900 })
 
     createSafeSend(log)(socket as unknown as WebSocket, SAMPLE_EVENT)
 
     expect(socket.send).toHaveBeenCalledTimes(1)
     expect(socket.close).not.toHaveBeenCalled()
+  })
+
+  it('bufferedAmount 자체는 상한 이하지만 payload를 더하면 초과하면 1013으로 close하고 send하지 않는다', () => {
+    const log = createFakeLog()
+    // bufferedAmount(1000) === 상한(1000)이라 사전 직렬화 검사(>)는 통과하지만,
+    // payloadBytes를 더하면 상한을 넘는다 — hard cap이 enqueue 전에 잘라야 한다.
+    const socket = createFakeSocket({ bufferedAmount: 1000 })
+
+    createSafeSend(log)(socket as unknown as WebSocket, SAMPLE_EVENT)
+
+    expect(socket.close).toHaveBeenCalledWith(1013)
+    expect(socket.send).not.toHaveBeenCalled()
   })
 
   it('readyState가 OPEN이 아니면 send도 close도 하지 않는다', () => {

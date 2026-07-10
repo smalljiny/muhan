@@ -91,24 +91,27 @@ function frameToText(data: RawData): string {
  * 이벤트를 소켓으로 안전하게 직렬화·전송하는 함수를 만든다(팩토리 클로저 — 로거를 1회 캡처해
  * 호출부 churn을 없앤다). 반환 함수는 3층 경계를 지킨다(소켓은 셸에만 있다).
  *
- * 순서: (1) OPEN 가드 — 닫힌 소켓엔 전송·close 모두 스킵한다. (2) backpressure 가드 — bufferedAmount가
- * 상한을 넘으면 느린 소비자로 판정해 1013(Try Again Later)로 close하고 전송하지 않는다. 권위적 이벤트
- * push 서버라 프레임을 드롭·유예하면 상태가 어긋나므로 close가 유일하게 안전한 응답이다. 상한은
- * getConfig()로 호출 시점에 조회해 테스트가 env를 덮어쓸 수 있게 한다(팩토리 생성 시점 캡처 금지).
- * (3) 콜백형 send — 비동기 전송 오류는 콜백으로 받아 로깅하고 codeless close로 잘라낸다(backpressure의
- * 1013과 달리 transport 실패이므로 코드 없이 닫는다, deadline 관례 미러). 콜백형에서 not-OPEN send는
- * 동기 throw 대신 콜백 err로 오지만(OPEN 가드가 이미 선차단), 잔여 동기 throw를 방어하기 위해 try/catch를
- * defense-in-depth로 유지한다. Story 4-6의 응답 경로가 이 가드를 재사용한다.
+ * 순서: (1) OPEN 가드 — 닫힌 소켓엔 전송·close 모두 스킵한다. (2) backpressure 가드 — 이번 payload를 미리
+ * 직렬화해 그 바이트 수를 bufferedAmount에 더한 값(`bufferedAmount + payloadBytes`)이 상한을 넘으면 느린
+ * 소비자로 판정해 1013(Try Again Later)로 close하고 전송하지 않는다. enqueue 직전에 대기 중인 payload 크기까지
+ * 회계에 넣는 hard cap이라, 단일 이벤트가 큐를 상한 너머로 밀어넣고도 살아남는 one-message overshoot가 없다.
+ * 권위적 이벤트 push 서버라 프레임을 드롭·유예하면 상태가 어긋나므로 close가 유일하게 안전한 응답이다. 상한은
+ * getConfig()로 호출 시점에 조회해 테스트가 env를 덮어쓸 수 있게 한다(팩토리 생성 시점 캡처 금지). payload는
+ * 여기서 한 번만 직렬화해 send에 재사용한다(이중 직렬화 없음). (3) 콜백형 send — 비동기 전송 오류는 콜백으로
+ * 받아 로깅하고 codeless close로 잘라낸다(backpressure의 1013과 달리 transport 실패이므로 코드 없이 닫는다,
+ * deadline 관례 미러). 콜백형에서 not-OPEN send는 동기 throw 대신 콜백 err로 오지만(OPEN 가드가 이미 선차단),
+ * 잔여 동기 throw를 방어하기 위해 try/catch를 defense-in-depth로 유지한다. Story 4-6의 응답 경로가 이 가드를 재사용한다.
  */
 export function createSafeSend(log: FastifyBaseLogger): (socket: WebSocket, event: ServerEvent) => void {
   return (socket, event) => {
     if (socket.readyState !== socket.OPEN) return
-    if (socket.bufferedAmount > getConfig().WS_MAX_BUFFERED_BYTES) {
+    const payload = JSON.stringify(event)
+    if (socket.bufferedAmount + Buffer.byteLength(payload) > getConfig().WS_MAX_BUFFERED_BYTES) {
       socket.close(1013)
       return
     }
     try {
-      socket.send(JSON.stringify(event), (err) => {
+      socket.send(payload, (err) => {
         if (err) {
           log.error({ err }, 'ws send failed')
           if (socket.readyState === socket.OPEN) socket.close()
@@ -171,12 +174,15 @@ function buildSession(
  * 통과 시 undefined를 반환해 라이프사이클을 계속 진행시킨다.
  *
  * 불변식(정원 누수 방어): 이 함수는 진입부터 `releaseOnce` 배선(raw 소켓 'close' + req.releaseQuota 대입)까지
- * `await` 없이 동기로 실행되어야 한다. 현재 `validateSessionCookie`가 동기라 reserve 전에 소켓이 파괴될 창이
- * 없어 abort-leak이 닫혀 있다. E5에서 실 어댑터가 async(`Promise` 반환)로 확장되면 reserve와 소켓 파괴 사이에
- * 창이 생겨, RST로 조기 종료한 연결이 reserve 후 이미 파괴된 소켓의 'close'를 못 받아 슬롯을 영구 누수시킬 수
- * 있다. async 전환 시 reserve 직전에 `req.raw.socket.destroyed` liveness 체크를 추가하고 회귀 테스트로 고정한다.
+ * `await` 없이 동기로 실행되어야 한다. hook 진입 시점에 raw 소켓이 이미 파괴됐으면 Node의 once-only 'close'가
+ * 과거에 발화하고 끝나 배선한 리스너가 영영 안 돌므로, 그 already-destroyed 경우를 위한 liveness 체크
+ * (`req.raw.socket?.destroyed`)를 release 배선 직후에 두어 놓친 반납을 직접 수행한다(released 플래그가 이중
+ * 반납을 차단하므로 살아 있는 소켓에는 무해). 현재 `validateSessionCookie`가 동기라 reserve와 배선 사이에 소켓이
+ * 파괴될 창이 없어 이 체크는 hook 진입 전에 이미 파괴된 소켓만 커버한다. E5에서 실 어댑터가 async(`Promise` 반환)로
+ * 확장되면 소켓이 await 도중에도 파괴될 수 있으므로(hook 진입 전만이 아니다), 이 liveness 체크를 await 이후에도
+ * 평가하도록 확장하고 그 async-gap 경로를 회귀 테스트로 고정한다.
  */
-function gameAuthPreValidation(
+export function gameAuthPreValidation(
   sessionAuth: SessionAuthPort,
   quota: ConnectionQuota,
 ): (req: FastifyRequest, reply: FastifyReply) => Promise<unknown> {
@@ -221,6 +227,10 @@ function gameAuthPreValidation(
     req.raw.socket?.once('close', releaseOnce)
     // 소켓 핸들러가 ws 'close'에 배선하도록 같은 참조를 요청 데코레이션에 실어 넘긴다.
     req.releaseQuota = releaseOnce
+    // 이미 파괴된 소켓이면 'close'는 과거에 한 번 발화하고 끝났으므로 위 리스너가 영영 안 돈다 —
+    // 놓친 반납을 여기서 직접 수행한다. releaseOnce의 released 플래그가 이중 반납을 막으므로,
+    // 소켓이 실제로 살아 있으면 리스너가 발화하고 이 직접 호출은 무해하게 중복 차단된다.
+    if (req.raw.socket?.destroyed) releaseOnce()
     return undefined
   }
 }
