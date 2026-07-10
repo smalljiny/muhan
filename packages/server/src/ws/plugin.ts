@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import fastifyWebsocket from '@fastify/websocket'
 import type { RawData, WebSocket } from 'ws'
 import type { ServerEvent } from 'shared'
@@ -88,16 +88,35 @@ function frameToText(data: RawData): string {
 }
 
 /**
- * 이벤트를 소켓으로 안전하게 직렬화·전송한다. 프레임 수신과 응답 사이에 피어가 닫으면 `send`가
- * throw하며 message 리스너를 탈출하므로(fastify errorHandler 미포착), OPEN 상태만 전송하고
- * 잔여 예외를 삼킨다. Story 4-6의 응답 경로도 이 가드를 재사용한다.
+ * 이벤트를 소켓으로 안전하게 직렬화·전송하는 함수를 만든다(팩토리 클로저 — 로거를 1회 캡처해
+ * 호출부 churn을 없앤다). 반환 함수는 3층 경계를 지킨다(소켓은 셸에만 있다).
+ *
+ * 순서: (1) OPEN 가드 — 닫힌 소켓엔 전송·close 모두 스킵한다. (2) backpressure 가드 — bufferedAmount가
+ * 상한을 넘으면 느린 소비자로 판정해 1013(Try Again Later)로 close하고 전송하지 않는다. 권위적 이벤트
+ * push 서버라 프레임을 드롭·유예하면 상태가 어긋나므로 close가 유일하게 안전한 응답이다. 상한은
+ * getConfig()로 호출 시점에 조회해 테스트가 env를 덮어쓸 수 있게 한다(팩토리 생성 시점 캡처 금지).
+ * (3) 콜백형 send — 비동기 전송 오류는 콜백으로 받아 로깅하고 codeless close로 잘라낸다(backpressure의
+ * 1013과 달리 transport 실패이므로 코드 없이 닫는다, deadline 관례 미러). 콜백형에서 not-OPEN send는
+ * 동기 throw 대신 콜백 err로 오지만(OPEN 가드가 이미 선차단), 잔여 동기 throw를 방어하기 위해 try/catch를
+ * defense-in-depth로 유지한다. Story 4-6의 응답 경로가 이 가드를 재사용한다.
  */
-function safeSend(socket: WebSocket, event: ServerEvent): void {
-  if (socket.readyState !== socket.OPEN) return
-  try {
-    socket.send(JSON.stringify(event))
-  } catch {
-    // 전송 직전 소켓이 닫힌 경우. 곧 'close'가 발화해 cleanup이 돌므로 무시한다.
+export function createSafeSend(log: FastifyBaseLogger): (socket: WebSocket, event: ServerEvent) => void {
+  return (socket, event) => {
+    if (socket.readyState !== socket.OPEN) return
+    if (socket.bufferedAmount > getConfig().WS_MAX_BUFFERED_BYTES) {
+      socket.close(1013)
+      return
+    }
+    try {
+      socket.send(JSON.stringify(event), (err) => {
+        if (err) {
+          log.error({ err }, 'ws send failed')
+          if (socket.readyState === socket.OPEN) socket.close()
+        }
+      })
+    } catch {
+      // 전송 직전 소켓이 닫힌 경우. 곧 'close'가 발화해 cleanup이 돌므로 무시한다.
+    }
   }
 }
 
@@ -119,6 +138,7 @@ function buildSession(
   socket: WebSocket,
   deadline: Deadline,
   lifecycle: SessionLifecycle,
+  send: (socket: WebSocket, event: ServerEvent) => void,
 ): SessionContext {
   if (ctx.account === null) {
     throw new Error('세션 불변식 위반: 인증 게이트를 통과했으나 account가 없다')
@@ -127,7 +147,7 @@ function buildSession(
   return {
     account,
     sessionAuth,
-    emit: (event) => safeSend(socket, event),
+    emit: (event) => send(socket, event),
     rearmDeadline: () => deadline.rearm(),
     clearDeadline: () => deadline.clear(),
     enterWorld: (characterId) => lifecycle.enterWorld(ctx, account.accountId, characterId),
@@ -229,6 +249,10 @@ export function registerWebsocket(
   permissionPort: PermissionPort = createPermissivePermissionAdapter(),
 ): void {
   const connections = new Map<WebSocket, ConnectionContext>()
+
+  // 안전 전송 함수를 앱 로거로 1회 조립한다(팩토리 클로저). 모든 응답 경로가 이 단일 병목을 통과해
+  // OPEN 가드·backpressure(1013)·전송오류(codeless close) 처리를 공유한다.
+  const safeSend = createSafeSend(app.log)
 
   // 명령 레지스트리는 무상태 핸들러의 배선표라 연결 간 공유 안전하다 — channelPort를 클로저 주입해 1회 조립한다.
   const commandRegistry = createCommandRegistry(channelPort)
@@ -358,7 +382,7 @@ export function registerWebsocket(
                 // 턴에 characterList + prompt를 동기 발화한다(setImmediate 금지 — 대화 중 클라이언트는 이미
                 // 리스너를 붙였다). ctx.state 변이는 FSM(enterState) 단일 지점에서만 일어난다(Lock D).
                 ctx.ready = true
-                enterInitialState(ctx, buildSession(ctx, sessionAuth, socket, deadline, lifecycle))
+                enterInitialState(ctx, buildSession(ctx, sessionAuth, socket, deadline, lifecycle, safeSend))
                 break
               case 'error':
                 safeSend(socket, result.event)
@@ -386,7 +410,7 @@ export function registerWebsocket(
                 } else {
                   handleSessionFrame(
                     ctx,
-                    buildSession(ctx, sessionAuth, socket, deadline, lifecycle),
+                    buildSession(ctx, sessionAuth, socket, deadline, lifecycle, safeSend),
                     parsed,
                   )
                 }
