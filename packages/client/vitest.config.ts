@@ -1,3 +1,4 @@
+import { fileURLToPath, URL } from 'node:url'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
 
@@ -8,6 +9,20 @@ import { defineConfig } from 'vitest/config'
 // - 커버리지: 부팅 엔트리(main.tsx)·셋업·테스트 파일 제외.
 export default defineConfig({
   plugins: [react()],
+  // shared를 dist가 아닌 소스로 해석한다(vite.config.ts와 동일 근거) — dist는 git-ignored라
+  // clean checkout(빌드 전)에서 테스트가 모듈 해석에 실패하지 않게 소스로 alias한다.
+  resolve: {
+    alias: [
+      {
+        find: /^shared\/protocol$/,
+        replacement: fileURLToPath(new URL('../shared/src/protocol/index.ts', import.meta.url)),
+      },
+      {
+        find: /^shared$/,
+        replacement: fileURLToPath(new URL('../shared/src/index.ts', import.meta.url)),
+      },
+    ],
+  },
   test: {
     environment: 'jsdom',
     globals: false,

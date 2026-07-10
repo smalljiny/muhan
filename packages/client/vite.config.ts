@@ -1,3 +1,4 @@
+import { fileURLToPath, URL } from 'node:url'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
@@ -13,6 +14,21 @@ import { defineConfig } from 'vite'
 // - `/game`은 ws:true로 WebSocket upgrade를 프록시한다.
 export default defineConfig({
   plugins: [react()],
+  // shared 워크스페이스를 dist(빌드 산출물)가 아니라 소스로 해석한다. shared/package.json exports는
+  // ./dist를 가리키지만 dist는 git-ignored라 clean checkout(빌드 전)에서 dev/e2e가 모듈 해석에 실패한다.
+  // tsconfig paths와 동일하게 소스로 alias해 shared 선-빌드 없이 dev·build·e2e가 재현되게 한다.
+  resolve: {
+    alias: [
+      {
+        find: /^shared\/protocol$/,
+        replacement: fileURLToPath(new URL('../shared/src/protocol/index.ts', import.meta.url)),
+      },
+      {
+        find: /^shared$/,
+        replacement: fileURLToPath(new URL('../shared/src/index.ts', import.meta.url)),
+      },
+    ],
+  },
   server: {
     port: 5173,
     strictPort: true,
