@@ -7,6 +7,7 @@ import { handleHandshakeFrame } from './handshake.js'
 import { createHeartbeat } from './heartbeat.js'
 import { createDeadline, type Deadline } from './deadline.js'
 import { createCommandRegistry, dispatch } from './router.js'
+import { buildActorContext } from './actorContext.js'
 import {
   ConnectionState,
   enterInitialState,
@@ -18,6 +19,10 @@ import type { AccountIdentity, SessionAuthPort } from '../auth/sessionAuthPort.j
 import { extractSessionCookie } from './cookies.js'
 import type { SessionLifecyclePort } from './sessionLifecyclePort.js'
 import { createNoopSessionLifecycleAdapter } from './noopSessionLifecycleAdapter.js'
+import type { ChannelPort } from './channelPort.js'
+import { createNoopChannelAdapter } from './noopChannelAdapter.js'
+import type { PermissionPort } from './permissionPort.js'
+import { createPermissivePermissionAdapter } from './permissivePermissionAdapter.js'
 import { createSessionRegistry, type SessionRegistry } from './sessionRegistry.js'
 import { createResolveDisconnect } from './resolveDisconnect.js'
 import { createSessionLifecycle, type SessionLifecycle } from './sessionLifecycle.js'
@@ -39,9 +44,6 @@ export const GAME_SOCKET_PATH = '/game'
  * 이미 버퍼링된 뒤라 방어가 되지 않는다.
  */
 export const MAX_FRAME_BYTES = 64 * 1024
-
-// 명령 레지스트리는 무상태 핸들러의 배선표라 연결 간 공유 안전하다 — 모듈 로드 시 1회 조립한다.
-const commandRegistry = createCommandRegistry()
 
 // app에 per-connection 레지스트리를 노출한다. 진단·하트비트 스윕(Story 5-6)·테스트 관찰의 단일 출처.
 // `account`는 preValidation 게이트가 확정한 계정 신원을 담는 per-request 데코레이션이다 —
@@ -175,13 +177,27 @@ function gameAuthPreValidation(
  * 어댑터를 기본으로 세운다 — 실 저장 어댑터는 E4/E5에서 이 자리에 주입한다(sessionAuth 관례 미러).
  * 종결 경로 배선(resolveDisconnect 호출)은 후속 Story가 붙이며, 여기서는 포트를 wsLifecyclePort로 노출해
  * 후속 Story·테스트 관찰의 단일 출처로 둔다(wsConnections 데코레이션 관례 미러).
+ *
+ * `channelPort`는 자유채팅 발화를 채널 전파 계층으로 핸드오프하는 포트다. 미주입 시 전달 사실만 로깅하는
+ * no-op 어댑터를 기본으로 세운다 — 실 브로드캐스트 어댑터는 E4/E7에서 이 자리에 주입한다(lifecyclePort
+ * 관례 미러). 명령 레지스트리는 이 포트를 클로저 주입해 registerWebsocket 스코프에서 1회 조립한다
+ * (무상태 Map이라 스코프 이동 비용 zero).
+ *
+ * `permissionPort`는 검증된 명령을 어느 actor가 실행할 자격이 있는지 판정하는 포트다. 미주입 시 항상
+ * allow하는 permissive 어댑터를 기본으로 세운다 — 실 RBAC 어댑터는 E5에서 이 자리에 주입한다(channelPort
+ * 관례 미러). dispatch가 payload 검증 성공 후·핸들러 전에 이 포트로 권한을 검사한다.
  */
 export function registerWebsocket(
   app: FastifyInstance,
   sessionAuth: SessionAuthPort,
   lifecyclePort: SessionLifecyclePort = createNoopSessionLifecycleAdapter(app.log),
+  channelPort: ChannelPort = createNoopChannelAdapter(app.log),
+  permissionPort: PermissionPort = createPermissivePermissionAdapter(),
 ): void {
   const connections = new Map<WebSocket, ConnectionContext>()
+
+  // 명령 레지스트리는 무상태 핸들러의 배선표라 연결 간 공유 안전하다 — channelPort를 클로저 주입해 1회 조립한다.
+  const commandRegistry = createCommandRegistry(channelPort)
   app.decorate('wsConnections', connections)
   app.decorate('wsLifecyclePort', lifecyclePort)
 
@@ -307,9 +323,11 @@ export function registerWebsocket(
                 // 그 이전(characterSelect·create)이면 FSM handleInput으로 보낸다(Lock C). 이미 파싱된 객체를
                 // 재파싱 없이 넘긴다.
                 if (ctx.state === ConnectionState.command) {
-                  const result = dispatch(commandRegistry, parsed)
+                  // buildActorContext의 배선 불변식 throw(account/boundCharacterId null)는 메시지 핸들러의
+                  // 방어 try/catch가 error{internal}로 격리한다 — 추가 배선 없이 기존 방어선을 재사용한다.
+                  const result = dispatch(commandRegistry, parsed, buildActorContext(ctx), permissionPort)
                   // 유효 명령 처리 성공(handled)만 무입력 타이머를 재-arm한다 — 거부(rejected:
-                  // unknown_type·bad_payload·internal)가 flood로 타이머를 무한 연장하지 못하게 한다.
+                  // unknown_type·bad_payload·forbidden·internal)가 flood로 타이머를 무한 연장하지 못하게 한다.
                   if (result.outcome === 'handled') ctx.idle?.arm()
                   if (result.event !== undefined) safeSend(socket, result.event)
                 } else {

@@ -9,7 +9,7 @@ describe('errorCodeSchema', () => {
     },
   )
 
-  it.each(['unauthorized', 'session_state'])('신규 %s 코드를 통과시킨다', (code) => {
+  it.each(['unauthorized', 'session_state', 'forbidden'])('신규 %s 코드를 통과시킨다', (code) => {
     expect(errorCodeSchema.safeParse(code).success).toBe(true)
   })
 

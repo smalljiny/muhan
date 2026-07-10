@@ -45,6 +45,8 @@
 - `{ type: 'debug:echo', text: string(min 1), id?: string }` — 진단용 echo 요청. `freeTextPayloadSchema.shape`를 새 strictObject에 spread해 재사용하되 리터럴 discriminator·strict를 보존한다. `id`는 client가 응답을 짝짓는 optional 상관 키.
 - `{ type: 'session:reply', promptId: string(min 1), value: string(min 1, max 256), id?: string }` — 세션 prompt 응답(T2). `promptId`가 지목한 질문에 `value`로 답한다. `value`는 자유 사용자 입력이라 거친 외곽 상한 `max 256`을 두고, 도메인별 세부 상한(캐릭터 이름 `max 40` 등)은 세션 핸들러가 추가로 강제한다(다층 방어).
 - `{ type: 'session:selectCharacter', characterId: string(min 1), id?: string }` — 캐릭터 선택(T2). `characterId`로 입장할 캐릭터를 지목한다.
+- `{ type: 'chat:message', channel: 'say'|'yell'|'broadcast', text: string(min 1, max 512), id?: string }` — 자유채팅(E3-4). `channel`로 전파 범위를 판별하고 `text`는 발화 내용. 채널 전파 대상 필드라 프레임 상한과 별개로 필드 단위 길이 상한을 둔다(DoS floor).
+- `{ type: 'chat:emote', emote: string(min 1, max 64), target?: string(min 1, max 64), text?: string(min 1, max 512), id?: string }` — 감정표현(E3-4, A2 감정표현 action). `emote`가 주 콘텐츠(별칭, 값 검증은 채널 어댑터/E7), `target`은 대상 캐릭터, `text`는 선택적 부가 메시지. `freeTextPayloadSchema.shape`를 spread하지 않는다(그 shape의 text는 필수라 optional 의도와 충돌). 검증된 채팅 명령은 `ChannelPort`로 핸드오프된다([`freechat-permission-seam.md`](freechat-permission-seam.md)).
 
 **`events.ts`** — `serverEventSchema = z.discriminatedUnion('type', [...])` + `errorCodeSchema`.
 
@@ -56,7 +58,7 @@
 - `{ type: 'session:characterList', characters: CharacterSummary[] }` — 캐릭터 선택 화면이 실을 와이어 전용 요약 배열(T2).
 - `{ type: 'session:entered', characterId: string(min 1) }` — 지목한 캐릭터로 월드 입장 확정 통지(T2).
 
-`errorCodeSchema = z.enum(['handshake_required', 'unknown_type', 'bad_payload', 'internal', 'unauthorized', 'session_state'])` — `handshake_required`(핸드셰이크 전 명령 수신), `unknown_type`(미지 discriminator), `bad_payload`(payload 형식 위반), `internal`(핸들러/처리 중 서버 내부 오류), `unauthorized`(소유하지 않은 캐릭터 지목 등 인가 실패, T2), `session_state`(현재 세션 단계에서 허용되지 않는 명령, T2). WS upgrade **전** 게이트의 거부(`401 unauthenticated`·`403 forbidden_origin`)는 프로토콜 error 이벤트가 아니라 HTTP 응답이며 이 열거에 없다(auth-session.md 참조).
+`errorCodeSchema = z.enum(['handshake_required', 'unknown_type', 'bad_payload', 'internal', 'unauthorized', 'session_state', 'forbidden'])` — `handshake_required`(핸드셰이크 전 명령 수신), `unknown_type`(미지 discriminator), `bad_payload`(payload 형식 위반), `internal`(핸들러/처리 중 서버 내부 오류), `unauthorized`(소유하지 않은 캐릭터 지목 등 **미인증** 세션의 인가 실패, T2), `session_state`(현재 세션 단계에서 허용되지 않는 명령, T2), `forbidden`(**인증됐으나** RBAC 권한 부족으로 거부, E3-4). `unauthorized`(신원 없음, 재인증 유도)와 `forbidden`(신원 있으나 자격 없음, 권한 없음 안내)은 client-visible 의미가 다르다. WS upgrade **전** 게이트의 거부(`401 unauthenticated`·`403 forbidden_origin`)는 프로토콜 error 이벤트가 아니라 HTTP 응답이며 이 열거에 없다(auth-session.md 참조).
 
 ### 전송 배선 (`packages/server/src/ws/`)
 
@@ -65,8 +67,8 @@
 - **`connection.ts`** — per-connection 컨텍스트. `ConnectionContext { protocolVersion: number(불변, 서버 권위), ready: boolean(핸드셰이크 완료 여부), heartbeat: NodeJS.Timeout | null }`. `createConnectionContext()`가 `PROTOCOL_VERSION`·`ready=false`·`heartbeat=null`로 초기화. `cleanupConnection()`이 남은 ping 타이머를 `clearInterval`(멱등)로 정리하고 레지스트리에서 컨텍스트를 제거한다.
 - **`frame.ts`** — 파싱된 프레임(`unknown`)에서 payload 스키마 검증 이전에 필드를 안전하게 읽는 primitive. `readField(parsed, key)`(객체·non-null·키 존재 가드 후 값 반환, 아니면 undefined), `readStringField(parsed, key)`(문자열일 때만 반환, 빈 문자열은 유효). null 가드가 load-bearing이다 — 없으면 `key in null`이 message 핸들러 안에서 throw한다. `key`는 호출부 리터럴이라 동적 키 주입 표면이 아니다.
 - **`heartbeat.ts`** — per-connection 하트비트 매니저. 아래 §동작 참조.
-- **`router.ts`** — `Map<type, handler>` 레지스트리·`dispatch` 순수 함수. 아래 §동작 참조.
-- **`handlers/echo.ts`** — 무인증 `echoHandler`.
+- **`router.ts`** — `Map<type, handler>` 레지스트리·`dispatch` 순수 함수. 아래 §동작 참조. E3-4가 actor·permission threading + chat 엔트리를 얹었다([`freechat-permission-seam.md`](freechat-permission-seam.md)).
+- **`handlers/echo.ts`** — 무인증 `echoHandler`. **`handlers/chat.ts`** — 자유채팅 `createChatHandler`(E3-4). 명령 디스패치 seam(`actorContext.ts`·`channelPort.ts`·`permissionPort.ts` + no-op/permissive 어댑터)은 [`freechat-permission-seam.md`](freechat-permission-seam.md) 정본.
 
 `FastifyInstance`에 `wsConnections: Map<WebSocket, ConnectionContext>`를 module augmentation으로 선언하고 `app.decorate`로 노출한다 — 진단·하트비트 스윕·테스트 관찰의 단일 출처다.
 
@@ -78,7 +80,7 @@
 
 `registerWebsocket(app)`은 `@fastify/websocket`을 `{ options: { maxPayload: MAX_FRAME_BYTES } }`로 먼저 등록한 뒤, 별도 encapsulated 플러그인에서 `/game` 라우트를 `{ websocket: true }`로 마운트한다("라우트보다 먼저 플러그인 등록" 관례를 top-level await 없이 만족). `verifyClient`은 쓰지 않는다(transport-only). `MAX_FRAME_BYTES`는 프로토콜 레이어(`maxPayload`)로 강제해 버퍼 완성 전에 초과 프레임을 1009 close로 거부한다 — 핸들러 안에서 크기를 재면 이미 버퍼링된 뒤라 방어가 안 된다.
 
-명령 레지스트리는 무상태 핸들러 배선표라 연결 간 공유 안전해 모듈 로드 시 1회 조립한다(`createCommandRegistry()`).
+명령 레지스트리는 무상태 핸들러 배선표라 연결 간 공유 안전하다 — E3-4가 `ChannelPort`를 클로저 주입하면서 모듈 싱글턴을 `registerWebsocket` 스코프의 `createCommandRegistry(channelPort)` 1회 조립으로 이동했다(레지스트리는 stateless Map이라 이동 비용 zero).
 
 ### 연결 수명주기
 
@@ -112,18 +114,19 @@
 
 ### 라우터·핸들러 레지스트리 (`router.ts`)
 
-`dispatch(registry, parsed)`는 핸드셰이크를 통과(`pass`)한 프레임을 O(1) 디스패치하는 순수 함수다. 레이어 순서가 distinct error code를 강제하기 위해 load-bearing이다.
+`dispatch(registry, parsed, actor, permission)`는 핸드셰이크를 통과(`pass`)한 프레임을 O(1) 디스패치하는 순수 함수다. E3-4가 `actor: ActorContext`(3번째)·`permission: PermissionPort`(4번째) 파라미터를 threading했다([`freechat-permission-seam.md`](freechat-permission-seam.md)). 레이어 순서가 distinct error code를 강제하기 위해 load-bearing이다.
 
 1. `readStringField(parsed, 'type')` 없음 → `error{unknown_type}`(상관 키 없음).
 2. `registry.get(type)` 실패 → `error{unknown_type}`. **allowlist 가드** — 미등록/미지 type 차단. 레지스트리가 plain object가 아닌 실제 `Map`이라 `get('__proto__')`가 prototype 속성에 도달하지 않고 undefined를 반환해 prototype-pollution 우회를 원천 차단한다.
 3. `clientCommandSchema.safeParse` 실패 → `error{bad_payload}`. 등록된 type이지만 payload 위반. discriminator가 등록 type임을 확인한 뒤 파싱하므로 정확히 그 variant를 검증한다(shared 계약 단일 출처).
-4. `handler(parsed)` throw → `error{internal}`. 핸들러 예외를 격리해 소켓을 생존시킨다.
+4. `permission.check(command, actor)` false → `error{forbidden}`(E3-4). 검증된 명령(`parseResult.data`)만 권한 판정에 넘긴다 — payload 검증 이후, 핸들러 이전. E3 permissive 어댑터는 항상 allow라 이 레이어는 inert(회귀 없음).
+5. `permission.check`·`handler(command, actor)` throw → `error{internal}`. 권한 판정·핸들러 예외를 같은 try/catch 격리 경계에서 잡아 소켓을 생존시킨다. `check`가 false를 반환하면 `forbidden`, throw하면 `internal`로 구분한다(throw하는 실 어댑터(E5)의 예외가 dispatch를 탈출해 correlationId를 잃지 않도록 격리).
 
-상관 키 `id`는 type 판별 직후·payload 검증 이전에 `readStringField`로 추출해(빈 문자열도 유효 → `typeof`로 판별), `bad_payload`·`internal` 응답도 상관 키를 실어 클라이언트가 실패를 상관지을 수 있게 한다. `unknown_type`은 type 판별 이전이라 상관 키를 싣지 않는다. `errorEvent()`는 `correlationId`가 있을 때만 키를 포함한다(undefined 키 금지).
+상관 키 `id`는 type 판별 직후·payload 검증 이전에 `readStringField`로 추출해(빈 문자열도 유효 → `typeof`로 판별), `bad_payload`·`forbidden`·`internal` 응답도 상관 키를 실어 클라이언트가 실패를 상관지을 수 있게 한다. `unknown_type`은 type 판별 이전이라 상관 키를 싣지 않는다. `errorEvent()`는 `correlationId`가 있을 때만 키를 포함한다(undefined 키 금지).
 
-`createCommandRegistry()`는 이 계층에서 무인증 `debug:echo` 하나만 배선한다(`new Map([['debug:echo', echoHandler]])`). 레지스트리는 의도적으로 `clientCommandSchema`보다 좁은 런타임 디스패치 집합이다 — `system:ready`는 스키마에 있으나 핸드셰이크가 `pass` 이전에 소비하므로 등록하지 않는다. 신규 핸들러는 반드시 `clientCommandSchema`에도 variant를 추가해야 한다(스키마에 없는 type의 핸들러는 `safeParse`가 매칭하지 못해 영구히 `bad_payload`로 떨어진다).
+`createCommandRegistry(channelPort)`는 무인증 `debug:echo`와 자유채팅 `chat:message`·`chat:emote`(→ `createChatHandler(channelPort)` 클로저)를 배선한다. E3-4가 `channelPort`를 필수 파라미터로 받으며(레지스트리 팩토리가 어댑터를 소유하지 않고 `registerWebsocket`이 default 주입), 모듈 싱글턴이던 레지스트리를 `registerWebsocket` 스코프로 이동했다. 레지스트리는 의도적으로 `clientCommandSchema`보다 좁은 런타임 디스패치 집합이다 — `system:ready`는 스키마에 있으나 핸드셰이크가 `pass` 이전에 소비하므로 등록하지 않는다. 신규 핸들러는 반드시 `clientCommandSchema`에도 variant를 추가해야 한다(스키마에 없는 type의 핸들러는 `safeParse`가 매칭하지 못해 영구히 `bad_payload`로 떨어진다).
 
-`echoHandler(command)`는 `debug:echo{text, id?}` → `debug:echo:result{text, correlationId?}`로 되돌린다. 라우터가 이미 검증한 `ClientCommand`만 받으므로 payload를 재검증하지 않는다. `id`가 있을 때만(`!== undefined`, 빈 문자열도 유효) `correlationId` 키를 싣는다.
+`echoHandler(command, _actor)`는 `debug:echo{text, id?}` → `debug:echo:result{text, correlationId?}`로 되돌린다. `actor`를 받되 무시하는 무권한 진단 핸들러다. 라우터가 이미 검증한 `ClientCommand`만 받으므로 payload를 재검증하지 않는다. `id`가 있을 때만(`!== undefined`, 빈 문자열도 유효) `correlationId` 키를 싣는다.
 
 ### 하트비트 (`heartbeat.ts`)
 
@@ -167,4 +170,4 @@
 - **`WS_HEARTBEAT_PONG_TIMEOUT_MS`는 미소비 예약 seam** — 현재 단일 인터벌 모델의 유효 per-pong 마감은 `PING_INTERVAL`이다. 이 필드를 낮춰도 종료 타이밍은 바뀌지 않는다.
 - **TLS는 TLS-ready pass-through만** — `buildApp`이 `https` 서버 옵션을 Fastify로 pass-through해 `wss`를 지원한다. dev는 평문 loopback `ws`. 프로덕션 TLS 종단 지점(Fastify https vs 리버스 프록시)과 하트비트 인터벌 확정값(프록시 idle timeout 75% 규칙)은 배포/인프라 토픽에서 재조정한다.
 - **`protocolVersion` bump 정책 미확정** — 형식은 정수 `1`로 확정. *언제* 올리는가(호환 불가 변경 기준·문서화)는 프로토콜이 커질 때 별도로 정한다.
-- **브로드캐스트·한글 자유 텍스트 파서 없음** — 단일 소켓 왕복만 다룬다. EventEmitter 토픽·구독 필터·방=채널은 월드 상태 엔진/소셜 에픽, 동사-후치 자유 텍스트 파서는 자유 모드 UI 토픽(구조화 명령은 클라가 이미 분리 전송), 조사 i18n 렌더·클라이언트 UI는 프론트엔드 토픽이다.
+- **브로드캐스트·한글 자유 텍스트 파서 없음** — 단일 소켓 왕복만 다룬다. E3-4가 자유채팅 입력을 `ChannelPort`로 핸드오프하는 seam을 얹었으나([`freechat-permission-seam.md`](freechat-permission-seam.md)) 실 전파는 여전히 없다(no-op 어댑터). EventEmitter 토픽·구독 필터·방=채널은 월드 상태 엔진/소셜 에픽(E4/E7), 동사-후치 자유 텍스트 파서는 자유 모드 UI 토픽(구조화 명령은 클라가 이미 분리 전송), 조사 i18n 렌더·클라이언트 UI는 프론트엔드 토픽이다.

@@ -8,6 +8,11 @@ import { characterSummarySchema, promptKindSchema, promptOptionSchema } from './
  * handshake_required(핸드셰이크 전 명령 수신), unknown_type(미지 discriminator),
  * bad_payload(payload 형식 위반), internal(서버 내부 오류),
  * unauthorized(인증되지 않은 세션의 명령 수신), session_state(현재 세션 단계에서 허용되지 않는 명령).
+ *
+ * unauthorized와 forbidden은 client-visible 의미가 다르다:
+ * - unauthorized = **미인증** 세션이 명령을 보냈다(신원 자체가 없다 — 핸드셰이크·로그인 필요).
+ * - forbidden = **인증된** 세션이나 RBAC 권한이 부족해 거부됐다(신원은 있으나 자격이 없다 — Open Q3).
+ * 클라이언트는 unauthorized에는 재인증을, forbidden에는 권한 없음 안내를 띄우도록 두 코드를 구분한다.
  */
 export const errorCodeSchema = z.enum([
   'handshake_required',
@@ -16,6 +21,7 @@ export const errorCodeSchema = z.enum([
   'internal',
   'unauthorized',
   'session_state',
+  'forbidden',
 ])
 
 /**
