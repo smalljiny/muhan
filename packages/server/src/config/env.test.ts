@@ -425,6 +425,41 @@ describe('getConfig', () => {
     expect(exitSpy).toHaveBeenCalledWith(1)
   })
 
+  it('WS_MAX_CONNECTIONS가 없으면 기본값(1000)을 채운다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    delete process.env.WS_MAX_CONNECTIONS
+
+    const config = getConfig()
+
+    expect(config.WS_MAX_CONNECTIONS).toBe(1000)
+  })
+
+  it('WS_MAX_CONNECTIONS 문자열을 숫자로 강제 변환한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_MAX_CONNECTIONS = '2000'
+
+    const config = getConfig()
+
+    expect(config.WS_MAX_CONNECTIONS).toBe(2000)
+  })
+
+  it('WS_MAX_CONNECTIONS가 하한(1) 미만이면 fail-fast로 종료한다', () => {
+    // 정원이 0이면 어떤 연결도 수용 못 해 서버가 무의미하므로 최소 1을 강제한다.
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_MAX_CONNECTIONS = '0'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
   it('NODE_ENV=production && DEV_LOGIN_ENABLED=true 조합이면 fail-fast로 종료한다', () => {
     // 인증 우회 2차 방어선 — 프로덕션에서 dev 로그인 활성화를 코드 레벨로 차단한다.
     process.env.MONGODB_URI = 'mongodb://localhost:27017'
@@ -465,6 +500,20 @@ describe('getConfig', () => {
     process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
     process.env.NODE_ENV = 'staging'
     process.env.DEV_LOGIN_ENABLED = 'true'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('WS_MAX_CONNECTIONS가 음수이면 fail-fast로 종료한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_MAX_CONNECTIONS = '-5'
     const exitSpy = vi
       .spyOn(process, 'exit')
       .mockImplementation((() => undefined) as never)
@@ -522,5 +571,145 @@ describe('getConfig', () => {
 
     expect(config.DEV_SEED_COOKIE).toBe('dev-seed-cookie-value')
     expect(config.DEV_SEED_ACCOUNT_ID).toBe('dev-account-1')
+  })
+
+  it('WS_MAX_CONNECTIONS가 비수치이면 fail-fast로 종료한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_MAX_CONNECTIONS = '천개'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('WS_MAX_CONNECTIONS_PER_ACCOUNT가 없으면 기본값(5)을 채운다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    delete process.env.WS_MAX_CONNECTIONS_PER_ACCOUNT
+
+    const config = getConfig()
+
+    expect(config.WS_MAX_CONNECTIONS_PER_ACCOUNT).toBe(5)
+  })
+
+  it('WS_MAX_CONNECTIONS_PER_ACCOUNT 문자열을 숫자로 강제 변환한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_MAX_CONNECTIONS_PER_ACCOUNT = '10'
+
+    const config = getConfig()
+
+    expect(config.WS_MAX_CONNECTIONS_PER_ACCOUNT).toBe(10)
+  })
+
+  it('WS_MAX_CONNECTIONS_PER_ACCOUNT가 하한(1) 미만이면 fail-fast로 종료한다', () => {
+    // 계정별 정원이 0이면 어떤 계정도 접속 못 해 무의미하므로 최소 1을 강제한다.
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_MAX_CONNECTIONS_PER_ACCOUNT = '0'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('WS_MAX_CONNECTIONS_PER_ACCOUNT가 음수이면 fail-fast로 종료한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_MAX_CONNECTIONS_PER_ACCOUNT = '-5'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('WS_MAX_CONNECTIONS_PER_ACCOUNT가 비수치이면 fail-fast로 종료한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_MAX_CONNECTIONS_PER_ACCOUNT = '다섯개'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('WS_MAX_BUFFERED_BYTES가 없으면 기본값(1048576)을 채운다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    delete process.env.WS_MAX_BUFFERED_BYTES
+
+    const config = getConfig()
+
+    expect(config.WS_MAX_BUFFERED_BYTES).toBe(1048576)
+  })
+
+  it('WS_MAX_BUFFERED_BYTES 문자열을 숫자로 강제 변환한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_MAX_BUFFERED_BYTES = '2097152'
+
+    const config = getConfig()
+
+    expect(config.WS_MAX_BUFFERED_BYTES).toBe(2097152)
+  })
+
+  it('WS_MAX_BUFFERED_BYTES가 하한(1) 미만이면 fail-fast로 종료한다', () => {
+    // 상한이 0이면 어떤 아웃바운드도 즉시 초과로 판정돼 무의미하므로 최소 1을 강제한다.
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_MAX_BUFFERED_BYTES = '0'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('WS_MAX_BUFFERED_BYTES가 음수이면 fail-fast로 종료한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_MAX_BUFFERED_BYTES = '-5'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('WS_MAX_BUFFERED_BYTES가 비수치이면 fail-fast로 종료한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_MAX_BUFFERED_BYTES = '일메가'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
   })
 })
