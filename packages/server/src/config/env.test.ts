@@ -376,4 +376,74 @@ describe('getConfig', () => {
 
     expect(exitSpy).toHaveBeenCalledWith(1)
   })
+
+  it('DEV_LOGIN_ENABLED가 없으면 false(boolean)를 기본값으로 채운다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    delete process.env.DEV_LOGIN_ENABLED
+
+    const config = getConfig()
+
+    expect(config.DEV_LOGIN_ENABLED).toBe(false)
+  })
+
+  it('DEV_LOGIN_ENABLED="true"를 boolean true로 파싱한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.DEV_LOGIN_ENABLED = 'true'
+
+    const config = getConfig()
+
+    expect(config.DEV_LOGIN_ENABLED).toBe(true)
+  })
+
+  it('DEV_LOGIN_ENABLED="false" 문자열을 true로 강제하지 않는다(z.coerce.boolean 금지)', () => {
+    // z.coerce.boolean은 비어있지 않은 문자열 "false"를 true로 강제한다 — enum+transform으로 회피.
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.DEV_LOGIN_ENABLED = 'false'
+
+    const config = getConfig()
+
+    expect(config.DEV_LOGIN_ENABLED).toBe(false)
+  })
+
+  it('DEV_LOGIN_ENABLED가 허용되지 않은 값이면 fail-fast로 종료한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.DEV_LOGIN_ENABLED = 'yes'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('DEV_SEED_COOKIE·DEV_SEED_ACCOUNT_ID가 없으면 빈 문자열 기본값을 채운다', () => {
+    // 플래그 off일 때도 파싱이 실패하지 않도록 시드 필드는 빈 문자열 default를 갖는다.
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    delete process.env.DEV_SEED_COOKIE
+    delete process.env.DEV_SEED_ACCOUNT_ID
+
+    const config = getConfig()
+
+    expect(config.DEV_SEED_COOKIE).toBe('')
+    expect(config.DEV_SEED_ACCOUNT_ID).toBe('')
+  })
+
+  it('DEV_SEED_COOKIE·DEV_SEED_ACCOUNT_ID 값을 그대로 통과시킨다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.DEV_SEED_COOKIE = 'dev-seed-cookie-value'
+    process.env.DEV_SEED_ACCOUNT_ID = 'dev-account-1'
+
+    const config = getConfig()
+
+    expect(config.DEV_SEED_COOKIE).toBe('dev-seed-cookie-value')
+    expect(config.DEV_SEED_ACCOUNT_ID).toBe('dev-account-1')
+  })
 })

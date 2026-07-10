@@ -4,6 +4,7 @@ import type { HealthStatus } from 'shared'
 import { registerWebsocket } from './ws/plugin.js'
 import type { SessionAuthPort } from './auth/sessionAuthPort.js'
 import { InMemorySessionAuthAdapter } from './auth/inMemorySessionAuthAdapter.js'
+import { registerDevLoginRoute } from './auth/devLoginRoute.js'
 import type { SessionLifecyclePort } from './ws/sessionLifecyclePort.js'
 
 /**
@@ -25,12 +26,17 @@ import type { SessionLifecyclePort } from './ws/sessionLifecyclePort.js'
  * `deps.lifecyclePort`는 세션 종결 후처리(영속화 seam) 포트다. 미주입 시 registerWebsocket이 no-op
  * 로깅 어댑터를 세운다 — 실 저장 어댑터는 E4/E5가 주입한다. 테스트는 스파이 포트를 주입해 종결 호출을
  * 관측한다(sessionAuth 관례 미러).
+ *
+ * `deps.devLoginSeedCookie`는 dev 전용 로그인 라우트(`GET /dev/login`)의 게이트다. 값이 주어질 때만
+ * 라우트를 마운트해 `__session=<값>` 쿠키를 발급한다(Story 4, G1 서버측). 미주입(프로덕션)이면 라우트가
+ * 존재하지 않아 dev 쿠키 발급 표면이 없다. 부팅(index.ts)이 DEV_LOGIN_ENABLED가 true일 때만 주입한다.
  */
 export function buildApp(deps?: {
   pingDb?: () => Promise<boolean>
   https?: HttpsServerOptions
   sessionAuth?: SessionAuthPort
   lifecyclePort?: SessionLifecyclePort
+  devLoginSeedCookie?: string
 }): FastifyInstance {
   // logger를 활성화해 부팅/에러 경로 진단(index.ts의 listen 실패 처리)이 실제로 출력되게 한다.
   // https를 넘기면 Fastify가 https.Server를 만든다(TLS-ready pass-through). Fastify 타입 오버로드가
@@ -48,6 +54,11 @@ export function buildApp(deps?: {
 
   // 세션 인증 포트를 조립한다. 미주입 시 빈 인메모리 어댑터(유효 쿠키 없음)를 기본으로 세운다.
   const sessionAuth = deps?.sessionAuth ?? new InMemorySessionAuthAdapter()
+
+  // dev 로그인 라우트는 시드 쿠키가 주입될 때만 마운트한다(프로덕션은 미주입 → 라우트 부재).
+  if (deps?.devLoginSeedCookie !== undefined) {
+    registerDevLoginRoute(app, deps.devLoginSeedCookie)
+  }
 
   // 게임 소켓 transport를 무조건 등록한다. injectWS·실 upgrade가 완성된 app에서만 동작하고,
   // 라우트가 안 쓰이면 기존 /health 경로엔 영향이 없다.
