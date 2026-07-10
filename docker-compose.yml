@@ -27,6 +27,10 @@ services:
     ports:
       - '3000:3000'
     environment:
+      # dev 로그인 fail-closed 2차 게이트 요건. getConfig는 DEV_LOGIN_ENABLED=true를 NODE_ENV가
+      # 명시적 development/test일 때만 허용하고 그 외(미설정 포함)엔 부팅을 차단한다. node:24-slim·
+      # tsx watch 모두 NODE_ENV를 세팅하지 않으므로 dev 스택임을 명시 선언해야 서버가 뜬다.
+      NODE_ENV: development
       # 로컬 compose mongo. DB명은 MONGODB_DB_NAME로 분리(URI에 경로 미포함 — env.ts 관례).
       MONGODB_URI: mongodb://mongo:27017
       MONGODB_DB_NAME: muhan_db_dev
