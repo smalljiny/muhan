@@ -9,7 +9,7 @@ import {
   type CharacterSummary,
   type ClientCommand,
   type ServerEvent,
-} from 'shared'
+} from 'shared/protocol'
 
 /** 연결 라이프사이클 상태. ready = echo 가능(session:entered/resumed 도달). */
 export type ConnectionStatus =
