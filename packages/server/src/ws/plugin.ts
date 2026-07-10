@@ -21,6 +21,8 @@ import type { SessionLifecyclePort } from './sessionLifecyclePort.js'
 import { createNoopSessionLifecycleAdapter } from './noopSessionLifecycleAdapter.js'
 import type { ChannelPort } from './channelPort.js'
 import { createNoopChannelAdapter } from './noopChannelAdapter.js'
+import type { PermissionPort } from './permissionPort.js'
+import { createPermissivePermissionAdapter } from './permissivePermissionAdapter.js'
 import { createSessionRegistry, type SessionRegistry } from './sessionRegistry.js'
 import { createResolveDisconnect } from './resolveDisconnect.js'
 import { createSessionLifecycle, type SessionLifecycle } from './sessionLifecycle.js'
@@ -180,12 +182,17 @@ function gameAuthPreValidation(
  * no-op 어댑터를 기본으로 세운다 — 실 브로드캐스트 어댑터는 E4/E7에서 이 자리에 주입한다(lifecyclePort
  * 관례 미러). 명령 레지스트리는 이 포트를 클로저 주입해 registerWebsocket 스코프에서 1회 조립한다
  * (무상태 Map이라 스코프 이동 비용 zero).
+ *
+ * `permissionPort`는 검증된 명령을 어느 actor가 실행할 자격이 있는지 판정하는 포트다. 미주입 시 항상
+ * allow하는 permissive 어댑터를 기본으로 세운다 — 실 RBAC 어댑터는 E5에서 이 자리에 주입한다(channelPort
+ * 관례 미러). dispatch가 payload 검증 성공 후·핸들러 전에 이 포트로 권한을 검사한다.
  */
 export function registerWebsocket(
   app: FastifyInstance,
   sessionAuth: SessionAuthPort,
   lifecyclePort: SessionLifecyclePort = createNoopSessionLifecycleAdapter(app.log),
   channelPort: ChannelPort = createNoopChannelAdapter(app.log),
+  permissionPort: PermissionPort = createPermissivePermissionAdapter(),
 ): void {
   const connections = new Map<WebSocket, ConnectionContext>()
 
@@ -318,9 +325,9 @@ export function registerWebsocket(
                 if (ctx.state === ConnectionState.command) {
                   // buildActorContext의 배선 불변식 throw(account/boundCharacterId null)는 메시지 핸들러의
                   // 방어 try/catch가 error{internal}로 격리한다 — 추가 배선 없이 기존 방어선을 재사용한다.
-                  const result = dispatch(commandRegistry, parsed, buildActorContext(ctx))
+                  const result = dispatch(commandRegistry, parsed, buildActorContext(ctx), permissionPort)
                   // 유효 명령 처리 성공(handled)만 무입력 타이머를 재-arm한다 — 거부(rejected:
-                  // unknown_type·bad_payload·internal)가 flood로 타이머를 무한 연장하지 못하게 한다.
+                  // unknown_type·bad_payload·forbidden·internal)가 flood로 타이머를 무한 연장하지 못하게 한다.
                   if (result.outcome === 'handled') ctx.idle?.arm()
                   if (result.event !== undefined) safeSend(socket, result.event)
                 } else {
