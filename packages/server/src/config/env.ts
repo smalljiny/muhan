@@ -7,6 +7,9 @@ import { z } from 'zod'
 // 빈 문자열(.env의 KEY= )은 .default()를 우회하므로 문자열 필드에 .min(1)을 건다.
 // zod 4 관용: z.flattenError(구식 error.flatten() 대신).
 export const EnvSchema = z.object({
+  // 런타임 환경 구분. DEV_LOGIN_ENABLED 단일 플래그가 유일한 방어선이 되지 않도록, getConfig에서
+  // NODE_ENV=production && DEV_LOGIN_ENABLED=true 조합을 fail-fast로 상호배제한다(인증 우회 방어 2차선).
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   MONGODB_URI: z.string().min(1),
   // WS upgrade Origin allowlist. default 없이 fail-fast(MONGODB_URI 패턴 동일) — 미설정 부팅을
   // 막아 CSWSH 방어 정책을 명시 설정으로 강제한다. 콤마 구분 문자열을 origin 배열로 transform하고,
@@ -69,6 +72,11 @@ export function getConfig(): Env {
   const result = EnvSchema.safeParse(process.env)
   if (!result.success) {
     console.error('Invalid environment variables:', z.flattenError(result.error).fieldErrors)
+    process.exit(1)
+  } else if (result.data.DEV_LOGIN_ENABLED && result.data.NODE_ENV === 'production') {
+    // 2차 방어선: 프로덕션에서 dev 로그인 우회를 코드 레벨로 강제 차단한다. 문서화가 아니라 부팅
+    // 차단이어야 orchestrator 설정 실수(env 잔존)로 인한 완전 인증 우회를 막는다.
+    console.error('DEV_LOGIN_ENABLED must not be true when NODE_ENV=production')
     process.exit(1)
   }
   configInstance = result.data

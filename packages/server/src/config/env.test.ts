@@ -422,6 +422,35 @@ describe('getConfig', () => {
     expect(exitSpy).toHaveBeenCalledWith(1)
   })
 
+  it('NODE_ENV=production && DEV_LOGIN_ENABLED=true 조합이면 fail-fast로 종료한다', () => {
+    // 인증 우회 2차 방어선 — 프로덕션에서 dev 로그인 활성화를 코드 레벨로 차단한다.
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.NODE_ENV = 'production'
+    process.env.DEV_LOGIN_ENABLED = 'true'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+    expect(errorSpy).toHaveBeenCalled()
+  })
+
+  it('NODE_ENV=production 이어도 DEV_LOGIN_ENABLED=false면 통과한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.NODE_ENV = 'production'
+    process.env.DEV_LOGIN_ENABLED = 'false'
+
+    const config = getConfig()
+
+    expect(config.DEV_LOGIN_ENABLED).toBe(false)
+    expect(config.NODE_ENV).toBe('production')
+  })
+
   it('DEV_SEED_COOKIE·DEV_SEED_ACCOUNT_ID가 없으면 빈 문자열 기본값을 채운다', () => {
     // 플래그 off일 때도 파싱이 실패하지 않도록 시드 필드는 빈 문자열 default를 갖는다.
     process.env.MONGODB_URI = 'mongodb://localhost:27017'
