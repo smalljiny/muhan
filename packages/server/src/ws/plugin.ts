@@ -169,6 +169,12 @@ function buildSession(
  *
  * async 훅에서 `return reply.code().send()`는 라이프사이클을 단락시켜 upgrade를 완료하지 않는다(거부).
  * 통과 시 undefined를 반환해 라이프사이클을 계속 진행시킨다.
+ *
+ * 불변식(정원 누수 방어): 이 함수는 진입부터 `releaseOnce` 배선(raw 소켓 'close' + req.releaseQuota 대입)까지
+ * `await` 없이 동기로 실행되어야 한다. 현재 `validateSessionCookie`가 동기라 reserve 전에 소켓이 파괴될 창이
+ * 없어 abort-leak이 닫혀 있다. E5에서 실 어댑터가 async(`Promise` 반환)로 확장되면 reserve와 소켓 파괴 사이에
+ * 창이 생겨, RST로 조기 종료한 연결이 reserve 후 이미 파괴된 소켓의 'close'를 못 받아 슬롯을 영구 누수시킬 수
+ * 있다. async 전환 시 reserve 직전에 `req.raw.socket.destroyed` liveness 체크를 추가하고 회귀 테스트로 고정한다.
  */
 function gameAuthPreValidation(
   sessionAuth: SessionAuthPort,
