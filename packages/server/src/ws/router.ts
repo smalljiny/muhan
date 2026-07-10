@@ -77,7 +77,8 @@ function errorEvent(
  *    discriminator가 등록 type임을 확인한 뒤 파싱하므로 정확히 그 variant를 검증한다(shared 계약 단일 출처).
  * 3. `permission.check` false → forbidden: 검증된 명령이나 actor가 실행 자격이 없다(safeParse 성공
  *    후·handler 전에 검사 — 검증된 명령만 권한 판정에 넘긴다). E3 permissive 어댑터는 항상 allow라 inert다.
- * 4. `handler` throw → internal: 핸들러 예외를 격리해 소켓을 생존시킨다.
+ * 4. `permission.check`·`handler` throw → internal: permission 판정 또는 핸들러 예외를 같은 격리 경계에서
+ *    잡아 소켓을 생존시킨다(check가 false를 반환하면 forbidden, throw하면 internal로 구분).
  *
  * `id`는 type 판별 직후 payload 검증 이전에 추출해, bad_payload·forbidden·internal 응답도 상관 키를 실어
  * 클라이언트가 실패를 상관지을 수 있게 한다. unknown_type은 type 판별 이전이라 상관 키를 싣지 않는다.
@@ -124,20 +125,25 @@ export function dispatch(
     }
   }
 
-  // 권한 레이어: 검증된 명령(parseResult.data)만 권한 판정에 넘긴다(raw parsed 아님 — 검증된 명령만
-  // 자격을 판정한다). safeParse 성공 후·handler 전에 위치해, 자격 없는 actor의 유효 명령을 handler에
-  // 도달시키지 않고 forbidden으로 거부한다. E3 permissive 어댑터는 항상 allow라 이 레이어는 inert다.
-  if (!permission.check(parseResult.data, actor)) {
-    return {
-      outcome: 'rejected',
-      event: errorEvent('forbidden', '이 명령을 실행할 권한이 없다', correlationId),
-    }
-  }
-
+  // 권한 레이어와 handler를 같은 격리 경계 안에서 실행한다 — dispatch의 containment 계약(라우팅 레이어의
+  // 거부는 항상 DispatchResult로 반환, 예외 누출 없음)을 permission.check에도 확장한다. E3 permissive
+  // 어댑터는 throw하지 않지만, E5의 실 RBAC 어댑터는 저장소 타임아웃·stale actor 등으로 throw할 수 있다 —
+  // 그 예외가 dispatch를 탈출하면 correlationId를 잃고 셸의 일반 catch로 떨어지므로, 여기서 internal로
+  // 격리해 상관 키를 실어 반환한다(handler throw와 동일 처리). check가 정상적으로 false를 반환하면
+  // forbidden(자격 없음)으로, throw하면 internal(판정 실패)로 구분한다.
   try {
+    // 권한 판정: 검증된 명령(parseResult.data)만 넘긴다(raw parsed 아님 — 검증된 명령만 자격을 판정한다).
+    // safeParse 성공 후·handler 전에 위치해, 자격 없는 actor의 유효 명령을 handler에 도달시키지 않는다.
+    // E3 permissive 어댑터는 항상 allow라 이 레이어는 inert다.
+    if (!permission.check(parseResult.data, actor)) {
+      return {
+        outcome: 'rejected',
+        event: errorEvent('forbidden', '이 명령을 실행할 권한이 없다', correlationId),
+      }
+    }
     return { outcome: 'handled', event: handler(parseResult.data, actor) }
   } catch {
-    // 핸들러 예외를 이벤트로 격리한다(기존 JSON.parse try/catch 미러). 원인은 클라이언트에 노출하지 않는다.
+    // permission.check·handler 예외를 이벤트로 격리한다. 원인은 클라이언트에 노출하지 않는다.
     return {
       outcome: 'rejected',
       event: errorEvent('internal', '명령 처리 중 서버 오류가 발생했다', correlationId),

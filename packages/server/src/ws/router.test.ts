@@ -119,6 +119,25 @@ describe('dispatch', () => {
       dispatch(createCommandRegistry(testChannelPort), { type: 'debug:echo', text: '핑' }, testActor, { check })
       expect(check).toHaveBeenCalledWith({ type: 'debug:echo', text: '핑' }, testActor)
     })
+
+    it('permission.check가 throw하면 rejected{internal}로 격리하고 correlationId를 반향한다', () => {
+      // E5의 실 RBAC 어댑터는 저장소 타임아웃·stale actor 등으로 throw할 수 있다. 그 예외가 dispatch를
+      // 탈출해 correlationId를 잃지 않도록, permission.check는 handler와 같은 격리 경계 안에서 internal로
+      // 잡힌다(forbidden=check가 false 반환, internal=check가 throw로 구분).
+      const throwingPermission: PermissionPort = {
+        check: () => {
+          throw new Error('permission adapter boom')
+        },
+      }
+      const result = dispatch(
+        createCommandRegistry(testChannelPort),
+        { type: 'debug:echo', text: '핑', id: 'c9' },
+        testActor,
+        throwingPermission,
+      )
+      expect(result.outcome).toBe('rejected')
+      expect(result.event).toMatchObject({ type: 'error', code: 'internal', correlationId: 'c9' })
+    })
   })
 
   describe('핸들러 예외 격리', () => {
