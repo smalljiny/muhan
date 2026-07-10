@@ -26,6 +26,7 @@ import { createPermissivePermissionAdapter } from './permissivePermissionAdapter
 import { createSessionRegistry, type SessionRegistry } from './sessionRegistry.js'
 import { createResolveDisconnect } from './resolveDisconnect.js'
 import { createSessionLifecycle, type SessionLifecycle } from './sessionLifecycle.js'
+import { createConnectionQuota, type ConnectionQuota } from './connectionQuota.js'
 
 /** switch 완전성 컴파일 강제 — 도달하면 union에 미처리 variant가 생긴 것이다. */
 function assertNever(value: never): never {
@@ -58,6 +59,9 @@ declare module 'fastify' {
   }
   interface FastifyRequest {
     account: AccountIdentity | null
+    // 이 요청의 정원 슬롯을 반납하는 idempotent 클로저. reserve 성공 직후 preValidation이 요청별로 대입해
+    // 소켓 핸들러가 'close'에 배선한다. account 데코레이션 관례 미러(null 기본값, 요청별 대입).
+    releaseQuota: (() => void) | null
   }
 }
 
@@ -138,11 +142,17 @@ function buildSession(
  * sessionAuth.validateSessionCookie로 검증, 부재·무효면 401. 통과하면 확정된 AccountIdentity를
  * req.account에 대입해 소켓 핸들러가 재사용하게 한다.
  *
+ * (3) 정원 게이트 — 계정 신원이 확정된 뒤 quota.reserve로 슬롯 1개를 점유한다. 전역 초과는 503, 계정별
+ * 초과는 429. reserve는 두 선행 게이트 뒤에 위치해 거부된 Origin·쿠키가 슬롯을 소비하지 않는다(check-then-
+ * increment가 같은 동기 스택에서 끝나 overshoot 없음). 성공하면 이 요청 전용 idempotent 반납 클로저를 만들어
+ * raw upgrade 소켓의 'close'(abort 포함)와 요청 데코레이션(소켓 핸들러가 ws 'close'에 배선)에 연결한다.
+ *
  * async 훅에서 `return reply.code().send()`는 라이프사이클을 단락시켜 upgrade를 완료하지 않는다(거부).
  * 통과 시 undefined를 반환해 라이프사이클을 계속 진행시킨다.
  */
 function gameAuthPreValidation(
   sessionAuth: SessionAuthPort,
+  quota: ConnectionQuota,
 ): (req: FastifyRequest, reply: FastifyReply) => Promise<unknown> {
   return async (req, reply) => {
     const config = getConfig()
@@ -161,6 +171,30 @@ function gameAuthPreValidation(
     }
 
     req.account = identity
+
+    // (3) 정원 게이트 — 신원이 확정된(accountId를 아는) 지금 슬롯을 점유한다. 거부는 슬롯을 올리지 않으므로
+    // (Path 1) 반납할 것이 없다.
+    const reservation = quota.reserve(identity.accountId)
+    if (!reservation.ok) {
+      if (reservation.code === 503) return reply.code(503).send({ error: 'server_busy' })
+      return reply.code(429).send({ error: 'too_many_connections' })
+    }
+
+    // reserve 성공 직후 이 요청 전용 반납 클로저를 정확히 하나 만든다. released 플래그가 load-bearing이다:
+    // 같은 연결의 release가 두 번(raw-close + ws-close) 발화해도 실제 quota.release는 한 번만 돌게 해, 다른
+    // 살아 있는 연결의 슬롯을 잘못 반납하는 cap 우회를 막는다(정원 레벨 가드로는 이 per-connection 이중 발화를
+    // 구별할 수 없다). 예약한 바로 그 accountId를 캡처한다.
+    let released = false
+    const releaseOnce = (): void => {
+      if (released) return
+      released = true
+      quota.release(identity.accountId)
+    }
+    // (Path 3, abort) raw TCP 소켓의 'close'는 handleUpgrade abort(악성 핸드셰이크)에서도 발화한다 — 소켓
+    // 핸들러에 도달하지 못하는 누수 경로를 이 배선이 커버한다.
+    req.raw.socket?.once('close', releaseOnce)
+    // 소켓 핸들러가 ws 'close'에 배선하도록 같은 참조를 요청 데코레이션에 실어 넘긴다.
+    req.releaseQuota = releaseOnce
     return undefined
   }
 }
@@ -231,9 +265,22 @@ export function registerWebsocket(
     idleMs: () => getConfig().WS_IDLE_TIMEOUT_MS,
   })
 
+  // 동시 접속 정원. lifecycle/registry 관례처럼 registerWebsocket 1회에 인스턴스화해 연결 간 공유한다
+  // (전역·계정별 카운터가 하나의 회계여야 상한을 정확히 관할한다). 상한은 thunk로 넘겨 reserve 시점에 지연
+  // 조회한다(graceMs/idleMs 관례 미러) — 팩토리 생성 시점에 getConfig를 읽지 않아 미설정 env가 빌드를 막지 않고,
+  // 각 reserve가 최신 상한값을 반영한다.
+  const quota = createConnectionQuota(() => ({
+    maxGlobal: getConfig().WS_MAX_CONNECTIONS,
+    maxPerAccount: getConfig().WS_MAX_CONNECTIONS_PER_ACCOUNT,
+  }))
+
   // per-request 계정 신원 슬롯. null 기본값으로 데코레이트하고 preValidation 훅에서 요청별로 대입한다
   // (객체 리터럴 데코레이트 금지 — 요청 간 공유 참조가 되어 신원이 교차 오염된다).
   app.decorateRequest('account', null)
+
+  // per-request 정원 반납 클로저 슬롯. account 관례 미러 — null 기본값으로 데코레이트하고 reserve 성공 시
+  // preValidation 훅이 요청별 releaseOnce를 대입한다(객체 리터럴 데코레이트 금지).
+  app.decorateRequest('releaseQuota', null)
 
   app.register(fastifyWebsocket, { options: { maxPayload: MAX_FRAME_BYTES } })
 
@@ -243,12 +290,18 @@ export function registerWebsocket(
     // 정원 게이트(동시 접속 상한)는 이 지점을 seam으로 두고 정책값은 배포 토픽에서 채운다.
     instance.get(
       GAME_SOCKET_PATH,
-      { websocket: true, preValidation: gameAuthPreValidation(sessionAuth) },
+      { websocket: true, preValidation: gameAuthPreValidation(sessionAuth, quota) },
       (socket, req: FastifyRequest) => {
         const ctx = createConnectionContext()
         // 게이트가 확정한 계정 신원을 컨텍스트에 보관한다(핸들러·라우팅이 소유권 검증에 재사용).
         ctx.account = req.account
         connections.set(socket, ctx)
+
+        // (Path 2, 정상 close) 정원 반납을 ws 'close'에 별도 리스너로 배선한다 — 아래 close 핸들러(정리·grace)와
+        // 독립이다. releaseOnce는 idempotent라 raw-close와 이중 발화해도 한 번만 반납한다. 소켓 핸들러에 도달한
+        // 연결은 항상 reserve에 성공했으므로 releaseQuota는 non-null이지만, 데코레이션 null 기본값과의 정합을 위해
+        // 방어적으로 가드한다.
+        if (req.releaseQuota) socket.on('close', req.releaseQuota)
 
         // 서버 주도 하트비트를 시작해 죽은 연결을 감지·정리한다. env로 튜닝된 간격·임계를 매니저에 넘기고,
         // 반환된 타이머 핸들을 ctx.heartbeat에 배선해 cleanup 경로가 이를 clear할 수 있게 한다.
