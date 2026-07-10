@@ -35,6 +35,23 @@ export const clientCommandSchema = z.discriminatedUnion('type', [
     characterId: z.string().min(1),
     id: z.string().optional(),
   }),
+  // 자유채팅 — 채널로 발화 대상 범위를 지목한다. text는 발화 내용. id는 상관 키.
+  z.strictObject({
+    type: z.literal('chat:message'),
+    channel: z.enum(['say', 'yell', 'broadcast']),
+    ...freeTextPayloadSchema.shape,
+    id: z.string().optional(),
+  }),
+  // 감정표현 — emote 별칭(값 검증은 E7 — Open Q4). target은 대상 캐릭터(선택). text는 선택적 부가 텍스트.
+  // freeTextPayloadSchema.shape를 spread하지 않는다 — 그 shape의 text는 필수라 "선택적 부가 text"
+  // 의도와 충돌한다. 따라서 text를 optional로 직접 선언한다.
+  z.strictObject({
+    type: z.literal('chat:emote'),
+    emote: z.string().min(1),
+    target: z.string().min(1).optional(),
+    text: z.string().min(1).optional(),
+    id: z.string().optional(),
+  }),
 ])
 
 export type ClientCommand = z.infer<typeof clientCommandSchema>

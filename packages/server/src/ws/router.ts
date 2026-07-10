@@ -1,7 +1,9 @@
 import { clientCommandSchema, type ClientCommand, type ErrorCode, type ServerEvent } from 'shared'
 import { echoHandler } from './handlers/echo.js'
+import { createChatHandler } from './handlers/chat.js'
 import { readStringField } from './frame.js'
 import type { ActorContext } from './actorContext.js'
+import type { ChannelPort } from './channelPort.js'
 
 /**
  * 검증된 명령을 소비해 응답 이벤트(또는 응답 없음=undefined)를 계산하는 핸들러.
@@ -16,18 +18,27 @@ export type CommandHandler = (command: ClientCommand, actor: ActorContext) => Se
 export type HandlerRegistry = Map<string, CommandHandler>
 
 /**
- * 기본 명령 레지스트리를 만든다 — 이 Story는 무인증 `debug:echo` 하나만 배선한다.
+ * 기본 명령 레지스트리를 만든다 — 무인증 `debug:echo`와 자유채팅 `chat:message`·`chat:emote`를 배선한다.
  *
  * plain object가 아닌 `Map`을 쓰는 것이 load-bearing이다: `registry.get('__proto__')`는
  * prototype 속성에 도달하지 않고 undefined를 반환해 allowlist 우회를 원천 차단한다.
+ *
+ * `channelPort`는 채팅 핸들러가 발화를 핸드오프할 채널 전달 포트다 — 팩토리는 어댑터를 소유하지 않고
+ * 필수 파라미터로 받는다(기본 어댑터 소유·주입은 registerWebsocket 책임). 같은 핸들러 인스턴스를
+ * chat:message·chat:emote 두 type에 공유 배선한다(핸들러가 내부에서 type을 narrow한다).
  *
  * 레지스트리는 의도적으로 `clientCommandSchema`보다 좁은 런타임 디스패치 집합이다. `system:ready`는
  * 스키마에 있으나 핸드셰이크(handleHandshakeFrame)가 `pass` 이전에 소비하므로 여기 등록하지 않는다.
  * 주의: `clientCommandSchema`에 없는 type의 핸들러를 등록하면 safeParse가 그 discriminator를 매칭하지
  * 못해 해당 명령이 영구히 bad_payload로 떨어진다 — 신규 핸들러는 반드시 스키마에도 variant를 추가한다.
  */
-export function createCommandRegistry(): HandlerRegistry {
-  return new Map<string, CommandHandler>([['debug:echo', echoHandler]])
+export function createCommandRegistry(channelPort: ChannelPort): HandlerRegistry {
+  const chatHandler = createChatHandler(channelPort)
+  return new Map<string, CommandHandler>([
+    ['debug:echo', echoHandler],
+    ['chat:message', chatHandler],
+    ['chat:emote', chatHandler],
+  ])
 }
 
 /**

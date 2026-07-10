@@ -141,6 +141,115 @@ describe('clientCommandSchema (client→server 봉투)', () => {
     })
   })
 
+  describe('chat:message', () => {
+    it('channel + text가 있으면 통과한다 (id 생략)', () => {
+      const parsed = clientCommandSchema.safeParse({
+        type: 'chat:message',
+        channel: 'say',
+        text: '안녕',
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'chat:message') {
+        expect(parsed.data.channel).toBe('say')
+        expect(parsed.data.text).toBe('안녕')
+        expect(parsed.data.id).toBeUndefined()
+      }
+    })
+
+    it('channel + text + id가 있으면 통과한다', () => {
+      const parsed = clientCommandSchema.safeParse({
+        type: 'chat:message',
+        channel: 'broadcast',
+        text: '방송',
+        id: 'c3',
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'chat:message') {
+        expect(parsed.data.id).toBe('c3')
+      }
+    })
+
+    it('yell·broadcast channel도 통과한다', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'chat:message', channel: 'yell', text: '외침' })
+          .success,
+      ).toBe(true)
+    })
+
+    it('channel 미허용값을 거부한다', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'chat:message', channel: 'gtalk', text: '안녕' })
+          .success,
+      ).toBe(false)
+    })
+
+    it('text가 누락되면 거부한다', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'chat:message', channel: 'say' }).success,
+      ).toBe(false)
+    })
+
+    it('text가 빈 문자열이면 거부한다', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'chat:message', channel: 'say', text: '' }).success,
+      ).toBe(false)
+    })
+
+    it('알 수 없는 키를 거부한다 (strict)', () => {
+      expect(
+        clientCommandSchema.safeParse({
+          type: 'chat:message',
+          channel: 'say',
+          text: '안녕',
+          extra: true,
+        }).success,
+      ).toBe(false)
+    })
+  })
+
+  describe('chat:emote', () => {
+    it('emote만 있으면 통과한다 (target·text·id 생략)', () => {
+      const parsed = clientCommandSchema.safeParse({ type: 'chat:emote', emote: '웃음' })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'chat:emote') {
+        expect(parsed.data.emote).toBe('웃음')
+        expect(parsed.data.target).toBeUndefined()
+        expect(parsed.data.text).toBeUndefined()
+        expect(parsed.data.id).toBeUndefined()
+      }
+    })
+
+    it('emote + target + text + id가 있으면 통과한다', () => {
+      const parsed = clientCommandSchema.safeParse({
+        type: 'chat:emote',
+        emote: '인사',
+        target: 'char-2',
+        text: '반갑다',
+        id: 'c4',
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'chat:emote') {
+        expect(parsed.data.target).toBe('char-2')
+        expect(parsed.data.text).toBe('반갑다')
+        expect(parsed.data.id).toBe('c4')
+      }
+    })
+
+    it('emote가 누락되면 거부한다', () => {
+      expect(clientCommandSchema.safeParse({ type: 'chat:emote' }).success).toBe(false)
+    })
+
+    it('emote가 빈 문자열이면 거부한다', () => {
+      expect(clientCommandSchema.safeParse({ type: 'chat:emote', emote: '' }).success).toBe(false)
+    })
+
+    it('알 수 없는 키를 거부한다 (strict)', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'chat:emote', emote: '웃음', extra: true }).success,
+      ).toBe(false)
+    })
+  })
+
   it('event 전용 type(system:hello)을 거부한다', () => {
     expect(
       clientCommandSchema.safeParse({ type: 'system:hello', protocolVersion: 1 }).success,

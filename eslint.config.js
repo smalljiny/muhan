@@ -23,6 +23,18 @@ export default tseslint.config(
       },
       globals: { ...globals.node },
     },
+    rules: {
+      // 밑줄 접두(`_actor` 등)는 계약상 받되 의도적으로 쓰지 않는 인자·변수임을 표시하는 관례다.
+      // seam 시그니처가 파라미터를 문서화하면서도 미사용을 허용하도록 접두 패턴을 무시한다.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+    },
   },
   // config .ts — 타입 인지 없이 스타일만 (projectService 미적용)
   {

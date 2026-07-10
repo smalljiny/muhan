@@ -19,6 +19,8 @@ import type { AccountIdentity, SessionAuthPort } from '../auth/sessionAuthPort.j
 import { extractSessionCookie } from './cookies.js'
 import type { SessionLifecyclePort } from './sessionLifecyclePort.js'
 import { createNoopSessionLifecycleAdapter } from './noopSessionLifecycleAdapter.js'
+import type { ChannelPort } from './channelPort.js'
+import { createNoopChannelAdapter } from './noopChannelAdapter.js'
 import { createSessionRegistry, type SessionRegistry } from './sessionRegistry.js'
 import { createResolveDisconnect } from './resolveDisconnect.js'
 import { createSessionLifecycle, type SessionLifecycle } from './sessionLifecycle.js'
@@ -40,9 +42,6 @@ export const GAME_SOCKET_PATH = '/game'
  * 이미 버퍼링된 뒤라 방어가 되지 않는다.
  */
 export const MAX_FRAME_BYTES = 64 * 1024
-
-// 명령 레지스트리는 무상태 핸들러의 배선표라 연결 간 공유 안전하다 — 모듈 로드 시 1회 조립한다.
-const commandRegistry = createCommandRegistry()
 
 // app에 per-connection 레지스트리를 노출한다. 진단·하트비트 스윕(Story 5-6)·테스트 관찰의 단일 출처.
 // `account`는 preValidation 게이트가 확정한 계정 신원을 담는 per-request 데코레이션이다 —
@@ -176,13 +175,22 @@ function gameAuthPreValidation(
  * 어댑터를 기본으로 세운다 — 실 저장 어댑터는 E4/E5에서 이 자리에 주입한다(sessionAuth 관례 미러).
  * 종결 경로 배선(resolveDisconnect 호출)은 후속 Story가 붙이며, 여기서는 포트를 wsLifecyclePort로 노출해
  * 후속 Story·테스트 관찰의 단일 출처로 둔다(wsConnections 데코레이션 관례 미러).
+ *
+ * `channelPort`는 자유채팅 발화를 채널 전파 계층으로 핸드오프하는 포트다. 미주입 시 전달 사실만 로깅하는
+ * no-op 어댑터를 기본으로 세운다 — 실 브로드캐스트 어댑터는 E4/E7에서 이 자리에 주입한다(lifecyclePort
+ * 관례 미러). 명령 레지스트리는 이 포트를 클로저 주입해 registerWebsocket 스코프에서 1회 조립한다
+ * (무상태 Map이라 스코프 이동 비용 zero).
  */
 export function registerWebsocket(
   app: FastifyInstance,
   sessionAuth: SessionAuthPort,
   lifecyclePort: SessionLifecyclePort = createNoopSessionLifecycleAdapter(app.log),
+  channelPort: ChannelPort = createNoopChannelAdapter(app.log),
 ): void {
   const connections = new Map<WebSocket, ConnectionContext>()
+
+  // 명령 레지스트리는 무상태 핸들러의 배선표라 연결 간 공유 안전하다 — channelPort를 클로저 주입해 1회 조립한다.
+  const commandRegistry = createCommandRegistry(channelPort)
   app.decorate('wsConnections', connections)
   app.decorate('wsLifecyclePort', lifecyclePort)
 
