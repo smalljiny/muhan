@@ -20,3 +20,13 @@ catalog:
   mongodb: ^7.4.0
   mongodb-memory-server: ^11.2.0
   zod: ^4.4.3
+  react: ^19.2.0
+  react-dom: ^19.2.0
+  '@types/react': ^19.2.0
+  '@types/react-dom': ^19.2.0
+  '@vitejs/plugin-react': ^5.2.0
+  '@testing-library/react': ^16.3.0
+  '@testing-library/jest-dom': ^6.9.0
+  '@testing-library/user-event': ^14.5.0
+  jsdom: ^29.1.0
+  '@playwright/test': ^1.61.1

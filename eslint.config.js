@@ -13,7 +13,7 @@ export default tseslint.config(
   js.configs.recommended,
   // TS 패키지 소스 — 타입 인지 (config 파일은 tsconfig include 밖이라 제외)
   {
-    files: ['**/*.ts'],
+    files: ['**/*.{ts,tsx}'],
     ignores: ['**/*.config.{ts,mts,cts}'],
     extends: [...tseslint.configs.recommendedTypeChecked],
     languageOptions: {

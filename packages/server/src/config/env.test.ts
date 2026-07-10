@@ -376,4 +376,151 @@ describe('getConfig', () => {
 
     expect(exitSpy).toHaveBeenCalledWith(1)
   })
+
+  it('DEV_LOGIN_ENABLED가 없으면 false(boolean)를 기본값으로 채운다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    delete process.env.DEV_LOGIN_ENABLED
+
+    const config = getConfig()
+
+    expect(config.DEV_LOGIN_ENABLED).toBe(false)
+  })
+
+  it('DEV_LOGIN_ENABLED="true"를 boolean true로 파싱한다', () => {
+    // NODE_ENV를 명시해 ambient 값(vitest 기본 test) 의존을 제거한다 — fail-closed 게이트가
+    // dev/test 밖에서 DEV_LOGIN_ENABLED=true를 차단하므로, 이 파싱 테스트는 development로 고정한다.
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.NODE_ENV = 'development'
+    process.env.DEV_LOGIN_ENABLED = 'true'
+
+    const config = getConfig()
+
+    expect(config.DEV_LOGIN_ENABLED).toBe(true)
+  })
+
+  it('DEV_LOGIN_ENABLED="false" 문자열을 true로 강제하지 않는다(z.coerce.boolean 금지)', () => {
+    // z.coerce.boolean은 비어있지 않은 문자열 "false"를 true로 강제한다 — enum+transform으로 회피.
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.DEV_LOGIN_ENABLED = 'false'
+
+    const config = getConfig()
+
+    expect(config.DEV_LOGIN_ENABLED).toBe(false)
+  })
+
+  it('DEV_LOGIN_ENABLED가 허용되지 않은 값이면 fail-fast로 종료한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.DEV_LOGIN_ENABLED = 'yes'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('NODE_ENV=production && DEV_LOGIN_ENABLED=true 조합이면 fail-fast로 종료한다', () => {
+    // 인증 우회 2차 방어선 — 프로덕션에서 dev 로그인 활성화를 코드 레벨로 차단한다.
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.NODE_ENV = 'production'
+    process.env.DEV_LOGIN_ENABLED = 'true'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+    expect(errorSpy).toHaveBeenCalled()
+  })
+
+  it('NODE_ENV 미설정 && DEV_LOGIN_ENABLED=true 조합이면 fail-fast로 종료한다(fail-closed)', () => {
+    // 핵심 회귀: NODE_ENV 기본값(development)을 두면 미설정 배포에서 dev 로그인이 fail-open으로
+    // 허용된다. NODE_ENV가 명시적 development/test가 아니면(미설정 포함) 차단해야 한다.
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    delete process.env.NODE_ENV
+    process.env.DEV_LOGIN_ENABLED = 'true'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+    expect(errorSpy).toHaveBeenCalled()
+  })
+
+  it('NODE_ENV=staging 같은 비-dev 값 && DEV_LOGIN_ENABLED=true면 fail-fast로 종료한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.NODE_ENV = 'staging'
+    process.env.DEV_LOGIN_ENABLED = 'true'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('NODE_ENV=production 이어도 DEV_LOGIN_ENABLED=false면 통과한다', () => {
+    // dev 로그인 off면 임의 NODE_ENV로 서버가 crash하지 않는다.
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.NODE_ENV = 'production'
+    process.env.DEV_LOGIN_ENABLED = 'false'
+
+    const config = getConfig()
+
+    expect(config.DEV_LOGIN_ENABLED).toBe(false)
+    expect(config.NODE_ENV).toBe('production')
+  })
+
+  it('NODE_ENV=development && DEV_LOGIN_ENABLED=true면 통과한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.NODE_ENV = 'development'
+    process.env.DEV_LOGIN_ENABLED = 'true'
+
+    const config = getConfig()
+
+    expect(config.DEV_LOGIN_ENABLED).toBe(true)
+  })
+
+  it('DEV_SEED_COOKIE·DEV_SEED_ACCOUNT_ID가 없으면 빈 문자열 기본값을 채운다', () => {
+    // 플래그 off일 때도 파싱이 실패하지 않도록 시드 필드는 빈 문자열 default를 갖는다.
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    delete process.env.DEV_SEED_COOKIE
+    delete process.env.DEV_SEED_ACCOUNT_ID
+
+    const config = getConfig()
+
+    expect(config.DEV_SEED_COOKIE).toBe('')
+    expect(config.DEV_SEED_ACCOUNT_ID).toBe('')
+  })
+
+  it('DEV_SEED_COOKIE·DEV_SEED_ACCOUNT_ID 값을 그대로 통과시킨다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.DEV_SEED_COOKIE = 'dev-seed-cookie-value'
+    process.env.DEV_SEED_ACCOUNT_ID = 'dev-account-1'
+
+    const config = getConfig()
+
+    expect(config.DEV_SEED_COOKIE).toBe('dev-seed-cookie-value')
+    expect(config.DEV_SEED_ACCOUNT_ID).toBe('dev-account-1')
+  })
 })

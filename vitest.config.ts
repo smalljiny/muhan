@@ -11,12 +11,13 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov'],
       all: true,
-      include: ['packages/*/src/**/*.ts'],
+      include: ['packages/*/src/**/*.{ts,tsx}'],
       exclude: [
         'packages/server/src/index.ts',
-        'packages/client/src/main.ts',
+        'packages/client/src/main.tsx',
+        'packages/client/src/test/setup.ts',
         'packages/port/**',
-        '**/*.test.ts',
+        '**/*.test.{ts,tsx}',
         'packages/*/src/**/*.testutil.ts',
       ],
       thresholds: {

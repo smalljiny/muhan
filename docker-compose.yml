@@ -1,0 +1,72 @@
+# dev/test 로컬 하네스(Story 6, G4 SUT). server + local mongo를 부팅해 외부 Atlas 비의존의
+# 재현 가능한 스택을 만든다. Playwright e2e(Story 7)는 호스트에서 실행하며 이 스택을 SUT로 삼는다
+# (OQ2: compose는 server+mongo만 부팅, 브라우저·Vite는 호스트).
+
+services:
+  # 로컬 MongoDB — 외부 Atlas를 대체하는 재현 가능한 DB. healthcheck 통과 후 server가 뜬다.
+  mongo:
+    image: mongo:7
+    # 호스트 디버깅용 publish(선택). 컨테이너 간 통신은 서비스명 mongo:27017로 이뤄진다.
+    ports:
+      - '27017:27017'
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # 게임 서버 — dev Dockerfile로 tsx 소스 부팅. dev 로그인·시드 인증을 켜서 G1 접속을 성립시킨다.
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    environment:
+      # dev 로그인 fail-closed 2차 게이트 요건. getConfig는 DEV_LOGIN_ENABLED=true를 NODE_ENV가
+      # 명시적 development/test일 때만 허용하고 그 외(미설정 포함)엔 부팅을 차단한다. node:24-slim·
+      # tsx watch 모두 NODE_ENV를 세팅하지 않으므로 dev 스택임을 명시 선언해야 서버가 뜬다.
+      NODE_ENV: development
+      # 로컬 compose mongo. DB명은 MONGODB_DB_NAME로 분리(URI에 경로 미포함 — env.ts 관례).
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB_NAME: muhan_db_dev
+      # 호스트 Vite origin. 브라우저가 5173에서 프록시로 접속하므로 Origin 게이트가 이 값을 받는다.
+      WS_ALLOWED_ORIGINS: http://localhost:5173
+      PORT: '3000'
+      # dev 로그인 게이트·시드 인증(Story 4). seed 쿠키·계정은 dev 전용 비밀 아님.
+      DEV_LOGIN_ENABLED: 'true'
+      DEV_SEED_COOKIE: dev-seed-session-cookie
+      DEV_SEED_ACCOUNT_ID: dev-account-1
+
+  # 선택적 유닛 스위트 러너(T6.4) — `docker compose --profile test run --rm test`로 도커에서 재현한다.
+  # 기본 `up`에는 포함되지 않는다(profiles 게이트).
+  #
+  # 스코프: 유닛 스위트만 실행한다(shared·client 전체 + server 유닛). server의 repo/db/save/bank
+  # 통합 테스트는 mongodb-memory-server가 플랫폼별 mongod를 다운로드해야 하므로 제외한다 — 이들은
+  # 호스트(macOS arm64 mongod 빌드 존재)와 x86_64 CI에서 통과하지만, aarch64+debian12 조합은
+  # MongoDB CDN에 8.2.x 빌드가 없어 도커 컨테이너에서 다운로드가 403난다. 도커 재현은 "유닛 스위트가
+  # 클린 컨테이너에서 green"을 확인하는 스모크이며, 커버리지 게이트는 호스트/CI가 담당하므로 여기선
+  # --coverage 없이 실행한다(통합 제외 시 커버리지가 80% 아래로 떨어지는 것과 무관하게).
+  test:
+    profiles: ['test']
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB_NAME: muhan_db_test
+      WS_ALLOWED_ORIGINS: http://localhost:5173
+    command:
+      - sh
+      - -c
+      - >-
+        pnpm --filter shared test &&
+        pnpm --filter client test &&
+        pnpm --filter server exec vitest run
+        --exclude "**/*.integration.test.ts"
+        --exclude "**/src/repo/**"
+        --exclude "**/src/db/connection.test.ts"

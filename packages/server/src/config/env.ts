@@ -7,6 +7,11 @@ import { z } from 'zod'
 // 빈 문자열(.env의 KEY= )은 .default()를 우회하므로 문자열 필드에 .min(1)을 건다.
 // zod 4 관용: z.flattenError(구식 error.flatten() 대신).
 export const EnvSchema = z.object({
+  // 런타임 환경 구분. DEV_LOGIN_ENABLED 단일 플래그가 유일한 방어선이 되지 않도록 fail-closed 게이트를
+  // getConfig에 둔다. default를 두지 않는다 — 기본값(development)을 두면 NODE_ENV 미설정 배포에서
+  // dev 로그인이 fail-open으로 허용된다. free string으로 받아(staging 등 임의 값이 dev 로그인 off일 때
+  // 서버를 crash시키지 않게) 게이트에서 명시적 development/test만 허용한다.
+  NODE_ENV: z.string().optional(),
   MONGODB_URI: z.string().min(1),
   // WS upgrade Origin allowlist. default 없이 fail-fast(MONGODB_URI 패턴 동일) — 미설정 부팅을
   // 막아 CSWSH 방어 정책을 명시 설정으로 강제한다. 콤마 구분 문자열을 origin 배열로 transform하고,
@@ -47,6 +52,17 @@ export const EnvSchema = z.object({
   // (resolveDisconnect(idleTimeout))으로 정식 종료한다. 하트비트(물리 생존)·진행 데드라인(핸드셰이크 진행)·
   // grace(재연결 창)와 별개 타이머다. 0이면 진입 즉시 만료돼 무입력 감시가 무의미하므로 최소 1을 강제한다.
   WS_IDLE_TIMEOUT_MS: z.coerce.number().int().min(1).default(300000),
+  // dev 전용 로그인 게이트(Story 4, G1 서버측). true일 때만 /dev/login 라우트가 마운트되고 시드
+  // SessionAuthPort 어댑터가 배선된다. z.coerce.boolean은 비어있지 않은 문자열 "false"를 true로
+  // 강제하므로 금지 — enum(['true','false'])로 명시 허용값을 강제하고 transform으로 boolean화한다.
+  DEV_LOGIN_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((s) => s === 'true'),
+  // 시드 세션 쿠키·계정 식별자. 플래그 off일 때도 파싱이 실패하지 않도록 빈 문자열 default를 둔다.
+  // 플래그 on인데 값이 비면 devSeedSessionAuth 조립 단계에서 fail-fast로 방어한다(빈 유효 쿠키 배포 방지).
+  DEV_SEED_COOKIE: z.string().default(''),
+  DEV_SEED_ACCOUNT_ID: z.string().default(''),
 })
 
 export type Env = z.infer<typeof EnvSchema>
@@ -58,6 +74,16 @@ export function getConfig(): Env {
   const result = EnvSchema.safeParse(process.env)
   if (!result.success) {
     console.error('Invalid environment variables:', z.flattenError(result.error).fieldErrors)
+    process.exit(1)
+  } else if (
+    result.data.DEV_LOGIN_ENABLED &&
+    result.data.NODE_ENV !== 'development' &&
+    result.data.NODE_ENV !== 'test'
+  ) {
+    // 2차 방어선(fail-closed): dev 로그인은 NODE_ENV가 명시적으로 development/test일 때만 허용한다.
+    // production·미설정·기타 값이면 부팅 차단 — orchestrator 설정 실수(env 잔존)나 NODE_ENV 누락으로
+    // 인한 완전 인증 우회를 코드 레벨로 막는다.
+    console.error('DEV_LOGIN_ENABLED requires NODE_ENV=development or test')
     process.exit(1)
   }
   configInstance = result.data

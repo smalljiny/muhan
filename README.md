@@ -113,6 +113,24 @@ node packages/port/templates.js obj legacy/muhan/objmon/o05
 node packages/port/convertWorld.js legacy/muhan data/world --pretty
 ```
 
+**전송 왕복 e2e** (`packages/client/e2e`, Playwright 실브라우저) — compose 스택(server+mongo)을 SUT로 삼아 인증 접속(G1)·버전 협상(G2)·`debug:echo` 왕복(G3)을 end-to-end 검증한다. compose는 e2e 실행 전 외부에서 미리 부팅하고(server:3000+mongo), Playwright는 호스트 Vite(5173)만 기동한다 — Vite가 `/game`·`/dev/login`을 서버로 프록시해 브라우저가 same-origin으로만 통신한다.
+
+```bash
+# 최초 1회: chromium 브라우저 설치
+pnpm --filter client exec playwright install chromium
+
+# 1. compose 스택 부팅 (server:3000 + mongo, dev 로그인·시드 인증 활성)
+docker compose up -d --build
+
+# 2. e2e 실행 (호스트 Vite 5173 자동 기동 + Playwright)
+pnpm --filter client e2e
+
+# 3. 정리
+docker compose down
+```
+
+수집·config resolve만 확인하려면 compose 없이 `pnpm --filter client exec playwright test --list`.
+
 ---
 
 ## 디스크 포맷 역설계

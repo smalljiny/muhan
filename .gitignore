@@ -7,6 +7,11 @@ build/
 .turbo/
 coverage/
 
+# Playwright e2e 산출물 (재생성 가능 — 리포트·트레이스·스냅샷)
+test-results/
+playwright-report/
+.playwright/
+
 # 파이썬 가상환경 (graphify CLI)
 .venv/
 

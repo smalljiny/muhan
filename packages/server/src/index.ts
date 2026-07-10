@@ -1,5 +1,6 @@
 import { buildApp } from './app.js'
 import { getConfig } from './config/env.js'
+import { createDevSeedAuthAdapterFromEnv } from './auth/devSeedSessionAuth.js'
 import { connectMongo } from './db/connection.js'
 import { pingDb } from './db/health.js'
 import { ObjectRepository } from './repo/objectRepository.js'
@@ -30,8 +31,18 @@ async function boot(): Promise<void> {
   // 정본 방 번들을 인메모리 그래프로 로드한다(부팅 스코프에 보관). 템플릿·리스폰은 E4 범위.
   const worldGraph = loadWorldGraph()
 
-  // ping을 /health의 진실 원천으로 주입한다.
-  const app = buildApp({ pingDb: () => pingDb(conn.db) })
+  // ping을 /health의 진실 원천으로 주입한다. DEV_LOGIN_ENABLED가 true일 때만 dev 시드 어댑터와
+  // /dev/login 라우트를 배선한다. 플래그 off(프로덕션)면 미주입 → buildApp이 빈 어댑터로 부팅하고
+  // 라우트가 마운트되지 않아 유효 쿠키가 0개다(기존 동작 불변).
+  const app = buildApp({
+    pingDb: () => pingDb(conn.db),
+    ...(config.DEV_LOGIN_ENABLED
+      ? {
+          sessionAuth: createDevSeedAuthAdapterFromEnv(config),
+          devLoginSeedCookie: config.DEV_SEED_COOKIE,
+        }
+      : {}),
+  })
   app.log.info(`world graph loaded: ${worldGraph.size} rooms`)
 
   // console 금지 — SaveLogger를 fastify app.log.error에 위임하는 어댑터로 구성한다.
