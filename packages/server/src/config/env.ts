@@ -63,6 +63,21 @@ export const EnvSchema = z.object({
   // 플래그 on인데 값이 비면 devSeedSessionAuth 조립 단계에서 fail-fast로 방어한다(빈 유효 쿠키 배포 방지).
   DEV_SEED_COOKIE: z.string().default(''),
   DEV_SEED_ACCOUNT_ID: z.string().default(''),
+  // 전역 동시 연결 정원(Story 2). WS 서버가 동시에 유지하는 소켓 총량의 상한이며, 초과 시 신규
+  // upgrade를 거부해 파일 디스크립터·메모리 고갈을 막는다. WS_ALLOWED_ORIGINS(보안 정책, no default)와
+  // 달리 자원 한도는 운영 규모에 맞춰 튜닝하는 값이라 합리적 기본값(1000)을 둔다. 0이면 어떤 연결도
+  // 수용 못 해 서버가 무의미하므로 최소 1을 강제한다.
+  WS_MAX_CONNECTIONS: z.coerce.number().int().min(1).default(1000),
+  // 계정별 동시 연결 정원(Story 2). 한 계정이 동시에 유지할 수 있는 소켓 수의 상한이며, 초과 시 신규
+  // upgrade를 거부해 단일 계정의 연결 독점(자원 고갈)을 막는다. 정상 사용(다중 탭·재연결 겹침)을
+  // 허용하되 남용은 차단하는 절충값으로 기본값(5)을 둔다. 0이면 어떤 계정도 접속 못 해 무의미하므로
+  // 최소 1을 강제한다.
+  WS_MAX_CONNECTIONS_PER_ACCOUNT: z.coerce.number().int().min(1).default(5),
+  // 아웃바운드 큐 상한(Story 2). per-connection 송신 버퍼(bufferedAmount)가 이 바이트 수를 넘으면
+  // 느린 소비자(slow consumer)로 판정해 소켓을 종료, 서버 메모리 누적을 막는다. 정상 메시지 버스트를
+  // 흡수하되 backpressure 미해소 소켓은 잘라내는 절충값으로 기본값 1MB(1048576)를 둔다. 0이면 어떤
+  // 아웃바운드도 즉시 초과로 판정돼 무의미하므로 최소 1을 강제한다.
+  WS_MAX_BUFFERED_BYTES: z.coerce.number().int().min(1).default(1048576),
 })
 
 export type Env = z.infer<typeof EnvSchema>

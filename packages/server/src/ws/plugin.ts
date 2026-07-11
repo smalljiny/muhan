@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import fastifyWebsocket from '@fastify/websocket'
 import type { RawData, WebSocket } from 'ws'
 import type { ServerEvent } from 'shared'
@@ -26,6 +26,7 @@ import { createPermissivePermissionAdapter } from './permissivePermissionAdapter
 import { createSessionRegistry, type SessionRegistry } from './sessionRegistry.js'
 import { createResolveDisconnect } from './resolveDisconnect.js'
 import { createSessionLifecycle, type SessionLifecycle } from './sessionLifecycle.js'
+import { createConnectionQuota, type ConnectionQuota } from './connectionQuota.js'
 
 /** switch 완전성 컴파일 강제 — 도달하면 union에 미처리 variant가 생긴 것이다. */
 function assertNever(value: never): never {
@@ -58,6 +59,9 @@ declare module 'fastify' {
   }
   interface FastifyRequest {
     account: AccountIdentity | null
+    // 이 요청의 정원 슬롯을 반납하는 idempotent 클로저. reserve 성공 직후 preValidation이 요청별로 대입해
+    // 소켓 핸들러가 'close'에 배선한다. account 데코레이션 관례 미러(null 기본값, 요청별 대입).
+    releaseQuota: (() => void) | null
   }
 }
 
@@ -84,16 +88,38 @@ function frameToText(data: RawData): string {
 }
 
 /**
- * 이벤트를 소켓으로 안전하게 직렬화·전송한다. 프레임 수신과 응답 사이에 피어가 닫으면 `send`가
- * throw하며 message 리스너를 탈출하므로(fastify errorHandler 미포착), OPEN 상태만 전송하고
- * 잔여 예외를 삼킨다. Story 4-6의 응답 경로도 이 가드를 재사용한다.
+ * 이벤트를 소켓으로 안전하게 직렬화·전송하는 함수를 만든다(팩토리 클로저 — 로거를 1회 캡처해
+ * 호출부 churn을 없앤다). 반환 함수는 3층 경계를 지킨다(소켓은 셸에만 있다).
+ *
+ * 순서: (1) OPEN 가드 — 닫힌 소켓엔 전송·close 모두 스킵한다. (2) backpressure 가드 — 이번 payload를 미리
+ * 직렬화해 그 바이트 수를 bufferedAmount에 더한 값(`bufferedAmount + payloadBytes`)이 상한을 넘으면 느린
+ * 소비자로 판정해 1013(Try Again Later)로 close하고 전송하지 않는다. enqueue 직전에 대기 중인 payload 크기까지
+ * 회계에 넣는 hard cap이라, 단일 이벤트가 큐를 상한 너머로 밀어넣고도 살아남는 one-message overshoot가 없다.
+ * 권위적 이벤트 push 서버라 프레임을 드롭·유예하면 상태가 어긋나므로 close가 유일하게 안전한 응답이다. 상한은
+ * getConfig()로 호출 시점에 조회해 테스트가 env를 덮어쓸 수 있게 한다(팩토리 생성 시점 캡처 금지). payload는
+ * 여기서 한 번만 직렬화해 send에 재사용한다(이중 직렬화 없음). (3) 콜백형 send — 비동기 전송 오류는 콜백으로
+ * 받아 로깅하고 codeless close로 잘라낸다(backpressure의 1013과 달리 transport 실패이므로 코드 없이 닫는다,
+ * deadline 관례 미러). 콜백형에서 not-OPEN send는 동기 throw 대신 콜백 err로 오지만(OPEN 가드가 이미 선차단),
+ * 잔여 동기 throw를 방어하기 위해 try/catch를 defense-in-depth로 유지한다. Story 4-6의 응답 경로가 이 가드를 재사용한다.
  */
-function safeSend(socket: WebSocket, event: ServerEvent): void {
-  if (socket.readyState !== socket.OPEN) return
-  try {
-    socket.send(JSON.stringify(event))
-  } catch {
-    // 전송 직전 소켓이 닫힌 경우. 곧 'close'가 발화해 cleanup이 돌므로 무시한다.
+export function createSafeSend(log: FastifyBaseLogger): (socket: WebSocket, event: ServerEvent) => void {
+  return (socket, event) => {
+    if (socket.readyState !== socket.OPEN) return
+    const payload = JSON.stringify(event)
+    if (socket.bufferedAmount + Buffer.byteLength(payload) > getConfig().WS_MAX_BUFFERED_BYTES) {
+      socket.close(1013)
+      return
+    }
+    try {
+      socket.send(payload, (err) => {
+        if (err) {
+          log.error({ err }, 'ws send failed')
+          if (socket.readyState === socket.OPEN) socket.close()
+        }
+      })
+    } catch {
+      // 전송 직전 소켓이 닫힌 경우. 곧 'close'가 발화해 cleanup이 돌므로 무시한다.
+    }
   }
 }
 
@@ -115,6 +141,7 @@ function buildSession(
   socket: WebSocket,
   deadline: Deadline,
   lifecycle: SessionLifecycle,
+  send: (socket: WebSocket, event: ServerEvent) => void,
 ): SessionContext {
   if (ctx.account === null) {
     throw new Error('세션 불변식 위반: 인증 게이트를 통과했으나 account가 없다')
@@ -123,7 +150,7 @@ function buildSession(
   return {
     account,
     sessionAuth,
-    emit: (event) => safeSend(socket, event),
+    emit: (event) => send(socket, event),
     rearmDeadline: () => deadline.rearm(),
     clearDeadline: () => deadline.clear(),
     enterWorld: (characterId) => lifecycle.enterWorld(ctx, account.accountId, characterId),
@@ -138,11 +165,26 @@ function buildSession(
  * sessionAuth.validateSessionCookie로 검증, 부재·무효면 401. 통과하면 확정된 AccountIdentity를
  * req.account에 대입해 소켓 핸들러가 재사용하게 한다.
  *
+ * (3) 정원 게이트 — 계정 신원이 확정된 뒤 quota.reserve로 슬롯 1개를 점유한다. 전역 초과는 503, 계정별
+ * 초과는 429. reserve는 두 선행 게이트 뒤에 위치해 거부된 Origin·쿠키가 슬롯을 소비하지 않는다(check-then-
+ * increment가 같은 동기 스택에서 끝나 overshoot 없음). 성공하면 이 요청 전용 idempotent 반납 클로저를 만들어
+ * raw upgrade 소켓의 'close'(abort 포함)와 요청 데코레이션(소켓 핸들러가 ws 'close'에 배선)에 연결한다.
+ *
  * async 훅에서 `return reply.code().send()`는 라이프사이클을 단락시켜 upgrade를 완료하지 않는다(거부).
  * 통과 시 undefined를 반환해 라이프사이클을 계속 진행시킨다.
+ *
+ * 불변식(정원 누수 방어): 이 함수는 진입부터 `releaseOnce` 배선(raw 소켓 'close' + req.releaseQuota 대입)까지
+ * `await` 없이 동기로 실행되어야 한다. hook 진입 시점에 raw 소켓이 이미 파괴됐으면 Node의 once-only 'close'가
+ * 과거에 발화하고 끝나 배선한 리스너가 영영 안 돌므로, 그 already-destroyed 경우를 위한 liveness 체크
+ * (`req.raw.socket?.destroyed`)를 release 배선 직후에 두어 놓친 반납을 직접 수행한다(released 플래그가 이중
+ * 반납을 차단하므로 살아 있는 소켓에는 무해). 현재 `validateSessionCookie`가 동기라 reserve와 배선 사이에 소켓이
+ * 파괴될 창이 없어 이 체크는 hook 진입 전에 이미 파괴된 소켓만 커버한다. E5에서 실 어댑터가 async(`Promise` 반환)로
+ * 확장되면 소켓이 await 도중에도 파괴될 수 있으므로(hook 진입 전만이 아니다), 이 liveness 체크를 await 이후에도
+ * 평가하도록 확장하고 그 async-gap 경로를 회귀 테스트로 고정한다.
  */
-function gameAuthPreValidation(
+export function gameAuthPreValidation(
   sessionAuth: SessionAuthPort,
+  quota: ConnectionQuota,
 ): (req: FastifyRequest, reply: FastifyReply) => Promise<unknown> {
   return async (req, reply) => {
     const config = getConfig()
@@ -161,6 +203,34 @@ function gameAuthPreValidation(
     }
 
     req.account = identity
+
+    // (3) 정원 게이트 — 신원이 확정된(accountId를 아는) 지금 슬롯을 점유한다. 거부는 슬롯을 올리지 않으므로
+    // (Path 1) 반납할 것이 없다.
+    const reservation = quota.reserve(identity.accountId)
+    if (!reservation.ok) {
+      if (reservation.code === 503) return reply.code(503).send({ error: 'server_busy' })
+      return reply.code(429).send({ error: 'too_many_connections' })
+    }
+
+    // reserve 성공 직후 이 요청 전용 반납 클로저를 정확히 하나 만든다. released 플래그가 load-bearing이다:
+    // 같은 연결의 release가 두 번(raw-close + ws-close) 발화해도 실제 quota.release는 한 번만 돌게 해, 다른
+    // 살아 있는 연결의 슬롯을 잘못 반납하는 cap 우회를 막는다(정원 레벨 가드로는 이 per-connection 이중 발화를
+    // 구별할 수 없다). 예약한 바로 그 accountId를 캡처한다.
+    let released = false
+    const releaseOnce = (): void => {
+      if (released) return
+      released = true
+      quota.release(identity.accountId)
+    }
+    // (Path 3, abort) raw TCP 소켓의 'close'는 handleUpgrade abort(악성 핸드셰이크)에서도 발화한다 — 소켓
+    // 핸들러에 도달하지 못하는 누수 경로를 이 배선이 커버한다.
+    req.raw.socket?.once('close', releaseOnce)
+    // 소켓 핸들러가 ws 'close'에 배선하도록 같은 참조를 요청 데코레이션에 실어 넘긴다.
+    req.releaseQuota = releaseOnce
+    // 이미 파괴된 소켓이면 'close'는 과거에 한 번 발화하고 끝났으므로 위 리스너가 영영 안 돈다 —
+    // 놓친 반납을 여기서 직접 수행한다. releaseOnce의 released 플래그가 이중 반납을 막으므로,
+    // 소켓이 실제로 살아 있으면 리스너가 발화하고 이 직접 호출은 무해하게 중복 차단된다.
+    if (req.raw.socket?.destroyed) releaseOnce()
     return undefined
   }
 }
@@ -195,6 +265,10 @@ export function registerWebsocket(
   permissionPort: PermissionPort = createPermissivePermissionAdapter(),
 ): void {
   const connections = new Map<WebSocket, ConnectionContext>()
+
+  // 안전 전송 함수를 앱 로거로 1회 조립한다(팩토리 클로저). 모든 응답 경로가 이 단일 병목을 통과해
+  // OPEN 가드·backpressure(1013)·전송오류(codeless close) 처리를 공유한다.
+  const safeSend = createSafeSend(app.log)
 
   // 명령 레지스트리는 무상태 핸들러의 배선표라 연결 간 공유 안전하다 — channelPort를 클로저 주입해 1회 조립한다.
   const commandRegistry = createCommandRegistry(channelPort)
@@ -231,9 +305,22 @@ export function registerWebsocket(
     idleMs: () => getConfig().WS_IDLE_TIMEOUT_MS,
   })
 
+  // 동시 접속 정원. lifecycle/registry 관례처럼 registerWebsocket 1회에 인스턴스화해 연결 간 공유한다
+  // (전역·계정별 카운터가 하나의 회계여야 상한을 정확히 관할한다). 상한은 thunk로 넘겨 reserve 시점에 지연
+  // 조회한다(graceMs/idleMs 관례 미러) — 팩토리 생성 시점에 getConfig를 읽지 않아 미설정 env가 빌드를 막지 않고,
+  // 각 reserve가 최신 상한값을 반영한다.
+  const quota = createConnectionQuota(() => ({
+    maxGlobal: getConfig().WS_MAX_CONNECTIONS,
+    maxPerAccount: getConfig().WS_MAX_CONNECTIONS_PER_ACCOUNT,
+  }))
+
   // per-request 계정 신원 슬롯. null 기본값으로 데코레이트하고 preValidation 훅에서 요청별로 대입한다
   // (객체 리터럴 데코레이트 금지 — 요청 간 공유 참조가 되어 신원이 교차 오염된다).
   app.decorateRequest('account', null)
+
+  // per-request 정원 반납 클로저 슬롯. account 관례 미러 — null 기본값으로 데코레이트하고 reserve 성공 시
+  // preValidation 훅이 요청별 releaseOnce를 대입한다(객체 리터럴 데코레이트 금지).
+  app.decorateRequest('releaseQuota', null)
 
   app.register(fastifyWebsocket, { options: { maxPayload: MAX_FRAME_BYTES } })
 
@@ -243,12 +330,18 @@ export function registerWebsocket(
     // 정원 게이트(동시 접속 상한)는 이 지점을 seam으로 두고 정책값은 배포 토픽에서 채운다.
     instance.get(
       GAME_SOCKET_PATH,
-      { websocket: true, preValidation: gameAuthPreValidation(sessionAuth) },
+      { websocket: true, preValidation: gameAuthPreValidation(sessionAuth, quota) },
       (socket, req: FastifyRequest) => {
         const ctx = createConnectionContext()
         // 게이트가 확정한 계정 신원을 컨텍스트에 보관한다(핸들러·라우팅이 소유권 검증에 재사용).
         ctx.account = req.account
         connections.set(socket, ctx)
+
+        // (Path 2, 정상 close) 정원 반납을 ws 'close'에 별도 리스너로 배선한다 — 아래 close 핸들러(정리·grace)와
+        // 독립이다. releaseOnce는 idempotent라 raw-close와 이중 발화해도 한 번만 반납한다. 소켓 핸들러에 도달한
+        // 연결은 항상 reserve에 성공했으므로 releaseQuota는 non-null이지만, 데코레이션 null 기본값과의 정합을 위해
+        // 방어적으로 가드한다.
+        if (req.releaseQuota) socket.on('close', req.releaseQuota)
 
         // 서버 주도 하트비트를 시작해 죽은 연결을 감지·정리한다. env로 튜닝된 간격·임계를 매니저에 넘기고,
         // 반환된 타이머 핸들을 ctx.heartbeat에 배선해 cleanup 경로가 이를 clear할 수 있게 한다.
@@ -305,7 +398,7 @@ export function registerWebsocket(
                 // 턴에 characterList + prompt를 동기 발화한다(setImmediate 금지 — 대화 중 클라이언트는 이미
                 // 리스너를 붙였다). ctx.state 변이는 FSM(enterState) 단일 지점에서만 일어난다(Lock D).
                 ctx.ready = true
-                enterInitialState(ctx, buildSession(ctx, sessionAuth, socket, deadline, lifecycle))
+                enterInitialState(ctx, buildSession(ctx, sessionAuth, socket, deadline, lifecycle, safeSend))
                 break
               case 'error':
                 safeSend(socket, result.event)
@@ -333,7 +426,7 @@ export function registerWebsocket(
                 } else {
                   handleSessionFrame(
                     ctx,
-                    buildSession(ctx, sessionAuth, socket, deadline, lifecycle),
+                    buildSession(ctx, sessionAuth, socket, deadline, lifecycle, safeSend),
                     parsed,
                   )
                 }
