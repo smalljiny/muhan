@@ -91,7 +91,7 @@
 3. `setImmediate`로 `system:hello{protocolVersion}`를 push. 동기 push는 injectWS 클라이언트가 message 리스너를 붙이기 전에 발화해 프레임이 드롭되는 레이스를 만들므로, 리스너 부착(promise 기반, `process.nextTick`보다 늦음) 뒤로 지연시킨다. 버전은 per-connection 권위인 `ctx.protocolVersion`을 단일 출처로 쓴다.
 4. `socket.on('close')`가 `heartbeat.stop()` + `cleanupConnection()`으로 타이머를 정지·정리한다.
 
-모든 서버→클라 전송은 `safeSend(socket, event)`를 거친다 — `readyState === OPEN`만 전송하고, 프레임 수신과 응답 사이에 피어가 닫아 `send`가 throw하는 경우를 삼킨다(곧 `close`가 발화해 cleanup이 돈다). 서버 종료 시 소켓 닫기는 `@fastify/websocket` 기본 `preClose`가 맡는다.
+모든 서버→클라 전송은 `safeSend(socket, event)`를 거친다 — `readyState === OPEN`만 전송하고, 프레임 수신과 응답 사이에 피어가 닫아 `send`가 throw하는 경우를 삼킨다(곧 `close`가 발화해 cleanup이 돈다). 여기에 아웃바운드 backpressure 가드가 얹혀 있다 — payload를 미리 직렬화해 `bufferedAmount + payloadBytes > WS_MAX_BUFFERED_BYTES`면 느린 소비자로 판정해 `close(1013)`하고, send 콜백 오류는 로깅 후 코드 없는 `close()`로 잘라낸다(정본 [`ws-resource-guard.md`](ws-resource-guard.md)). 서버 종료 시 소켓 닫기는 `@fastify/websocket` 기본 `preClose`가 맡는다.
 
 ### 메시지 처리 파이프라인
 
@@ -148,6 +148,8 @@
 - `WS_HEARTBEAT_PONG_TIMEOUT_MS`(기본 10000) — **예약 seam**. 현재 단일 인터벌 모델은 소비하지 않는다(유효 마감은 이 값이 아니라 `PING_INTERVAL`) — 향후 이중 타이머 모델 도입 시 소비. 운영자 오도를 막기 위해 무효임을 스키마 주석에 명시한다.
 
 `getConfig()`는 `plugin.ts`가 연결마다 읽어 `createHeartbeat`에 `pingIntervalMs`·`maxMissed`를 넘긴다.
+
+E3 하드닝(#54)이 자원 한도 3필드(`WS_MAX_CONNECTIONS`·`WS_MAX_CONNECTIONS_PER_ACCOUNT`·`WS_MAX_BUFFERED_BYTES`)를 같은 `EnvSchema`에 더했다 — 연결 정원·아웃바운드 backpressure 튜닝값이며 정본은 [`ws-resource-guard.md`](ws-resource-guard.md)다.
 
 ### 테스트 전략 (`packages/server/src/ws/`)
 

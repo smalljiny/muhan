@@ -18,12 +18,13 @@
 
 ### 인증 게이트 (`packages/server/src/ws/plugin.ts`, `cookies.ts`)
 
-`gameAuthPreValidation(sessionAuth)`가 `/game` 라우트 옵션의 `preValidation` 훅을 만든다. 다층 guard 순서:
+`gameAuthPreValidation(sessionAuth, quota)`가 `/game` 라우트 옵션의 `preValidation` 훅을 만든다. 다층 guard 순서:
 
 1. **Origin 게이트** — `req.headers.origin`을 `config.WS_ALLOWED_ORIGINS`와 대조한다. 부재·불일치 모두 `403 forbidden_origin`(fail-closed). 중복 Origin 헤더는 배열로 정규화돼 `includes(array)`가 항상 false를 반환하므로 fail-closed로 떨어진다.
 2. **세션 쿠키 게이트** — `extractSessionCookie(req.headers.cookie)`로 `__session` 값을 추출해 `sessionAuth.validateSessionCookie`로 검증한다. 부재·무효 모두 `401 unauthenticated`.
+3. **정원 게이트**(E3 하드닝 #54) — 확정된 accountId로 `quota.reserve`를 호출해 동시 연결 슬롯 1개를 점유한다. 전역 초과 `503 server_busy`, 계정별 초과 `429 too_many_connections`. 계정별 판정에 확정 accountId가 필요하므로 쿠키 게이트 뒤에 둔다. 정본은 [`ws-resource-guard.md`](ws-resource-guard.md)다.
 
-두 거부 모두 `reply.code().send()` 후 return이라 라이프사이클이 단락돼 upgrade가 완료되지 않는다. 통과하면 확정된 `AccountIdentity`를 `req.account`에 대입한다 — `app.decorateRequest('account', null)`로 요청별 null 슬롯을 심고 훅에서 대입한다(객체 리터럴 데코레이트 금지: 요청 간 공유 참조 교차 오염). 소켓 핸들러가 `ctx.account = req.account`로 재사용한다.
+세 거부 모두 `reply.code().send()` 후 return이라 라이프사이클이 단락돼 upgrade가 완료되지 않는다. 통과하면 확정된 `AccountIdentity`를 `req.account`에 대입한다 — `app.decorateRequest('account', null)`로 요청별 null 슬롯을 심고 훅에서 대입한다(객체 리터럴 데코레이트 금지: 요청 간 공유 참조 교차 오염). 소켓 핸들러가 `ctx.account = req.account`로 재사용한다.
 
 `extractSessionCookie`는 `Cookie` 헤더를 파싱해 `__session`을 읽되, `__proto__`/`constructor`/`prototype` 예약 키를 차단하고(`RESERVED_KEYS` + `Object.hasOwn`) 중복 키는 first-wins를 취한다(prototype-pollution 방어, `.harness/rules/security.md` 정합).
 
@@ -81,7 +82,7 @@ E3-1 컨텍스트에 `account: AccountIdentity | null`(게이트 확정 신원)�
 
 ### upgrade 인증 흐름
 
-브라우저가 `wss + Cookie(__session) + Origin`으로 upgrade를 요청하면, `preValidation` 훅이 (1) Origin allowlist 대조(부재·불일치 403), (2) `__session` 검증(부재·무효 401)을 순서대로 돈다. 통과 시 `req.account`에 신원을 실어 소켓 핸들러가 `ctx.account`로 확정한다. `auth.gate.test.ts`가 거부 시 `wsConnections.size === 0`(HTTP status뿐 아니라 소켓 미개방)을 단언한다.
+브라우저가 `wss + Cookie(__session) + Origin`으로 upgrade를 요청하면, `preValidation` 훅이 (1) Origin allowlist 대조(부재·불일치 403), (2) `__session` 검증(부재·무효 401), (3) 정원 reserve(전역 초과 503·계정별 초과 429, E3 하드닝 #54)를 순서대로 돈다. 통과 시 `req.account`에 신원을 실어 소켓 핸들러가 `ctx.account`로 확정한다. `auth.gate.test.ts`가 거부 시 `wsConnections.size === 0`(HTTP status뿐 아니라 소켓 미개방)을 단언한다.
 
 ### 세션 FSM 흐름
 
@@ -112,6 +113,7 @@ message 핸들러는 JSON 파싱 실패를 `bad_payload`로 우선 응답하고,
 - **prototype pollution**: 쿠키 파서 예약 키 차단 + `Object.hasOwn` 가드.
 - **정보 미노출**: 에러 경로가 내부 상세를 노출하지 않음. 시드 자격증명은 프로덕션 빌드 제외.
 - **프레임 상한**: E3-1 `maxPayload`(64KB)가 인바운드 프레임 크기를 서버측 강제.
+- **자원 고갈 방어**: E3 하드닝(#54)이 연결 정원(전역·계정별)과 아웃바운드 backpressure로 유효 쿠키 1개의 무제한 연결·무제한 송신 버퍼 누적을 차단([`ws-resource-guard.md`](ws-resource-guard.md)).
 
 ### 테스트 전략
 
