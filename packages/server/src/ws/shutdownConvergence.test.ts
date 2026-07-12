@@ -126,6 +126,49 @@ describe('createShutdownConverger', () => {
     expect(teardown).toHaveBeenCalledTimes(4)
   })
 
+  it('한 바인딩 종결이 throw해도 격리·로깅하고 나머지 바인딩을 계속 수렴한다', () => {
+    const b1 = makeBinding('c1', 'live')
+    const boom = makeBinding('c2', 'link-dead')
+    const b3 = makeBinding('c3', 'live')
+    // throw 바인딩을 가운데 두어 순회 중단이 없음을 증명한다(순서 load-bearing).
+    const snapshot = [b1, boom, b3]
+
+    const resolveDisconnect = vi.fn<TerminateCallback>((binding) => {
+      if (binding === boom) throw new Error('teardown 실패')
+    })
+    const logConvergeFailure = vi.fn()
+    const converger = createShutdownConverger({
+      registry: stubRegistry(snapshot),
+      resolveDisconnect,
+      logConvergeFailure,
+    })
+
+    // converge 자체는 throw하지 않는다(상위 종료 시퀀스의 후속 flush를 막지 않도록).
+    expect(() => converger.converge()).not.toThrow()
+
+    // 모든 바인딩에 대해 호출이 시도됐다(throw 이후 b3까지 계속).
+    expect(resolveDisconnect).toHaveBeenCalledTimes(3)
+    expect(resolveDisconnect).toHaveBeenCalledWith(b3, 'shutdown')
+    // 실패한 바인딩만 정확히 1회 로깅됐다.
+    expect(logConvergeFailure).toHaveBeenCalledTimes(1)
+    expect(logConvergeFailure).toHaveBeenCalledWith(boom, expect.any(Error))
+  })
+
+  it('logConvergeFailure 미주입 시에도 throw를 조용히 격리하고 나머지를 계속 수렴한다', () => {
+    const boom = makeBinding('c1', 'live')
+    const ok = makeBinding('c2', 'live')
+    const resolveDisconnect = vi.fn<TerminateCallback>((binding) => {
+      if (binding === boom) throw new Error('teardown 실패')
+    })
+    const converger = createShutdownConverger({
+      registry: stubRegistry([boom, ok]),
+      resolveDisconnect,
+    })
+
+    expect(() => converger.converge()).not.toThrow()
+    expect(resolveDisconnect).toHaveBeenCalledWith(ok, 'shutdown')
+  })
+
   it('빈 레지스트리에서 converge()는 no-op(resolveDisconnect 미호출)', () => {
     const resolveDisconnect = vi.fn<TerminateCallback>()
     const converger = createShutdownConverger({

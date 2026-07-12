@@ -302,7 +302,12 @@ export function registerWebsocket(
   // 서버 주도 종료 수렴 조율기. registry.listBindings 스냅샷을 resolveDisconnect(reason:'shutdown')로 일괄
   // 종결한다. registerWebsocket 1회에 조립해 app.wsShutdown으로 노출한다 — index.ts 신호 핸들러가 종료 시퀀스
   // (markShuttingDown → converge)에 쓰고, 아래 소켓 close 핸들러가 isShuttingDown()으로 link-dead 진입을 우회한다.
-  const converger = createShutdownConverger({ registry, resolveDisconnect })
+  const converger = createShutdownConverger({
+    registry,
+    resolveDisconnect,
+    logConvergeFailure: (binding, err) =>
+      app.log.error({ err, characterId: binding.characterId }, 'shutdown converge failed for binding'),
+  })
   app.decorate('wsShutdown', converger)
 
   // 월드 진입 등록·close 판정·grace 재연결 조율기. grace는 env WS_RECONNECT_GRACE_MS로 스케줄한다(하드코딩 금지).

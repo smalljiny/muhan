@@ -68,12 +68,20 @@ async function boot(): Promise<void> {
       // 종료 수렴 순서(spec §3.3): ① 플래그 set으로 뒤늦은 close가 link-dead 처리로 새지 않도록
       // 차단 → ② 월드 틱 정지로 신규 게임 이벤트 유입 차단 → ③ 등록된 세션을 일괄 수렴(clean
       // disconnect) → ④ app.close()로 잔여 소켓·리스너를 정리. 그 다음에야 save flush·DB close.
-      app.wsShutdown.markShuttingDown()
-      worldClock.stop()
-      app.wsShutdown.converge()
-      await app.close()
-      await saveEngine.shutdown()
-      await conn.close()
+      //
+      // 상위 단계(③④)를 try로 감싸고 flush·DB close를 finally에 둔다 — converge나 app.close가 throw해도
+      // saveEngine.shutdown()이 무조건 실행돼 잔여 dirty를 flush한다. saveEngine.shutdown()은 유일한
+      // force-flush 지점이라, 스킵되면 미저장 상태가 소실된다(#56 결함 클래스: shutdown 배선 자체가
+      // flush 스킵 경로를 만들지 않도록 격리). converge의 바인딩별 격리와 함께 이중 방어를 이룬다.
+      try {
+        app.wsShutdown.markShuttingDown()
+        worldClock.stop()
+        app.wsShutdown.converge()
+        await app.close()
+      } finally {
+        await saveEngine.shutdown()
+        await conn.close()
+      }
       process.exit(0)
     })()
     return shuttingDown

@@ -1,4 +1,4 @@
-import type { SessionRegistry, TerminateCallback } from './sessionRegistry.js'
+import type { SessionBinding, SessionRegistry, TerminateCallback } from './sessionRegistry.js'
 
 /**
  * shutdown 세션 수렴 헬퍼 — 서버 주도 종료 플래그와, 등록된 모든 세션 바인딩을 일괄 종결하는 순수 단위.
@@ -20,6 +20,12 @@ export interface ShutdownConverger {
 export interface ShutdownConvergerDeps {
   readonly registry: Pick<SessionRegistry, 'listBindings'>
   readonly resolveDisconnect: TerminateCallback
+  /**
+   * 한 바인딩의 종결이 throw할 때 기록하는 콜백(미주입 시 조용히 격리). 한 바인딩 실패가 나머지 수렴을
+   * 중단시키지 않도록 converge가 바인딩별로 catch한다(WorldClock.onTick 슬롯 격리 관례 미러). 격리가 없으면
+   * 상위 종료 시퀀스(index.ts)의 후속 flush가 스킵돼 데이터 유실로 이어진다.
+   */
+  readonly logConvergeFailure?: (binding: SessionBinding, err: unknown) => void
 }
 
 /**
@@ -44,11 +50,19 @@ export function createShutdownConverger(deps: ShutdownConvergerDeps): ShutdownCo
    * 계약, Story 4), resolveDisconnect가 순회 중 index.remove를 호출해도 안전하다. resolveDisconnect의 identity
    * 가드·선-제거가 재진입/이중 종결을 막고, link-dead 바인딩은 graceTimer clear + 포트 1회 후 teardown no-op으로
    * 안전 종결된다.
+   *
+   * 바인딩별 격리: 각 resolveDisconnect 호출을 try/catch로 감싸 한 바인딩 종결 실패가 나머지 수렴을 중단시키지
+   * 않게 한다(WorldClock.onTick 슬롯 격리 미러). 격리가 없으면 index.ts 종료 시퀀스의 후속 saveEngine.shutdown
+   * flush가 통째로 스킵돼 잔여 dirty 상태가 유실된다(#56 결함 클래스 재발 방지).
    */
   function converge(): void {
     const bindings = deps.registry.listBindings()
     for (const binding of bindings) {
-      deps.resolveDisconnect(binding, 'shutdown')
+      try {
+        deps.resolveDisconnect(binding, 'shutdown')
+      } catch (err) {
+        deps.logConvergeFailure?.(binding, err)
+      }
     }
   }
 
