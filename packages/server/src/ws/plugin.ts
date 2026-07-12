@@ -27,6 +27,7 @@ import { createSessionRegistry, type SessionRegistry } from './sessionRegistry.j
 import { createResolveDisconnect } from './resolveDisconnect.js'
 import { createSessionLifecycle, type SessionLifecycle } from './sessionLifecycle.js'
 import { createConnectionQuota, type ConnectionQuota } from './connectionQuota.js'
+import { createShutdownConverger, type ShutdownConverger } from './shutdownConvergence.js'
 
 /** switch 완전성 컴파일 강제 — 도달하면 union에 미처리 variant가 생긴 것이다. */
 function assertNever(value: never): never {
@@ -56,6 +57,9 @@ declare module 'fastify' {
     wsLifecyclePort: SessionLifecyclePort
     // characterId → SessionBinding 색인. 진단·재연결·테스트 관찰의 단일 출처(wsConnections 관례 미러).
     wsSessionRegistry: SessionRegistry
+    // 서버 주도 종료 수렴 핸들. index.ts 신호 핸들러가 markShuttingDown→converge로 등록 바인딩을 일괄 종결하고,
+    // 소켓 close 핸들러가 isShuttingDown()으로 link-dead 진입을 우회한다(wsSessionRegistry 관례 미러).
+    wsShutdown: ShutdownConverger
   }
   interface FastifyRequest {
     account: AccountIdentity | null
@@ -295,6 +299,12 @@ export function registerWebsocket(
     logPortFailure: (err) => app.log.error({ err }, 'session lifecycle port onSessionEnd failed'),
   })
 
+  // 서버 주도 종료 수렴 조율기. registry.listBindings 스냅샷을 resolveDisconnect(reason:'shutdown')로 일괄
+  // 종결한다. registerWebsocket 1회에 조립해 app.wsShutdown으로 노출한다 — index.ts 신호 핸들러가 종료 시퀀스
+  // (markShuttingDown → converge)에 쓰고, 아래 소켓 close 핸들러가 isShuttingDown()으로 link-dead 진입을 우회한다.
+  const converger = createShutdownConverger({ registry, resolveDisconnect })
+  app.decorate('wsShutdown', converger)
+
   // 월드 진입 등록·close 판정·grace 재연결 조율기. grace는 env WS_RECONNECT_GRACE_MS로 스케줄한다(하드코딩 금지).
   // graceMs는 thunk로 넘겨 스케줄 시점(연결 close)에 지연 조회한다 — 미설정 env로 buildApp을 막지 않는다.
   // idleMs도 thunk로 넘겨 월드 진입 시점에 지연 조회한다(graceMs 관례 미러, 하드코딩 금지).
@@ -457,7 +467,9 @@ export function registerWebsocket(
           // 미등록(characterSelect·create)·stale(옛 소켓)·비-command는 no-op이라 도메인 종결·포트 호출이 없다.
           // binding.connection===ctx 가드가 load-bearing: 서버 주도 종료(evict/grace) 후 옛 소켓의 뒤늦은
           // close가 새 세션을 markLinkDead하는 재진입을 막는다.
-          lifecycle.handleClose(ctx)
+          // 서버 주도 종료 시(isShuttingDown) markLinkDead(grace)를 건너뛴다 — 이미 converge가 등록 바인딩을
+          // 일괄 종결했으므로, 뒤늦은 close가 새 link-dead(+새 30s grace 타이머)를 만들어 종료를 지연시키지 못하게 한다.
+          if (!converger.isShuttingDown()) lifecycle.handleClose(ctx)
           // transport 정리는 소켓 한정 — markLinkDead 여부와 무관하게 이 소켓의 heartbeat·deadline·idle을
           // 정리하고 connections에서 제거한다(link-dead 바인딩은 registry에 유지, ctx 참조도 살아 있다).
           cleanupConnection(connections, socket)
