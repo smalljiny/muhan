@@ -21,3 +21,6 @@ export * from './protocol/index.js'
 
 // 골든 fixture 하네스 — 함수별 골든 fixture JSON 포맷 스키마 + 제네릭 타입.
 export { goldenFixtureSchema, type GoldenFixture } from './oracle/types.js'
+
+// 골든 fixture approval 러너 — cases를 SUT 출력과 대조해 전 불일치를 집계 리포트.
+export { approve } from './oracle/runner.js'
