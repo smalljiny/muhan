@@ -18,3 +18,6 @@ export * from './schema/index.js'
 
 // 와이어 프로토콜 계약 + z.infer 파생 타입(명령·이벤트 봉투·payload building block).
 export * from './protocol/index.js'
+
+// 골든 fixture 하네스 — 함수별 골든 fixture JSON 포맷 스키마 + 제네릭 타입.
+export { goldenFixtureSchema, type GoldenFixture } from './oracle/types.js'
