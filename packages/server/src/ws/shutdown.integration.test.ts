@@ -74,11 +74,12 @@ describe('WS shutdown 수렴 integration (실 소켓 + WorldClock)', () => {
       worldClock.start()
       expect(worldClock.running).toBe(true)
 
-      // 종료 시퀀스: 플래그 set → 월드 틱 정지 → 등록 바인딩 일괄 수렴 → 서버 종료.
+      // 종료 시퀀스(index.ts 미러): 플래그 set → 월드 틱 정지 → 1차 수렴 → 서버 종료 → 2차 수렴(늦은 등록 방어).
       app.wsShutdown.markShuttingDown()
       worldClock.stop()
       app.wsShutdown.converge()
       await app.close()
+      app.wsShutdown.converge()
 
       // (a) 레지스트리가 빈다 — link-dead 바인딩이 30s grace 만료를 기다리지 않고 즉시 종결됐다.
       expect(app.wsSessionRegistry.listBindings()).toHaveLength(0)

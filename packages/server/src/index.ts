@@ -78,6 +78,11 @@ async function boot(): Promise<void> {
         worldClock.stop()
         app.wsShutdown.converge()
         await app.close()
+        // 2차 수렴 — 1차 스냅샷 이후 app.close 대기 중 큐잉 프레임이 enterWorld로 등록한 late 바인딩을
+        // 종결한다. app.close 완료 시점엔 소켓이 모두 닫혀 신규 등록이 불가하므로 이 수렴이 레지스트리를
+        // 확정적으로 비운다(늦은 등록 레이스 방어 — 그 소켓의 close는 isShuttingDown 가드로 handleClose를
+        // 건너뛰어 스스로 종결되지 못한다). converge는 idempotent·바인딩별 격리라 재호출이 안전하다.
+        app.wsShutdown.converge()
       } finally {
         await saveEngine.shutdown()
         await conn.close()

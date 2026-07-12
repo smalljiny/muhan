@@ -169,6 +169,37 @@ describe('createShutdownConverger', () => {
     expect(resolveDisconnect).toHaveBeenCalledWith(ok, 'shutdown')
   })
 
+  it('2차 converge()가 1차 스냅샷 이후 등록된 late 바인딩을 종결한다(늦은 등록 레이스 방어)', () => {
+    const registry = createSessionRegistry()
+    const port = makePort()
+    const resolveDisconnect = createResolveDisconnect({
+      registry,
+      port,
+      teardown: vi.fn(),
+      logPortFailure: vi.fn(),
+      clearTimeoutFn: vi.fn(),
+    })
+    registry.register('c1', 'acc-1', createConnectionContext(), resolveDisconnect)
+    const converger = createShutdownConverger({ registry, resolveDisconnect })
+
+    // 1차 수렴: c1 종결, 레지스트리 빔.
+    converger.converge()
+    expect(registry.listBindings()).toEqual([])
+    expect(port.onSessionEnd).toHaveBeenCalledTimes(1)
+
+    // 1차 수렴 이후 late 바인딩 등록(app.close 대기 중 enterWorld 레이스 시뮬레이션).
+    registry.register('c2', 'acc-2', createConnectionContext(), resolveDisconnect)
+    expect(registry.listBindings()).toHaveLength(1)
+
+    // 2차 수렴: late 바인딩 c2 종결. converge가 idempotent·재호출 안전임을 증명한다(index.ts 2차 수렴 근거).
+    converger.converge()
+    expect(registry.listBindings()).toEqual([])
+    expect(port.onSessionEnd).toHaveBeenCalledTimes(2)
+    expect(port.onSessionEnd).toHaveBeenCalledWith(
+      expect.objectContaining({ characterId: 'c2', reason: 'shutdown' }),
+    )
+  })
+
   it('빈 레지스트리에서 converge()는 no-op(resolveDisconnect 미호출)', () => {
     const resolveDisconnect = vi.fn<TerminateCallback>()
     const converger = createShutdownConverger({
