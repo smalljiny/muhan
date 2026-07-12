@@ -20,6 +20,13 @@ import type { GoldenFixture } from './types.js'
  * 더 견고한 `node:util`의 `isDeepStrictEqual`을 채택한다.
  */
 export function approve<I, O>(fixture: GoldenFixture<I, O>, sut: (input: I) => O): void {
+  // boundary 가드 — 빈 cases는 mismatches가 0건이라 무조건 통과하는 vacuous-pass다.
+  // goldenFixtureSchema는 .min(1)로 이를 막지만, approve는 파싱을 거치지 않고 캐스팅된
+  // fixture도 받는 공개 재사용 러너이므로 여기서 defense-in-depth로 다시 거부한다.
+  if (fixture.cases.length === 0) {
+    throw new Error(`골든 fixture '${fixture.fn}' 빈 cases: 대조할 케이스가 없다(vacuous-pass 방지)`)
+  }
+
   // 불일치 케이스만 수집한다 — {index, input, expected, actual}.
   const mismatches: { index: number; input: I; expected: O; actual: O }[] = []
 

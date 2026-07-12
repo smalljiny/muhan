@@ -89,6 +89,16 @@ describe('approve', () => {
     expect(() => approve(fixture, wrap)).not.toThrow()
   })
 
+  it('빈 cases fixture는 vacuous-pass 대신 throw한다 (boundary 가드)', () => {
+    // 스키마 .min(1)을 우회해 캐스팅된 fixture(cases: [])가 approve로 들어오면,
+    // 불일치 0건으로 조용히 통과하는 vacuous-pass가 아니라 즉시 throw해야 한다.
+    const fixture: GoldenFixture<{ x: number }, number> = {
+      ...doubleFixture(),
+      cases: [],
+    }
+    expect(() => approve(fixture, double)).toThrow(/빈 cases|empty/i)
+  })
+
   it('객체 출력에서 structural 비교가 동작한다 — 다른 구조는 불일치', () => {
     const fixture: GoldenFixture<{ id: number }, { id: number; tag: string }> = {
       fn: 'wrap',
