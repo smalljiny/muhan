@@ -10,6 +10,7 @@ import { WorldRepository } from './repo/worldRepository.js'
 import { SaveEngine } from './save/saveEngine.js'
 import type { SaveLogger } from './save/logger.js'
 import { loadWorldGraph } from './world/worldGraph.js'
+import { WorldClock } from './world/worldClock.js'
 
 // 부팅 엔트리 — env 검증(fail-fast) → DB 연결(fail-fast) → 앱 구성 → SaveEngine 배선 → listen.
 // 커버리지에서 제외(배선 코드). PORT는 getConfig().PORT 단일 출처를 쓴다(인라인 파싱 소거).
@@ -52,6 +53,10 @@ async function boot(): Promise<void> {
   const saveEngine = new SaveEngine(characters, bank, world, saveLogger)
   saveEngine.start()
 
+  // 1Hz 중앙 월드 틱 시작. 실 슬롯은 후속 토픽(#69/#68)이 register로 붙인다.
+  const worldClock = new WorldClock()
+  worldClock.start()
+
   // graceful shutdown — SaveEngine.shutdown()으로 잔여 dirty를 flush·drain한 뒤 DB 연결을 닫는다.
   // 캐시된 Promise로 idempotent 보장: SIGTERM 중복 도착이나 shutdown 진행 중 재수신 시 같은
   // Promise를 반환해 두 번 실행하지 않는다.
@@ -60,6 +65,13 @@ async function boot(): Promise<void> {
     if (shuttingDown !== null) return shuttingDown
     shuttingDown = (async () => {
       app.log.info(`${signal} 수신 — graceful shutdown 시작`)
+      // 종료 수렴 순서(spec §3.3): ① 플래그 set으로 뒤늦은 close가 link-dead 처리로 새지 않도록
+      // 차단 → ② 월드 틱 정지로 신규 게임 이벤트 유입 차단 → ③ 등록된 세션을 일괄 수렴(clean
+      // disconnect) → ④ app.close()로 잔여 소켓·리스너를 정리. 그 다음에야 save flush·DB close.
+      app.wsShutdown.markShuttingDown()
+      worldClock.stop()
+      app.wsShutdown.converge()
+      await app.close()
       await saveEngine.shutdown()
       await conn.close()
       process.exit(0)
