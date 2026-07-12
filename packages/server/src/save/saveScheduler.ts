@@ -7,10 +7,12 @@
  *
  * clock seam:
  *   setInterval/clearInterval을 직접 부르지 않고 주입된 SchedulerClock을 통해 호출한다.
- *   기본값은 전역 setInterval/clearInterval을 위임하는 defaultClock이다. 이 seam으로
- *   (a) 테스트에서 FakeClock을 주입해 tick을 수동 구동하고(비결정적 실타이머 대기 제거),
- *   (b) E3 heartbeat 스케줄러로 clock을 교체할 수 있다. 전역 싱글턴을 쓰지 않고 의존성을
- *   모두 생성자로 주입해 인스턴스 격리를 보장한다.
+ *   SchedulerClock·IntervalHandle·defaultClock 정의는 ../util/clock.js가 단일 출처이며
+ *   (save·heartbeat·WorldClock 공유), 여기서는 back-compat용으로 재-export만 한다. 기본값은
+ *   전역 setInterval/clearInterval을 위임하는 defaultClock이다. 이 seam으로 (a) 테스트에서
+ *   FakeClock을 주입해 tick을 수동 구동하고(비결정적 실타이머 대기 제거), (b) heartbeat
+ *   스케줄러로 clock을 교체할 수 있다. 전역 싱글턴을 쓰지 않고 의존성을 모두 생성자로 주입해
+ *   인스턴스 격리를 보장한다.
  *
  * flush 절차:
  *   (1) DirtyTracker.drain()으로 이미 coalesce된(키당 최신 1건) 항목 배열을 얻는다.
@@ -38,21 +40,13 @@
 import type { DirtyEntry } from './dirtyTracker.js'
 import type { SaveLogger } from './logger.js'
 import { NOOP_LOGGER } from './logger.js'
+import { defaultClock, type SchedulerClock, type IntervalHandle } from '../util/clock.js'
+
+/** 타이머 seam back-compat 재-export — saveEngine의 기존 `from './saveScheduler.js'` import를 유지한다. */
+export type { SchedulerClock, IntervalHandle } from '../util/clock.js'
 
 /** 기본 flush 간격(ms) — 120초. 생성자 옵션으로 override 가능하다. */
 export const DEFAULT_INTERVAL_MS = 120_000
-
-/** clock이 반환하는 불투명 interval 핸들. */
-export type IntervalHandle = ReturnType<typeof setInterval>
-
-/**
- * 주기 tick seam. setInterval/clearInterval의 최소 계약만 노출해 테스트 FakeClock·
- * E3 heartbeat로 교체 가능하게 한다.
- */
-export interface SchedulerClock {
-  setInterval(callback: () => void, ms: number): IntervalHandle
-  clearInterval(handle: IntervalHandle): void
-}
 
 /** DirtyTracker 의존성의 최소 계약(구조적 주입 — 테스트 mock 허용). */
 export interface DirtyDrainSource {
@@ -73,12 +67,6 @@ export interface SaveSchedulerOptions {
   readonly clock?: SchedulerClock
   /** flush 에러 logger(기본 NOOP_LOGGER). */
   readonly logger?: SaveLogger
-}
-
-/** 전역 setInterval/clearInterval에 위임하는 기본 clock. */
-const defaultClock: SchedulerClock = {
-  setInterval: (callback, ms) => setInterval(callback, ms),
-  clearInterval: (handle) => clearInterval(handle),
 }
 
 export class SaveScheduler {

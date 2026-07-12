@@ -4,36 +4,8 @@ import type { BankRepository } from '../repo/bankRepository.js'
 import type { WorldRepository } from '../repo/worldRepository.js'
 import { DocumentNotFoundError } from '../repo/types.js'
 import { NOOP_LOGGER, type SaveLogger } from './logger.js'
-import type { IntervalHandle, SchedulerClock } from './saveScheduler.js'
 import { SaveEngine } from './saveEngine.js'
-
-/**
- * 수동 구동 FakeClock — setInterval 콜백을 tick()으로 직접 발사한다(실타이머 없음).
- */
-class FakeClock implements SchedulerClock {
-  private readonly handlers = new Map<IntervalHandle, () => void>()
-  private nextId = 1
-  public lastMs: number | null = null
-
-  setInterval(callback: () => void, ms: number): IntervalHandle {
-    this.lastMs = ms
-    const handle = this.nextId++ as unknown as IntervalHandle
-    this.handlers.set(handle, callback)
-    return handle
-  }
-
-  clearInterval(handle: IntervalHandle): void {
-    this.handlers.delete(handle)
-  }
-
-  tick(): void {
-    for (const cb of this.handlers.values()) cb()
-  }
-
-  get activeCount(): number {
-    return this.handlers.size
-  }
-}
+import { FakeClock } from '../util/clock.testutil.js'
 
 /** 백그라운드 워커가 진행하도록 남은 microtask/macrotask를 비운다. */
 const barrier = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
