@@ -91,7 +91,7 @@ pnpm workspaces monorepo. 패키지: `shared`(프로토콜 Zod 스키마·조사
 
 C oracle을 behavioral oracle로 삼는 **frozen 골든 fixture**(characterization=golden master=approval 동일 기법). oracle은 fixture *생성기*로만 쓰고 체크인, CI는 순수 TS(32비트 툴체인 불요). 대상: 순수 공식 함수(전투 데미지·thaco·명중, 마법 지속·데미지, exp 곡선·레벨업, 가격 배수). 다중 파라미터 테이블은 combination approval. property 테스트는 RNG 시드 고정 전제로 불변식(데미지≥0·명중률 범위) 범위 검증. fixture는 함수별·입력 범위별로 좁게 유지(큰 공유 fixture 회피). 버그는 P1대로 bug-for-bug 재현/수정을 항목별 태깅. testing.md 정합(TDD·80% 커버리지·vitest).
 
-> **테스트 인프라 주의**: 기존 oracle은 `mstruct.h` 헤더-only struct 바이트 대조다. 공식 oracle은 `command5.c`/`magic*.c` 함수를 struct·전역 의존성까지 컴파일해야 하므로 실 작업량이 크다 — frozen fixture 채택 근거이며, 후속 테스트 인프라 토픽이 oracle 함수 컴파일 범위를 별도 스코핑한다.
+> **테스트 인프라 주의**: 기존 oracle은 `mstruct.h` 헤더-only struct 바이트 대조다. 공식 oracle은 `command5.c`/`magic*.c` 함수를 struct·전역 의존성까지 컴파일해야 하므로 실 작업량이 크다 — frozen fixture 채택 근거다. E8-1(#70)이 이 하네스를 실체화했다 — fixture 포맷·zod 스키마·approval 러너·manual 생성기를 `packages/shared/src/oracle/`에 두고 대표 공식 `compute_ac`로 end-to-end 증명했다. 상세는 `docs/specs/golden-fixture-harness.md`. oracle 함수 컴파일 범위는 아래 Open Q 6에서 확정했다.
 
 ## 4. 의사결정
 
@@ -129,7 +129,7 @@ C oracle을 behavioral oracle로 삼는 **frozen 골든 fixture**(characterizati
 3. **은행 이자** — 원작 무이자(as-shipped) vs 경제 확장. 기본 무이자(P1).
 4. **계정 email 필수/선택** — 인증 구현 토픽에서.
 5. **PFMBOS(패거리 두목) 임명 규칙** — oracle상 불명(A10 §6.5). 신규 설계 필요(소셜 구현 토픽).
-6. **oracle 함수 컴파일 범위** — 어느 공식을 실제 C 함수 대조까지 갈지 vs 수동 검산 fixture로 충분한지. 테스트 인프라 토픽에서.
+6. **oracle 함수 컴파일 범위** — **E8-1(#70)에서 확정(closed)**: 수동 검산(manual) 우선 + 함수별 실 C 컴파일(c-compile) opt-in 하이브리드. A5~A8이 공식을 라인 단위로 추출 완료라 대부분 manual로 저비용 산출하고, 러너가 SUT와 교차 검증해 transcription을 방어한다. c-compile은 transcription 리스크 높거나 조합공간 큰 함수(RNG 굴림 분포·13×20 thaco_list 등)에 한해 첫 소비자 E6 서브 토픽이 opt-in한다 — E8-1은 `method` enum만 보존하고 c-compile 드라이버를 실체화하지 않는다.
 7. **후속 구현 에픽 순서** — 제안: (a) monorepo 스캐폴딩 → (b) 영속화 기반 → (c) 전송·세션 계층 → (d) 테스트 인프라(게임 규칙 엔진 선행) → (e) 월드 상태 엔진(방·이동·인메모리 그래프) → (f) 게임 규칙 엔진(전투·마법·진행·아이템, 다수 토픽) → (g) 인증·계정 → (h) 소셜·채널. 의존 그래프·에픽 카드 상세는 working 로드맵 `docs/_local/impl-roadmap.md`. 순서는 각 에픽 착수 시 확정.
 
 ## 7. 관련 문서

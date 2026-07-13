@@ -1,0 +1,71 @@
+{
+  "fn": "compute_ac",
+  "oracle": {
+    "method": "manual",
+    "source": "player.c:971 (A5 §6 a5-combat.md:184)",
+    "generatedAt": "2026-07-13T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "dexterity": 10,
+        "equipArmor": 0,
+        "protection": false
+      },
+      "expected": 100
+    },
+    {
+      "input": {
+        "dexterity": 20,
+        "equipArmor": 20,
+        "protection": true
+      },
+      "expected": 55
+    },
+    {
+      "input": {
+        "dexterity": 63,
+        "equipArmor": 0,
+        "protection": false
+      },
+      "expected": 65
+    },
+    {
+      "input": {
+        "dexterity": 0,
+        "equipArmor": 0,
+        "protection": false
+      },
+      "note": "음 bonus",
+      "expected": 120
+    },
+    {
+      "input": {
+        "dexterity": 63,
+        "equipArmor": 300,
+        "protection": true
+      },
+      "note": "clamp 하한 경계",
+      "expected": -127
+    },
+    {
+      "input": {
+        "dexterity": 0,
+        "equipArmor": -20,
+        "protection": false
+      },
+      "note": "clamp 상한 경계·게임 현실성 미검증",
+      "expected": 127
+    },
+    {
+      "input": {
+        "dexterity": 70,
+        "equipArmor": 0,
+        "protection": false
+      },
+      "note": "MIN cap 검증",
+      "expected": 65
+    }
+  ]
+}
