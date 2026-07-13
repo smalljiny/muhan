@@ -53,7 +53,7 @@ BankTransactionService (bank/, index.ts와 독립 조립)
 
 ### SaveScheduler
 
-주입된 `SchedulerClock`(`setInterval`/`clearInterval` seam)으로 주기 flush를 구동한다(기본 `DEFAULT_INTERVAL_MS`=120초). clock seam으로 테스트는 FakeClock을 주입해 tick을 수동 구동하고, E3 heartbeat 도입 시 clock을 교체한다.
+주입된 `SchedulerClock`(`setInterval`/`clearInterval` seam)으로 주기 flush를 구동한다(기본 `DEFAULT_INTERVAL_MS`=120초). `SchedulerClock`·`IntervalHandle`·`defaultClock` 정의는 `util/clock.ts`가 단일 출처이며 saveScheduler는 이를 import한다(heartbeat·WorldClock과 동일 seam 공유). clock seam으로 테스트는 FakeClock을 주입해 tick을 수동 구동한다.
 
 - `flush()` — `DirtyTracker.drain()`으로 이미 coalesce된 배열을 얻어, 각 항목을 AsyncWriteQueue에 **동기 burst**로 enqueue한다(각 enqueue 사이 await로 yield하지 않고 `Promise.all`로 완료 대기 — 큐의 "coalescing은 동기 burst에서만 성립" 계약 준수). 빈 배치는 no-op.
 - `start()`/`stop()` — interval을 걸고 해제한다. 이미 실행 중이면 재-arm하지 않는다.
