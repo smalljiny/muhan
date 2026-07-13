@@ -6,42 +6,9 @@ import { NOOP_LOGGER } from './logger.js'
 import {
   SaveScheduler,
   DEFAULT_INTERVAL_MS,
-  type IntervalHandle,
-  type SchedulerClock,
   type WriteEnqueue,
 } from './saveScheduler.js'
-
-/**
- * 수동 구동 FakeClock — setInterval로 등록된 콜백을 tick()으로 직접 발사한다.
- * 실타이머를 쓰지 않아 완전히 결정적이다.
- */
-class FakeClock implements SchedulerClock {
-  private readonly handlers = new Map<IntervalHandle, () => void>()
-  private nextId = 1
-  /** 마지막으로 setInterval에 전달된 간격(ms) — 간격 검증용. */
-  public lastMs: number | null = null
-
-  setInterval(callback: () => void, ms: number): IntervalHandle {
-    this.lastMs = ms
-    const handle = this.nextId++ as unknown as IntervalHandle
-    this.handlers.set(handle, callback)
-    return handle
-  }
-
-  clearInterval(handle: IntervalHandle): void {
-    this.handlers.delete(handle)
-  }
-
-  /** 등록된 모든 interval 콜백을 1회 발사한다(간격 경과 시뮬레이션). */
-  tick(): void {
-    for (const cb of this.handlers.values()) cb()
-  }
-
-  /** 현재 등록된 활성 interval 개수. */
-  get activeCount(): number {
-    return this.handlers.size
-  }
-}
+import { FakeClock } from '../util/clock.testutil.js'
 
 /** enqueue 호출을 기록하는 mock write 큐. */
 function mockQueue(): { queue: WriteEnqueue; enqueue: ReturnType<typeof vi.fn> } {

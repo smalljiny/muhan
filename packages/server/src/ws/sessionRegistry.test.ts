@@ -191,6 +191,67 @@ describe('createSessionRegistry', () => {
     })
   })
 
+  describe('listBindings', () => {
+    it('빈 레지스트리면 빈 배열을 반환한다', () => {
+      const registry = createSessionRegistry()
+      expect(registry.listBindings()).toEqual([])
+    })
+
+    it('live 다건 등록 후 모든 바인딩을 반환한다(개수·characterId 전체 포함)', () => {
+      const registry = createSessionRegistry()
+      const a = registry.register('char-1', 'acc-1', createConnectionContext(), vi.fn())
+      const b = registry.register('char-2', 'acc-2', createConnectionContext(), vi.fn())
+      const c = registry.register('char-3', 'acc-3', createConnectionContext(), vi.fn())
+
+      const bindings = registry.listBindings()
+
+      expect(bindings).toHaveLength(3)
+      expect(bindings.map((x) => x.characterId).sort()).toEqual(['char-1', 'char-2', 'char-3'])
+      // 반환 원소는 map에 등록된 바로 그 바인딩 객체 참조들이다(toContain=Object.is identity).
+      // 이 identity가 shutdown 수렴의 resolveDisconnect identity 가드가 의존하는 계약이다.
+      expect(bindings).toContain(a)
+      expect(bindings).toContain(b)
+      expect(bindings).toContain(c)
+    })
+
+    it('live·link-dead 혼재 시 둘 다 열거한다(link-dead 필터링 없음)', () => {
+      const registry = createSessionRegistry()
+      const live = registry.register('char-1', 'acc-1', createConnectionContext(), vi.fn())
+      const other = registry.register('char-2', 'acc-2', createConnectionContext(), vi.fn())
+      const dead = registry.markLinkDead(other, makeScheduleGrace(fakeHandle(1)))
+      expect(dead).not.toBeNull()
+
+      const bindings = registry.listBindings()
+
+      expect(bindings).toHaveLength(2)
+      // live 엔트리와 link-dead 엔트리가 모두 스냅샷에 참조 identity로 포함된다.
+      expect(bindings).toContain(live)
+      expect(bindings).toContain(dead as SessionBinding)
+      const deadEntry = bindings.find((x) => x.characterId === 'char-2')
+      expect(deadEntry?.link).toBe('link-dead')
+    })
+
+    it('반환값은 라이브 뷰가 아닌 복사 스냅샷이라 순회 중 remove가 반환 배열에 영향이 없다', () => {
+      const registry = createSessionRegistry()
+      registry.register('char-1', 'acc-1', createConnectionContext(), vi.fn())
+      registry.register('char-2', 'acc-2', createConnectionContext(), vi.fn())
+      registry.register('char-3', 'acc-3', createConnectionContext(), vi.fn())
+
+      const snapshot = registry.listBindings()
+      const visited: string[] = []
+      // 스냅샷 순회 중 각 characterId를 index에서 제거해도 순회가 깨지지 않고 완주한다.
+      for (const binding of snapshot) {
+        visited.push(binding.characterId)
+        registry.remove(binding.characterId)
+      }
+
+      expect(visited.sort()).toEqual(['char-1', 'char-2', 'char-3'])
+      expect(snapshot).toHaveLength(3)
+      // index는 순회로 모두 비워졌다.
+      expect(registry.listBindings()).toEqual([])
+    })
+  })
+
   describe('map 조작 throw-safety', () => {
     it('주입 콜백이 정상 반환할 때 register/markLinkDead/rebind는 throw하지 않는다', () => {
       const registry = createSessionRegistry({ clearTimeoutFn: vi.fn() as unknown as typeof clearTimeout })

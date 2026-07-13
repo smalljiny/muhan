@@ -3,9 +3,11 @@
  *
  * 단일 인터벌(isAlive) 모델: `pingIntervalMs`마다 tick이 돌며 직전 라운드의 pong 미수신을 센다.
  * 연속 미수신이 `maxMissed`에 도달하면 소켓을 `terminate`하고 정지한다. pong 수신은 `notePong()`으로
- * 알리며 미스 카운터를 리셋한다. 타이머는 주입 가능(`setIntervalFn`/`clearIntervalFn`)이라 fake clock으로
- * 결정적 단위 테스트가 가능하고, 미주입 시 전역 타이머를 쓴다.
+ * 알리며 미스 카운터를 리셋한다. 타이머는 주입 가능(`clock: SchedulerClock`)이라 fake clock으로
+ * 결정적 단위 테스트가 가능하고, 미주입 시 전역 타이머(`defaultClock`)를 쓴다.
  */
+
+import { defaultClock, type SchedulerClock } from '../util/clock.js'
 
 /** 매니저가 의존하는 소켓 표면. 실 ws.WebSocket이 구조적으로 충족한다. */
 export interface HeartbeatSocket {
@@ -17,8 +19,7 @@ export interface HeartbeatSocket {
 export interface HeartbeatOptions {
   readonly pingIntervalMs: number
   readonly maxMissed: number
-  readonly setIntervalFn?: typeof setInterval
-  readonly clearIntervalFn?: typeof clearInterval
+  readonly clock?: SchedulerClock
 }
 
 /** per-connection 하트비트 핸들. `start`가 타이머 핸들을 돌려줘 `ctx.heartbeat`에 배선한다. */
@@ -32,8 +33,7 @@ export interface Heartbeat {
  * 하트비트 매니저를 만든다. 상태(미스 카운트·pong 대기 여부·타이머 핸들)는 클로저에 캡슐화한다.
  */
 export function createHeartbeat(socket: HeartbeatSocket, opts: HeartbeatOptions): Heartbeat {
-  const setIntervalFn = opts.setIntervalFn ?? setInterval
-  const clearIntervalFn = opts.clearIntervalFn ?? clearInterval
+  const clock = opts.clock ?? defaultClock
 
   let timer: NodeJS.Timeout | null = null
   let missedPongs = 0
@@ -42,7 +42,7 @@ export function createHeartbeat(socket: HeartbeatSocket, opts: HeartbeatOptions)
 
   function stop(): void {
     if (timer !== null) {
-      clearIntervalFn(timer)
+      clock.clearInterval(timer)
       timer = null
     }
   }
@@ -64,7 +64,7 @@ export function createHeartbeat(socket: HeartbeatSocket, opts: HeartbeatOptions)
   function start(): NodeJS.Timeout {
     missedPongs = 0
     awaitingPong = false
-    timer = setIntervalFn(tick, opts.pingIntervalMs)
+    timer = clock.setInterval(tick, opts.pingIntervalMs)
     return timer
   }
 

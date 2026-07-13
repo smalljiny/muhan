@@ -10,6 +10,7 @@ import { WorldRepository } from './repo/worldRepository.js'
 import { SaveEngine } from './save/saveEngine.js'
 import type { SaveLogger } from './save/logger.js'
 import { loadWorldGraph } from './world/worldGraph.js'
+import { WorldClock } from './world/worldClock.js'
 
 // 부팅 엔트리 — env 검증(fail-fast) → DB 연결(fail-fast) → 앱 구성 → SaveEngine 배선 → listen.
 // 커버리지에서 제외(배선 코드). PORT는 getConfig().PORT 단일 출처를 쓴다(인라인 파싱 소거).
@@ -52,6 +53,10 @@ async function boot(): Promise<void> {
   const saveEngine = new SaveEngine(characters, bank, world, saveLogger)
   saveEngine.start()
 
+  // 1Hz 중앙 월드 틱 시작. 실 슬롯은 후속 토픽(#69/#68)이 register로 붙인다.
+  const worldClock = new WorldClock()
+  worldClock.start()
+
   // graceful shutdown — SaveEngine.shutdown()으로 잔여 dirty를 flush·drain한 뒤 DB 연결을 닫는다.
   // 캐시된 Promise로 idempotent 보장: SIGTERM 중복 도착이나 shutdown 진행 중 재수신 시 같은
   // Promise를 반환해 두 번 실행하지 않는다.
@@ -60,8 +65,28 @@ async function boot(): Promise<void> {
     if (shuttingDown !== null) return shuttingDown
     shuttingDown = (async () => {
       app.log.info(`${signal} 수신 — graceful shutdown 시작`)
-      await saveEngine.shutdown()
-      await conn.close()
+      // 종료 수렴 순서(spec §3.3): ① 플래그 set으로 뒤늦은 close가 link-dead 처리로 새지 않도록
+      // 차단 → ② 월드 틱 정지로 신규 게임 이벤트 유입 차단 → ③ 등록된 세션을 일괄 수렴(clean
+      // disconnect) → ④ app.close()로 잔여 소켓·리스너를 정리. 그 다음에야 save flush·DB close.
+      //
+      // 상위 단계(③④)를 try로 감싸고 flush·DB close를 finally에 둔다 — converge나 app.close가 throw해도
+      // saveEngine.shutdown()이 무조건 실행돼 잔여 dirty를 flush한다. saveEngine.shutdown()은 유일한
+      // force-flush 지점이라, 스킵되면 미저장 상태가 소실된다(#56 결함 클래스: shutdown 배선 자체가
+      // flush 스킵 경로를 만들지 않도록 격리). converge의 바인딩별 격리와 함께 이중 방어를 이룬다.
+      try {
+        app.wsShutdown.markShuttingDown()
+        worldClock.stop()
+        app.wsShutdown.converge()
+        await app.close()
+        // 2차 수렴 — 1차 스냅샷 이후 app.close 대기 중 큐잉 프레임이 enterWorld로 등록한 late 바인딩을
+        // 종결한다. app.close 완료 시점엔 소켓이 모두 닫혀 신규 등록이 불가하므로 이 수렴이 레지스트리를
+        // 확정적으로 비운다(늦은 등록 레이스 방어 — 그 소켓의 close는 isShuttingDown 가드로 handleClose를
+        // 건너뛰어 스스로 종결되지 못한다). converge는 idempotent·바인딩별 격리라 재호출이 안전하다.
+        app.wsShutdown.converge()
+      } finally {
+        await saveEngine.shutdown()
+        await conn.close()
+      }
       process.exit(0)
     })()
     return shuttingDown

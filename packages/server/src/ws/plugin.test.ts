@@ -595,4 +595,68 @@ describe('WS transport', () => {
       resetConfigForTests()
     }
   })
+
+  // ── Story 6 — shutdown 수렴·소켓 종료 배선(app 레벨 단위) ──────────────────────────────────────
+  // registerWebsocket이 조립한 app.wsShutdown(ShutdownConverger)이 등록 바인딩을 reason 'shutdown'으로
+  // 일괄 종결하고, 종료 플래그(isShuttingDown)가 소켓 close 핸들러의 markLinkDead(link-dead 진입)를
+  // 우회하는지 injectWS로 관측한다. WorldClock 포함 실서버 수렴은 shutdown.integration.test.ts가 소유한다.
+
+  it('markShuttingDown→converge가 live 바인딩을 reason shutdown으로 정확히 1회 종결하고 레지스트리를 비운다', async () => {
+    const port = spyPort()
+    const app = buildSeededApp({ lifecyclePort: port })
+    await app.ready()
+
+    const ws = await injectAuthedWS(app)
+    await enterCommandState(ws)
+    expect(app.wsSessionRegistry.get(SEED_CHARACTER_ID)?.link).toBe('live')
+
+    app.wsShutdown.markShuttingDown()
+    app.wsShutdown.converge()
+
+    // 등록됐던 live 바인딩이 reason 'shutdown'으로 정확히 1회 종결된다(link-dead 경유 없이 직접 제거).
+    expect(port.onSessionEnd).toHaveBeenCalledTimes(1)
+    expect(port.onSessionEnd).toHaveBeenCalledWith({
+      accountId: SEED_ACCOUNT_ID,
+      characterId: SEED_CHARACTER_ID,
+      reason: 'shutdown',
+    })
+    // 레지스트리가 비고 색인 조회가 undefined다 — link-dead로 남지 않고 제거됐다.
+    expect(app.wsSessionRegistry.listBindings()).toHaveLength(0)
+    expect(app.wsSessionRegistry.get(SEED_CHARACTER_ID)).toBeUndefined()
+
+    ws.terminate()
+    await app.close()
+  })
+
+  it('종료 플래그 set 후 소켓 close는 markLinkDead를 건너뛰어 새 link-dead를 만들지 않는다', async () => {
+    const port = spyPort()
+    const app = buildSeededApp({ lifecyclePort: port })
+    await app.ready()
+
+    const ws = await injectAuthedWS(app)
+    await enterCommandState(ws)
+    expect(app.wsSessionRegistry.get(SEED_CHARACTER_ID)?.link).toBe('live')
+
+    // 종료 플래그를 먼저 세운 뒤 클라가 drop한다 — close 핸들러가 isShuttingDown()로 handleClose를 우회한다.
+    app.wsShutdown.markShuttingDown()
+    ws.terminate()
+    // waitFor(connections 0)는 load-bearing이다 — close 핸들러가 실제로 돌았음을 보장한 뒤에 단언한다.
+    await waitFor(() => app.wsConnections.size === 0)
+
+    // handleClose 미실행 증거: 바인딩이 link-dead로 전이하지 않고 live로 남는다(새 grace 타이머 미생성).
+    expect(app.wsSessionRegistry.get(SEED_CHARACTER_ID)?.link).toBe('live')
+    expect(port.onSessionEnd).not.toHaveBeenCalled()
+
+    // converge가 남은 live 바인딩을 reason 'shutdown'으로 1회 종결하고 레지스트리를 비운다.
+    app.wsShutdown.converge()
+    expect(port.onSessionEnd).toHaveBeenCalledTimes(1)
+    expect(port.onSessionEnd).toHaveBeenCalledWith({
+      accountId: SEED_ACCOUNT_ID,
+      characterId: SEED_CHARACTER_ID,
+      reason: 'shutdown',
+    })
+    expect(app.wsSessionRegistry.listBindings()).toHaveLength(0)
+
+    await app.close()
+  })
 })

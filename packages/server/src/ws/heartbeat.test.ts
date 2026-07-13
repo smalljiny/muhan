@@ -1,32 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createHeartbeat, type HeartbeatSocket } from './heartbeat.js'
+import { FakeClock } from '../util/clock.testutil.js'
 
 // 하트비트는 순수 로직이라 fake socket + 주입한 fake clock으로 결정적으로 검증한다.
 // injectWS로 제어 프레임(ping/pong)을 태우지 않는다 — 라이트-소켓 릴레이 타이밍 불확실성을 피한다.
-
-/** 주입용 결정적 fake clock. tick()이 활성 인터벌 핸들러를 1회씩 동기로 발화한다. */
-function createFakeClock() {
-  interface Entry {
-    id: number
-    fn: () => void
-  }
-  let entries: Entry[] = []
-  let nextId = 1
-  const setIntervalFn = ((fn: () => void) => {
-    const id = nextId++
-    entries = [...entries, { id, fn }]
-    return id as unknown as NodeJS.Timeout
-  }) as unknown as typeof setInterval
-  const clearIntervalFn = ((handle: NodeJS.Timeout) => {
-    entries = entries.filter((e) => e.id !== (handle as unknown as number))
-  }) as unknown as typeof clearInterval
-  function tick(times = 1): void {
-    for (let i = 0; i < times; i += 1) {
-      for (const e of [...entries]) e.fn()
-    }
-  }
-  return { setIntervalFn, clearIntervalFn, tick }
-}
 
 function createFakeSocket(): HeartbeatSocket & { ping: ReturnType<typeof vi.fn>; terminate: ReturnType<typeof vi.fn> } {
   return { ping: vi.fn(), terminate: vi.fn() }
@@ -34,13 +11,12 @@ function createFakeSocket(): HeartbeatSocket & { ping: ReturnType<typeof vi.fn>;
 
 /** 6개 테스트가 공유하는 표준 셋업(간격 1000ms·임계 3, 주입 fake clock). */
 function makeHb() {
-  const clock = createFakeClock()
+  const clock = new FakeClock()
   const socket = createFakeSocket()
   const hb = createHeartbeat(socket, {
     pingIntervalMs: 1000,
     maxMissed: 3,
-    setIntervalFn: clock.setIntervalFn,
-    clearIntervalFn: clock.clearIntervalFn,
+    clock,
   })
   return { hb, socket, clock }
 }
@@ -64,7 +40,7 @@ describe('createHeartbeat', () => {
     // 핸들은 단순 non-null이 아니라 cleanup이 clear할 수 있는 실제 타이머 핸들이어야 한다
     // (ctx.heartbeat 배선의 계약). 이 핸들로 clear하면 이후 tick에서 ping이 멈춰야 한다.
     expect(handle).toBeDefined()
-    clock.clearIntervalFn(handle)
+    clock.clearInterval(handle)
     clock.tick(1)
     expect(socket.ping).not.toHaveBeenCalled()
   })

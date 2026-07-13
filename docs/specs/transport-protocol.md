@@ -137,7 +137,7 @@
 - `notePong()` — `missedPongs=0`·`awaitingPong=false`로 리셋(연결 생존 신호).
 - `stop()` — 타이머 clear(멱등).
 
-타이머는 주입 가능(`setIntervalFn`/`clearIntervalFn`)이라 fake clock으로 결정적 단위 테스트가 가능하고, 미주입 시 전역 타이머를 쓴다. 첫 인터벌은 미스를 세지 않고 ping만 보내므로 종료까지 ≈ `pingIntervalMs × (maxMissed + 1)`이다(기본값 25s·3 → ≈ 100s).
+타이머는 `clock?: SchedulerClock` 단일 seam으로 주입 가능(`util/clock.ts` 공유 계약 — saveScheduler·WorldClock과 동일 관용구)이라 fake clock으로 결정적 단위 테스트가 가능하고, 미주입 시 `defaultClock`(전역 타이머)을 쓴다. 첫 인터벌은 미스를 세지 않고 ping만 보내므로 종료까지 ≈ `pingIntervalMs × (maxMissed + 1)`이다(기본값 25s·3 → ≈ 100s).
 
 ### Env config (`packages/server/src/config/env.ts`)
 

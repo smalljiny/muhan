@@ -21,9 +21,10 @@ export type LinkState = 'live' | 'link-dead'
 
 /**
  * 종결 사유 — `register`의 evict-old가 쓰는 `evictedByNewLogin`(같은 캐릭터 재로그인)과, Story 4/5가 채우는
- * grace 만료·idle 종료 사유. Story 3의 `register`는 `evictedByNewLogin`만 발생시킨다.
+ * grace 만료·idle 종료 사유. `shutdown`은 Story 5/6의 서버 종료 일괄 수렴이 전체 바인딩을 종결할 때 쓴다.
+ * Story 3의 `register`는 `evictedByNewLogin`만 발생시킨다.
  */
-export type DisconnectReason = 'evictedByNewLogin' | 'graceExpired' | 'idleTimeout'
+export type DisconnectReason = 'evictedByNewLogin' | 'graceExpired' | 'idleTimeout' | 'shutdown'
 
 /** 등록된 기존 엔트리를 종결하는 주입 콜백. Story 4의 `resolveDisconnect`가 이 형태로 배선된다. */
 export type TerminateCallback = (existing: SessionBinding, reason: DisconnectReason) => void
@@ -64,6 +65,7 @@ export interface SessionRegistry {
   rebind(binding: SessionBinding, newCtx: ConnectionContext): SessionBinding | null
   get(characterId: string): SessionBinding | undefined
   remove(characterId: string): void
+  listBindings(): readonly SessionBinding[]
 }
 
 /**
@@ -142,5 +144,15 @@ export function createSessionRegistry(opts: SessionRegistryOptions = {}): Sessio
     index.delete(characterId)
   }
 
-  return { register, markLinkDead, rebind, get, remove }
+  /**
+   * 등록된 모든 바인딩(live·link-dead 무관)의 materialized 스냅샷 복사본을 반환한다. link-dead도
+   * armed grace 타이머 + 미저장 세션을 쥐고 있어 shutdown 수렴 대상이므로 필터링하지 않는다. 라이브 뷰가
+   * 아닌 복사본이라, 수렴이 이 배열을 순회하며 각 바인딩에 resolveDisconnect(→ index.remove)를 호출해도
+   * 순회 중 변이 위험이 없다.
+   */
+  function listBindings(): readonly SessionBinding[] {
+    return [...index.values()]
+  }
+
+  return { register, markLinkDead, rebind, get, remove, listBindings }
 }

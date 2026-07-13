@@ -38,7 +38,7 @@ E3-1([`transport-protocol.md`](./transport-protocol.md))은 transport-only WS(�
 | `link` | `LinkState = 'live' \| 'link-dead'` |
 | `graceTimer` | link-dead 진입 시 건 grace 타이머 핸들(live면 null) |
 
-`DisconnectReason = 'evictedByNewLogin' | 'graceExpired' | 'idleTimeout'` — 종결 사유의 단일 출처(`sessionRegistry.ts`). `SessionLifecyclePort`·`resolveDisconnect`가 이를 import한다.
+`DisconnectReason = 'evictedByNewLogin' | 'graceExpired' | 'idleTimeout' | 'shutdown'` — 종결 사유의 단일 출처(`sessionRegistry.ts`). `SessionLifecyclePort`·`resolveDisconnect`가 이를 import한다. `'shutdown'`은 서버 주도 종료 시 전체 live 바인딩을 일괄 수렴할 때 쓴다([`runtime-foundation.md`](./runtime-foundation.md) shutdown 수렴).
 
 ### `ConnectionContext` 확장 (E3-2 슬롯에 2개 추가)
 
@@ -52,7 +52,10 @@ register(characterId, accountId, ctx, terminate): SessionBinding
 markLinkDead(binding, scheduleGrace): SessionBinding | null
 rebind(binding, newCtx): SessionBinding | null
 get(characterId): SessionBinding | undefined
+listBindings(): readonly SessionBinding[]   // 등록 바인딩 스냅샷(shutdown 일괄 수렴 소스)
 ```
+
+`listBindings`는 라이브 뷰가 아닌 **복사 스냅샷**을 반환한다 — 순회 중 `resolveDisconnect`가 레지스트리에서 엔트리를 제거해도 안전하도록. live·link-dead를 필터하지 않고 전부 반환한다(link-dead도 armed grace 타이머 + 미저장 세션을 쥐고 있어 shutdown 수렴 대상이므로). 서버 주도 종료 일괄 수렴([`runtime-foundation.md`](./runtime-foundation.md))의 바인딩 소스다.
 
 `createSessionRegistry(opts)` 팩토리로 만들고, 타이머·포트 호출·소켓 close 같은 부수효과는 셸(plugin)이 주입 콜백으로 넣는다(functional-core/imperative-shell 경계). `clearTimeoutFn`은 주입 가능하며 미주입 시 전역 `clearTimeout`을 쓴다(fake clock 단위 테스트).
 
@@ -185,11 +188,11 @@ grace·idle 창은 env로 튜닝하며 스키마는 `z.coerce.number().int().min
 - **놓친 이벤트 리플레이 없음** — rebind는 `command` 복원 + `session:resumed`까지다. 단절 중 놓친 이벤트(방 설명·전투 로그) 재전송은 월드 상태 소관(E4).
 - **명시적 logout 없음** — 원작 무한에 quit 명령이 없어 이 계층에도 없다. 향후 추가 시 별도 reason으로 `resolveDisconnect`에 매핑한다.
 - **연결 정원·상한·backpressure 없음** — 레지스트리는 중복/정원 정책이 소비할 seam을 제공할 뿐, 동시 접속 상한·계정별 연결 상한·rate limiting·아웃바운드 backpressure는 별도 하드닝 토픽(#54) 소관이다.
-- **서버 graceful shutdown 수렴 미구현** — 현재 소켓 `'close'` 핸들러는 command 세션의 모든 close를 link-dead로 판정한다. `@fastify/websocket` 기본 preClose가 `app.close()` 시 모든 클라이언트 소켓을 닫으므로, 서버 종료가 클라 주도 drop과 구분되지 않아 live command 세션마다 referenced grace 타이머가 걸린다(종료 예산 초과·수렴 지연 가능). 현재는 lifecycle 포트가 no-op이고 프로덕션 graceful shutdown 핸들러가 없어 latent이며, 실 save 포트 랜딩 시 승격된다. 후속 이슈 [#56](https://github.com/smalljiny/muhan/issues/56)에서 shutdown 수렴(custom preClose·즉시 resolveDisconnect·통합 테스트)을 다룬다.
+- **서버 graceful shutdown 수렴은 런타임 기반 토픽 소관** — 서버 주도 종료 시 전체 live 바인딩을 `resolveDisconnect(reason:'shutdown')`로 즉시 수렴하는 오케스트레이션은 [`runtime-foundation.md`](./runtime-foundation.md)(shutdown 수렴, #56 해소)이 소유한다. 본 계층은 그 수렴이 소비하는 seam만 제공한다 — `DisconnectReason`의 `'shutdown'` 값, `SessionRegistry.listBindings` 스냅샷, 그리고 서버 주도 종료 플래그가 set이면 close 핸들러가 `markLinkDead`(grace)를 건너뛰는 판정. close 핸들러의 서버 주도 종료 구분은 §동작 "close 판정" 표의 "서버 주도 종료" 행과 동일 원리다(플래그 가드로 link-dead 진입 차단).
 
 ## 관련 문서
 
 - 에픽 [#32 E3 전송·세션 계층](https://github.com/smalljiny/muhan/issues/32)
 - 선행 스펙: [`transport-protocol.md`](./transport-protocol.md)(E3-1) · [`auth-session.md`](./auth-session.md)(E3-2)
 - ADR: [`architecture.md`](./architecture.md)(D6 세션·D5 프로토콜 슬롯)
-- 후속·조정: [#54 WS 자원 고갈 하드닝](https://github.com/smalljiny/muhan/issues/54) · [#56 서버 shutdown 세션 수렴](https://github.com/smalljiny/muhan/issues/56)
+- 후속·조정: [#54 WS 자원 고갈 하드닝](https://github.com/smalljiny/muhan/issues/54) · [#56 서버 shutdown 세션 수렴](https://github.com/smalljiny/muhan/issues/56)(해소 → [`runtime-foundation.md`](./runtime-foundation.md))

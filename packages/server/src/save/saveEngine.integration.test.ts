@@ -3,34 +3,12 @@ import type { Db } from 'mongodb'
 import type { BankAccount, Character, RoomState } from 'shared'
 import { SaveEngine } from './saveEngine.js'
 import { NOOP_LOGGER } from './logger.js'
-import type { IntervalHandle, SchedulerClock } from './saveScheduler.js'
 import { CharacterRepository } from '../repo/characterRepository.js'
 import { BankRepository } from '../repo/bankRepository.js'
 import { WorldRepository } from '../repo/worldRepository.js'
 import { ObjectRepository } from '../repo/objectRepository.js'
 import { createMongoTestDb, type MongoTestDb } from '../repo/mongoTestDb.testutil.js'
-
-/** 수동 구동 FakeClock — 주기 flush를 tick()으로 결정적으로 구동한다. */
-class FakeClock implements SchedulerClock {
-  private readonly handlers = new Map<IntervalHandle, () => void>()
-  private nextId = 1
-  public lastMs: number | null = null
-
-  setInterval(callback: () => void, ms: number): IntervalHandle {
-    this.lastMs = ms
-    const handle = this.nextId++ as unknown as IntervalHandle
-    this.handlers.set(handle, callback)
-    return handle
-  }
-
-  clearInterval(handle: IntervalHandle): void {
-    this.handlers.delete(handle)
-  }
-
-  tick(): void {
-    for (const cb of this.handlers.values()) cb()
-  }
-}
+import { FakeClock } from '../util/clock.testutil.js'
 
 /** 즉시 resolve backoff sleep. */
 const immediate = (): Promise<void> => Promise.resolve()
