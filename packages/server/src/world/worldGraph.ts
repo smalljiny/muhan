@@ -7,17 +7,35 @@ type RawItem = { name: string; description: string; value: number; contains: Raw
 type RawRoom = {
   id: number
   name: string
+  flags: number[]
   exits: RawExit[]
   items: RawItem[]
   short_desc: string
   long_desc: string
 }
 
-// raw 출구를 런타임 엣지로 매핑한다. room(대상 방 번호) → targetRoomId, timer는 런타임 기본 0.
+/**
+ * 출구 문 재잠금/재닫힘 지연의 런타임 기본값(초). oracle a4 §111 `check_exits`는
+ * `ltime + interval < now`이면 문을 자동 재잠금/재닫힘하지만 원본은 구체 interval 값을
+ * 명시하지 않는다(디스크 라이브 상태에 기록될 뿐). 여기서 런타임 기본값으로 고정하고,
+ * 후속 write-back(문 상태 영속화) 토픽에서 방별 값으로 이월한다. 코드·테스트가 이 상수를
+ * 함께 참조해 값 불일치를 없앤다.
+ */
+export const DEFAULT_EXIT_INTERVAL_SEC = 60
+
+// raw 출구를 런타임 엣지로 매핑한다. room(대상 방 번호) → targetRoomId.
+// ltime은 문 상태 변경 시각으로 부팅 시 0(변경 없음), interval은 런타임 기본 주입값.
 // dangling 대상은 그대로 유지한다(해석은 Map.has 지연 조회).
 function toExitEdge(raw: RawExit): ExitEdge {
   // flags는 복사한다 — 노드가 폐기될 raw 번들과 배열을 공유하지 않게(items deep-copy와 정합).
-  return { name: raw.name, targetRoomId: raw.room, flags: [...raw.flags], key: raw.key, timer: 0 }
+  return {
+    name: raw.name,
+    targetRoomId: raw.room,
+    flags: [...raw.flags],
+    key: raw.key,
+    ltime: 0,
+    interval: DEFAULT_EXIT_INTERVAL_SEC,
+  }
 }
 
 // raw 아이템을 인메모리 인스턴스로 재귀 변환한다.
@@ -42,6 +60,10 @@ function toRoomNode(raw: RawRoom): RoomNode {
     longDesc: raw.long_desc,
     exits: raw.exits.map(toExitEdge),
     items: raw.items.map((item, i) => toItemInstance(item, raw.id, String(i))),
+    // flags는 64비트 raw 방 flags를 복사해 보존한다(exits/items deep-copy 관례와 정합, 불변).
+    flags: [...raw.flags],
+    // occupants는 라이브 점유자 Set으로 부팅 시 빈 상태다(characterId가 이동 시 채워짐).
+    occupants: new Set<string>(),
   }
 }
 
