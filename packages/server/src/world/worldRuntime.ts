@@ -5,6 +5,7 @@ import {
   loadSpawnTemplates,
   respawnPermCreatures,
   type SpawnTemplateIndex,
+  type InstanceIdAllocator,
 } from './spawn.js'
 import { createCreatureTick, type OnCombatTick } from './creatureTick.js'
 import { createRandomSpawn } from './randomSpawn.js'
@@ -64,6 +65,15 @@ export interface WorldRuntime {
   readonly onRoomLeft: (room: RoomNode, actor: MoveActor) => void
   /** 활성 집합(테스트·후속 조회용). */
   readonly activeSet: ActiveSet
+  /**
+   * 방별 monotonic idx 발급기(D7). perm·random·invasion 3경로가 이미 공유하며, E6이 전투 사망을
+   * 결선할 때 `onCreatureDeath`/`onDeathSummon`이 **이 동일 인스턴스**를 재사용해야 소환 크리처
+   * instanceId가 스폰 크리처와 충돌하지 않는다(별도 발급기 생성 시 방별 `n`부터 중복 발급). D7 4경로
+   * 공유 계약을 조립 지점에서 닫기 위해 노출한다.
+   */
+  readonly alloc: InstanceIdAllocator
+  /** 스폰 템플릿 인덱스(팩토리 (b) 조회). E6 death seam이 소환 대상 조회에 재사용한다. */
+  readonly templates: SpawnTemplateIndex
 }
 
 export function createWorldRuntime(
@@ -110,5 +120,5 @@ export function createWorldRuntime(
     activeSet.deactivate(room)
   }
 
-  return { slots, onRoomEntered, onRoomLeft, activeSet }
+  return { slots, onRoomEntered, onRoomLeft, activeSet, alloc, templates }
 }

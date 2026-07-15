@@ -103,8 +103,10 @@ function toRoomNode(raw: RawRoom): RoomNode {
  * 부팅 시 정본 방 번들을 인메모리 그래프로 로드한다.
  *
  * rooms.json 배열을 한 번 읽어 `room.id`를 키로 하는 Map을 구성한다. 출구는 엣지로,
- * 바닥 아이템은 고유 id를 가진 ItemInstance로 물질화한다. objmon 템플릿·리스폰·몬스터
- * 로딩은 하지 않는다(E4 범위). 순수 함수 — 전역·부수효과 없이 Map만 반환한다.
+ * 바닥 아이템은 고유 id를 가진 ItemInstance로, 방 embedded 몬스터는 `CreatureInstance`로
+ * 물질화하고 스폰 정의 필드(`permMon`·`random`·`traffic`)를 노드에 싣는다(E4-2 G1). objmon
+ * 템플릿 번호 재인스턴스화·리스폰 스케줄은 하지 않는다(입장 lazy·tick 소관). 순수 함수 —
+ * 전역·부수효과 없이 Map만 반환한다.
  *
  * @param worldRoot data/world 루트 오버라이드(기본: 저장소 data/world) — 테스트 격리용
  */
