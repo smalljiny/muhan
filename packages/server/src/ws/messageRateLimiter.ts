@@ -8,18 +8,62 @@
  * 소비하게 한다. 상한은 thunk로 지연 조회해(createConnectionQuota 관례 미러) 미설정 env가 팩토리 생성을
  * 막지 않게 하고, 첫 check 시점의 최신값을 시드로 반영한다.
  *
- * 계정 차원(account dimension)은 이 코어 범위 밖이며 후속 AND 게이트로 추가된다 — 지금은 단일 연결 버킷만
- * 다루되 확장 여지를 남긴다.
+ * 계정 차원(account dimension)은 `createMessageRateLimiterFactory`가 계정 버킷을 연결 간 공유하는
+ * 레지스트리로 얹고, 연결 핸들의 `check`가 연결·계정 두 버킷을 원자적으로 AND해 확장한다. 계정 버킷은
+ * refcount + delete-at-zero로 소유·정리한다(connectionQuota 미러).
  */
 
 /**
- * 유량 제한 상한(연결 차원). 버킷 용량·초당 리필 속도·종료 임계 위반 횟수를 정한다.
- * 계정 차원은 후속 Story가 AND 게이트로 얹으므로 이 형태는 그 확장에 열려 있다.
+ * 유량 제한 상한. 연결 차원(capacity·refillPerSec·maxViolations)과 계정 차원(accountCapacity·
+ * accountRefillPerSec)을 하나의 combined 형태로 담는다. factory는 이 단일 thunk를 받아 연결 버킷과
+ * 공유 계정 버킷을 각자의 상한으로 회계한다. maxViolations는 연결 단위 종료 임계이며 계정 버킷에는
+ * 위반 카운터가 없다.
  */
 export interface MessageRateLimits {
   readonly capacity: number
   readonly refillPerSec: number
   readonly maxViolations: number
+  readonly accountCapacity: number
+  readonly accountRefillPerSec: number
+}
+
+/**
+ * 순수 토큰 버킷 — 잔여 토큰과 마지막 리필 시각만 소유한다. 연결 버킷과 공유 계정 버킷이 같은 회계를
+ * 쓰므로 이 헬퍼로 통일한다. `refill`은 지연 리필(첫 호출은 `lastRefill === null` 센티넬로 capacity
+ * 시드), `hasToken`/`consume`은 AND 게이트가 "둘 다 검사 → 둘 다 소비"를 부분 소비 없이 마치도록
+ * 검사와 소비를 분리한다. now는 단조 비감소로 가정한다.
+ */
+interface TokenBucket {
+  refill(now: number, capacity: number, refillPerSec: number): void
+  hasToken(): boolean
+  consume(): void
+  peek(): number
+}
+
+function createTokenBucket(): TokenBucket {
+  let tokens = 0
+  let lastRefill: number | null = null
+
+  function refill(now: number, capacity: number, refillPerSec: number): void {
+    if (lastRefill === null) {
+      // 최초 시드 — 버킷을 가득 채운다. 이번 리필 경과는 0이다.
+      tokens = capacity
+    } else {
+      // 지연 리필 — 자체 lastRefill 이후 경과에 비례해 회복하되 capacity에서 clamp한다.
+      const elapsedSec = (now - lastRefill) / 1000
+      tokens = Math.min(capacity, tokens + elapsedSec * refillPerSec)
+    }
+    lastRefill = now
+  }
+
+  return {
+    refill,
+    hasToken: () => tokens >= 1,
+    consume: () => {
+      tokens -= 1
+    },
+    peek: () => tokens,
+  }
 }
 
 /**
@@ -28,67 +72,122 @@ export interface MessageRateLimits {
  */
 export type RateVerdict = 'accept' | 'drop' | 'drop-warn'
 
-/** 유량 제한 핸들. `check`는 순수 판정, `shouldTerminate`는 부수효과 없는 읽기다. */
-export interface MessageRateLimiter {
+/**
+ * 연결 유량 제한 핸들(계정 차원 포함). factory가 `createConnection`으로 연결마다 하나씩 발급한다.
+ * `check`는 연결 버킷과 공유 계정 버킷을 원자적으로 AND한 순수 판정이며, 위반 카운터·warn-edge·
+ * shouldTerminate는 연결 단위로 이 핸들이 소유한다(계정 버킷은 위반 카운터가 없다). 인스펙터 두 개로
+ * 연결·계정 버킷의 미소비 관측을 각각 검증한다.
+ */
+export interface ConnectionRateLimiter {
   check(now: number): RateVerdict
   shouldTerminate(): boolean
-  /**
-   * 테스트 전용 인스펙터 — 현재 버킷의 잔여 토큰 수를 반환한다. 시드·소비·리필·clamp 동작은
-   * verdict만으로는 구간 경계에서 관측이 어려우므로 이 인스펙터로 직접 본다. 프로덕션 회계에는
-   * 참여하지 않는다.
-   */
   peekConnectionTokens(): number
+  peekAccountTokens(): number
 }
 
 /**
- * 유량 제한기를 만든다. 상태(잔여 토큰·마지막 리필 시각·위반 카운터·경고 엣지)는 클로저에 캡슐화한다.
- *
- * 생성 시점에는 상한을 조회하지 않는다(thunk 관례) — `lastRefill === null`을 "아직 시드되지 않음" 센티넬로
- * 두고, 첫 `check`에서 비로소 `getLimits()`를 읽어 버킷을 capacity로 시드한다. 이후 매 check는 먼저
- * `elapsed/1000 * refillPerSec`만큼 리필(capacity에서 clamp)한 뒤 토큰 1개 소비를 시도한다. now는 단조
- * 비감소로 가정한다.
+ * 유량 제한기 factory. 계정 버킷 레지스트리를 직접 소유하고 연결 핸들을 발급·정리한다.
+ * plugin(배선 Story)이 소켓 open 시 `createConnection(accountId)`로 핸들을 얻고, 프레임마다
+ * `handle.check(now)`/`handle.shouldTerminate()`를 호출하며, close 시 `releaseAccount(accountId)`로
+ * 계정 참조를 반납한다.
  */
-export function createMessageRateLimiter(getLimits: () => MessageRateLimits): MessageRateLimiter {
-  let tokens = 0
-  let lastRefill: number | null = null
-  // 위반 카운터가 경고 엣지도 겸한다 — accept가 0으로 리셋하므로 연속 폐기 구간의 첫 폐기는 항상 1이다.
-  let violations = 0
+export interface MessageRateLimiterFactory {
+  createConnection(accountId: string): ConnectionRateLimiter
+  releaseAccount(accountId: string): void
+  /**
+   * 테스트 전용 인스펙터 — 현재 살아 있는 계정 버킷 엔트리 수를 반환한다. refCount가 0에 도달한
+   * 계정 엔트리가 삭제되는지(churn 누적 방지)는 create/release 행동만으로는 관측이 어려우므로 이
+   * 인스펙터로 직접 본다(connectionQuota.activeAccountCount 미러). 프로덕션 회계에는 참여하지 않는다.
+   */
+  activeAccountCount(): number
+}
 
-  function check(now: number): RateVerdict {
-    // 매 호출 상한을 지연 조회한다(thunk 관례). 첫 check가 이 값을 시드로 반영한다.
-    const limits = getLimits()
+/** 계정 버킷 레지스트리 엔트리 — 공유 버킷과 이 계정을 참조하는 살아 있는 연결 수. */
+interface AccountEntry {
+  readonly bucket: TokenBucket
+  refCount: number
+}
 
-    if (lastRefill === null) {
-      // 최초 시드 — 버킷을 가득 채운다. 이번 리필 경과는 0이다.
-      tokens = limits.capacity
+/**
+ * 유량 제한기 factory를 만든다. 계정별 공유 버킷 Map을 클로저에 캡슐화한다(connectionQuota 미러 —
+ * connectionQuota 카운터에 얹지 않는 별도 레지스트리다).
+ *
+ * `createConnection`은 계정 엔트리가 있으면 refCount를 올려 기존 공유 버킷을 참조하고, 없으면 버킷을
+ * 새로 만들어 refCount=1로 등록한다. `releaseAccount`는 refCount를 내리고 0에 도달하면 엔트리를
+ * 삭제해 churn 계정의 Map 누적을 막는다. 부재 계정 release나 이중 반납은 완전 no-op이다(음수·누수 없음).
+ *
+ * 생성·연결 발급 시점에는 상한을 조회하지 않는다(thunk 관례) — 각 버킷은 첫 `check`에서 자체
+ * `lastRefill === null` 센티넬로 lazy 시드된다.
+ */
+export function createMessageRateLimiterFactory(
+  getLimits: () => MessageRateLimits,
+): MessageRateLimiterFactory {
+  const accounts = new Map<string, AccountEntry>()
+
+  function createConnection(accountId: string): ConnectionRateLimiter {
+    let entry = accounts.get(accountId)
+    if (entry !== undefined) {
+      // 기존 계정 — 살아 있는 연결 수를 늘리고 공유 버킷을 그대로 참조한다.
+      entry.refCount += 1
     } else {
-      // 지연 리필 — 경과 시간에 비례해 토큰을 회복하되 capacity에서 clamp한다.
-      const elapsedSec = (now - lastRefill) / 1000
-      tokens = Math.min(limits.capacity, tokens + elapsedSec * limits.refillPerSec)
+      // 새 계정 — 공유 버킷을 만들어 첫 연결로 등록한다.
+      entry = { bucket: createTokenBucket(), refCount: 1 }
+      accounts.set(accountId, entry)
     }
-    lastRefill = now
+    // 이 연결이 공유하는 계정 버킷. releaseAccount가 엔트리를 삭제해도 이 참조는 유효하게 유지된다.
+    const accountBucket = entry.bucket
+    // 연결 전용 버킷·위반 카운터. 계정 차원과 달리 연결 단위로 이 핸들이 소유한다.
+    const connectionBucket = createTokenBucket()
+    let violations = 0
 
-    if (tokens >= 1) {
-      // 소비 성공 — 위반 카운터를 리셋해 경고 엣지도 함께 재무장한다.
-      tokens -= 1
-      violations = 0
-      return 'accept'
+    function check(now: number): RateVerdict {
+      // 매 호출 상한을 지연 조회한다(thunk 관례). 각 버킷을 자체 경과로 먼저 리필한다.
+      const limits = getLimits()
+      connectionBucket.refill(now, limits.capacity, limits.refillPerSec)
+      accountBucket.refill(now, limits.accountCapacity, limits.accountRefillPerSec)
+
+      // 원자적 AND — 둘 다 토큰이 있을 때만 각각 1개씩 소비한다(connectionQuota check-then-increment
+      // 원자성 미러). 한쪽이라도 부족하면 어느 쪽도 소비하지 않아 부분 소비를 막는다.
+      if (connectionBucket.hasToken() && accountBucket.hasToken()) {
+        connectionBucket.consume()
+        accountBucket.consume()
+        violations = 0
+        return 'accept'
+      }
+
+      // 고갈 — 두 버킷 모두 미소비. 위반은 연결 단위로만 누적한다(계정 버킷은 위반 카운터 없음).
+      violations += 1
+      return violations === 1 ? 'drop-warn' : 'drop'
     }
 
-    // 고갈 — 토큰은 소비하지 않고 위반만 누적한다. 구간 첫 폐기(violations===1)만 경고로 승격해
-    // 증폭을 막고, 후속 폐기는 억제한다.
-    violations += 1
-    return violations === 1 ? 'drop-warn' : 'drop'
+    function shouldTerminate(): boolean {
+      return violations >= getLimits().maxViolations
+    }
+
+    return {
+      check,
+      shouldTerminate,
+      peekConnectionTokens: () => connectionBucket.peek(),
+      peekAccountTokens: () => accountBucket.peek(),
+    }
   }
 
-  function shouldTerminate(): boolean {
-    // 순수 읽기 — 위반 카운터가 임계에 도달했는지만 본다.
-    return violations >= getLimits().maxViolations
+  function releaseAccount(accountId: string): void {
+    // 엔트리가 있을 때만 refCount를 내린다 — 부재 계정·이중 반납은 여기서 완전 no-op이다.
+    const entry = accounts.get(accountId)
+    if (entry === undefined) {
+      return
+    }
+    entry.refCount -= 1
+    if (entry.refCount <= 0) {
+      // 마지막 연결이 반납했다 — 엔트리를 삭제해 새 계정처럼 초기화하고 Map 누적을 막는다.
+      accounts.delete(accountId)
+    }
   }
 
-  function peekConnectionTokens(): number {
-    return tokens
+  function activeAccountCount(): number {
+    return accounts.size
   }
 
-  return { check, shouldTerminate, peekConnectionTokens }
+  return { createConnection, releaseAccount, activeAccountCount }
 }
