@@ -116,6 +116,10 @@ describe('characterSelect StateHandler.onEnter (2층)', () => {
       promptId: SELECT_CHARACTER_PROMPT_ID,
       kind: 'selectCharacter',
     })
+    // select prompt는 create 진입 옵션을 실어, 클라가 매직값 하드코딩 없이 option.value를 되돌려 생성에 진입한다.
+    expect(events[1]).toMatchObject({
+      options: [{ value: CREATE_SENTINEL, label: '새 캐릭터 생성' }],
+    })
   })
 })
 
