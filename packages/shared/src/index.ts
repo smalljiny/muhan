@@ -36,3 +36,6 @@ export { approve } from './oracle/runner.js'
 
 // property 테스트용 의존 0 seedable PRNG(mulberry32) + 정수 범위 헬퍼.
 export { makeSeededRng, nextIntInRange } from './property/seededRng.js'
+
+// property 공통 불변식 assert(순수, fast-check 무의존) — 범위·단조성 검사.
+export { assertInRange, assertMonotonic } from './property/invariants.js'
