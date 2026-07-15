@@ -13,6 +13,7 @@ import { loadWorldGraph } from './world/worldGraph.js'
 import { WorldClock, type WorldTickLogger } from './world/worldClock.js'
 import { createGameTime } from './world/gameTime.js'
 import { createCheckExitsSlot } from './world/checkExits.js'
+import { createWorldRuntime } from './world/worldRuntime.js'
 
 // 부팅 엔트리 — env 검증(fail-fast) → DB 연결(fail-fast) → 앱 구성 → SaveEngine 배선 → listen.
 // 커버리지에서 제외(배선 코드). PORT는 getConfig().PORT 단일 출처를 쓴다(인라인 파싱 소거).
@@ -57,7 +58,7 @@ async function boot(): Promise<void> {
 
   // 1Hz 중앙 월드 틱. 게임시각 진행(150초마다 Time++)과 출구 자동 재잠금/재닫힘(매 틱) 슬롯을
   // 등록한 뒤 start한다. 두 슬롯은 WS 명령 배선 없이 WorldClock만으로 자족 동작한다(게임시각 소스·
-  // check_exits 스윕). 크리처 활성 큐 등 나머지 실 슬롯은 후속 토픽(#68)이 register로 붙인다.
+  // check_exits 스윕).
   // console 금지 — 슬롯 실패 격리 logger를 app.log.error에 위임한다.
   const worldTickLogger: WorldTickLogger = {
     error: (context, message) => app.log.error(context, message),
@@ -66,6 +67,19 @@ async function boot(): Promise<void> {
   const gameTime = createGameTime()
   worldClock.register(gameTime.slot)
   worldClock.register(createCheckExitsSlot(worldGraph))
+
+  // 크리처 tick·스폰 슬롯을 컴포지션 팩토리로 조립해 register한다. now 도메인 단일 출처로
+  // worldClock.currentTick()을 훅 now에 주입한다 — onRoomEntered activate/respawn now가 creatureTick
+  // tickSec와 동일 도메인이어야 재생 소급이 성립한다.
+  // onRoomEntered/onRoomLeft 훅은 runtime에 구성돼 있으나 프로덕션에서 tryMove를 부르는 실 caller가
+  // 아직 없어 dormant다(movement/command 에픽이 tryMove를 프로덕션 결선할 때 활성화). 그 전까지 활성
+  // 집합은 비어 creatureTick·randomSpawn은 no-op이다.
+  // invasion 슬롯은 **실 invasionRng 미주입 시 register 대상에서 제외**된다(adversarial 결정) — 기본
+  // 결정적 stub은 고정 방에 무한 누적하고 E4-2는 전투 정리가 없어, 실 rng(E8-2, 범위 분산) 배선
+  // 전까지 boot를 inert하게 둔다. runtime.slots는 creatureTick·randomSpawn만 담는다.
+  const worldRuntime = createWorldRuntime(worldGraph, { now: () => worldClock.currentTick() })
+  for (const slot of worldRuntime.slots) worldClock.register(slot)
+
   worldClock.start()
 
   // graceful shutdown — SaveEngine.shutdown()으로 잔여 dirty를 flush·drain한 뒤 DB 연결을 닫는다.

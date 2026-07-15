@@ -1,0 +1,152 @@
+import type { RoomNode } from 'shared'
+import { createActiveSet, type ActiveSet } from './activeSet.js'
+import {
+  createInstanceIdAllocator,
+  loadSpawnTemplates,
+  respawnPermCreatures,
+  type SpawnTemplateIndex,
+  type InstanceIdAllocator,
+} from './spawn.js'
+import { createCreatureTick, type OnCombatTick } from './creatureTick.js'
+import { createRandomSpawn, type SpawnRng } from './randomSpawn.js'
+import {
+  createInvasion,
+  loadInvasionEvents,
+  type InvasionEvent,
+  type InvasionRng,
+  type SpawnBroadcast,
+} from './invasion.js'
+import type { CreatureRng } from './creatureFactory.js'
+import type { WorldTickSlot } from './worldClock.js'
+import type { MoveActor } from './tryMove.js'
+
+/**
+ * 월드 런타임 컴포지션 팩토리 — G1~G4 조각(활성 집합·크리처 tick·스폰 3트리거·entry/leave 훅)을
+ * 하나의 배선 단위로 조립한다(플랜 Story 6).
+ *
+ * index.ts boot는 커버리지 제외 배선 코드라, 배선 로직을 테스트 가능한 이 팩토리로 추출하고 index.ts는
+ * `createWorldRuntime(...)` 호출과 슬롯 register만 남기는 얇은 glue로 둔다. 팩토리는 슬롯 배열과
+ * onRoomEntered/onRoomLeft 훅, 활성 집합을 반환한다.
+ *
+ * now 도메인 단일 출처: onRoomEntered의 activate/respawn `now`는 creatureTick의 tickSec와 동일 tick
+ * 도메인이어야 재생 소급 baseline 클램프(Story 3)가 성립한다. 그래서 `deps.now`(index.ts가
+ * `() => worldClock.currentTick()`을 주입)를 훅 `now`의 단일 소스로 쓰고, 자체 tick 미러를 두지 않는다.
+ *
+ * D7 준수: 단일 `alloc`(방별 monotonic idx 발급기)을 훅 리스폰·randomSpawn·invasion이 공유한다 —
+ * 별도 발급기를 두면 같은 방에서 idx가 충돌한다. worldGraph의 pristine creatures.length로 seed한다.
+ *
+ * dormant 경계(E4-2): onRoomEntered/onRoomLeft는 구성만 되고 프로덕션에서 tryMove를 부르는 실 caller가
+ * 아직 없다(movement/command 에픽 소관) — 배선은 완비하되 실제 발화는 후속 에픽이 tryMove를 프로덕션에
+ * 결선할 때 활성화된다. 그 전까지 활성 집합은 비어 creatureTick·randomSpawn은 boot 후 no-op이다.
+ *
+ * 확률 seam은 각 슬롯 모듈 기본값(neverFireRng·defaultSpawnRng·defaultInvasionRng)을 그대로 쓴다 —
+ * 실 확률 굴림 배선은 E6/E8 소관이고, 그 발화 경로는 슬롯 단위 테스트가 이미 검증한다. 팩토리 deps는
+ * E6/E7 seam(onCombatTick·broadcast·creatureRng)과 테스트 격리용 주입(templates·events·worldRoot)만
+ * 노출한다.
+ */
+export interface WorldRuntimeDeps {
+  /** 훅 `now` 단일 소스 — index.ts가 `() => worldClock.currentTick()`을 주입한다. */
+  readonly now: () => number
+  /** 스폰 템플릿 인덱스(기본: creatures.json 로드). 테스트가 합성 인덱스를 주입한다. */
+  readonly templates?: SpawnTemplateIndex
+  /** 침공 이벤트 목록(기본: events.json 로드). 테스트가 합성 이벤트를 주입한다. */
+  readonly events?: readonly InvasionEvent[]
+  /** data/world 루트 오버라이드(테스트 격리) — templates·events 미주입 시 로드 경로에 전달. */
+  readonly worldRoot?: string
+  /** carry/gold 랜덤화 seam(기본 결정적 identity) — 리스폰·random·invasion 스폰이 공유한다. */
+  readonly creatureRng?: CreatureRng
+  /**
+   * random 배회 진입 확률 seam(traffic 게이트·후보 선택·그룹 크기). 미주입 시 `defaultSpawnRng`
+   * (결정적 비발화 — traffic 게이트 항상 실패)라 random 슬롯이 조용하다. 실 확률·시드는 E8-2 RNG가
+   * 이 seam으로 주입한다 — 노출하지 않으면 코드 수정 없이 random 스폰을 살릴 수 없다(adversarial 지적).
+   */
+  readonly spawnRng?: SpawnRng
+  /**
+   * invasion 방/몹 선택 mrand seam. 미주입 시 `defaultInvasionRng`(항상 범위 min)이라 결정적으로
+   * **동일 방에 집중**된다 — 실 확률은 E8-2 RNG가 이 seam으로 주입해 범위 전역에 분산한다. invasion
+   * 슬롯의 무조건 주기 스폰 특성상 이 seam이 결정적 stub이면 고정 방 누적이 발생한다(§Non-goals
+   * forward note — E6 정리·E8-2 분산 전까지 상한 미도입).
+   */
+  readonly invasionRng?: InvasionRng
+  /** §3.5 게이트 통과 크리처 전투 디스패치(기본 no-op, E6이 대체). */
+  readonly onCombatTick?: OnCombatTick
+  /** invasion 방송 seam(기본 no-op, E7이 전역 방송으로 대체). */
+  readonly broadcast?: SpawnBroadcast
+}
+
+/** 컴포지션 산출물 — boot가 register할 슬롯 + tryMove가 결선할 훅 + 활성 집합. */
+export interface WorldRuntime {
+  /** WorldClock에 register할 슬롯(creatureTick·randomSpawn·이벤트당 invasion). */
+  readonly slots: WorldTickSlot[]
+  /** tryMove join 경로 결선용 entry-hook(활성화 + perm 리스폰). */
+  readonly onRoomEntered: (room: RoomNode, actor: MoveActor) => void
+  /** tryMove leave 경로 결선용 leave-hook(빈 방 비활성화). */
+  readonly onRoomLeft: (room: RoomNode, actor: MoveActor) => void
+  /** 활성 집합(테스트·후속 조회용). */
+  readonly activeSet: ActiveSet
+  /**
+   * 방별 monotonic idx 발급기(D7). perm·random·invasion 3경로가 이미 공유하며, E6이 전투 사망을
+   * 결선할 때 `onCreatureDeath`/`onDeathSummon`이 **이 동일 인스턴스**를 재사용해야 소환 크리처
+   * instanceId가 스폰 크리처와 충돌하지 않는다(별도 발급기 생성 시 방별 `n`부터 중복 발급). D7 4경로
+   * 공유 계약을 조립 지점에서 닫기 위해 노출한다.
+   */
+  readonly alloc: InstanceIdAllocator
+  /** 스폰 템플릿 인덱스(팩토리 (b) 조회). E6 death seam이 소환 대상 조회에 재사용한다. */
+  readonly templates: SpawnTemplateIndex
+}
+
+export function createWorldRuntime(
+  worldGraph: Map<number, RoomNode>,
+  deps: WorldRuntimeDeps,
+): WorldRuntime {
+  const activeSet = createActiveSet()
+  // pristine creatures.length로 방별 seed(D7) — 로드 직후·어떤 tick도 일어나기 전 전 방을 seed한다.
+  const alloc = createInstanceIdAllocator(worldGraph.values())
+  const templates = deps.templates ?? loadSpawnTemplates(deps.worldRoot)
+  const events = deps.events ?? loadInvasionEvents(deps.worldRoot)
+
+  const creatureTick = createCreatureTick({
+    activeSet,
+    onCombatTick: deps.onCombatTick,
+  })
+  const randomSpawn = createRandomSpawn({
+    rooms: () => activeSet.activeRooms(),
+    templates,
+    alloc,
+    rng: deps.spawnRng,
+    creatureRng: deps.creatureRng,
+  })
+  const invasionSlots = createInvasion({
+    events,
+    resolveRoom: (roomId) => worldGraph.get(roomId),
+    templates,
+    alloc,
+    rng: deps.invasionRng,
+    creatureRng: deps.creatureRng,
+    broadcast: deps.broadcast,
+  })
+
+  // invasion 슬롯은 **실 invasionRng가 주입될 때만** boot register 대상에 포함한다(adversarial 결정).
+  // invasion은 확률 게이트 없이 주기마다 무조건 count 스폰하므로, 기본 stub(항상 min)이면 고정 방에
+  // 결정적 누적된다(E4-2는 전투 정리·방 활성화 없음). 실 rng(E8-2, 범위 분산) 미주입 시 등록하지 않아
+  // E4-2 boot를 inert하게 둔다 — 슬롯 자체는 조립·테스트되며 rng 주입 시 즉시 활성화된다.
+  const slots: WorldTickSlot[] =
+    deps.invasionRng !== undefined
+      ? [creatureTick, randomSpawn, ...invasionSlots]
+      : [creatureTick, randomSpawn]
+
+  // perm 리스폰 deps는 boot-once 안정값이라 훅 밖에서 1회만 구성한다(입장마다 재할당 회피).
+  const permRespawnDeps = { templates, alloc, rng: deps.creatureRng }
+  // entry-hook: 활성화 + perm due 리스폰. now는 deps.now()(creatureTick tickSec와 동일 도메인).
+  const onRoomEntered = (room: RoomNode, _actor: MoveActor): void => {
+    const now = deps.now()
+    activeSet.activate(room, now)
+    respawnPermCreatures(room, now, permRespawnDeps)
+  }
+  // leave-hook: 빈 방 비활성화(deactivate는 occupants 비어있을 때만 성립 — tryMove가 delete 後 호출).
+  const onRoomLeft = (room: RoomNode, _actor: MoveActor): void => {
+    activeSet.deactivate(room)
+  }
+
+  return { slots, onRoomEntered, onRoomLeft, activeSet, alloc, templates }
+}

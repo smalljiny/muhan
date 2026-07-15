@@ -59,6 +59,8 @@ describe('loadWorldGraph — 실제 번들', () => {
     expect(pouch).toBeDefined()
     expect(pouch?.instanceId).toBeTruthy()
     expect(pouch?.value).toBe(2000)
+    // D8: scavenge 제외 판정용 object flags(hex string) 전파. 돈주머니는 0300(OPERMT|OHIDDN).
+    expect(pouch?.flags).toBe('0300000000000000')
   })
 
   it('그래프 전체에서 instanceId가 유일하다(중첩 contains 포함)', () => {
@@ -68,20 +70,68 @@ describe('loadWorldGraph — 실제 번들', () => {
     expect(new Set(allIds).size).toBe(allIds.length)
   })
 
-  it('RoomNode에 monsters 필드가 없고 인메모리 필드만 갖는다(스코프 가드)', () => {
+  it('RoomNode는 라이브 필드 + 스폰 필드만 갖고 raw monsters 필드는 새지 않는다(스코프 가드)', () => {
     const graph = loadWorldGraph()
     const room50 = graph.get(50)
     expect(room50).toBeDefined()
     if (!room50) return
 
+    // raw `monsters`/`perm_mon`는 creatures/permMon 인메모리 필드로 매핑되고 raw 키는 새지 않는다.
     expect(Object.keys(room50).sort()).toEqual(
-      ['exits', 'flags', 'items', 'longDesc', 'name', 'occupants', 'roomId', 'shortDesc'].sort(),
+      [
+        'creatures',
+        'exits',
+        'flags',
+        'items',
+        'longDesc',
+        'name',
+        'occupants',
+        'permMon',
+        'random',
+        'roomId',
+        'shortDesc',
+        'traffic',
+      ].sort(),
     )
     const pouch = room50.items.find((i) => i.name === '숨겨진 돈주머니')
     // 아이템에 objnum/type 같은 템플릿 필드가 새지 않았다.
     expect(Object.keys(pouch ?? {}).sort()).toEqual(
-      ['contains', 'description', 'instanceId', 'name', 'value'].sort(),
+      ['contains', 'description', 'flags', 'instanceId', 'name', 'value'].sort(),
     )
+  })
+
+  it('방 embedded 몬스터를 creatures[]로 물질화한다(템플릿 재인스턴스화 아님, 방135 좀도둑 2마리)', () => {
+    const graph = loadWorldGraph()
+    const room135 = graph.get(135)
+    expect(room135).toBeDefined()
+    if (!room135) return
+
+    expect(room135.creatures.length).toBe(2)
+    const thief = room135.creatures[0]
+    expect(thief).toBeDefined()
+    if (!thief) return
+    // embedded 인라인 데이터로 물질화 → templateId=null(템플릿 링크 재구성 아님).
+    expect(thief.templateId).toBeNull()
+    expect(thief.name).toBe('좀도둑')
+    // 빌더 커스터마이즈 스탯(템플릿 123과 다른 embedded 값)이 그대로 실린다.
+    expect(thief.hpmax).toBe(7)
+    expect(thief.level).toBe(4)
+    expect(thief.dexterity).toBe(14)
+    expect(thief.gold).toBe(80)
+    expect(thief.flags).toBe('0112000000000000')
+    expect(thief.instanceId).toBe('135:c0')
+  })
+
+  it('rooms.json 번들의 스폰 필드를 RoomNode에 싣는다(방135 traffic·random·permMon)', () => {
+    const graph = loadWorldGraph()
+    const room135 = graph.get(135)
+    expect(room135).toBeDefined()
+    if (!room135) return
+
+    expect(room135.traffic).toBe(10)
+    expect(room135.random).toEqual([13, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    expect(room135.permMon.length).toBe(10)
+    expect(room135.permMon[0]).toEqual({ interval: 100, ltime: 871640363, misc: 123 })
   })
 })
 

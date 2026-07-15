@@ -66,6 +66,16 @@ export class WorldClock {
   }
 
   /**
+   * 현재 단조 tick 카운터(초)를 반환한다(read-only). 슬롯의 `now` 도메인 단일 출처 —
+   * onRoomEntered의 activate/respawn `now`가 creatureTick의 tickSec와 동일 tick 도메인이어야
+   * 재생 소급 baseline 비교(Story 3)가 성립하므로, 조립 지점이 `() => worldClock.currentTick()`을
+   * 훅 `now`로 주입한다. 시작 전·정지 상태에서도 마지막 tick 값을 그대로 노출한다.
+   */
+  currentTick(): number {
+    return this.tickCounter
+  }
+
+  /**
    * 슬롯을 등록하고 해제 함수를 반환한다. 해제 함수는 그 슬롯만 제거하며(다른 슬롯 무영향)
    * 여러 번 호출해도 안전하다.
    */

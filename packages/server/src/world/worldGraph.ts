@@ -1,15 +1,29 @@
 import { loadWorldFile } from 'shared'
-import type { ExitEdge, ItemInstance, RoomNode } from 'shared'
+import type { CreatureInstance, ExitEdge, ItemInstance, PermMonSlot, RoomNode } from 'shared'
+import { fromEmbedded, type CreatureSource } from './creatureFactory.js'
 
 // data/world/rooms.json 파싱 입력 형태(raw 디스크 산출물). loadWorldFile이 이 shape를 준다.
 type RawExit = { name: string; room: number; flags: number[]; key: number }
-type RawItem = { name: string; description: string; value: number; contains: RawItem[] }
+type RawItem = {
+  name: string
+  description: string
+  value: number
+  flags?: string
+  contains: RawItem[]
+}
+// embedded 몬스터는 T2.0 이후 완전한 creature 필드를 담는다(CreatureSource + rom_num·inventory 등).
+type RawMonster = CreatureSource & { rom_num: number }
+type RawPermMon = { interval: number; ltime: number; misc: number }
 type RawRoom = {
   id: number
   name: string
   flags: number[]
   exits: RawExit[]
   items: RawItem[]
+  monsters?: RawMonster[]
+  perm_mon?: RawPermMon[]
+  random?: number[]
+  traffic?: number
   short_desc: string
   long_desc: string
 }
@@ -48,11 +62,24 @@ function toItemInstance(raw: RawItem, roomId: number, path: string): ItemInstanc
     name: raw.name,
     description: raw.description,
     value: raw.value,
+    // flags는 scavenge 제외 판정용 hex string(D8). 합성 픽스처 등 raw.flags 부재 시 all-zero로
+    // 기본값(플래그 없음=회수 가능)을 준다 — 타입은 항상 string 계약을 유지한다.
+    flags: raw.flags ?? '0000000000000000',
     contains: raw.contains.map((child, i) => toItemInstance(child, roomId, `${path}.${i}`)),
   }
 }
 
+// perm 스폰 슬롯을 복사한다 — 노드가 폐기될 raw 번들과 객체를 공유하지 않게(flags/items 복사 관례).
+// ltime은 라이브 가변(입장 리스폰·사망 시 세팅)이라 반드시 raw와 분리한다.
+function toPermMonSlot(raw: RawPermMon): PermMonSlot {
+  return { interval: raw.interval, ltime: raw.ltime, misc: raw.misc }
+}
+
 function toRoomNode(raw: RawRoom): RoomNode {
+  // embedded 몬스터를 라이브 크리처로 물질화한다(팩토리 (a) 경로, templateId=null — 템플릿
+  // 재인스턴스화가 아니라 방 파일 인라인 데이터로 물질화). 기본 결정적 rng로 순수성을 유지한다.
+  const monsters = raw.monsters ?? []
+  const creatures: CreatureInstance[] = monsters.map((m, i) => fromEmbedded(m, raw.id, i))
   return {
     roomId: raw.id,
     name: raw.name,
@@ -64,6 +91,11 @@ function toRoomNode(raw: RawRoom): RoomNode {
     flags: [...raw.flags],
     // occupants는 라이브 점유자 Set으로 부팅 시 빈 상태다(characterId가 이동 시 채워짐).
     occupants: new Set<string>(),
+    // creatures는 라이브 가변 배열(스폰 push·사망 제거). 스폰 정의 필드는 복사해 raw와 분리한다.
+    creatures,
+    permMon: (raw.perm_mon ?? []).map(toPermMonSlot),
+    random: [...(raw.random ?? [])],
+    traffic: raw.traffic ?? 0,
   }
 }
 
@@ -71,8 +103,10 @@ function toRoomNode(raw: RawRoom): RoomNode {
  * 부팅 시 정본 방 번들을 인메모리 그래프로 로드한다.
  *
  * rooms.json 배열을 한 번 읽어 `room.id`를 키로 하는 Map을 구성한다. 출구는 엣지로,
- * 바닥 아이템은 고유 id를 가진 ItemInstance로 물질화한다. objmon 템플릿·리스폰·몬스터
- * 로딩은 하지 않는다(E4 범위). 순수 함수 — 전역·부수효과 없이 Map만 반환한다.
+ * 바닥 아이템은 고유 id를 가진 ItemInstance로, 방 embedded 몬스터는 `CreatureInstance`로
+ * 물질화하고 스폰 정의 필드(`permMon`·`random`·`traffic`)를 노드에 싣는다(E4-2 G1). objmon
+ * 템플릿 번호 재인스턴스화·리스폰 스케줄은 하지 않는다(입장 lazy·tick 소관). 순수 함수 —
+ * 전역·부수효과 없이 Map만 반환한다.
  *
  * @param worldRoot data/world 루트 오버라이드(기본: 저장소 data/world) — 테스트 격리용
  */

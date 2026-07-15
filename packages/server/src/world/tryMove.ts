@@ -65,9 +65,28 @@ export interface TryMoveDeps {
   readonly broadcastLeave: (room: RoomNode, actor: MoveActor) => void
   /** 도착 방 join 방송 seam — actor가 이미 도착 방 점유자가 된 뒤 호출된다. */
   readonly broadcastJoin: (room: RoomNode, actor: MoveActor) => void
+  /**
+   * 방 진입 entry-hook seam — actor가 도착 방 점유자가 된 뒤(join 방송 직후) 호출된다.
+   * E4-2가 활성 집합 활성화 + perm 리스폰 검사(Story 4)를 이 훅에 건다. E4-1b/기본 주입은
+   * no-op이라 이동 로직·기존 테스트가 불변이다.
+   */
+  readonly onRoomEntered: (room: RoomNode, actor: MoveActor) => void
+  /**
+   * 방 퇴장 leave-hook seam — actor가 출발 방 점유자에서 제거된 직후(점유자 delete 後) 호출된다.
+   * `broadcastLeave`(delete 前 호출)와 대칭이나 시점이 다르다 — E4-2가 `activeSet.deactivate`를
+   * 이 훅에 걸어 빈 방을 비활성화하며, deactivate는 빈 방(occupants 비어있음)을 요구하므로 반드시
+   * delete 後에 호출돼야 한다. E4-1b/기본 주입은 no-op이라 이동 로직·기존 테스트가 불변이다.
+   */
+  readonly onRoomLeft: (room: RoomNode, actor: MoveActor) => void
   /** flee 출구 선택자 — chooseFleeExit에 위임된다. */
   readonly rng: FleeRng
 }
+
+/** 결정적 기본 entry-hook — no-op. E4-2가 활성화·perm 리스폰 결선으로 대체 주입한다. */
+export const noopOnRoomEntered = (_room: RoomNode, _actor: MoveActor): void => {}
+
+/** 결정적 기본 leave-hook — no-op. E4-2가 활성 집합 비활성화 결선으로 대체 주입한다. */
+export const noopOnRoomLeft = (_room: RoomNode, _actor: MoveActor): void => {}
 
 /** tryMove 결과. 통과면 arrivedRoom(도착 방), 거부면 reason(사유). MoveGateResult와 동형. */
 export type TryMoveResult =
@@ -174,8 +193,10 @@ export function tryMove(
   //     타입 주석과 정합, 프로젝트 immutability 규칙의 승인된 예외).
   deps.broadcastLeave(sourceRoom, actor) // (5a) actor는 아직 출발 방 점유자
   sourceRoom.occupants.delete(actor.characterId) // (5b) 재배치
+  deps.onRoomLeft(sourceRoom, actor) // (5b') leave-hook — 빈 방 비활성화(E4-2). delete 後여야 deactivate 성립
   targetRoom.occupants.add(actor.characterId)
   deps.broadcastJoin(targetRoom, actor) // (5c) actor는 이미 도착 방 점유자
+  deps.onRoomEntered(targetRoom, actor) // (5d) entry-hook — 활성화·perm 리스폰(E4-2 Story 4)
 
   return { ok: true, arrivedRoom: targetRoom }
 }

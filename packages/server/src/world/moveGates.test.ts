@@ -33,7 +33,20 @@ function makeRoom(bits: number[], occupantCount: number): RoomNode {
   for (const bit of bits) setFlag(flags, bit)
   const occupants = new Set<string>()
   for (let i = 0; i < occupantCount; i += 1) occupants.add(`c${i}`)
-  return { roomId: 100, name: '방', shortDesc: '', longDesc: '', exits: [], items: [], flags, occupants }
+  return {
+    roomId: 100,
+    name: '방',
+    shortDesc: '',
+    longDesc: '',
+    exits: [],
+    items: [],
+    flags,
+    occupants,
+    creatures: [],
+    permMon: [],
+    random: [],
+    traffic: 0,
+  }
 }
 
 const actor: MoveGateActor = { characterId: 'me' }

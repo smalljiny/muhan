@@ -10,7 +10,7 @@
     0,
     9000
   ],
-  "notes": "방 ID=원본 로드경로 번호(rooms/r{N/1000}/r{N:05d}). orphan 875개 제외. 구조체 필드 오프셋은 32비트 C oracle로 검증.",
+  "notes": "방 ID=원본 로드경로 번호(rooms/r{N/1000}/r{N:05d}). orphan 제외. 구조체 필드 오프셋은 32비트 C oracle로 검증.",
   "files": {
     "perRoom": "rooms/r#####.json",
     "roomsBundle": "rooms.json",

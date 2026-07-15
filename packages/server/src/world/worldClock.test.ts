@@ -133,4 +133,13 @@ describe('WorldClock', () => {
     expect(() => world.stop()).not.toThrow()
     expect(world.running).toBe(false)
   })
+
+  it('currentTick()는 단조 tick 카운터를 노출한다(슬롯 now 소스)', () => {
+    const clock = new FakeClock()
+    const world = new WorldClock({ clock })
+    expect(world.currentTick()).toBe(0)
+    world.start()
+    clock.tick(3)
+    expect(world.currentTick()).toBe(3)
+  })
 })

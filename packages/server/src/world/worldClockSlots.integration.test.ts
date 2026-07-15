@@ -26,6 +26,10 @@ function makeGraph(exits: ExitEdge[]): Map<number, RoomNode> {
     items: [],
     flags: [0, 0, 0, 0, 0, 0, 0, 0],
     occupants: new Set<string>(),
+    creatures: [],
+    permMon: [],
+    random: [],
+    traffic: 0,
   }
   return new Map([[room.roomId, room]])
 }

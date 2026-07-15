@@ -39,6 +39,10 @@ function makeRoom(
     items: [],
     flags,
     occupants: new Set(occupantIds),
+    creatures: [],
+    permMon: [],
+    random: [],
+    traffic: 0,
   }
 }
 
@@ -61,6 +65,8 @@ function makeDeps(rooms: RoomNode[], currentHour = 12) {
       // join 시점: actor는 이미 도착 방 점유자여야 한다(재배치 後).
       log.push({ event: 'join', room: room.roomId, hasActor: room.occupants.has(a.characterId) })
     }),
+    onRoomEntered: vi.fn(),
+    onRoomLeft: vi.fn(),
     rng: defaultFleeRng,
   }
   return { deps, graph, log }
@@ -185,6 +191,48 @@ describe('tryMove 통과 시 재배치·방송', () => {
     ])
     expect(deps.broadcastLeave).toHaveBeenCalledTimes(1)
     expect(deps.broadcastJoin).toHaveBeenCalledTimes(1)
+  })
+
+  it('통과 시 onRoomEntered entry-hook을 도착 방·actor로 join 직후 1회 호출한다', () => {
+    const target = makeRoom(200, [])
+    const source = makeRoom(100, [makeExit('동', 200)], ['me'])
+    const { deps } = makeDeps([source, target])
+    const actor: MoveActor = { characterId: 'me', currentRoomId: 100 }
+    tryMove(deps, actor, '동', 'directional')
+    expect(deps.onRoomEntered).toHaveBeenCalledTimes(1)
+    expect(deps.onRoomEntered).toHaveBeenCalledWith(target, actor)
+    // entry-hook 호출 시점: actor는 이미 도착 방 점유자다(join 경로).
+    expect(target.occupants.has('me')).toBe(true)
+  })
+
+  it('거부 시 onRoomEntered를 호출하지 않는다(무변경)', () => {
+    const target = makeRoom(200, [])
+    const source = makeRoom(100, [makeExit('동', 200, [XLOCKD])], ['me'])
+    const { deps } = makeDeps([source, target])
+    const actor: MoveActor = { characterId: 'me', currentRoomId: 100 }
+    tryMove(deps, actor, '동', 'directional')
+    expect(deps.onRoomEntered).not.toHaveBeenCalled()
+  })
+
+  it('통과 시 onRoomLeft leave-hook을 출발 방·actor로 점유자 delete 직후 1회 호출한다', () => {
+    const target = makeRoom(200, [])
+    const source = makeRoom(100, [makeExit('동', 200)], ['me'])
+    const { deps } = makeDeps([source, target])
+    const actor: MoveActor = { characterId: 'me', currentRoomId: 100 }
+    tryMove(deps, actor, '동', 'directional')
+    expect(deps.onRoomLeft).toHaveBeenCalledTimes(1)
+    expect(deps.onRoomLeft).toHaveBeenCalledWith(source, actor)
+    // leave-hook 호출 시점: actor는 이미 출발 방 점유자에서 제거된 뒤다(deactivate가 빈 방을 요구).
+    expect(source.occupants.has('me')).toBe(false)
+  })
+
+  it('거부 시 onRoomLeft를 호출하지 않는다(무변경)', () => {
+    const target = makeRoom(200, [])
+    const source = makeRoom(100, [makeExit('동', 200, [XLOCKD])], ['me'])
+    const { deps } = makeDeps([source, target])
+    const actor: MoveActor = { characterId: 'me', currentRoomId: 100 }
+    tryMove(deps, actor, '동', 'directional')
+    expect(deps.onRoomLeft).not.toHaveBeenCalled()
   })
 })
 

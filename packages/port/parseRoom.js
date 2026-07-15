@@ -12,13 +12,15 @@
  * 모든 정수 little-endian. 텍스트 EUC-KR.
  */
 
+const { readCreature } = require('./templates.js');
+
 const SZ = { room: 480, exit_: 44, object: 352, creature: 1184 };
 const OFF = {
   room: { rom_num: 0, name: 2, lolevel: 96, hilevel: 97, special: 98,
           trap: 100, trapexit: 102, track: 104, flags: 184, random: 192,
-          traffic: 212 },
+          traffic: 212, perm_mon: 216 },
   exit_: { name: 0, room: 20, flags: 22, key: 40 },
-  object: { name: 0, description: 80, value: 300, type: 119 /* 추정: 미사용 PoC */ },
+  object: { name: 0, description: 80, value: 300, type: 119 /* 추정: 미사용 PoC */, flags: 324 },
   creature: { name: 0, level: -1 /* 아래서 직접 계산 안 함, 이름만 */, rom_num: 458 },
 };
 
@@ -45,6 +47,8 @@ function parseObject(c) {
     name: cstr(b, base + OFF.object.name, 80),
     description: cstr(b, base + OFF.object.description, 80),
     value: b.readInt32LE(base + OFF.object.value),
+    // D8: scavenge 제외 판정용 object flags(8B hex). templates.js OBJ.flags=324와 동일 오프셋.
+    flags: b.subarray(base + OFF.object.flags, base + OFF.object.flags + 8).toString('hex'),
   };
   c.off += SZ.object;
   const cnt = c.i32();
@@ -54,13 +58,13 @@ function parseObject(c) {
 }
 
 // write_crt: creature(1184) + int invcnt + obj들
+// D6: embedded 몬스터는 완전한 1184B creature 구조체다(빌더 커스터마이즈로 템플릿과 상이).
+// templates.js readCreature를 base-relative로 재사용해 전체 스탯을 emit한다(정본 오프셋 테이블).
+// readCreature는 최대 오프셋 rom_num@458만 읽어 1184B 블록 내부라 over-read 없음.
 function parseCreature(c) {
   const base = c.off;
   const b = c.buf;
-  const crt = {
-    name: cstr(b, base + OFF.creature.name, 80),
-    rom_num: b.readInt16LE(base + OFF.creature.rom_num),
-  };
+  const crt = readCreature(b, base);
   c.off += SZ.creature;
   const cnt = c.i32();
   crt.inventory = [];
@@ -90,6 +94,23 @@ function parseRoom(buf) {
     flags: Array.from(b.subarray(OFF.room.flags, OFF.room.flags + 8)),
     track: cstr(b, OFF.room.track, 80),
   };
+
+  // 스폰 데이터 (room 구조체 480B 내부 고정 필드; 커서 미이동)
+  // random: short[10] 랜덤 스폰 몹번호. traffic: 스폰 확률(char).
+  room.random = [];
+  for (let i = 0; i < 10; i++) room.random.push(b.readInt16LE(OFF.room.random + i * 2));
+  room.traffic = b.readInt8(OFF.room.traffic);
+  // perm_mon: lasttime[10] (각 12B: interval long, ltime long, misc short) 고정 스폰 몹.
+  room.perm_mon = [];
+  for (let i = 0; i < 10; i++) {
+    const o = OFF.room.perm_mon + i * 12;
+    room.perm_mon.push({
+      interval: b.readInt32LE(o),
+      ltime: b.readInt32LE(o + 4),
+      misc: b.readInt16LE(o + 8),
+    });
+  }
+
   c.off = SZ.room;
 
   // 출구

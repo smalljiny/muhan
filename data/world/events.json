@@ -1,0 +1,18 @@
+[
+  {
+    "id": "chaos-invasion",
+    "periodSec": 4000,
+    "roomRange": { "min": 8000, "max": 8300 },
+    "mobRange": { "min": 732, "max": 755 },
+    "count": 50,
+    "broadcast": "드레니아에 카오스의 지휘하에 몹이 침공했습니다."
+  },
+  {
+    "id": "muhan-zone-raid",
+    "periodSec": 5000,
+    "roomRange": { "min": 3601, "max": 3630 },
+    "mobRange": { "min": 265, "max": 299 },
+    "count": 10,
+    "broadcast": "무적존을 강탈하려고 드레니아 몹이 침공했습니다."
+  }
+]
