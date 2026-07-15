@@ -302,7 +302,13 @@ const characterSelectHandler: StateHandler = {
   onEnter(_ctx, session) {
     const characters = session.sessionAuth.listCharacters(session.account.accountId)
     session.emit({ type: 'session:characterList', characters })
-    session.emit({ type: 'session:prompt', promptId: SELECT_CHARACTER_PROMPT_ID, kind: 'selectCharacter' })
+    session.emit({
+      type: 'session:prompt',
+      promptId: SELECT_CHARACTER_PROMPT_ID,
+      kind: 'selectCharacter',
+      // create 진입 옵션을 실어 클라가 매직값 하드코딩 없이 option.value(=CREATE_SENTINEL)를 되돌려 생성에 진입한다.
+      options: [{ value: CREATE_SENTINEL, label: '새 캐릭터 생성' }],
+    })
   },
   handleInput(_ctx, session, frame) {
     const decision = decideCharacterSelectInput(frame)

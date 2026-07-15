@@ -12,7 +12,7 @@
 
 ### 클라이언트 (`packages/client`)
 
-- `src/transport/wsClient.ts` — 프레임워크 비의존 순수 TS `WsClient`. 연결/해제/수동 재연결, 송신 전 `clientCommandSchema` 검증, 수신 후 `serverEventSchema` parse, hello→ready 버전 협상, command 상태 도달용 최소 자동 `selectCharacter`, `sendEcho(text)`를 제공한다. `SocketFactory`(테스트가 fake `SocketLike`를 주입하는 seam)로 실제 `WebSocket` 생성을 감싸고, 불변 `WsClientSnapshot { status, events, errors }`를 `subscribe`/`getSnapshot`으로 노출한다(React `useSyncExternalStore` 호환).
+- `src/transport/wsClient.ts` — 프레임워크 비의존 순수 TS `WsClient`. 연결/해제/수동 재연결, 송신 전 `clientCommandSchema` 검증, 수신 후 `serverEventSchema` parse, hello→ready 버전 협상, `sendEcho(text)` 송신을 제공한다. `SocketFactory`(테스트가 fake `SocketLike`를 주입하는 seam)로 실제 `WebSocket` 생성을 감싸고, 불변 `WsClientSnapshot`을 `subscribe`/`getSnapshot`으로 노출한다(React `useSyncExternalStore` 호환). 세션 진입 서브상태(`session`)와 사용자 구동 명령(`selectCharacter`·`replyPrompt`)은 E10이 확장한다([`session-entry.md`](session-entry.md)).
 - `src/App.tsx` — 전송 셸 최상위. `WsClient`를 마운트 동안 단일 인스턴스로 유지하고 스냅샷을 구독해 하위 컴포넌트에 데이터·콜백을 주입한다. 게임 소켓 URL을 `window.location`에서 파생한다(하드코딩 host 없음 — same-origin이라야 쿠키가 upgrade에 첨부된다).
 - `src/main.tsx` — React 마운트 엔트리(`#root`).
 - `src/components/EventLog.tsx` — 수신 `ServerEvent`를 원본(type + 직렬화 payload)으로 순차 렌더하는 순수 표시 컴포넌트.
@@ -63,7 +63,7 @@ Vite 프록시(`vite.config.ts`)는 CSWSH를 브라우저 실제 Origin으로 �
 
 `WsClient`는 모든 송신 `ClientCommand`를 `clientCommandSchema.safeParse`로, 모든 수신 프레임을 `serverEventSchema.safeParse`로 검증한다. 검증에 실패하면 throw하지 않고 관측 가능한 `WsClientSnapshot.errors`에 누적한다 — 상태 전이·이벤트 기록에 도달하지 않으므로 실패가 무증상으로 묻히지 않는다.
 
-서버 세션 FSM([`auth-session.md`](auth-session.md))은 `command` 상태에 도달해야 `debug:echo`를 라우팅한다. `WsClient`는 이 경로를 성립시키기 위해 `session:characterList` 수신 시 첫 캐릭터의 `characterId`로 `session:selectCharacter`를 1회 자동 송신한다. 이 자동 선택은 **전송 배관**이며 캐릭터 선택 UI가 아니다 — 목록 렌더·사용자 선택·생성/재개 UX는 다루지 않는다(E10 소유). `session:entered` 수신 시 상태를 `ready`로 전환한다(echo 가능). `EventLog`는 `session:characterList` 등 수신 이벤트를 원본으로 표시할 뿐, 캐릭터 선택 화면을 구현하지 않는다.
+서버 세션 FSM([`auth-session.md`](auth-session.md))은 `command` 상태에 도달해야 `debug:echo`를 라우팅한다. E9-1은 이 경로를 성립시키려 `session:characterList` 수신 시 첫 캐릭터를 1회 자동 선택하는 스텁을 두었으나, E10이 이를 사용자 구동 캐릭터 선택·생성 UI로 대체했다([`session-entry.md`](session-entry.md)) — 목록 렌더·선택·생성/재개는 이제 그 계층이 소유한다. `session:entered`/`session:resumed` 수신 시 상태를 `ready`로 전환한다(echo 가능). `EventLog`는 수신 이벤트를 원본으로 표시하는 진입 후 placeholder 셸의 일부다.
 
 `ready` 상태에서 `CommandInput`이 텍스트를 `sendEcho(text)`로 넘기면 `debug:echo` ClientCommand가 송신되고, 서버가 되돌린 `debug:echo:result`가 `EventLog`에 나타나 왕복을 증명한다.
 
@@ -73,7 +73,7 @@ Vite 프록시(`vite.config.ts`)는 CSWSH를 브라우저 실제 Origin으로 �
 
 `docker compose up`이 `mongo`(healthcheck 통과 대기) 뒤에 `server`를 기동한다. 서버 컨테이너는 `MONGODB_URI=mongodb://mongo:27017`(외부 Atlas 비의존), `WS_ALLOWED_ORIGINS=http://localhost:5173`, `DEV_LOGIN_ENABLED=true` + 시드 값을 env로 받는다.
 
-Playwright e2e(`e2e/transport.spec.ts`)는 호스트에서 실행하며 compose(server+mongo)를 SUT로 삼는다 — `playwright.config.ts`의 `webServer`는 호스트 Vite(5173)만 기동하고, compose 스택은 caller가 `docker compose up -d --build`로 미리 띄운다. 각 테스트는 `beforeEach`에서 `/dev/login`으로 쿠키를 먼저 심은 뒤 앱을 로드해(순서가 바뀌면 쿠키 없는 upgrade가 401난다) `연결 상태` 텍스트가 `ready`에 도달함(G1+G2)과 `이벤트 로그`에 `debug:echo:result`·에코 텍스트가 나타남(G3)을 web-first assertion(자동 재시도, 고정 sleep 없음)으로 단언한다.
+Playwright e2e(`e2e/transport.spec.ts`)는 호스트에서 실행하며 compose(server+mongo)를 SUT로 삼는다 — `playwright.config.ts`의 `webServer`는 호스트 Vite(5173)만 기동하고, compose 스택은 caller가 `docker compose up -d --build`로 미리 띄운다. 각 테스트는 `beforeEach`에서 `/dev/login`으로 쿠키를 먼저 심은 뒤 앱을 로드하고(순서가 바뀌면 쿠키 없는 upgrade가 401난다), 캐릭터 목록이 도착하면 시드 캐릭터의 '선택' 버튼을 눌러(autoSelect 스텁 제거 후 진입은 사용자 구동 — [`session-entry.md`](session-entry.md)) `연결 상태` 텍스트가 `ready`에 도달함(G1+G2)과 `이벤트 로그`에 `debug:echo:result`·에코 텍스트가 나타남(G3)을 web-first assertion(자동 재시도, 고정 sleep 없음)으로 단언한다.
 
 compose는 선택적 `test` profile로 `docker compose --profile test run --rm test`가 `shared`·`client`·`server`(mongodb-memory-server 통합 테스트 제외) 유닛 스위트를 클린 컨테이너에서 실행하는 도커 재현 경로를 제공한다. 기본 `up`에는 포함되지 않으며, 커버리지 게이트는 호스트/CI가 담당한다.
 
@@ -81,7 +81,7 @@ compose는 선택적 `test` profile로 `docker compose --profile test run --rm t
 
 - **dev/test 전용** — `DEV_LOGIN_ENABLED`·시드 인증·`Dockerfile.dev`·compose 스택은 모두 dev/test 하네스다. 프로덕션 배포용 이미지 최적화·멀티스테이지 Dockerfile은 범위 밖이며, 프로덕션 Firebase 인증은 다루지 않는다(dev seed만).
 - **수동 재연결만** — `WsClient.reconnect()`는 사용자가 트리거하는 명시 호출뿐이다. 자동 재연결·백오프·`session:resumed`를 통한 상태 복원 흐름은 이 토픽에 없다.
-- **캐릭터 선택·게임플레이 뷰는 범위 밖** — 캐릭터 목록·선택·생성·진입 UI는 E10, 방·전투·인벤·채팅 등 게임플레이 뷰는 E11~E13(대응 프로토콜 미존재)이 소유한다. G3의 자동 `selectCharacter`는 오직 `command` 상태 도달을 위한 전송 배관이다.
+- **캐릭터 선택·게임플레이 뷰는 범위 밖** — 캐릭터 목록·선택·생성·진입 UI는 E10([`session-entry.md`](session-entry.md)), 방·전투·인벤·채팅 등 게임플레이 뷰는 E11~E13(대응 프로토콜 미존재)이 소유한다. E9-1이 두었던 자동 `selectCharacter` 스텁은 E10이 사용자 구동 선택으로 대체했다.
 - **CI 파이프라인 통합 없음** — 로컬 Docker 실행 절차만 다루며, CI 배선은 후속 토픽이다.
 - **디자인·테마·레이아웃 폴리시 없음** — 컴포넌트는 최소 시맨틱 마크업만 제공한다(FE-6 경계).
 - **인증·세션·핸드셰이크 로직은 소비만** — `preValidation` 게이트·버전 협상 상태표·세션 FSM 자체의 정본은 [`transport-protocol.md`](transport-protocol.md)·[`auth-session.md`](auth-session.md)이며, 이 문서는 그 계약을 client가 어떻게 소비하는지만 기술한다.
