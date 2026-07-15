@@ -1,15 +1,23 @@
 import { loadWorldFile } from 'shared'
-import type { ExitEdge, ItemInstance, RoomNode } from 'shared'
+import type { CreatureInstance, ExitEdge, ItemInstance, PermMonSlot, RoomNode } from 'shared'
+import { fromEmbedded, type CreatureSource } from './creatureFactory.js'
 
 // data/world/rooms.json 파싱 입력 형태(raw 디스크 산출물). loadWorldFile이 이 shape를 준다.
 type RawExit = { name: string; room: number; flags: number[]; key: number }
 type RawItem = { name: string; description: string; value: number; contains: RawItem[] }
+// embedded 몬스터는 T2.0 이후 완전한 creature 필드를 담는다(CreatureSource + rom_num·inventory 등).
+type RawMonster = CreatureSource & { rom_num: number }
+type RawPermMon = { interval: number; ltime: number; misc: number }
 type RawRoom = {
   id: number
   name: string
   flags: number[]
   exits: RawExit[]
   items: RawItem[]
+  monsters?: RawMonster[]
+  perm_mon?: RawPermMon[]
+  random?: number[]
+  traffic?: number
   short_desc: string
   long_desc: string
 }
@@ -52,7 +60,17 @@ function toItemInstance(raw: RawItem, roomId: number, path: string): ItemInstanc
   }
 }
 
+// perm 스폰 슬롯을 복사한다 — 노드가 폐기될 raw 번들과 객체를 공유하지 않게(flags/items 복사 관례).
+// ltime은 라이브 가변(입장 리스폰·사망 시 세팅)이라 반드시 raw와 분리한다.
+function toPermMonSlot(raw: RawPermMon): PermMonSlot {
+  return { interval: raw.interval, ltime: raw.ltime, misc: raw.misc }
+}
+
 function toRoomNode(raw: RawRoom): RoomNode {
+  // embedded 몬스터를 라이브 크리처로 물질화한다(팩토리 (a) 경로, templateId=null — 템플릿
+  // 재인스턴스화가 아니라 방 파일 인라인 데이터로 물질화). 기본 결정적 rng로 순수성을 유지한다.
+  const monsters = raw.monsters ?? []
+  const creatures: CreatureInstance[] = monsters.map((m, i) => fromEmbedded(m, raw.id, i))
   return {
     roomId: raw.id,
     name: raw.name,
@@ -64,6 +82,11 @@ function toRoomNode(raw: RawRoom): RoomNode {
     flags: [...raw.flags],
     // occupants는 라이브 점유자 Set으로 부팅 시 빈 상태다(characterId가 이동 시 채워짐).
     occupants: new Set<string>(),
+    // creatures는 라이브 가변 배열(스폰 push·사망 제거). 스폰 정의 필드는 복사해 raw와 분리한다.
+    creatures,
+    permMon: (raw.perm_mon ?? []).map(toPermMonSlot),
+    random: [...(raw.random ?? [])],
+    traffic: raw.traffic ?? 0,
   }
 }
 

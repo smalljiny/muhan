@@ -45,3 +45,36 @@ test('perm_mon은 길이 10, 각 {interval,ltime,misc}, [0]/[1] 오라클 리터
 test('스폰 필드 추가 후에도 _leftover===0 (가변 꼬리 회귀 가드)', () => {
   assert.equal(room135()._leftover, 0);
 });
+
+// D6: embedded 몬스터는 완전한 1184B creature 구조체다. parseCreature가
+// templates.js readCreature 재사용으로 전체 스탯을 emit해야 한다(name+rom_num만이 아님).
+test('embedded 몬스터가 readCreature 전체 필드를 갖는다 (좀도둑: hpmax 7·level 4·gold 80·dex 14)', () => {
+  const r = room135();
+  assert.equal(r.monsters.length, 2);
+  const thief = r.monsters[0];
+  assert.equal(thief.name, '좀도둑');
+  assert.equal(thief.rom_num, 135);
+  assert.equal(thief.level, 4);
+  assert.equal(thief.hpmax, 7);
+  assert.equal(thief.hpcur, 7);
+  assert.equal(thief.mpmax, 0);
+  assert.equal(thief.mpcur, 0);
+  assert.equal(thief.gold, 80);
+  assert.equal(thief.dexterity, 14);
+  // flags는 creatures.json과 동일 hex string 표현.
+  assert.equal(thief.flags, '0112000000000000');
+});
+
+test('embedded 몬스터 inventory 배열이 유지된다 (중첩 obj 파싱 경로 불변)', () => {
+  const r = room135();
+  for (const m of r.monsters) {
+    assert.ok(Array.isArray(m.inventory));
+  }
+});
+
+test('embedded 몬스터 스탯은 템플릿과 다를 수 있다 (빌더 커스터마이즈, 인라인 추출 필수)', () => {
+  // 좀도둑 embedded gold=80·flags=0112, 템플릿 123과 다름 → 템플릿 재구성 불가.
+  const r = room135();
+  assert.equal(r.monsters[0].gold, 80);
+  assert.equal(r.monsters[0].flags, '0112000000000000');
+});

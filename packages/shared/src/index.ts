@@ -10,8 +10,15 @@ export type HealthStatus = { status: 'ok' | 'degraded'; db: 'up' | 'down' }
 
 export { loadWorldFile } from './worldLoader.js'
 
-// 인메모리 월드 그래프 런타임 타입(방 노드·출구 엣지·아이템 인스턴스). 영속 스키마와 별개.
-export type { ExitEdge, ItemInstance, RoomNode, DirectionHints } from './worldGraph.js'
+// 인메모리 월드 그래프 런타임 타입(방 노드·출구 엣지·아이템·크리처 인스턴스·스폰 슬롯). 영속 스키마와 별개.
+export type {
+  ExitEdge,
+  ItemInstance,
+  CreatureInstance,
+  PermMonSlot,
+  RoomNode,
+  DirectionHints,
+} from './worldGraph.js'
 // 방 출구를 기본 6방향 vs 명명/대각으로 분리하는 파생 순수 함수.
 export { getDirectionHints } from './worldGraph.js'
 

@@ -12,6 +12,8 @@
  * 모든 정수 little-endian. 텍스트 EUC-KR.
  */
 
+const { readCreature } = require('./templates.js');
+
 const SZ = { room: 480, exit_: 44, object: 352, creature: 1184 };
 const OFF = {
   room: { rom_num: 0, name: 2, lolevel: 96, hilevel: 97, special: 98,
@@ -54,13 +56,13 @@ function parseObject(c) {
 }
 
 // write_crt: creature(1184) + int invcnt + obj들
+// D6: embedded 몬스터는 완전한 1184B creature 구조체다(빌더 커스터마이즈로 템플릿과 상이).
+// templates.js readCreature를 base-relative로 재사용해 전체 스탯을 emit한다(정본 오프셋 테이블).
+// readCreature는 최대 오프셋 rom_num@458만 읽어 1184B 블록 내부라 over-read 없음.
 function parseCreature(c) {
   const base = c.off;
   const b = c.buf;
-  const crt = {
-    name: cstr(b, base + OFF.creature.name, 80),
-    rom_num: b.readInt16LE(base + OFF.creature.rom_num),
-  };
+  const crt = readCreature(b, base);
   c.off += SZ.creature;
   const cnt = c.i32();
   crt.inventory = [];

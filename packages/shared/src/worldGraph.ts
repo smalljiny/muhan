@@ -5,9 +5,13 @@
  * 타입으로, 디스크에 저장되지 않는 라이브 상태(런타임 필드·생성 id)를 표현한다.
  *
  * 가변성(mutability) 경계 — 프로젝트 CRITICAL immutability 규칙의 의도된 예외:
- *   - 라이브 가변: `RoomNode.occupants`(점유자 Set), `ExitEdge.flags`+`ExitEdge.ltime`
- *     (문 개폐/재잠금 상태 머신 — oracle a4 §111 `check_exits`가 ltime+interval로 재잠금).
- *   - immutable: 정적 필드 전부 + `RoomNode.flags`(64비트 raw 방 flags는 콘텐츠로 불변).
+ *   - 라이브 가변: `RoomNode.occupants`(점유자 Set), `RoomNode.creatures`(라이브 크리처 배열 —
+ *     스폰 push·사망 제거, occupants 선례), `CreatureInstance`의 라이브 상태 필드(hpcur·mpcur·
+ *     타이머·enemies), `ExitEdge.flags`+`ExitEdge.ltime`(문 개폐/재잠금 상태 머신 — oracle a4 §111
+ *     `check_exits`가 ltime+interval로 재잠금), `RoomNode.permMon[].ltime`(perm 리스폰 타이머 —
+ *     exit ltime과 동형, 입장 lazy 리스폰·사망 시 now로 세팅. Story 4·5).
+ *   - immutable: 정적 필드 전부 + `RoomNode.flags`(64비트 raw 방 flags는 콘텐츠로 불변) +
+ *     `RoomNode.random`/`RoomNode.traffic`(스폰 정의 콘텐츠, 불변).
  *   방 flags와 exit flags를 혼동하지 않는다 — 전자는 불변, 후자는 문 상태로 가변이다.
  */
 
@@ -42,6 +46,53 @@ export type ItemInstance = {
 }
 
 /**
+ * 라이브 크리처 인스턴스 — 크리처 템플릿(또는 방 embedded 몬스터)을 부팅/스폰 시 물질화한
+ * 런타임 객체. `instanceId`는 디스크에 저장되지 않는 고유 id다(non-durable, ItemInstance 선례).
+ *
+ * 두 출처(server `creatureFactory`):
+ *   (a) 방 embedded 몬스터 — 방 파일에 박힌 완전한 creature 구조체(빌더 커스터마이즈).
+ *       `templateId=null`(템플릿 링크 없음, 인라인 데이터로 물질화).
+ *   (b) 템플릿 번호 — `creatures.json`을 id로 조회해 물질화(perm/random 스폰·MSUMMO 소환용).
+ *       `templateId`=조회한 템플릿 id.
+ *
+ * 라이브 가변 필드(hpcur·mpcur·`nextActionAt`·`lastRegenAt`·enemies)는 tick/전투가 in-place
+ * 변경한다(occupants 선례, immutability 규칙 승인 예외). `flags`는 creatures.json과 동일한
+ * hex string 표현을 유지한다(콘텐츠, 불변). `enemies`는 적 characterId/instanceId seam으로
+ * 부팅 시 빈 배열이며 E6 전투가 채운다.
+ */
+export type CreatureInstance = {
+  instanceId: string
+  templateId: number | null
+  name: string
+  level: number
+  hpmax: number
+  hpcur: number
+  mpmax: number
+  mpcur: number
+  dexterity: number
+  gold: number
+  special: number
+  flags: string
+  enemies: string[]
+  /** 다음 autonomic/전투 행동 도래 실초 시각. Story 3 next-action 큐가 세팅. */
+  nextActionAt?: number
+  /** 마지막 재생 적용 실초 시각. Story 3 재생이 소급 기준으로 사용. */
+  lastRegenAt?: number
+}
+
+/**
+ * perm 스폰 슬롯 — 방 구조체 `lasttime perm_mon[10]`의 런타임 표현. `misc`는 스폰할 몹번호,
+ * `interval`은 리스폰 지연 초, `ltime`은 마지막 스폰/사망 실초 시각(라이브 가변 — exit ltime과
+ * 동형). Story 4가 `ltime+interval ≤ now` 슬롯을 입장 시 lazy 리스폰하고, Story 5가 사망 시
+ * `ltime = now`로 리셋한다.
+ */
+export type PermMonSlot = {
+  interval: number
+  ltime: number
+  misc: number
+}
+
+/**
  * 방 그래프 노드. 그래프 탐색·표시에 필요한 필드만 담는다(모든 raw 필드를 옮기지 않음).
  * raw의 short_desc/long_desc를 shortDesc/longDesc로 매핑한다.
  *
@@ -49,6 +100,10 @@ export type ItemInstance = {
  * 이동/마법/상점/전투 서브시스템이 이 플래그를 읽으므로 방이 전부 운반해야 한다). 불변.
  * `occupants`는 방에 있는 캐릭터의 characterId 집합으로 라이브 가변이다. shared는
  * server의 ActorContext를 import할 수 없으므로 원소 타입은 string(characterId)이다.
+ *
+ * 스폰 필드: `creatures`는 방의 라이브 크리처 배열(가변 — 스폰 push·사망 제거), `permMon`은
+ * perm 스폰 슬롯 배열(각 슬롯 ltime 가변), `random`은 랜덤 스폰 몹번호 후보(길이 10, 불변),
+ * `traffic`은 스폰/배회 확률(불변).
  */
 export type RoomNode = {
   roomId: number
@@ -59,6 +114,10 @@ export type RoomNode = {
   items: ItemInstance[]
   flags: number[]
   occupants: Set<string>
+  creatures: CreatureInstance[]
+  permMon: PermMonSlot[]
+  random: number[]
+  traffic: number
 }
 
 /**

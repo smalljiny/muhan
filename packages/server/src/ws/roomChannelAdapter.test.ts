@@ -19,6 +19,10 @@ function makeRoom(occupantIds: readonly string[]): RoomNode {
     items: [],
     flags: [],
     occupants: new Set<string>(occupantIds),
+    creatures: [],
+    permMon: [],
+    random: [],
+    traffic: 0,
   }
 }
 
