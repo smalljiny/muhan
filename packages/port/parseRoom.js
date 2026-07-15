@@ -16,7 +16,7 @@ const SZ = { room: 480, exit_: 44, object: 352, creature: 1184 };
 const OFF = {
   room: { rom_num: 0, name: 2, lolevel: 96, hilevel: 97, special: 98,
           trap: 100, trapexit: 102, track: 104, flags: 184, random: 192,
-          traffic: 212 },
+          traffic: 212, perm_mon: 216 },
   exit_: { name: 0, room: 20, flags: 22, key: 40 },
   object: { name: 0, description: 80, value: 300, type: 119 /* 추정: 미사용 PoC */ },
   creature: { name: 0, level: -1 /* 아래서 직접 계산 안 함, 이름만 */, rom_num: 458 },
@@ -90,6 +90,23 @@ function parseRoom(buf) {
     flags: Array.from(b.subarray(OFF.room.flags, OFF.room.flags + 8)),
     track: cstr(b, OFF.room.track, 80),
   };
+
+  // 스폰 데이터 (room 구조체 480B 내부 고정 필드; 커서 미이동)
+  // random: short[10] 랜덤 스폰 몹번호. traffic: 스폰 확률(char).
+  room.random = [];
+  for (let i = 0; i < 10; i++) room.random.push(b.readInt16LE(OFF.room.random + i * 2));
+  room.traffic = b.readInt8(OFF.room.traffic);
+  // perm_mon: lasttime[10] (각 12B: interval long, ltime long, misc short) 고정 스폰 몹.
+  room.perm_mon = [];
+  for (let i = 0; i < 10; i++) {
+    const o = OFF.room.perm_mon + i * 12;
+    room.perm_mon.push({
+      interval: b.readInt32LE(o),
+      ltime: b.readInt32LE(o + 4),
+      misc: b.readInt16LE(o + 8),
+    });
+  }
+
   c.off = SZ.room;
 
   // 출구
