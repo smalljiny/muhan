@@ -24,7 +24,7 @@ export interface GameTime {
   /** WorldClock에 등록할 진행 슬롯(intervalSec=150, 발화당 Time += 1). */
   readonly slot: WorldTickSlot
   /** 현재 게임시각 시(0~23) = Time % 24. 라이브 클로저 상태를 읽는다. */
-  currentHour(): number
+  readonly currentHour: () => number
 }
 
 /** 게임시각 슬롯 케이던스(실초). 원본 update_time 150초 주기 미러. */
@@ -49,10 +49,9 @@ export function createGameTime(options: GameTimeOptions = {}): GameTime {
 
   return {
     slot,
-    currentHour(): number {
-      // ((x % 24) + 24) % 24로 정규화해 initialTime이 음수로 주입돼도 0~23 계약이 성립한다
-      // (도메인상 Time은 0에서 단조 증가라 음수가 나오지 않지만, 계약을 입력과 무관하게 고정).
-      return ((time % 24) + 24) % 24
-    },
+    // ((x % 24) + 24) % 24로 정규화해 initialTime이 음수로 주입돼도 0~23 계약이 성립한다
+    // (도메인상 Time은 0에서 단조 증가라 음수가 나오지 않지만, 계약을 입력과 무관하게 고정).
+    // arrow 프로퍼티로 정의해 구조분해 시 this 바인딩 이슈가 없다.
+    currentHour: (): number => ((time % 24) + 24) % 24,
   }
 }

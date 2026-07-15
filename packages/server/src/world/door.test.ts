@@ -13,7 +13,6 @@ import {
   XCLOSD,
   XLOCKS,
   XCLOSS,
-  XUNPCK,
   XNOSEE,
   KEY,
 } from './door.js'
