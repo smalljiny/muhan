@@ -28,6 +28,11 @@ import { createResolveDisconnect } from './resolveDisconnect.js'
 import { createSessionLifecycle, type SessionLifecycle } from './sessionLifecycle.js'
 import { createConnectionQuota, type ConnectionQuota } from './connectionQuota.js'
 import { createShutdownConverger, type ShutdownConverger } from './shutdownConvergence.js'
+import {
+  createMessageRateLimiterFactory,
+  type MessageRateLimiterFactory,
+  type MessageRateLimits,
+} from './messageRateLimiter.js'
 
 /** switch 완전성 컴파일 강제 — 도달하면 union에 미처리 variant가 생긴 것이다. */
 function assertNever(value: never): never {
@@ -60,6 +65,9 @@ declare module 'fastify' {
     // 서버 주도 종료 수렴 핸들. index.ts 신호 핸들러가 markShuttingDown→converge로 등록 바인딩을 일괄 종결하고,
     // 소켓 close 핸들러가 isShuttingDown()으로 link-dead 진입을 우회한다(wsSessionRegistry 관례 미러).
     wsShutdown: ShutdownConverger
+    // 인바운드 유량 제한기 factory. 연결 간 공유되는 계정 버킷 레지스트리를 소유하며, 소켓 open 시 연결 핸들을
+    // 발급하고 close 시 계정 참조를 반납한다. 진단·테스트 관찰의 단일 출처로 노출한다(wsSessionRegistry 관례 미러).
+    wsMessageRateLimiter: MessageRateLimiterFactory
   }
   interface FastifyRequest {
     account: AccountIdentity | null
@@ -329,6 +337,28 @@ export function registerWebsocket(
     maxPerAccount: getConfig().WS_MAX_CONNECTIONS_PER_ACCOUNT,
   }))
 
+  // 인바운드 유량 제한기 factory를 registerWebsocket 1회에 인스턴스화한다(quota/registry 관례 미러 — per-connection이
+  // 아니다: 계정 버킷이 연결 간 공유되는 하나의 레지스트리여야 계정 차원 flood를 정확히 관할한다). 상한은 thunk로 넘겨
+  // check 시점에 지연 조회한다(quota 관례) — 팩토리 생성 시 getConfig를 읽지 않아 미설정 env가 빌드를 막지 않는다.
+  // app.wsMessageRateLimiter로 노출해 진단·테스트가 activeAccountCount()를 관찰하게 한다.
+  // config는 첫 파싱 후 불변이므로 projection을 첫 check에서 한 번만 만들어 캐시한다 — check는 매 프레임 도는
+  // hot path라 프레임마다 새 5-필드 객체를 할당하면 flood 시 공격률에 비례한 GC garbage가 된다. 캐시 수명은
+  // 팩토리(=registerWebsocket) 수명과 같아, 앱마다 새 팩토리를 만드는 테스트에서도 staleness가 없다.
+  let cachedLimits: MessageRateLimits | undefined
+  const rateLimiterFactory = createMessageRateLimiterFactory(() => {
+    if (cachedLimits !== undefined) return cachedLimits
+    const c = getConfig()
+    cachedLimits = {
+      capacity: c.WS_MSG_RATE_CAPACITY,
+      refillPerSec: c.WS_MSG_RATE_REFILL_PER_SEC,
+      accountCapacity: c.WS_MSG_RATE_ACCOUNT_CAPACITY,
+      accountRefillPerSec: c.WS_MSG_RATE_ACCOUNT_REFILL_PER_SEC,
+      maxViolations: c.WS_MSG_RATE_MAX_VIOLATIONS,
+    }
+    return cachedLimits
+  })
+  app.decorate('wsMessageRateLimiter', rateLimiterFactory)
+
   // per-request 계정 신원 슬롯. null 기본값으로 데코레이트하고 preValidation 훅에서 요청별로 대입한다
   // (객체 리터럴 데코레이트 금지 — 요청 간 공유 참조가 되어 신원이 교차 오염된다).
   app.decorateRequest('account', null)
@@ -357,6 +387,27 @@ export function registerWebsocket(
         // 연결은 항상 reserve에 성공했으므로 releaseQuota는 non-null이지만, 데코레이션 null 기본값과의 정합을 위해
         // 방어적으로 가드한다.
         if (req.releaseQuota) socket.on('close', req.releaseQuota)
+
+        // 인바운드 유량 제한기를 socket-open 시점에 arm한다 — deadline과 같은 이유로 pre-handshake 창(open →
+        // system:ready)도 유량 제한 대상이 되게 한다(핸드셰이크 완료를 기다리면 그 사이 flood가 무제한이다).
+        // account는 preValidation 게이트가 non-null을 보장하지만(인증 실패면 upgrade 자체가 차단), strictNullChecks
+        // 하에서 req.account는 여전히 nullable이라 releaseQuota와 같은 방어적 가드로 accountId를 좁혀 캡처한다.
+        // accountId는 여기서 한 번만 읽어 상수로 고정한다 — 아래 close 리스너가 이 캡처값을 쓴다(재조회 금지).
+        const accountId = req.account?.accountId
+        if (accountId !== undefined) {
+          ctx.rateLimiter = rateLimiterFactory.createConnection(accountId)
+
+          // 계정 버킷 반납을 once-guard 클로저로 ws 'close'에 배선한다(releaseQuota 관례 미러). ws 'close'는 이
+          // 코드베이스에서 2회 이상 발화할 수 있어(그래서 releaseQuota도 releaseOnce다), 가드가 없으면
+          // releaseAccount가 이중 감소해 refCount를 조기에 0으로 만들어 살아 있는 형제 연결의 계정 엔트리를
+          // 지운다(계정 차원 상한 우회). rateReleased 플래그가 load-bearing이라, 캡처한 accountId로 정확히 1회만 반납한다.
+          let rateReleased = false
+          socket.on('close', () => {
+            if (rateReleased) return
+            rateReleased = true
+            rateLimiterFactory.releaseAccount(accountId)
+          })
+        }
 
         // 서버 주도 하트비트를 시작해 죽은 연결을 감지·정리한다. env로 튜닝된 간격·임계를 매니저에 넘기고,
         // 반환된 타이머 핸들을 ctx.heartbeat에 배선해 cleanup 경로가 이를 clear할 수 있게 한다.
@@ -391,6 +442,27 @@ export function registerWebsocket(
         })
 
         socket.on('message', (data: RawData) => {
+          // 인바운드 유량 gate — JSON.parse보다 먼저 둔다. flood 방어의 핵심 목적이 "정상 read + 고속 프레임
+          // 투입으로 파싱·dispatch CPU를 소진시키는 공격 차단"이므로, 파싱 비용을 치르기 전에 초과분을 버려야
+          // 방어가 성립한다(파싱 뒤에 두면 이미 CPU를 소비한 뒤라 무의미). rateLimiter는 socket-open에 arm돼
+          // 항상 non-null이지만 releaseQuota 관례처럼 옵셔널 체이닝으로 방어한다 — null이면 verdict가 undefined라
+          // gate를 건너뛴다. accept가 아니면 early-return해 파싱·dispatch·그리고 아래 dispatch handled 경로의
+          // idle 재-arm(`ctx.idle?.arm()`)까지 구조적으로 우회한다 — 이것이 "drop된 프레임은 idle을 재-arm하지 않는다"의 메커니즘이다.
+          const verdict = ctx.rateLimiter?.check(Date.now())
+          if (verdict !== undefined && verdict !== 'accept') {
+            // drop-warn(연속 폐기 구간의 첫 폐기)만 1회 경고한다 — 이후 연속 drop은 침묵해 경고 증폭을 막는다.
+            if (verdict === 'drop-warn') {
+              safeSend(socket, {
+                type: 'error',
+                code: 'rate_limited',
+                message: '인바운드 속도 상한을 초과했습니다. 잠시 후 다시 시도하세요.',
+              })
+            }
+            // 지속 위반이 임계를 넘으면 graceful close한다(코어가 소유한 위반 카운터로 판정).
+            if (ctx.rateLimiter?.shouldTerminate() && socket.readyState === socket.OPEN) socket.close()
+            return
+          }
+
           // 프레임 파싱 실패는 핸드셰이크 게이트보다 우선한다(type 판별 이전). 파싱만 별도 try로 감싸
           // bad_payload로 응답하고 종료한다.
           let parsed: unknown
