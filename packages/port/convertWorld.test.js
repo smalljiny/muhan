@@ -48,6 +48,24 @@ test('orphan 제외 유지 — counts.rooms=2341', () => {
   assert.equal(meta.counts.rooms, 2341);
 });
 
+test('creatures.json 엔트리가 numwander를 담는다 (D9)', () => {
+  const crts = JSON.parse(fs.readFileSync(path.join(dirA, 'creatures.json')));
+  const byId = new Map(crts.map((c) => [c.id, c]));
+  // numwander(CRT offset 322, int16LE)는 random 스폰 그룹 크기 입력.
+  assert.equal(byId.get(25).numwander, 3);
+  assert.equal(byId.get(3).numwander, 2);
+  assert.equal(byId.get(0).numwander, 1);
+});
+
+test('임베디드 몬스터도 numwander를 담는다 (rooms.json 번들)', () => {
+  const bundle = JSON.parse(fs.readFileSync(path.join(dirA, 'rooms.json')));
+  const r135 = bundle.find((r) => r.id === 135);
+  assert.ok(r135.monsters.length > 0);
+  for (const m of r135.monsters) {
+    assert.equal(typeof m.numwander, 'number');
+  }
+});
+
 test('meta counts는 실측 (objects=709, creatures=674)', () => {
   const meta = JSON.parse(fs.readFileSync(path.join(dirA, 'meta.json')));
   assert.equal(meta.counts.objects, 709);

@@ -51,7 +51,8 @@ function readCreature(b, base = 0) {
   return {
     name: cstr(b, c('name'), 80), description: cstr(b, c('description'), 80), talk: cstr(b, c('talk'), 80),
     level: b.readUInt8(c('level')), type: b.readInt8(c('type')), class: b.readInt8(c('class')),
-    race: b.readInt8(c('race')), alignment: b.readInt16LE(c('alignment')),
+    race: b.readInt8(c('race')), numwander: b.readInt16LE(c('numwander')),
+    alignment: b.readInt16LE(c('alignment')),
     strength: b.readInt8(c('strength')), dexterity: b.readInt8(c('dexterity')),
     constitution: b.readInt8(c('constitution')), intelligence: b.readInt8(c('intelligence')),
     piety: b.readInt8(c('piety')), hpmax: b.readInt16LE(c('hpmax')), hpcur: b.readInt16LE(c('hpcur')),
