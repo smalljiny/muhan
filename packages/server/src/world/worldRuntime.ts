@@ -8,8 +8,14 @@ import {
   type InstanceIdAllocator,
 } from './spawn.js'
 import { createCreatureTick, type OnCombatTick } from './creatureTick.js'
-import { createRandomSpawn } from './randomSpawn.js'
-import { createInvasion, loadInvasionEvents, type InvasionEvent, type SpawnBroadcast } from './invasion.js'
+import { createRandomSpawn, type SpawnRng } from './randomSpawn.js'
+import {
+  createInvasion,
+  loadInvasionEvents,
+  type InvasionEvent,
+  type InvasionRng,
+  type SpawnBroadcast,
+} from './invasion.js'
 import type { CreatureRng } from './creatureFactory.js'
 import type { WorldTickSlot } from './worldClock.js'
 import type { MoveActor } from './tryMove.js'
@@ -49,6 +55,19 @@ export interface WorldRuntimeDeps {
   readonly worldRoot?: string
   /** carry/gold 랜덤화 seam(기본 결정적 identity) — 리스폰·random·invasion 스폰이 공유한다. */
   readonly creatureRng?: CreatureRng
+  /**
+   * random 배회 진입 확률 seam(traffic 게이트·후보 선택·그룹 크기). 미주입 시 `defaultSpawnRng`
+   * (결정적 비발화 — traffic 게이트 항상 실패)라 random 슬롯이 조용하다. 실 확률·시드는 E8-2 RNG가
+   * 이 seam으로 주입한다 — 노출하지 않으면 코드 수정 없이 random 스폰을 살릴 수 없다(adversarial 지적).
+   */
+  readonly spawnRng?: SpawnRng
+  /**
+   * invasion 방/몹 선택 mrand seam. 미주입 시 `defaultInvasionRng`(항상 범위 min)이라 결정적으로
+   * **동일 방에 집중**된다 — 실 확률은 E8-2 RNG가 이 seam으로 주입해 범위 전역에 분산한다. invasion
+   * 슬롯의 무조건 주기 스폰 특성상 이 seam이 결정적 stub이면 고정 방 누적이 발생한다(§Non-goals
+   * forward note — E6 정리·E8-2 분산 전까지 상한 미도입).
+   */
+  readonly invasionRng?: InvasionRng
   /** §3.5 게이트 통과 크리처 전투 디스패치(기본 no-op, E6이 대체). */
   readonly onCombatTick?: OnCombatTick
   /** invasion 방송 seam(기본 no-op, E7이 전역 방송으로 대체). */
@@ -94,6 +113,7 @@ export function createWorldRuntime(
     rooms: () => activeSet.activeRooms(),
     templates,
     alloc,
+    rng: deps.spawnRng,
     creatureRng: deps.creatureRng,
   })
   const invasionSlots = createInvasion({
@@ -101,6 +121,7 @@ export function createWorldRuntime(
     resolveRoom: (roomId) => worldGraph.get(roomId),
     templates,
     alloc,
+    rng: deps.invasionRng,
     creatureRng: deps.creatureRng,
     broadcast: deps.broadcast,
   })
