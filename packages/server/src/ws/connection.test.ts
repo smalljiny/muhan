@@ -7,6 +7,7 @@ import {
   type IdleTimer,
 } from './connection.js'
 import type { Deadline } from './deadline.js'
+import type { ConnectionRateLimiter } from './messageRateLimiter.js'
 
 // cleanupConnection의 누수 방어선을 소켓 없이 단위 검증한다(플러그인 e2e는 size만 보므로 clear 회귀를
 // 못 잡는다). Map 키는 fake 소켓을 WebSocket으로 캐스팅해 참조 동등성만 쓴다(메서드 미호출).
@@ -24,6 +25,19 @@ function fakeDeadline(): Deadline & { clear: ReturnType<typeof vi.fn> } {
 /** clear를 스파이하는 fake IdleTimer. 팩토리는 Story 6이라 여기선 슬롯 clear만 검증한다. */
 function fakeIdle(): IdleTimer & { clear: ReturnType<typeof vi.fn> } {
   return { arm: vi.fn(), clear: vi.fn() }
+}
+
+/**
+ * fake ConnectionRateLimiter. 슬롯 참조로만 쓴다 — cleanupConnection은 이 핸들의 메서드를 부르지 않는다
+ * (계정 버킷 반납은 close 리스너 소유, cleanup은 슬롯 null화만 한다).
+ */
+function fakeRateLimiter(): ConnectionRateLimiter {
+  return {
+    check: vi.fn(() => 'accept' as const),
+    shouldTerminate: vi.fn(() => false),
+    peekConnectionTokens: vi.fn(() => 0),
+    peekAccountTokens: vi.fn(() => 0),
+  }
 }
 
 describe('cleanupConnection', () => {
@@ -67,6 +81,44 @@ describe('cleanupConnection', () => {
 
     expect(deadline.clear).toHaveBeenCalledTimes(1)
     expect(ctx.deadline).toBeNull()
+    expect(connections.has(socket)).toBe(false)
+  })
+
+  it('createConnectionContext는 rateLimiter 슬롯을 null로 둔다', () => {
+    const ctx = createConnectionContext()
+    expect(ctx.rateLimiter).toBeNull()
+  })
+
+  it('rateLimiter 슬롯이 non-null이면 null로 비운다(계정 반납은 close 리스너 소유, 슬롯만 정리)', () => {
+    const socket = fakeSocket()
+    const connections = new Map<WebSocket, ConnectionContext>()
+    const ctx = createConnectionContext()
+    // 다른 슬롯 분기를 격리하기 위해 heartbeat·deadline·idle은 null로 두고 rateLimiter만 배선한다.
+    ctx.heartbeat = null
+    ctx.deadline = null
+    ctx.idle = null
+    ctx.rateLimiter = fakeRateLimiter()
+    connections.set(socket, ctx)
+
+    cleanupConnection(connections, socket)
+
+    // 슬롯을 null로 비운다 — releaseAccount는 여기서 부르지 않는다(별도 close 리스너 소유).
+    expect(ctx.rateLimiter).toBeNull()
+    expect(connections.has(socket)).toBe(false)
+  })
+
+  it('rateLimiter가 null이어도 안전하게 정리한다(idempotent 방어선)', () => {
+    const socket = fakeSocket()
+    const connections = new Map<WebSocket, ConnectionContext>()
+    const ctx = createConnectionContext()
+    ctx.heartbeat = null
+    ctx.deadline = null
+    ctx.idle = null
+    ctx.rateLimiter = null
+    connections.set(socket, ctx)
+
+    expect(() => cleanupConnection(connections, socket)).not.toThrow()
+    expect(ctx.rateLimiter).toBeNull()
     expect(connections.has(socket)).toBe(false)
   })
 

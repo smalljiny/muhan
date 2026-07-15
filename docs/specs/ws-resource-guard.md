@@ -77,7 +77,7 @@ E3-2(인증·세션 FSM) adversarial 리뷰가 자원 고갈(DoS) 표면 2건을
 ## 제약사항
 
 - **정원은 accountId 회계** — 계정별 상한이 "중복 연결" 방어를 커버하므로 재연결 정책(#47)이 별도 중복 연결 정책을 재구현하지 않는다.
-- **인바운드 메시지 속도 제한은 범위 밖** — 다른 자원(CPU)·다른 공격면. 후속 이슈 #64. 정원은 연결 수, backpressure는 아웃바운드 큐만 관할한다.
+- **인바운드 메시지 속도 제한은 범위 밖** — 다른 자원(CPU)·다른 공격면. 이 문서 이후 [`ws-rate-limit.md`](ws-rate-limit.md)(#64)가 연결·계정 토큰 버킷으로 인바운드 프레임 도착률을 상한했다. 정원은 연결 수, backpressure는 아웃바운드 큐만 관할한다.
 - **graceful shutdown 세션 수렴은 범위 밖**(#56) — 본 토픽 이후 [`runtime-foundation.md`](runtime-foundation.md)이 구현했다(서버 주도 종료 시 전체 live 바인딩 일괄 수렴 + 월드 틱 정지). 자원 가드 계층은 이를 다루지 않는다.
 - **command 상태 유휴 종료는 범위 밖** — `WS_IDLE_TIMEOUT_MS`가 이미 커버.
 - **결정적 테스트** — fake socket 주입·env 오버라이드로 검증하며 부하 테스트가 아니다.
@@ -86,4 +86,5 @@ E3-2(인증·세션 FSM) adversarial 리뷰가 자원 고갈(DoS) 표면 2건을
 
 - [`auth-session.md`](auth-session.md) — 정원 게이트가 세 번째 층으로 얹히는 인증 게이트 정본.
 - [`transport-protocol.md`](transport-protocol.md) — backpressure가 얹히는 `safeSend` 전송 배선 정본.
+- [`ws-rate-limit.md`](ws-rate-limit.md) — 인바운드 메시지 유량 제한(#64) 정본. 이 문서의 자원 방어 사슬에 도착률 층을 얹는 형제 문서.
 - 이슈 #54(본 토픽), #64(rate limit 후속), #56(shutdown), #47(재연결). ADR #14.

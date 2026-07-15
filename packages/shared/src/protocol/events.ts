@@ -22,6 +22,8 @@ export const errorCodeSchema = z.enum([
   'unauthorized',
   'session_state',
   'forbidden',
+  // rate_limited = 인바운드 프레임이 연결·계정 속도 상한을 초과해 파싱 전 drop됐다(1회 경고 통지).
+  'rate_limited',
 ])
 
 /**

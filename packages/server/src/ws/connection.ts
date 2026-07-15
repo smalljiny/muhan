@@ -3,6 +3,7 @@ import { PROTOCOL_VERSION } from 'shared'
 import type { AccountIdentity } from '../auth/sessionAuthPort.js'
 import { ConnectionState, type CreateProgress } from './fsm/sessionFsm.js'
 import type { Deadline } from './deadline.js'
+import type { ConnectionRateLimiter } from './messageRateLimiter.js'
 
 /**
  * per-connection 컨텍스트 — 소켓 하나의 수명 동안 유지되는 transport 상태.
@@ -27,6 +28,11 @@ import type { Deadline } from './deadline.js'
  * `idle`은 월드 입장 후 무입력(idle) 종료를 감시하는 슬롯(Story 6이 팩토리로 arm한다)이다. 여기서는 슬롯과
  * 최소 인터페이스만 정의하고 초기값 null로 둔다 — resolveDisconnect·cleanupConnection이 종결 시 `clear`로
  * 누수를 막는다(팩토리 arming 전까지 항상 null이라 clear는 no-op).
+ *
+ * `rateLimiter`는 인바운드 프레임 유량 제한 핸들 슬롯이다. 소켓 open 시 팩토리가 이 연결의 핸들을 대입하고
+ * (deadline/idle과 달리 arm은 handshake가 아니라 open 시점이라 pre-handshake 창도 제한된다), message 핸들러가
+ * 프레임마다 `check(now)`로 verdict를 받아 gate한다. cleanup은 이 슬롯을 null로 비운다 — heartbeat/deadline/idle과
+ * 달리 clear할 타이머가 없고(순수 회계), 계정 버킷 반납은 별도 close 리스너가 소유하므로 여기서는 슬롯만 정리한다.
  */
 export interface ConnectionContext {
   readonly protocolVersion: number
@@ -34,6 +40,7 @@ export interface ConnectionContext {
   heartbeat: NodeJS.Timeout | null
   deadline: Deadline | null
   idle: IdleTimer | null
+  rateLimiter: ConnectionRateLimiter | null
   account: AccountIdentity | null
   state: ConnectionState
   createProgress: CreateProgress | null
@@ -61,6 +68,7 @@ export function createConnectionContext(): ConnectionContext {
     heartbeat: null,
     deadline: null,
     idle: null,
+    rateLimiter: null,
     account: null,
     state: ConnectionState.characterSelect,
     createProgress: null,
@@ -95,5 +103,9 @@ export function cleanupConnection(
     ctx.idle.clear()
     ctx.idle = null
   }
+  // rateLimiter 슬롯은 null로 비우기만 한다 — 순수 회계 핸들이라 clear할 타이머가 없어(heartbeat/deadline/idle과
+  // 달리 null 전 부수효과가 없다) 무조건 대입으로 충분하다. 계정 버킷 반납은 별도 close 리스너(releaseAccount)가
+  // 소유한다(여기서 반납하면 이중 감소로 형제 연결의 계정 엔트리를 지운다).
+  if (ctx) ctx.rateLimiter = null
   connections.delete(socket)
 }

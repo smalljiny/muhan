@@ -13,6 +13,10 @@ describe('errorCodeSchema', () => {
     expect(errorCodeSchema.safeParse(code).success).toBe(true)
   })
 
+  it('rate_limited 코드를 통과시킨다 (인바운드 속도 상한 초과 drop 통지)', () => {
+    expect(errorCodeSchema.safeParse('rate_limited').success).toBe(true)
+  })
+
   it('알 수 없는 코드를 거부한다', () => {
     expect(errorCodeSchema.safeParse('teapot').success).toBe(false)
   })
