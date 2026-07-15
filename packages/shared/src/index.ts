@@ -33,3 +33,6 @@ export { goldenFixtureSchema, type GoldenFixture } from './oracle/types.js'
 
 // 골든 fixture approval 러너 — cases를 SUT 출력과 대조해 전 불일치를 집계 리포트.
 export { approve } from './oracle/runner.js'
+
+// property 테스트용 의존 0 seedable PRNG(mulberry32) + 정수 범위 헬퍼.
+export { makeSeededRng, nextIntInRange } from './property/seededRng.js'
