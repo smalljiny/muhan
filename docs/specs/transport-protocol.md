@@ -58,7 +58,7 @@
 - `{ type: 'session:characterList', characters: CharacterSummary[] }` — 캐릭터 선택 화면이 실을 와이어 전용 요약 배열(T2).
 - `{ type: 'session:entered', characterId: string(min 1) }` — 지목한 캐릭터로 월드 입장 확정 통지(T2).
 
-`errorCodeSchema = z.enum(['handshake_required', 'unknown_type', 'bad_payload', 'internal', 'unauthorized', 'session_state', 'forbidden'])` — `handshake_required`(핸드셰이크 전 명령 수신), `unknown_type`(미지 discriminator), `bad_payload`(payload 형식 위반), `internal`(핸들러/처리 중 서버 내부 오류), `unauthorized`(소유하지 않은 캐릭터 지목 등 **미인증** 세션의 인가 실패, T2), `session_state`(현재 세션 단계에서 허용되지 않는 명령, T2), `forbidden`(**인증됐으나** RBAC 권한 부족으로 거부, E3-4). `unauthorized`(신원 없음, 재인증 유도)와 `forbidden`(신원 있으나 자격 없음, 권한 없음 안내)은 client-visible 의미가 다르다. WS upgrade **전** 게이트의 거부(`401 unauthenticated`·`403 forbidden_origin`)는 프로토콜 error 이벤트가 아니라 HTTP 응답이며 이 열거에 없다(auth-session.md 참조).
+`errorCodeSchema = z.enum(['handshake_required', 'unknown_type', 'bad_payload', 'internal', 'unauthorized', 'session_state', 'forbidden', 'rate_limited'])` — `handshake_required`(핸드셰이크 전 명령 수신), `unknown_type`(미지 discriminator), `bad_payload`(payload 형식 위반), `internal`(핸들러/처리 중 서버 내부 오류), `unauthorized`(소유하지 않은 캐릭터 지목 등 **미인증** 세션의 인가 실패, T2), `session_state`(현재 세션 단계에서 허용되지 않는 명령, T2), `forbidden`(**인증됐으나** RBAC 권한 부족으로 거부, E3-4), `rate_limited`(인바운드 프레임이 연결·계정 속도 상한을 초과해 `JSON.parse` 전에 drop됨, #64 — 연속 폐기 구간의 첫 폐기에만 1회 통지, 정본 [`ws-rate-limit.md`](ws-rate-limit.md)). `unauthorized`(신원 없음, 재인증 유도)와 `forbidden`(신원 있으나 자격 없음, 권한 없음 안내)은 client-visible 의미가 다르다. WS upgrade **전** 게이트의 거부(`401 unauthenticated`·`403 forbidden_origin`)는 프로토콜 error 이벤트가 아니라 HTTP 응답이며 이 열거에 없다(auth-session.md 참조).
 
 ### 전송 배선 (`packages/server/src/ws/`)
 
@@ -97,6 +97,7 @@
 
 `socket.on('message')`가 프레임마다 다음 순서를 실행한다.
 
+0. **인바운드 유량 게이트**(#64) — `JSON.parse`보다 **앞**에 둔다. `ctx.rateLimiter.check(performance.now())`가 연결·계정 토큰 버킷을 AND 판정해 `accept`가 아니면 파싱·dispatch·idle 재-arm을 모두 우회하고 early-return한다(정본 [`ws-rate-limit.md`](ws-rate-limit.md)). flood 방어의 핵심이 파싱 CPU 소진 차단이므로 파싱 비용 이전에 초과분을 버려야 방어가 성립한다.
 1. **JSON 파싱** — `frameToText(RawData)`(nodebuffer/Array/기타를 UTF-8로 정규화) 후 `JSON.parse`. 실패 시 `error{bad_payload}`로 응답하고 종료(type 판별보다 우선).
 2. **핸드셰이크 게이트** — `handleHandshakeFrame(ctx, parsed)`가 반환한 `HandshakeResult`를 message 핸들러가 해석한다. 전체를 try/catch로 감싸 어떤 throw든 `error{internal}`로 격리하고 소켓을 생존시킨다(fastify errorHandler가 message 핸들러 예외를 잡지 못하므로 방어적 확장).
 
@@ -149,7 +150,7 @@
 
 `getConfig()`는 `plugin.ts`가 연결마다 읽어 `createHeartbeat`에 `pingIntervalMs`·`maxMissed`를 넘긴다.
 
-E3 하드닝(#54)이 자원 한도 3필드(`WS_MAX_CONNECTIONS`·`WS_MAX_CONNECTIONS_PER_ACCOUNT`·`WS_MAX_BUFFERED_BYTES`)를 같은 `EnvSchema`에 더했다 — 연결 정원·아웃바운드 backpressure 튜닝값이며 정본은 [`ws-resource-guard.md`](ws-resource-guard.md)다.
+E3 하드닝(#54)이 자원 한도 3필드(`WS_MAX_CONNECTIONS`·`WS_MAX_CONNECTIONS_PER_ACCOUNT`·`WS_MAX_BUFFERED_BYTES`)를 같은 `EnvSchema`에 더했다 — 연결 정원·아웃바운드 backpressure 튜닝값이며 정본은 [`ws-resource-guard.md`](ws-resource-guard.md)다. E3 하드닝 후속(#64)이 인바운드 유량 상한 5필드(`WS_MSG_RATE_CAPACITY`·`WS_MSG_RATE_REFILL_PER_SEC`·`WS_MSG_RATE_ACCOUNT_CAPACITY`·`WS_MSG_RATE_ACCOUNT_REFILL_PER_SEC`·`WS_MSG_RATE_MAX_VIOLATIONS`)를 더했다 — 연결·계정 토큰 버킷 튜닝값이며 정본은 [`ws-rate-limit.md`](ws-rate-limit.md)다.
 
 ### 테스트 전략 (`packages/server/src/ws/`)
 
