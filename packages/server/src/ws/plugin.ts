@@ -448,7 +448,9 @@ export function registerWebsocket(
           // 항상 non-null이지만 releaseQuota 관례처럼 옵셔널 체이닝으로 방어한다 — null이면 verdict가 undefined라
           // gate를 건너뛴다. accept가 아니면 early-return해 파싱·dispatch·그리고 아래 dispatch handled 경로의
           // idle 재-arm(`ctx.idle?.arm()`)까지 구조적으로 우회한다 — 이것이 "drop된 프레임은 idle을 재-arm하지 않는다"의 메커니즘이다.
-          const verdict = ctx.rateLimiter?.check(Date.now())
+          // 클록은 performance.now()(단조)를 쓴다 — 코어 refill이 now의 단조 비감소를 가정하므로, NTP 보정으로
+          // 역행할 수 있는 Date.now() 대신 단조 클록을 공급해 역방향 점프가 유발하는 정상 사용자 spurious drop을 막는다.
+          const verdict = ctx.rateLimiter?.check(performance.now())
           if (verdict !== undefined && verdict !== 'accept') {
             // drop-warn(연속 폐기 구간의 첫 폐기)만 1회 경고한다 — 이후 연속 drop은 침묵해 경고 증폭을 막는다.
             if (verdict === 'drop-warn') {
