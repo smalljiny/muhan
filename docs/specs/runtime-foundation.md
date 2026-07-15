@@ -110,11 +110,11 @@ SIGTERM/SIGINT 수신 시 순서(캐시된 Promise로 idempotent — 중복 신�
 
 ### 배선 (`index.ts` `boot`)
 
-`boot`에서 `new WorldClock()`(기본 `defaultClock` 주입)·`start()`로 1Hz 틱을 시작하고, `gracefulShutdown` 클로저가 `worldClock`·`app.wsShutdown`을 캡처한다. 배선 코드는 커버리지 제외(기존 관례)이며, 수렴·정지 로직은 테스트 가능한 모듈(`worldClock.ts`·`shutdownConvergence.ts`)에 둔다. `SchedulerClock`·`WorldClock`·`ShutdownConverger` 각 모듈은 단위 커버리지 100%다.
+`boot`에서 `new WorldClock({ logger })`를 생성하고, 자족 실 슬롯 `createGameTime().slot`·`createCheckExitsSlot(worldGraph)`를 `register`한 뒤 `start()`로 1Hz 틱을 시작한다. 슬롯 실패 격리 logger는 `app.log.error`에 위임한다(`console` 금지). `gracefulShutdown` 클로저가 `worldClock`·`app.wsShutdown`을 캡처한다. 배선 코드는 커버리지 제외(기존 관례)이며, 수렴·정지 로직과 슬롯은 테스트 가능한 모듈(`worldClock.ts`·`shutdownConvergence.ts`·`gameTime.ts`·`checkExits.ts`)에 둔다. 두 슬롯의 동시 등록·발화는 `worldClockSlots.integration.test.ts`가 검증한다. `SchedulerClock`·`WorldClock`·`ShutdownConverger` 각 모듈은 단위 커버리지 100%다. 이동·방 서브시스템의 슬롯 소비 상세는 [`movement-rooms.md`](./movement-rooms.md) 참조.
 
 ## 제약사항
 
-- **순수 프레임워크 — 실 슬롯 없음** — `WorldClock`은 등록 프레임워크와 API만 확정한다. 실 슬롯(출구 타이머 `check_exits`=#69, 크리처 큐·스폰=#68, 저빈도 `update_*` 게임시간 주야·moonstone 등)은 소비 토픽이 `register`로 붙인다. 현재는 단위 테스트가 등록하는 fake 슬롯으로만 검증한다.
+- **실 슬롯 소비는 소비 토픽 소관** — `WorldClock`은 등록 프레임워크와 API를 확정한다. E4-1b(#69)가 첫 실 슬롯 소비자로 게임시각(`gameTime`, `intervalSec=150`)·출구 타이머(`checkExits`, `intervalSec=1`)를 boot에서 `register`한다([`movement-rooms.md`](./movement-rooms.md)). 나머지 실 슬롯(크리처 큐·스폰=#68, 저빈도 `update_*` 게임시간 주야·moonstone 등)은 후속 소비 토픽이 붙인다.
 - **소켓 ping/pong 정책 불변** — `ws/heartbeat`는 타이머 주입 seam만 `clock`으로 통일한다. 생존 판정 로직(미스 카운터·`maxMissed`·`terminate`)은 E3 확정 사항 그대로다.
 - **#51(ctx.heartbeat 타이머 단일 소유권) 범위 밖** — registry sweep 설계와 결합된 별도 이슈. 본 토픽은 타이머 *주입 seam*만 통일하며 소유권 리팩터는 다루지 않는다.
 - **실 save 포트 배선 없음** — `SessionLifecyclePort`는 no-op 유지. shutdown 수렴 경로가 포트를 바인딩당 정확히 1회 호출함만 확정한다. 실 저장 어댑터는 라이브 월드 캐릭터가 존재하는 후속 에픽(E4/E5) 소관.
