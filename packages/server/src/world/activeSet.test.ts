@@ -17,6 +17,7 @@ function makeCreature(instanceId: string, hpcur: number): CreatureInstance {
     special: 0,
     flags: '0000000000000000',
     enemies: [],
+    inventory: [],
   }
 }
 

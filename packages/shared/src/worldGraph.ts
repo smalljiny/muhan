@@ -7,7 +7,7 @@
  * 가변성(mutability) 경계 — 프로젝트 CRITICAL immutability 규칙의 의도된 예외:
  *   - 라이브 가변: `RoomNode.occupants`(점유자 Set), `RoomNode.creatures`(라이브 크리처 배열 —
  *     스폰 push·사망 제거, occupants 선례), `CreatureInstance`의 라이브 상태 필드(hpcur·mpcur·
- *     타이머·enemies), `ExitEdge.flags`+`ExitEdge.ltime`(문 개폐/재잠금 상태 머신 — oracle a4 §111
+ *     타이머·enemies·inventory), `ExitEdge.flags`+`ExitEdge.ltime`(문 개폐/재잠금 상태 머신 — oracle a4 §111
  *     `check_exits`가 ltime+interval로 재잠금), `RoomNode.permMon[].ltime`(perm 리스폰 타이머 —
  *     exit ltime과 동형, 입장 lazy 리스폰·사망 시 now로 세팅. Story 4·5).
  *   - immutable: 정적 필드 전부 + `RoomNode.flags`(64비트 raw 방 flags는 콘텐츠로 불변) +
@@ -42,6 +42,12 @@ export type ItemInstance = {
   name: string
   description: string
   value: number
+  /**
+   * object flags(8바이트 hex string, creatures/objects.json과 동일 표현). scavenge(A9 §3.3) 제외
+   * 판정에 쓰인다 — OPERMT·OHIDDN·OPERM2·ONOTAK·OSCENE 중 하나라도 있으면 몬스터가 줍지 못한다.
+   * 콘텐츠(불변). 전투 스탯 등 나머지 object 필드는 아이템 에픽 소관이라 여기에 싣지 않는다(D8).
+   */
+  flags: string
   contains: ItemInstance[]
 }
 
@@ -74,10 +80,32 @@ export type CreatureInstance = {
   special: number
   flags: string
   enemies: string[]
+  /**
+   * 크리처가 보유한 아이템(라이브 가변). 부팅 시 빈 배열이며 scavenge(A9 §3.3)가 바닥 아이템을
+   * 여기로 옮긴다. Story 5 사망 시 바닥 드롭의 출처가 된다. embedded 몬스터의 초기 인벤토리
+   * 물질화는 별도(아이템 에픽) 소관이라 여기선 scavenge 회수분만 담는다.
+   */
+  inventory: ItemInstance[]
   /** 다음 autonomic/전투 행동 도래 실초 시각. Story 3 next-action 큐가 세팅. */
   nextActionAt?: number
-  /** 마지막 재생 적용 실초 시각. Story 3 재생이 소급 기준으로 사용. */
+  /** 마지막 재생 적용 실초 시각(LT_HEALS 도래 기준). Story 3 재생이 소급 baseline으로 사용. */
   lastRegenAt?: number
+  /** 마지막 scavenge 게이트 통과 실초 시각(LT_MSCAV). Story 3 scavenge 20초 게이트. */
+  lastScavengeAt?: number
+  /** 마지막 wander-out 게이트 통과 실초 시각(LT_MWAND). Story 3 wander-out 20초 게이트. */
+  lastWanderAt?: number
+  /**
+   * 혼동(MBEFUD) 만료 실초 시각(LT_BEFUD 도래시각). E6 전투/주문이 미래 시각으로 세팅한다. 미설정은
+   * "활성 혼동 없음"(오라클 LT_BEFUD=0=과거)이라, autonomic이 MBEFUD 비트를 스크럽한다 — 스폰 시 on-disk
+   * MBEFUD stale 비트(예 화룡)를 첫 처리에서 정리한다(오라클 update.c:258 무가드). 능동 효과는 E6 소관.
+   */
+  befuddledUntil?: number
+  /**
+   * 매혹(MCHARM) 만료 실초 시각(LT_CHRMD 도래시각). E6 주문이 미래 시각으로 세팅한다. 미설정은 "활성 매혹
+   * 없음"(LT_CHRMD=0=과거)이라 autonomic이 MCHARM을 스크럽한다 — 스폰 시 on-disk stale 비트(초향·모래괴물·
+   * 해적)를 정리한다(오라클 update.c:277). 능동 효과는 E6 소관.
+   */
+  charmedUntil?: number
 }
 
 /**

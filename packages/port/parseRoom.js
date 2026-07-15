@@ -20,7 +20,7 @@ const OFF = {
           trap: 100, trapexit: 102, track: 104, flags: 184, random: 192,
           traffic: 212, perm_mon: 216 },
   exit_: { name: 0, room: 20, flags: 22, key: 40 },
-  object: { name: 0, description: 80, value: 300, type: 119 /* 추정: 미사용 PoC */ },
+  object: { name: 0, description: 80, value: 300, type: 119 /* 추정: 미사용 PoC */, flags: 324 },
   creature: { name: 0, level: -1 /* 아래서 직접 계산 안 함, 이름만 */, rom_num: 458 },
 };
 
@@ -47,6 +47,8 @@ function parseObject(c) {
     name: cstr(b, base + OFF.object.name, 80),
     description: cstr(b, base + OFF.object.description, 80),
     value: b.readInt32LE(base + OFF.object.value),
+    // D8: scavenge 제외 판정용 object flags(8B hex). templates.js OBJ.flags=324와 동일 오프셋.
+    flags: b.subarray(base + OFF.object.flags, base + OFF.object.flags + 8).toString('hex'),
   };
   c.off += SZ.object;
   const cnt = c.i32();

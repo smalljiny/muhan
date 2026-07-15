@@ -11,10 +11,32 @@ const path = require('path');
 const { parseRoom, OFF } = require('./parseRoom.js');
 
 const FIXTURE = path.join(__dirname, '../../legacy/muhan/rooms/r00/r00135');
+const FIXTURE_ITEMS = path.join(__dirname, '../../legacy/muhan/rooms/r00/r00050');
 
 function room135() {
   return parseRoom(fs.readFileSync(FIXTURE));
 }
+
+function room50() {
+  return parseRoom(fs.readFileSync(FIXTURE_ITEMS));
+}
+
+// D8: scavenge 제외 판정에 바닥 아이템 object flags(offset 324, 8B hex)가 필요하다.
+// 방 50 바닥 아이템(숨겨진 돈주머니)은 raw flags 0300(OPERMT|OHIDDN) → scavenge 제외 대상.
+test('parseObject가 flags(offset 324, 8B hex)를 emit한다 (방50 돈주머니 0300)', () => {
+  const r = room50();
+  assert.equal(r.items.length, 1);
+  assert.equal(r.items[0].name, '숨겨진 돈주머니');
+  assert.equal(r.items[0].flags, '0300000000000000');
+});
+
+test('OFF.object.flags 오프셋은 오라클 324', () => {
+  assert.equal(OFF.object.flags, 324);
+});
+
+test('object flags 추가 후에도 방50 _leftover===0 (아이템 파싱 경로 불변)', () => {
+  assert.equal(room50()._leftover, 0);
+});
 
 test('OFF.room.perm_mon 오프셋은 오라클 offsetof 216', () => {
   assert.equal(OFF.room.perm_mon, 216);

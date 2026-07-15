@@ -63,6 +63,9 @@ function materialize(
     special: src.special,
     flags: src.flags,
     enemies: [],
+    // inventory는 라이브 가변 배열(scavenge 회수분·Story 5 드롭 출처). 스폰 시 빈 배열이며,
+    // embedded 몬스터의 초기 소지품 물질화는 별도(아이템 에픽) 소관이다.
+    inventory: [],
   }
 }
 

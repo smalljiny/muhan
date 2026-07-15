@@ -59,6 +59,8 @@ describe('loadWorldGraph — 실제 번들', () => {
     expect(pouch).toBeDefined()
     expect(pouch?.instanceId).toBeTruthy()
     expect(pouch?.value).toBe(2000)
+    // D8: scavenge 제외 판정용 object flags(hex string) 전파. 돈주머니는 0300(OPERMT|OHIDDN).
+    expect(pouch?.flags).toBe('0300000000000000')
   })
 
   it('그래프 전체에서 instanceId가 유일하다(중첩 contains 포함)', () => {
@@ -94,7 +96,7 @@ describe('loadWorldGraph — 실제 번들', () => {
     const pouch = room50.items.find((i) => i.name === '숨겨진 돈주머니')
     // 아이템에 objnum/type 같은 템플릿 필드가 새지 않았다.
     expect(Object.keys(pouch ?? {}).sort()).toEqual(
-      ['contains', 'description', 'instanceId', 'name', 'value'].sort(),
+      ['contains', 'description', 'flags', 'instanceId', 'name', 'value'].sort(),
     )
   })
 

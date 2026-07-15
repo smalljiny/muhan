@@ -4,7 +4,13 @@ import { fromEmbedded, type CreatureSource } from './creatureFactory.js'
 
 // data/world/rooms.json 파싱 입력 형태(raw 디스크 산출물). loadWorldFile이 이 shape를 준다.
 type RawExit = { name: string; room: number; flags: number[]; key: number }
-type RawItem = { name: string; description: string; value: number; contains: RawItem[] }
+type RawItem = {
+  name: string
+  description: string
+  value: number
+  flags?: string
+  contains: RawItem[]
+}
 // embedded 몬스터는 T2.0 이후 완전한 creature 필드를 담는다(CreatureSource + rom_num·inventory 등).
 type RawMonster = CreatureSource & { rom_num: number }
 type RawPermMon = { interval: number; ltime: number; misc: number }
@@ -56,6 +62,9 @@ function toItemInstance(raw: RawItem, roomId: number, path: string): ItemInstanc
     name: raw.name,
     description: raw.description,
     value: raw.value,
+    // flags는 scavenge 제외 판정용 hex string(D8). 합성 픽스처 등 raw.flags 부재 시 all-zero로
+    // 기본값(플래그 없음=회수 가능)을 준다 — 타입은 항상 string 계약을 유지한다.
+    flags: raw.flags ?? '0000000000000000',
     contains: raw.contains.map((child, i) => toItemInstance(child, roomId, `${path}.${i}`)),
   }
 }
