@@ -43,8 +43,10 @@ describe('createCheckExitsSlot — 슬롯 계약', () => {
 })
 
 describe('createCheckExitsSlot — 타이머 자동 재설정 (WorldClock 구동)', () => {
-  it('만료된 XLOCKS 출구를 XLOCKD로 재잠근다', () => {
+  it('만료된 XLOCKS-only 출구를 XLOCKD·XCLOSD 둘 다 재설정한다(room.c:469, "잠금은 닫힘 함의")', () => {
     // ltime=0, interval=5 → now>=6에서 만료(5<6). tick(6)으로 now=6까지 진행.
+    // XCLOSS 없는 XLOCKS-only 출구(data/world에 4개 실재)라도 원본은 XCLOSD를 함께 세팅해
+    // "잠겼지만 열린" 모순 상태를 만들지 않는다.
     const exit = makeExit([XLOCKS], 0, 5)
     const graph = makeGraph([makeRoom(1, [exit])])
     const fake = new FakeClock()
@@ -55,6 +57,7 @@ describe('createCheckExitsSlot — 타이머 자동 재설정 (WorldClock 구동
     fake.tick(6)
 
     expect(hasFlag(exit.flags, XLOCKD)).toBe(true)
+    expect(hasFlag(exit.flags, XCLOSD)).toBe(true)
   })
 
   it('만료된 XCLOSS 출구를 XCLOSD로 재닫는다', () => {
@@ -71,7 +74,7 @@ describe('createCheckExitsSlot — 타이머 자동 재설정 (WorldClock 구동
   })
 
   it('한 출구가 XLOCKS+XCLOSS를 동시에 보유·만료 시 XLOCKD·XCLOSD를 한 스윕에서 둘 다 설정한다', () => {
-    // 두 조건이 별도 if로 독립 평가됨을 단일 출구에서 직접 검증(독립성 설계의 최강 형태).
+    // XLOCKS 분기(if)가 XLOCKD+XCLOSD를 모두 세팅하므로 XCLOSS(else-if 미평가)와 무관하게 결과 동일.
     const exit = makeExit([XLOCKS, XCLOSS], 0, 5)
     const slot = createCheckExitsSlot(makeGraph([makeRoom(1, [exit])]))
 
