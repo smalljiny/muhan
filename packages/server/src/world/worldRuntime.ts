@@ -126,7 +126,14 @@ export function createWorldRuntime(
     broadcast: deps.broadcast,
   })
 
-  const slots: WorldTickSlot[] = [creatureTick, randomSpawn, ...invasionSlots]
+  // invasion 슬롯은 **실 invasionRng가 주입될 때만** boot register 대상에 포함한다(adversarial 결정).
+  // invasion은 확률 게이트 없이 주기마다 무조건 count 스폰하므로, 기본 stub(항상 min)이면 고정 방에
+  // 결정적 누적된다(E4-2는 전투 정리·방 활성화 없음). 실 rng(E8-2, 범위 분산) 미주입 시 등록하지 않아
+  // E4-2 boot를 inert하게 둔다 — 슬롯 자체는 조립·테스트되며 rng 주입 시 즉시 활성화된다.
+  const slots: WorldTickSlot[] =
+    deps.invasionRng !== undefined
+      ? [creatureTick, randomSpawn, ...invasionSlots]
+      : [creatureTick, randomSpawn]
 
   // perm 리스폰 deps는 boot-once 안정값이라 훅 밖에서 1회만 구성한다(입장마다 재할당 회피).
   const permRespawnDeps = { templates, alloc, rng: deps.creatureRng }

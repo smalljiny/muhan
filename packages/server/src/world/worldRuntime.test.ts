@@ -56,6 +56,8 @@ function graphOf(...rooms: RoomNode[]): Map<number, RoomNode> {
 
 const templates = () => buildSpawnTemplateIndex([template()])
 const noEvents: InvasionEvent[] = []
+// 결정적 invasion rng(항상 min). 주입 시 invasion 슬롯이 boot register 대상에 포함된다(게이트 통과).
+const minInvasionRng = (min: number): number => min
 
 // ── 슬롯 빌드 (T6.1) ──────────────────────────────────────────────────────────
 
@@ -69,6 +71,7 @@ describe('createWorldRuntime — 슬롯 빌드', () => {
       now: () => 0,
       templates: templates(),
       events,
+      invasionRng: minInvasionRng, // 실 rng 주입 시에만 invasion 슬롯이 register 대상에 포함된다
     })
     expect(runtime.slots.map((s) => s.name)).toEqual([
       'creatureTick',
@@ -79,14 +82,28 @@ describe('createWorldRuntime — 슬롯 빌드', () => {
     expect(runtime.slots.map((s) => s.intervalSec)).toEqual([1, 20, 4000, 5000])
   })
 
-  it('templates·events 미주입 시 data/world에서 로드한다(프로덕션 기본 경로)', () => {
-    // 실 creatures.json·events.json을 로드하는 fallback 경로. 이벤트 수만큼 invasion 슬롯이 붙는다.
-    const runtime = createWorldRuntime(graphOf(makeRoom()), { now: () => 0 })
+  it('invasionRng 미주입(E4-2 기본)이면 invasion 슬롯을 register 대상에서 제외한다', () => {
+    const events: InvasionEvent[] = [
+      { id: 'e1', periodSec: 4000, roomRange: { min: 8000, max: 8300 }, mobRange: { min: 732, max: 755 }, count: 3, broadcast: '침공1' },
+    ]
+    const runtime = createWorldRuntime(graphOf(makeRoom()), {
+      now: () => 0,
+      templates: templates(),
+      events,
+      // invasionRng 미주입 — 결정적 stub 고정 방 누적 방지(adversarial 결정): boot inert.
+    })
+    expect(runtime.slots.map((s) => s.name)).toEqual(['creatureTick', 'randomSpawn'])
+    expect(runtime.slots.some((s) => s.name.startsWith('invasion:'))).toBe(false)
+  })
+
+  it('templates·events 미주입 시 data/world에서 로드하고, invasionRng 주입 시 invasion 슬롯이 붙는다', () => {
+    // 실 creatures.json·events.json을 로드하는 fallback 경로. invasionRng 주입 시 이벤트 수만큼 invasion.
+    const runtime = createWorldRuntime(graphOf(makeRoom()), { now: () => 0, invasionRng: minInvasionRng })
     const names = runtime.slots.map((s) => s.name)
     expect(names[0]).toBe('creatureTick')
     expect(names[1]).toBe('randomSpawn')
     expect(names.filter((n) => n.startsWith('invasion:')).length).toBe(runtime.slots.length - 2)
-    expect(runtime.slots.length).toBeGreaterThanOrEqual(2)
+    expect(runtime.slots.length).toBeGreaterThan(2)
   })
 
   it('빌드한 슬롯을 WorldClock에 register하고 구동해도 throw하지 않는다', () => {
@@ -112,6 +129,7 @@ describe('createWorldRuntime — 슬롯 빌드', () => {
       now: () => 0,
       templates: templates(),
       events,
+      invasionRng: minInvasionRng, // 게이트 통과 — invasion 슬롯이 register 대상에 포함
       broadcast,
     })
     const fake = new FakeClock()
