@@ -135,8 +135,49 @@ describe('WsClient version negotiation', () => {
   })
 })
 
-describe('WsClient auto selectCharacter', () => {
-  it('selects characters[0] once on session:characterList', () => {
+describe('WsClient session state & commands', () => {
+  it('starts with session.phase connecting and empty session state', () => {
+    const { client } = makeHarness()
+    const session = client.getSnapshot().session
+    expect(session.phase).toBe('connecting')
+    expect(session.characterList).toEqual([])
+    expect(session.activePrompt).toBeNull()
+    expect(session.lastError).toBeNull()
+  })
+
+  it('selectCharacter sends a session:selectCharacter frame', () => {
+    const { client, last } = makeHarness()
+    client.connect()
+    last().fireOpen()
+    const ok = client.selectCharacter('c1')
+    expect(ok).toBe(true)
+    expect(sentFrames(last())).toContainEqual({ type: 'session:selectCharacter', characterId: 'c1' })
+  })
+
+  it('replyPrompt sends a session:reply frame with the caller value verbatim', () => {
+    const { client, last } = makeHarness()
+    client.connect()
+    last().fireOpen()
+    const ok = client.replyPrompt('create:name', '철수')
+    expect(ok).toBe(true)
+    expect(sentFrames(last())).toContainEqual({
+      type: 'session:reply',
+      promptId: 'create:name',
+      value: '철수',
+    })
+  })
+
+  it('blocks selectCharacter with an empty characterId (min 1) via send validation', () => {
+    const { client, last } = makeHarness()
+    client.connect()
+    last().fireOpen()
+    const ok = client.selectCharacter('')
+    expect(ok).toBe(false)
+    expect(last().sent).toHaveLength(0)
+    expect(client.getSnapshot().errors.some((e) => e.kind === 'send-validation')).toBe(true)
+  })
+
+  it('stores the character list on session:characterList without auto-selecting', () => {
     const { client, last } = makeHarness()
     client.connect()
     last().fireOpen()
@@ -147,55 +188,72 @@ describe('WsClient auto selectCharacter', () => {
         { characterId: 'c2', name: 'B', class: 0, race: 0, level: 1 },
       ],
     })
-    const selects = sentFrames(last()).filter(
-      (f): f is { type: string; characterId: string } =>
-        typeof f === 'object' && f !== null && (f as { type: string }).type === 'session:selectCharacter',
-    )
-    expect(selects).toHaveLength(1)
-    expect(selects[0]?.characterId).toBe('c1')
-  })
-
-  it('does not re-select on a second characterList', () => {
-    const { client, last } = makeHarness()
-    client.connect()
-    last().fireOpen()
-    const list: ServerEvent = {
-      type: 'session:characterList',
-      characters: [{ characterId: 'c1', name: 'A', class: 0, race: 0, level: 1 }],
-    }
-    last().emit(list)
-    last().emit(list)
-    const selects = sentFrames(last()).filter(
-      (f) => typeof f === 'object' && f !== null && (f as { type: string }).type === 'session:selectCharacter',
-    )
-    expect(selects).toHaveLength(1)
-  })
-
-  it('does not select when the character list is empty', () => {
-    const { client, last } = makeHarness()
-    client.connect()
-    last().fireOpen()
-    last().emit({ type: 'session:characterList', characters: [] })
+    expect(client.getSnapshot().session.characterList).toEqual([
+      { characterId: 'c1', name: 'A', class: 0, race: 0, level: 1 },
+      { characterId: 'c2', name: 'B', class: 0, race: 0, level: 1 },
+    ])
     const selects = sentFrames(last()).filter(
       (f) => typeof f === 'object' && f !== null && (f as { type: string }).type === 'session:selectCharacter',
     )
     expect(selects).toHaveLength(0)
   })
 
-  it('reaches echo-ready on session:entered', () => {
+  it('enters selecting phase and stores activePrompt on a selectCharacter prompt', () => {
+    const { client, last } = makeHarness()
+    client.connect()
+    last().fireOpen()
+    last().emit({
+      type: 'session:prompt',
+      promptId: 'select',
+      kind: 'selectCharacter',
+      options: [{ value: 'c1', label: 'A' }],
+    })
+    const session = client.getSnapshot().session
+    expect(session.phase).toBe('selecting')
+    expect(session.activePrompt).toEqual({
+      promptId: 'select',
+      kind: 'selectCharacter',
+      options: [{ value: 'c1', label: 'A' }],
+    })
+  })
+
+  it('enters creating phase on a createField prompt', () => {
+    const { client, last } = makeHarness()
+    client.connect()
+    last().fireOpen()
+    last().emit({ type: 'session:prompt', promptId: 'create:name', kind: 'createField' })
+    const session = client.getSnapshot().session
+    expect(session.phase).toBe('creating')
+    expect(session.activePrompt?.promptId).toBe('create:name')
+  })
+
+  it('reaches entered phase and echo-ready status on session:entered', () => {
     const { client, last } = makeHarness()
     client.connect()
     last().fireOpen()
     last().emit({ type: 'session:entered', characterId: 'c1' })
+    expect(client.getSnapshot().session.phase).toBe('entered')
     expect(client.getStatus()).toBe('ready')
   })
 
-  it('reaches echo-ready on session:resumed', () => {
+  it('reaches resumed phase and echo-ready status on session:resumed', () => {
     const { client, last } = makeHarness()
     client.connect()
     last().fireOpen()
     last().emit({ type: 'session:resumed', characterId: 'c1' })
+    expect(client.getSnapshot().session.phase).toBe('resumed')
     expect(client.getStatus()).toBe('ready')
+  })
+
+  it('records lastError without clearing activePrompt on error', () => {
+    const { client, last } = makeHarness()
+    client.connect()
+    last().fireOpen()
+    last().emit({ type: 'session:prompt', promptId: 'create:name', kind: 'createField' })
+    last().emit({ type: 'error', code: 'session_state', message: 'bad name' })
+    const session = client.getSnapshot().session
+    expect(session.lastError).toEqual({ code: 'session_state', message: 'bad name' })
+    expect(session.activePrompt?.promptId).toBe('create:name')
   })
 })
 
