@@ -78,6 +78,24 @@ export const EnvSchema = z.object({
   // 흡수하되 backpressure 미해소 소켓은 잘라내는 절충값으로 기본값 1MB(1048576)를 둔다. 0이면 어떤
   // 아웃바운드도 즉시 초과로 판정돼 무의미하므로 최소 1을 강제한다.
   WS_MAX_BUFFERED_BYTES: z.coerce.number().int().min(1).default(1048576),
+  // 인바운드 메시지 유량 상한(E3 hardening). 인증된 WS 연결의 프레임 도착률을 연결별·계정별 토큰
+  // 버킷으로 제한해, 읽기는 정상이면서 프레임을 고속 flood해 파싱·dispatch CPU를 소진시키는 공격을
+  // 차단한다. WS_MAX_* 관례를 미러해 fail-fast(.int().min(1).default())로 두어, 미설정 부팅을 막지
+  // 않으면서 잘못된 값(0)은 즉시 거부한다.
+  //
+  // 연결당 버스트 허용 토큰 수. 연결 10/s 지속 + 20 버스트는 사람 입력(피크 1~3 cmd/s) 대비 넉넉하되
+  // flood(수백/s)는 즉시 포착한다. 0이면 어떤 프레임도 통과 못 해 무의미하므로 최소 1을 강제한다.
+  WS_MSG_RATE_CAPACITY: z.coerce.number().int().min(1).default(20),
+  // 연결당 초당 리필(지속율). 사람의 지속 입력율을 넉넉히 덮되 flood는 못 따라오는 값.
+  WS_MSG_RATE_REFILL_PER_SEC: z.coerce.number().int().min(1).default(10),
+  // 계정당 버스트 토큰 수. connectionQuota 계정당 5연결 하에 다중 탭 정상 사용은 허용하되 다중 연결
+  // flood의 집계는 잡는 값.
+  WS_MSG_RATE_ACCOUNT_CAPACITY: z.coerce.number().int().min(1).default(40),
+  // 계정당 초당 리필. 연결 지속율(10)의 다중 연결 합을 흡수하되 계정 차원 flood는 억제하는 값.
+  WS_MSG_RATE_ACCOUNT_REFILL_PER_SEC: z.coerce.number().int().min(1).default(20),
+  // 연속 위반 종료 임계. 일시 버스트(accept가 카운터 리셋)엔 여유를 주되 지속 flooder는 빠르게 초과해
+  // graceful close된다. env 튜닝 가능이라 정확값은 저위험이다.
+  WS_MSG_RATE_MAX_VIOLATIONS: z.coerce.number().int().min(1).default(10),
 })
 
 export type Env = z.infer<typeof EnvSchema>
