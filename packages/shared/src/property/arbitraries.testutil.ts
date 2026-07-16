@@ -8,6 +8,8 @@
 import fc from 'fast-check'
 import type { Arbitrary } from 'fast-check'
 import type { ComputeAcInput } from '../oracle/generators/computeAcFixture.js'
+import type { StatKey } from '../stats/tables.js'
+import type { StatModifier } from '../stats/effectiveStat.js'
 
 /** 닫힌 정수 구간 `[lo, hi]`(양끝 포함) arbitrary. */
 export function intInRangeArb(lo: number, hi: number): Arbitrary<number> {
@@ -27,3 +29,37 @@ export const computeAcInputArb: Arbitrary<ComputeAcInput> = fc.record({
   equipArmor: intInRangeArb(-50, 400),
   protection: fc.boolean(),
 })
+
+/** 능력치 키(strength·dexterity·constitution·intelligence·piety) 5종 중 하나. */
+const statKeyValues: readonly StatKey[] = [
+  'strength',
+  'dexterity',
+  'constitution',
+  'intelligence',
+  'piety',
+]
+
+/** `StatKey` 유니온 arbitrary. StatModifier.stat 필드 도메인과 일치. */
+export const statKeyArb: Arbitrary<StatKey> = fc.constantFrom(...statKeyValues)
+
+/**
+ * `StatModifier` 한 건 arbitrary. delta는 음수를 포함하는 넓은 범위 `[-100, 100]`로 잡아
+ * 가산·감산·상쇄가 모두 표본에 나오게 한다. source·stat은 임의 유효값.
+ */
+export const statModifierArb: Arbitrary<StatModifier> = fc.record({
+  source: fc.string(),
+  stat: statKeyArb,
+  delta: intInRangeArb(-100, 100),
+})
+
+/** `StatModifier[]` arbitrary(빈 배열 포함). effectiveStat 무clamp 가산 property가 소비. */
+export const statModifiersArb: Arbitrary<readonly StatModifier[]> = fc.array(statModifierArb)
+
+/**
+ * 양수 delta(`[1, 100]`) StatModifier를 1건 이상 담는 배열 arbitrary. base에 더하면 결과가
+ * 반드시 base를 초과하므로 effectiveStat의 무clamp(상한 미적용) 관측 property가 소비한다.
+ */
+export const positiveStatModifiersArb: Arbitrary<readonly StatModifier[]> = fc.array(
+  fc.record({ source: fc.string(), stat: statKeyArb, delta: intInRangeArb(1, 100) }),
+  { minLength: 1 },
+)

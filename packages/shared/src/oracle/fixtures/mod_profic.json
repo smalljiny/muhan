@@ -1,0 +1,63 @@
+{
+  "fn": "mod_profic",
+  "oracle": {
+    "method": "manual",
+    "source": "player.c:1032 (A7 §2)",
+    "generatedAt": "2026-07-16T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": 0,
+      "expected": 40
+    },
+    {
+      "input": 1,
+      "expected": 30
+    },
+    {
+      "input": 2,
+      "expected": 20
+    },
+    {
+      "input": 3,
+      "expected": 30
+    },
+    {
+      "input": 4,
+      "expected": 20
+    },
+    {
+      "input": 5,
+      "expected": 40
+    },
+    {
+      "input": 6,
+      "expected": 25
+    },
+    {
+      "input": 7,
+      "expected": 25
+    },
+    {
+      "input": 8,
+      "expected": 30
+    },
+    {
+      "input": 9,
+      "expected": 20
+    },
+    {
+      "input": 10,
+      "expected": 20
+    },
+    {
+      "input": 11,
+      "expected": 40
+    },
+    {
+      "input": 12,
+      "expected": 40
+    }
+  ]
+}

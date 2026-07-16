@@ -8,7 +8,7 @@
 
 이 하네스는 E6(게임 규칙 엔진: 전투·마법·진행·경제)의 선행 조건이다. E6가 각 공식을 골든 fixture로 TDD하려면 포맷·러너·생성기 규약이 먼저 존재해야 한다. 대표 공식 `compute_ac`(방어도) 하나로 생성기→fixture→러너 루프를 end-to-end 증명한다.
 
-공개 API는 `packages/shared`의 배럴(`src/index.ts`)에서 `goldenFixtureSchema`·`GoldenFixture`·`approve` 셋만 노출한다. SUT(`computeAc`)와 생성기(`computeAcFixture`)는 비공개로 두어 blast radius를 oracle 서브트리로 한정한다.
+공개 API는 `packages/shared`의 배럴(`src/index.ts`)에서 `goldenFixtureSchema`·`GoldenFixture`·`approve` 셋을 노출한다. 생성기(`*Fixture.ts`)와 그 공유 I/O(`fixtureIo.ts`)는 비공개로 두어 blast radius를 oracle 서브트리로 한정한다. 자기검증용 SUT였던 `computeAc`는 E6 stats-core(#80)가 런타임 공개 API `stats/derived.ts`로 정착시켜, `oracle/computeAc.ts`는 검증 참조로 남고 런타임 resolver가 이를 얇게 wrap한다(`docs/specs/stats-core.md`).
 
 ## 구조
 
@@ -16,12 +16,15 @@
 packages/shared/src/oracle/
 ├── types.ts                      # fixture JSON 포맷·zod 스키마·GoldenFixture 제네릭 타입
 ├── runner.ts                     # approve() — 체크인 fixture 대조 러너
-├── computeAc.ts                  # 대표 SUT (self-test용 방어도 계산)
-├── fixtures/
-│   └── compute_ac.json           # 체크인 frozen fixture
+├── computeAc.ts                  # 방어도 산술 정본 (stats/derived.ts가 wrap)
+├── fixtures/                     # 체크인 frozen fixture (compute_ac + E6 stats-core 공식·테이블)
+│   └── *.json
 └── generators/
-    └── computeAcFixture.ts       # manual 생성기 (참조 구현 + 기대값 산출·기록)
+    ├── fixtureIo.ts              # 생성기 공유 writeFixtureFile(path, fixture)
+    └── *Fixture.ts               # manual 생성기 (참조 구현 + 기대값 산출·기록)
 ```
+
+대표 공식 `compute_ac`로 하네스 루프를 end-to-end 증명했고, E6 stats-core(#80)가 이 규약을 준용해 `computeThaco`·`maxWeight`·`computeHpMax`·`computeMpMax` 공식 fixture와 상수 테이블(`class_stats`·`thaco_list`·`mod_profic`) 전사 fixture를 추가했다(`writeFixtureFile`은 생성기 공용 `fixtureIo.ts`로 추출). 각 공식 fixture를 그 공식 소유 토픽이 생성하는 규약(아래 §범위)의 첫 적용이다.
 
 ### fixture JSON 포맷
 
@@ -77,7 +80,7 @@ export function approve<I, O>(fixture: GoldenFixture<I, O>, sut: (input: I) => O
 
 순수 TS 스크립트가 공식을 참조 구현(`referenceComputeAc`)하고, 선택 입력에 대해 기대값을 산출해 fixture로 기록한다. `method: "manual"`, `source`에 C 라인을 명시한다. 참조 구현은 fixture 생성 전용이며 러너의 SUT(`computeAc`)와 **독립 표현**이다 — 같은 공식의 두 독립 구현이 교차 검증 역할을 해 transcription 리스크를 방어한다.
 
-주요 export: `bonus`(원본 상수 테이블), `ComputeAcInput` 타입, `referenceComputeAc`(참조 구현), `buildCases`·`buildFixture(clock)`(fixture 조립), `writeFixtureFile(path, fixture)`(디스크 기록). 재생성은 문서화된 수동 명령으로 `buildFixture`에 고정 시각 clock을 주입해 실행한다.
+주요 export: `bonus`(원본 상수 테이블), `ComputeAcInput` 타입, `referenceComputeAc`(참조 구현), `buildCases`·`buildFixture(clock)`(fixture 조립), `writeFixtureFile(path, fixture)`(디스크 기록 — 공용 `fixtureIo.ts`에서 정의, 재생성 명령 호환을 위해 re-export). 재생성은 문서화된 수동 명령으로 `buildFixture`에 고정 시각 clock을 주입해 실행한다.
 
 ### 대표 공식 self-test — `compute_ac`
 

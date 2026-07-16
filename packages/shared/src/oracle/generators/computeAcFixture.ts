@@ -1,5 +1,9 @@
-import { writeFileSync } from 'node:fs'
 import type { GoldenFixture } from '../types.js'
+import { bonus } from '../../stats/tables.js'
+import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
+
+// 재생성 명령이 `import { buildFixture, writeFixtureFile }`로 소비하므로 writer를 re-export한다.
+export { writeFixtureFile }
 
 /**
  * compute_ac(방어도) 골든 fixture 생성기 — manual oracle.
@@ -31,21 +35,6 @@ export type ComputeAcInput = {
   /** PPROTE(보호마법) 플래그. */
   protection: boolean
 }
-
-/**
- * 민첩 보너스 테이블 `bonus[64]`(원본 `player.c` 전역). 정확히 64개 원소.
- * `ac -= 5 * bonus[MIN(dexterity,63)]` — 값이 클수록 방어도가 낮아진다(우수).
- */
-export const bonus: readonly number[] = [
-  -4, -4, -4, -3, -3, -2, -2, -1, // 0-7
-  -1, -1, 0, 0, 0, 0, 1, 1, // 8-15
-  1, 2, 2, 2, 3, 3, 3, 3, // 16-23
-  4, 4, 4, 4, 4, 5, 5, 5, // 24-31
-  5, 5, 5, 6, 6, 6, 6, 6, // 32-39
-  6, 6, 6, 6, 7, 7, 7, 7, // 40-47
-  7, 7, 7, 7, 7, 7, 7, 7, // 48-55
-  7, 7, 7, 7, 7, 7, 7, 7, // 56-63
-]
 
 /**
  * compute_ac 참조 구현 — `player.c:971` 정공식을 for-루프 누적 스타일로 옮긴다.
@@ -108,22 +97,10 @@ export function buildCases(): ComputeAcCase[] {
  * 케이스를 골든 fixture로 감싼다. `generatedAt`은 주입 clock으로 스탬프해 결정적으로 만든다.
  */
 export function buildFixture(clock: () => Date): GoldenFixture<ComputeAcInput, number> {
-  return {
-    fn: 'compute_ac',
-    oracle: {
-      method: 'manual',
-      source: 'player.c:971 (A5 §6 a5-combat.md:184)',
-      generatedAt: clock().toISOString(),
-      seed: null,
-    },
-    cases: buildCases(),
-  }
-}
-
-/** fixture를 2-space pretty JSON으로 파일에 기록한다. */
-export function writeFixtureFile(
-  path: string,
-  fixture: GoldenFixture<ComputeAcInput, number>,
-): void {
-  writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`, 'utf8')
+  return makeManualFixture(
+    'compute_ac',
+    'player.c:971 (A5 §6 a5-combat.md:184)',
+    buildCases(),
+    clock,
+  )
 }

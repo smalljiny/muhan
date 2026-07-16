@@ -39,3 +39,6 @@ export { makeSeededRng, nextIntInRange } from './property/seededRng.js'
 
 // property 공통 불변식 assert(순수, fast-check 무의존) — 범위·단조성 검사.
 export { assertInRange, assertMonotonic } from './property/invariants.js'
+
+// 전투·경제·레벨링 정적 룩업 테이블 + 유효 능력치 합성 + 파생 스탯 resolver(단일 배럴 출처).
+export * from './stats/index.js'

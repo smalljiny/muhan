@@ -1,4 +1,4 @@
-import { bonus } from './generators/computeAcFixture.js'
+import { bonus } from '../stats/tables.js'
 import type { ComputeAcInput } from './generators/computeAcFixture.js'
 
 /**
@@ -12,7 +12,7 @@ import type { ComputeAcInput } from './generators/computeAcFixture.js'
  * 원본 `player.c:971` 정공식은 동일하지만, 표현은 생성기의 `referenceComputeAc`
  * (steps 배열 + for-루프 누적)와 의도적으로 분리한다. 여기서는 명시적 clamp 헬퍼 +
  * 직접 산술식 체이닝으로 작성해 우연한 문장 일치(tautology)를 피한다. bonus 테이블은
- * 원본 상수이므로 재정의하지 않고 `computeAcFixture.ts`의 `bonus`를 import해 재사용한다.
+ * 원본 상수이므로 재정의하지 않고 단일 물리 출처 `stats/tables.ts`의 `bonus`를 import해 재사용한다.
  */
 
 /** 값을 [lo, hi] 범위로 clamp하는 명시적 헬퍼. */

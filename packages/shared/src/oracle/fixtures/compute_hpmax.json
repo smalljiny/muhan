@@ -1,0 +1,95 @@
+{
+  "fn": "compute_hpmax",
+  "oracle": {
+    "method": "manual",
+    "source": "player.c:805 (A7 §2 up_level HP)",
+    "generatedAt": "2026-07-13T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "effectiveStrength": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0,
+        "characterClass": 4,
+        "level": 10
+      },
+      "note": "A7 §2 검사 L10 (그룹핑 함정 83 vs 80)",
+      "expected": 83
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "effectiveStrength": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0,
+        "characterClass": 4,
+        "level": 50
+      },
+      "note": "A7 §2 검사 L50",
+      "expected": 203
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "effectiveStrength": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0,
+        "characterClass": 4,
+        "level": 100
+      },
+      "note": "A7 §2 검사 L100",
+      "expected": 353
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "effectiveStrength": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0,
+        "characterClass": 5,
+        "level": 50
+      },
+      "note": "A7 §2 도술사 L50",
+      "expected": 152
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "effectiveStrength": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0,
+        "characterClass": 2,
+        "level": 50
+      },
+      "note": "A7 §2 권법가 L50 (그룹핑 함정 228 vs 225)",
+      "expected": 228
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "effectiveStrength": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0,
+        "characterClass": 4,
+        "level": 1
+      },
+      "note": "A7 §2 검사 L1 (성장항 0)",
+      "expected": 56
+    }
+  ]
+}
