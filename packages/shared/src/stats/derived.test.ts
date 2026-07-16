@@ -4,7 +4,7 @@ import { goldenFixtureSchema } from '../oracle/types.js'
 import type { GoldenFixture } from '../oracle/types.js'
 import type { ComputeAcInput } from '../oracle/generators/computeAcFixture.js'
 import { approve } from '../oracle/runner.js'
-import { computeAc, computeThaco, maxWeight } from './derived.js'
+import { computeAc, computeThaco, maxWeight, computeHpMax, computeMpMax } from './derived.js'
 import type { EffectiveStatContext } from './context.js'
 
 // 체크인된 compute_ac 골든 fixture를 로드해 goldenFixtureSchema로 파싱한 뒤
@@ -178,5 +178,98 @@ describe('런타임 maxWeight SUT 스팟 체크 (clamp 함정)', () => {
 
   it('str0 하한 (fighter L1 str0 → 20)', () => {
     expect(maxWeight(ctx({ effectiveStrength: 0, characterClass: 4, level: 1 }))).toBe(20)
+  })
+})
+
+describe('런타임 computeHpMax SUT 골든 교차검증', () => {
+  // T5.2(a) — 체크인 fixture 전 케이스가 런타임 SUT를 통과한다. SUT는 derived.ts의 직접 산술.
+  it('approve(compute_hpmax fixture, computeHpMax)가 전 케이스를 throw 없이 통과한다', () => {
+    const fixture = loadContextFixture('compute_hpmax.json')
+    expect(() => approve(fixture, computeHpMax)).not.toThrow()
+  })
+
+  // T5.2(b) negative control(최중요) — +1 버그를 주입한 변형은 반드시 감지된다.
+  it('+1 버그를 주입한 변형에는 approve가 throw한다', () => {
+    const fixture = loadContextFixture('compute_hpmax.json')
+    const buggy = (input: EffectiveStatContext): number => computeHpMax(input) + 1
+    expect(() => approve(fixture, buggy)).toThrow()
+  })
+})
+
+describe('런타임 computeHpMax SUT 스팟 체크 (A7 §2 앵커·정수 나눗셈 그룹핑)', () => {
+  const ctx = (overrides: {
+    characterClass: number
+    level: number
+  }): EffectiveStatContext => ({
+    effectiveDexterity: 0,
+    effectiveStrength: 0,
+    equipArmor: 0,
+    protection: false,
+    weaponAdjustment: 0,
+    weaponProficiency: 0,
+    ...overrides,
+  })
+
+  // truncation은 곱 결과에 적용된다: 56 + trunc(6*9/2) = 83 (잘못된 6*trunc(9/2)=24 → 80 아님).
+  it('검사(fighter) L10=83, L50=203, L100=353', () => {
+    expect(computeHpMax(ctx({ characterClass: 4, level: 10 }))).toBe(83)
+    expect(computeHpMax(ctx({ characterClass: 4, level: 50 }))).toBe(203)
+    expect(computeHpMax(ctx({ characterClass: 4, level: 100 }))).toBe(353)
+  })
+
+  it('도술사(mage) L50=152, 권법가(barbarian) L50=228', () => {
+    expect(computeHpMax(ctx({ characterClass: 5, level: 50 }))).toBe(152)
+    // 잘못된 그룹핑이면 57 + 7*trunc(49/2) = 225 (올바르면 228).
+    expect(computeHpMax(ctx({ characterClass: 2, level: 50 }))).toBe(228)
+  })
+
+  it('L1은 성장항 0이라 hpstart 그대로다 (fighter L1 → 56)', () => {
+    expect(computeHpMax(ctx({ characterClass: 4, level: 1 }))).toBe(56)
+  })
+})
+
+describe('런타임 computeMpMax SUT 골든 교차검증', () => {
+  // T5.2(a) — 체크인 fixture 전 케이스가 런타임 SUT를 통과한다.
+  it('approve(compute_mpmax fixture, computeMpMax)가 전 케이스를 throw 없이 통과한다', () => {
+    const fixture = loadContextFixture('compute_mpmax.json')
+    expect(() => approve(fixture, computeMpMax)).not.toThrow()
+  })
+
+  // T5.2(b) negative control(최중요) — +1 버그를 주입한 변형은 반드시 감지된다.
+  it('+1 버그를 주입한 변형에는 approve가 throw한다', () => {
+    const fixture = loadContextFixture('compute_mpmax.json')
+    const buggy = (input: EffectiveStatContext): number => computeMpMax(input) + 1
+    expect(() => approve(fixture, buggy)).toThrow()
+  })
+})
+
+describe('런타임 computeMpMax SUT 스팟 체크 (A7 §2 앵커·정수 나눗셈 그룹핑)', () => {
+  const ctx = (overrides: {
+    characterClass: number
+    level: number
+  }): EffectiveStatContext => ({
+    effectiveDexterity: 0,
+    effectiveStrength: 0,
+    equipArmor: 0,
+    protection: false,
+    weaponAdjustment: 0,
+    weaponProficiency: 0,
+    ...overrides,
+  })
+
+  it('검사(fighter) L10=54, L50=74, L100=99', () => {
+    expect(computeMpMax(ctx({ characterClass: 4, level: 10 }))).toBe(54)
+    expect(computeMpMax(ctx({ characterClass: 4, level: 50 }))).toBe(74)
+    expect(computeMpMax(ctx({ characterClass: 4, level: 100 }))).toBe(99)
+  })
+
+  it('도술사(mage) L50=123, 권법가(barbarian) L50=64', () => {
+    // 50 + trunc(3*49/2) = 50 + 73 = 123.
+    expect(computeMpMax(ctx({ characterClass: 5, level: 50 }))).toBe(123)
+    expect(computeMpMax(ctx({ characterClass: 2, level: 50 }))).toBe(64)
+  })
+
+  it('L1은 성장항 0이라 mpstart 그대로다 (mage L1 → 50)', () => {
+    expect(computeMpMax(ctx({ characterClass: 5, level: 1 }))).toBe(50)
   })
 })

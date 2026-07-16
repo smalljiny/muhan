@@ -8,7 +8,7 @@
 
 import { computeAc as computeAcOracle } from '../oracle/computeAc.js'
 import type { ComputeAcInput } from '../oracle/generators/computeAcFixture.js'
-import { thacoOf, bonusOf, proficDivisorOf } from './tables.js'
+import { thacoOf, bonusOf, proficDivisorOf, classStatOf } from './tables.js'
 import type { EffectiveStatContext } from './context.js'
 
 /**
@@ -72,4 +72,35 @@ export function maxWeight(context: EffectiveStatContext): number {
     n += Math.trunc((level + 3) / 4) * 10
   }
   return n
+}
+
+/**
+ * 최대 HP resolver — `player.c:805`의 up_level HP 성장 폐형을 직접 산술로 구현한 SUT.
+ *
+ * `hpMax = hpstart + trunc(hp * (level-1) / 2)`. `hpstart`(1레벨 기본)와 `hp`(레벨당 성장
+ * 계수)는 `classStatOf`로 판독한다. 현재 HP·재생은 파생하지 않는다 — 최대치만 계산한다.
+ *
+ * ## 결정적 함정: 정수 나눗셈 그룹핑
+ * C 원본 `hp * (level-1) / 2`는 `*`·`/` 동일 우선순위·좌결합이라 `(hp*(level-1))/2`이며
+ * truncation이 **곱 결과에 적용**된다. `Math.trunc(hp * (level - 1) / 2)`로 그룹핑한다 —
+ * `hp * Math.trunc((level-1)/2)`로 잘못 묶으면 오답이다(fighter L10이 83 아닌 80).
+ */
+export function computeHpMax(context: EffectiveStatContext): number {
+  const { characterClass, level } = context
+  const hpstart = classStatOf({ classIndex: characterClass, field: 'hpstart' })
+  const hp = classStatOf({ classIndex: characterClass, field: 'hp' })
+  return hpstart + Math.trunc((hp * (level - 1)) / 2)
+}
+
+/**
+ * 최대 MP resolver — `player.c:806`의 up_level MP 성장 폐형을 직접 산술로 구현한 SUT.
+ *
+ * `mpMax = mpstart + trunc(mp * (level-1) / 2)`. computeHpMax와 동일한 그룹핑 규칙을 따른다 —
+ * truncation은 곱 결과에 적용한다. `mpstart`·`mp`는 `classStatOf`로 판독한다.
+ */
+export function computeMpMax(context: EffectiveStatContext): number {
+  const { characterClass, level } = context
+  const mpstart = classStatOf({ classIndex: characterClass, field: 'mpstart' })
+  const mp = classStatOf({ classIndex: characterClass, field: 'mp' })
+  return mpstart + Math.trunc((mp * (level - 1)) / 2)
 }
