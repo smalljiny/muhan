@@ -1,4 +1,10 @@
 import { defineConfig } from 'vitest/config'
+import { fileURLToPath } from 'node:url'
+
+// shared property arbitraries(fast-check 의존, dist 미포함)를 server 테스트가 소스에서
+// subpath로 재사용하도록 alias한다. `shared/*` → `../shared/src/*`(소스). bare `shared`는
+// 슬래시가 없어 이 정규식에 걸리지 않으므로 dist 경유가 그대로 유지된다(두 경로 공존).
+const sharedSrc = fileURLToPath(new URL('../shared/src', import.meta.url))
 
 // server 패키지 스코프 테스트 설정 — turbo run test가 이 config로 커버리지 게이트를 강제한다.
 // 부팅 엔트리(src/index.ts)는 커버리지에서 제외(리스너 배선은 스모크 대상 아님).
@@ -21,4 +27,5 @@ export default defineConfig({
       },
     },
   },
+  resolve: { alias: [{ find: /^shared\/(.*)$/, replacement: `${sharedSrc}/$1` }] },
 })

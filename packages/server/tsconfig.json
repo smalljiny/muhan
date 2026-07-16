@@ -5,7 +5,8 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "shared": ["../shared/src/index.ts"]
+      "shared": ["../shared/src/index.ts"],
+      "shared/*": ["../shared/src/*"]
     }
   },
   "include": ["src"]
