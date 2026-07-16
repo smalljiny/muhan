@@ -10,7 +10,8 @@ export default defineConfig({
       reporter: ['text', 'lcov'],
       all: true,
       include: ['src/**/*.ts'],
-      exclude: ['src/index.ts', '**/*.test.ts', 'src/**/*.testutil.ts'],
+      // index.ts(배럴)·context.ts(type-only)는 실행 코드가 없어 커버리지에서 제외.
+      exclude: ['src/index.ts', 'src/stats/context.ts', '**/*.test.ts', 'src/**/*.testutil.ts'],
       thresholds: {
         lines: 80,
         functions: 80,
