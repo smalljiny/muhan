@@ -1,0 +1,95 @@
+{
+  "fn": "max_weight",
+  "oracle": {
+    "method": "manual",
+    "source": "player.c:1099 (A7 §6 max_weight)",
+    "generatedAt": "2026-07-13T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0,
+        "effectiveStrength": 10,
+        "characterClass": 2,
+        "level": 81
+      },
+      "note": "clamp 함정 discriminator (330, 320 아님)",
+      "expected": 330
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0,
+        "effectiveStrength": 10,
+        "characterClass": 4,
+        "level": 81
+      },
+      "note": "non-barbarian 고레벨 (barbarian 항 없음)",
+      "expected": 120
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0,
+        "effectiveStrength": 10,
+        "characterClass": 2,
+        "level": 1
+      },
+      "note": "barbarian 저레벨",
+      "expected": 130
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0,
+        "effectiveStrength": 18,
+        "characterClass": 2,
+        "level": 20
+      },
+      "note": "barbarian 중레벨·고str",
+      "expected": 250
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0,
+        "effectiveStrength": 0,
+        "characterClass": 4,
+        "level": 1
+      },
+      "note": "str0 하한",
+      "expected": 20
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0,
+        "effectiveStrength": 10,
+        "characterClass": 2,
+        "level": 400
+      },
+      "note": "unclamped 발산",
+      "expected": 1120
+    }
+  ]
+}

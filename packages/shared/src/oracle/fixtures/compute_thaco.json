@@ -1,0 +1,137 @@
+{
+  "fn": "compute_thaco",
+  "oracle": {
+    "method": "manual",
+    "source": "player.c:1001 (A7 §6 compute_thaco)",
+    "generatedAt": "2026-07-13T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "effectiveStrength": 10,
+        "characterClass": 4,
+        "level": 1,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0
+      },
+      "note": "A7 앵커 fighter L1",
+      "expected": 20
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "effectiveStrength": 10,
+        "characterClass": 4,
+        "level": 77,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0
+      },
+      "note": "A7 앵커 fighter L77 (circle 20)",
+      "expected": 3
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "effectiveStrength": 10,
+        "characterClass": 5,
+        "level": 1,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0
+      },
+      "note": "A7 앵커 mage L1",
+      "expected": 20
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "effectiveStrength": 10,
+        "characterClass": 1,
+        "level": 1,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0
+      },
+      "note": "A7 앵커 assassin L1",
+      "expected": 18
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "effectiveStrength": 10,
+        "characterClass": 2,
+        "level": 77,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 100
+      },
+      "note": "class<10 L<101 하한 0 (mod_profic 5)",
+      "expected": 0
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "effectiveStrength": 25,
+        "characterClass": 4,
+        "level": 40,
+        "weaponAdjustment": 2,
+        "weaponProficiency": 40
+      },
+      "note": "weaponAdjustment+strength bonus+mod_profic 차감",
+      "expected": 3
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "effectiveStrength": 10,
+        "characterClass": 4,
+        "level": 101,
+        "weaponAdjustment": 10,
+        "weaponProficiency": 100
+      },
+      "note": "class<10 L>=101 하한 -5",
+      "expected": -5
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "effectiveStrength": 10,
+        "characterClass": 10,
+        "level": 1,
+        "weaponAdjustment": 20,
+        "weaponProficiency": 0
+      },
+      "note": "class>=10 하한 -10",
+      "expected": -10
+    },
+    {
+      "input": {
+        "effectiveDexterity": 0,
+        "equipArmor": 0,
+        "protection": false,
+        "effectiveStrength": 10,
+        "characterClass": 10,
+        "level": 1,
+        "weaponAdjustment": 0,
+        "weaponProficiency": 0
+      },
+      "note": "class>=10 비clamp",
+      "expected": -5
+    }
+  ]
+}
