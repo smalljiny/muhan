@@ -49,6 +49,9 @@ export function computeThaco(context: EffectiveStatContext): number {
   let thaco = thacoOf({ classIndex: characterClass, levelIndex })
   thaco -= weaponAdjustment
   thaco -= Math.trunc(weaponProficiency / proficDivisorOf(characterClass))
+  // oracle 발산(의도): C `compute_thaco`(player.c:1011)는 `bonus[strength]`를 무클램프로
+  // 첨자하나, `bonusOf`는 [0,63]으로 clamp한다. 정상 능력치 범위에서는 동일하고, clamp가
+  // C의 잠재적 OOB 읽기보다 안전하다 — effectiveStrength>63(버프 스택) 극단에서만 갈린다.
   thaco -= bonusOf(effectiveStrength)
 
   if (characterClass < 10) {
@@ -84,6 +87,14 @@ export function maxWeight(context: EffectiveStatContext): number {
  * C 원본 `hp * (level-1) / 2`는 `*`·`/` 동일 우선순위·좌결합이라 `(hp*(level-1))/2`이며
  * truncation이 **곱 결과에 적용**된다. `Math.trunc(hp * (level - 1) / 2)`로 그룹핑한다 —
  * `hp * Math.trunc((level-1)/2)`로 잘못 묶으면 오답이다(fighter L10이 83 아닌 80).
+ *
+ * ## oracle 발산 수용: 폐형만 구현
+ * 원본 `up_level`은 폐형(805–808) 이전에 홀짝 증분(779–780)을 수행하고, 폐형 재계산은
+ * `level==1`·`level%4==0`에서만 도달한다(791행 조기 return). `level%4≠0` 레벨은 증분
+ * 누적값이 잔존해 폐형과 **발산**하며 그 값이 디스크에 저장·관측된다(fighter hpMax:
+ * L2 게임56/폐형59, L5 71/68, L7 77/74). 이 발산은 `level%4` 조기 return이 만든 형상
+ * 버그로 판단해 신규 스택은 **폐형 하나만** 구현한다 — 발산 레벨에서 원본과 다를 수 있으며
+ * 수용된 결정이다(근거: `docs/notes/game-analysis-20260625/a7-player-progression.md` §2 정정).
  */
 export function computeHpMax(context: EffectiveStatContext): number {
   const { characterClass, level } = context
@@ -97,6 +108,8 @@ export function computeHpMax(context: EffectiveStatContext): number {
  *
  * `mpMax = mpstart + trunc(mp * (level-1) / 2)`. computeHpMax와 동일한 그룹핑 규칙을 따른다 —
  * truncation은 곱 결과에 적용한다. `mpstart`·`mp`는 `classStatOf`로 판독한다.
+ * oracle 발산 수용(폐형만 구현)도 computeHpMax와 동일하다 — MP는 짝수 레벨 증분이라
+ * `level%4≠0` 짝수 레벨에서 폐형과 발산한다(같은 A7 §2 근거).
  */
 export function computeMpMax(context: EffectiveStatContext): number {
   const { characterClass, level } = context
