@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { goldenFixtureSchema } from '../types.js'
+import { bonus } from '../../stats/tables.js'
 import {
-  bonus,
   referenceComputeAc,
   buildCases,
   buildFixture,

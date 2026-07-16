@@ -1,0 +1,648 @@
+{
+  "fn": "class_stats",
+  "oracle": {
+    "method": "manual",
+    "source": "global.c:37 (A7 §2)",
+    "generatedAt": "2026-07-16T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "classIndex": 0,
+        "field": "hpstart"
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "classIndex": 0,
+        "field": "mpstart"
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "classIndex": 0,
+        "field": "hp"
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "classIndex": 0,
+        "field": "mp"
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "classIndex": 0,
+        "field": "ndice"
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "classIndex": 0,
+        "field": "sdice"
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "classIndex": 0,
+        "field": "pdice"
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "classIndex": 1,
+        "field": "hpstart"
+      },
+      "expected": 55
+    },
+    {
+      "input": {
+        "classIndex": 1,
+        "field": "mpstart"
+      },
+      "expected": 40
+    },
+    {
+      "input": {
+        "classIndex": 1,
+        "field": "hp"
+      },
+      "expected": 5
+    },
+    {
+      "input": {
+        "classIndex": 1,
+        "field": "mp"
+      },
+      "expected": 2
+    },
+    {
+      "input": {
+        "classIndex": 1,
+        "field": "ndice"
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "classIndex": 1,
+        "field": "sdice"
+      },
+      "expected": 6
+    },
+    {
+      "input": {
+        "classIndex": 1,
+        "field": "pdice"
+      },
+      "expected": 0
+    },
+    {
+      "input": {
+        "classIndex": 2,
+        "field": "hpstart"
+      },
+      "expected": 57
+    },
+    {
+      "input": {
+        "classIndex": 2,
+        "field": "mpstart"
+      },
+      "expected": 40
+    },
+    {
+      "input": {
+        "classIndex": 2,
+        "field": "hp"
+      },
+      "expected": 7
+    },
+    {
+      "input": {
+        "classIndex": 2,
+        "field": "mp"
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "classIndex": 2,
+        "field": "ndice"
+      },
+      "expected": 2
+    },
+    {
+      "input": {
+        "classIndex": 2,
+        "field": "sdice"
+      },
+      "expected": 3
+    },
+    {
+      "input": {
+        "classIndex": 2,
+        "field": "pdice"
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "classIndex": 3,
+        "field": "hpstart"
+      },
+      "expected": 54
+    },
+    {
+      "input": {
+        "classIndex": 3,
+        "field": "mpstart"
+      },
+      "expected": 50
+    },
+    {
+      "input": {
+        "classIndex": 3,
+        "field": "hp"
+      },
+      "expected": 4
+    },
+    {
+      "input": {
+        "classIndex": 3,
+        "field": "mp"
+      },
+      "expected": 3
+    },
+    {
+      "input": {
+        "classIndex": 3,
+        "field": "ndice"
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "classIndex": 3,
+        "field": "sdice"
+      },
+      "expected": 4
+    },
+    {
+      "input": {
+        "classIndex": 3,
+        "field": "pdice"
+      },
+      "expected": 0
+    },
+    {
+      "input": {
+        "classIndex": 4,
+        "field": "hpstart"
+      },
+      "expected": 56
+    },
+    {
+      "input": {
+        "classIndex": 4,
+        "field": "mpstart"
+      },
+      "expected": 50
+    },
+    {
+      "input": {
+        "classIndex": 4,
+        "field": "hp"
+      },
+      "expected": 6
+    },
+    {
+      "input": {
+        "classIndex": 4,
+        "field": "mp"
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "classIndex": 4,
+        "field": "ndice"
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "classIndex": 4,
+        "field": "sdice"
+      },
+      "expected": 5
+    },
+    {
+      "input": {
+        "classIndex": 4,
+        "field": "pdice"
+      },
+      "expected": 0
+    },
+    {
+      "input": {
+        "classIndex": 5,
+        "field": "hpstart"
+      },
+      "expected": 54
+    },
+    {
+      "input": {
+        "classIndex": 5,
+        "field": "mpstart"
+      },
+      "expected": 50
+    },
+    {
+      "input": {
+        "classIndex": 5,
+        "field": "hp"
+      },
+      "expected": 4
+    },
+    {
+      "input": {
+        "classIndex": 5,
+        "field": "mp"
+      },
+      "expected": 3
+    },
+    {
+      "input": {
+        "classIndex": 5,
+        "field": "ndice"
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "classIndex": 5,
+        "field": "sdice"
+      },
+      "expected": 3
+    },
+    {
+      "input": {
+        "classIndex": 5,
+        "field": "pdice"
+      },
+      "expected": 0
+    },
+    {
+      "input": {
+        "classIndex": 6,
+        "field": "hpstart"
+      },
+      "expected": 55
+    },
+    {
+      "input": {
+        "classIndex": 6,
+        "field": "mpstart"
+      },
+      "expected": 50
+    },
+    {
+      "input": {
+        "classIndex": 6,
+        "field": "hp"
+      },
+      "expected": 5
+    },
+    {
+      "input": {
+        "classIndex": 6,
+        "field": "mp"
+      },
+      "expected": 2
+    },
+    {
+      "input": {
+        "classIndex": 6,
+        "field": "ndice"
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "classIndex": 6,
+        "field": "sdice"
+      },
+      "expected": 4
+    },
+    {
+      "input": {
+        "classIndex": 6,
+        "field": "pdice"
+      },
+      "expected": 0
+    },
+    {
+      "input": {
+        "classIndex": 7,
+        "field": "hpstart"
+      },
+      "expected": 56
+    },
+    {
+      "input": {
+        "classIndex": 7,
+        "field": "mpstart"
+      },
+      "expected": 40
+    },
+    {
+      "input": {
+        "classIndex": 7,
+        "field": "hp"
+      },
+      "expected": 6
+    },
+    {
+      "input": {
+        "classIndex": 7,
+        "field": "mp"
+      },
+      "expected": 2
+    },
+    {
+      "input": {
+        "classIndex": 7,
+        "field": "ndice"
+      },
+      "expected": 2
+    },
+    {
+      "input": {
+        "classIndex": 7,
+        "field": "sdice"
+      },
+      "expected": 2
+    },
+    {
+      "input": {
+        "classIndex": 7,
+        "field": "pdice"
+      },
+      "expected": 0
+    },
+    {
+      "input": {
+        "classIndex": 8,
+        "field": "hpstart"
+      },
+      "expected": 55
+    },
+    {
+      "input": {
+        "classIndex": 8,
+        "field": "mpstart"
+      },
+      "expected": 50
+    },
+    {
+      "input": {
+        "classIndex": 8,
+        "field": "hp"
+      },
+      "expected": 5
+    },
+    {
+      "input": {
+        "classIndex": 8,
+        "field": "mp"
+      },
+      "expected": 2
+    },
+    {
+      "input": {
+        "classIndex": 8,
+        "field": "ndice"
+      },
+      "expected": 2
+    },
+    {
+      "input": {
+        "classIndex": 8,
+        "field": "sdice"
+      },
+      "expected": 2
+    },
+    {
+      "input": {
+        "classIndex": 8,
+        "field": "pdice"
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "classIndex": 9,
+        "field": "hpstart"
+      },
+      "expected": 400
+    },
+    {
+      "input": {
+        "classIndex": 9,
+        "field": "mpstart"
+      },
+      "expected": 250
+    },
+    {
+      "input": {
+        "classIndex": 9,
+        "field": "hp"
+      },
+      "expected": 4
+    },
+    {
+      "input": {
+        "classIndex": 9,
+        "field": "mp"
+      },
+      "expected": 4
+    },
+    {
+      "input": {
+        "classIndex": 9,
+        "field": "ndice"
+      },
+      "expected": 2
+    },
+    {
+      "input": {
+        "classIndex": 9,
+        "field": "sdice"
+      },
+      "expected": 4
+    },
+    {
+      "input": {
+        "classIndex": 9,
+        "field": "pdice"
+      },
+      "expected": 0
+    },
+    {
+      "input": {
+        "classIndex": 10,
+        "field": "hpstart"
+      },
+      "expected": 50
+    },
+    {
+      "input": {
+        "classIndex": 10,
+        "field": "mpstart"
+      },
+      "expected": 50
+    },
+    {
+      "input": {
+        "classIndex": 10,
+        "field": "hp"
+      },
+      "expected": 5
+    },
+    {
+      "input": {
+        "classIndex": 10,
+        "field": "mp"
+      },
+      "expected": 5
+    },
+    {
+      "input": {
+        "classIndex": 10,
+        "field": "ndice"
+      },
+      "expected": 5
+    },
+    {
+      "input": {
+        "classIndex": 10,
+        "field": "sdice"
+      },
+      "expected": 5
+    },
+    {
+      "input": {
+        "classIndex": 10,
+        "field": "pdice"
+      },
+      "expected": 5
+    },
+    {
+      "input": {
+        "classIndex": 11,
+        "field": "hpstart"
+      },
+      "expected": 50
+    },
+    {
+      "input": {
+        "classIndex": 11,
+        "field": "mpstart"
+      },
+      "expected": 50
+    },
+    {
+      "input": {
+        "classIndex": 11,
+        "field": "hp"
+      },
+      "expected": 5
+    },
+    {
+      "input": {
+        "classIndex": 11,
+        "field": "mp"
+      },
+      "expected": 5
+    },
+    {
+      "input": {
+        "classIndex": 11,
+        "field": "ndice"
+      },
+      "expected": 5
+    },
+    {
+      "input": {
+        "classIndex": 11,
+        "field": "sdice"
+      },
+      "expected": 5
+    },
+    {
+      "input": {
+        "classIndex": 11,
+        "field": "pdice"
+      },
+      "expected": 5
+    },
+    {
+      "input": {
+        "classIndex": 12,
+        "field": "hpstart"
+      },
+      "expected": 50
+    },
+    {
+      "input": {
+        "classIndex": 12,
+        "field": "mpstart"
+      },
+      "expected": 50
+    },
+    {
+      "input": {
+        "classIndex": 12,
+        "field": "hp"
+      },
+      "expected": 7
+    },
+    {
+      "input": {
+        "classIndex": 12,
+        "field": "mp"
+      },
+      "expected": 4
+    },
+    {
+      "input": {
+        "classIndex": 12,
+        "field": "ndice"
+      },
+      "expected": 5
+    },
+    {
+      "input": {
+        "classIndex": 12,
+        "field": "sdice"
+      },
+      "expected": 5
+    },
+    {
+      "input": {
+        "classIndex": 12,
+        "field": "pdice"
+      },
+      "expected": 5
+    }
+  ]
+}
