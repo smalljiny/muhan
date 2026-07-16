@@ -45,6 +45,16 @@ export interface ConnectionContext {
   state: ConnectionState
   createProgress: CreateProgress | null
   boundCharacterId: string | null
+  // 소켓 close 발화 여부. 포트 호출이 async가 된 뒤(Story 4) FSM이 포트 await로 멈춘 사이 소켓이 닫히면
+  // 'close' 핸들러(frameTail 큐와 별개 리스너)가 이 플래그를 세운다. await 재개 후 FSM은 이 플래그로 죽은 연결에
+  // 대한 월드 등록(register)·command 상태 대입·데드라인 rearm 같은 부수효과를 건너뛴다(좀비 바인딩·형제 evict 방지).
+  closed: boolean
+  // per-connection 프레임 직렬화 큐의 tail promise. message 핸들러가 이제 async 경로(FSM·핸드셰이크 accept)를
+  // 태울 수 있어, ws가 리스너를 await하지 않는 이상 프레임 2의 'message'가 프레임 1의 await 도중 시작돼 공유
+  // 상태(state·createProgress·deadline)를 동시 변이할 수 있다. 각 프레임 처리를 이 tail에 .then으로 체이닝해
+  // 프레임 N+1이 프레임 N 완결 뒤에만 시작하도록 강제한다. 소켓 수명 동안 유지돼야 하므로(리스너 로컬은 프레임
+  // 간 소멸) 여기 둔다. 초기값은 즉시 resolve된 Promise다.
+  frameTail: Promise<void>
 }
 
 /**
@@ -73,6 +83,8 @@ export function createConnectionContext(): ConnectionContext {
     state: ConnectionState.characterSelect,
     createProgress: null,
     boundCharacterId: null,
+    closed: false,
+    frameTail: Promise.resolve(),
   }
 }
 

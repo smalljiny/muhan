@@ -98,6 +98,11 @@ export interface SessionContext {
   // 바인딩해 주입하고, 테스트는 vi.fn()으로 배선한다. required(optional 금지)라 주입 누락 시 컴파일에서 걸린다
   // (배선을 빠뜨리면 월드 진입이 레지스트리에 등록되지 않아 재연결·evict가 무력화된다).
   readonly enterWorld: (characterId: string) => 'entered' | 'resumed'
+  // 연결 close 여부 조회 seam(Story 4 async 마이그레이션). 포트 호출이 async가 되며 handleInput이 포트 await로
+  // 멈춘 사이 소켓이 닫힐 수 있다 — 재개 후 command 진입(enterWorld 등록 + command 상태 대입) 전에 이 콜백으로
+  // 죽은 연결을 감지해 부수효과 없이 bail한다(좀비 registry 바인딩·형제 세션 evict·유령 idle 타이머 방지). 셸은
+  // `() => ctx.closed`로, 테스트는 제어 가능한 함수로 배선한다. required(optional 금지)라 주입 누락 시 컴파일에서 걸린다.
+  readonly isClosed: () => boolean
 }
 
 /**
@@ -118,9 +123,9 @@ export interface FsmContext {
  * 대화 상태에 접근한다 — 무상태 핸들러(characterSelect·command)는 ctx를 읽지 않는다.
  */
 export interface StateHandler {
-  onEnter?(ctx: FsmContext, session: SessionContext): void
-  handleInput(ctx: FsmContext, session: SessionContext, frame: unknown): ConnectionState
-  onExit?(ctx: FsmContext, session: SessionContext): void
+  onEnter?(ctx: FsmContext, session: SessionContext): Promise<void>
+  handleInput(ctx: FsmContext, session: SessionContext, frame: unknown): Promise<ConnectionState>
+  onExit?(ctx: FsmContext, session: SessionContext): Promise<void>
 }
 
 /**
@@ -285,9 +290,13 @@ export function advanceCreate(
   session: SessionContext,
   nextStep: CreateStep,
   collected: CreateCollected,
-): void {
+): Promise<void> {
   ctx.createProgress = { step: nextStep, collected }
   session.rearmDeadline()
+  // 현재는 동기 부수효과뿐이지만 async 캐스케이드의 awaitable 단일 지점으로 두어(호출부가 await),
+  // Story 6의 데드라인 훅이 여기서 async 작업을 추가해도 호출부 시그니처가 변하지 않게 한다. non-async +
+  // Promise.resolve — await 없는 async 키워드는 require-await에 걸리므로 명시 Promise로 반환한다.
+  return Promise.resolve()
 }
 
 /**
@@ -299,8 +308,8 @@ export function advanceCreate(
  * unauthorized error + 상태 유지, reject면 session_state error + 유지. 무상태 핸들러라 ctx를 읽지 않는다.
  */
 const characterSelectHandler: StateHandler = {
-  onEnter(_ctx, session) {
-    const characters = session.sessionAuth.listCharacters(session.account.accountId)
+  async onEnter(_ctx, session) {
+    const characters = await session.sessionAuth.listCharacters(session.account.accountId)
     session.emit({ type: 'session:characterList', characters })
     session.emit({
       type: 'session:prompt',
@@ -310,7 +319,7 @@ const characterSelectHandler: StateHandler = {
       options: [{ value: CREATE_SENTINEL, label: '새 캐릭터 생성' }],
     })
   },
-  handleInput(_ctx, session, frame) {
+  async handleInput(_ctx, session, frame) {
     const decision = decideCharacterSelectInput(frame)
     if (decision.kind === 'reject') {
       session.emit(sessionStateError('현재 세션 단계에서 허용되지 않는 명령이다'))
@@ -321,8 +330,11 @@ const characterSelectHandler: StateHandler = {
       return decision.nextState
     }
 
+    // assertOwnership은 이제 Promise를 반환한다 — await해야 reject(OwnershipError)가 이 try에서 잡힌다.
+    // await 없이 호출하면 rejected Promise가 이 동기 try를 빠져나가 셸의 방어 try/catch로 흘러가므로
+    // unauthorized 매핑이 무력화된다.
     try {
-      session.sessionAuth.assertOwnership(session.account.accountId, decision.characterId)
+      await session.sessionAuth.assertOwnership(session.account.accountId, decision.characterId)
     } catch (error) {
       if (error instanceof OwnershipError) {
         session.emit({ type: 'error', code: 'unauthorized', message: '해당 캐릭터에 대한 권한이 없다' })
@@ -331,6 +343,9 @@ const characterSelectHandler: StateHandler = {
       throw error
     }
 
+    // close-race 가드: 포트 await 도중 소켓이 닫혔으면 월드 등록·command 상태 대입 없이 현재 상태로 bail한다
+    // (좀비 바인딩·형제 세션 evict 방지). 현재 상태 반환이라 applyTransition이 no-op이 돼 상태 대입도 일어나지 않는다.
+    if (session.isClosed()) return ConnectionState.characterSelect
     return enterCommand(session, decision.characterId)
   },
 }
@@ -345,11 +360,11 @@ const characterSelectHandler: StateHandler = {
  * onExit: create를 이탈할 때 createProgress를 정리한다(create 밖에선 null 불변식).
  */
 const createHandler: StateHandler = {
-  onEnter(ctx, session) {
-    advanceCreate(ctx, session, 'name', {})
+  async onEnter(ctx, session) {
+    await advanceCreate(ctx, session, 'name', {})
     session.emit(createFieldPrompt('name'))
   },
-  handleInput(ctx, session, frame) {
+  async handleInput(ctx, session, frame) {
     const progress = ctx.createProgress
     if (progress === null) {
       // create 상태인데 progress가 없으면 배선 불변식 위반. 조용한 no-op 대신 session_state로 응답한다.
@@ -363,16 +378,22 @@ const createHandler: StateHandler = {
       return ConnectionState.create
     }
     if (decision.kind === 'advance') {
-      advanceCreate(ctx, session, decision.nextStep, decision.collected)
+      await advanceCreate(ctx, session, decision.nextStep, decision.collected)
       session.emit(createFieldPrompt(decision.nextStep))
       return ConnectionState.create
     }
 
-    const summary = session.sessionAuth.createCharacter(session.account.accountId, decision.dto)
+    const summary = await session.sessionAuth.createCharacter(session.account.accountId, decision.dto)
+    // close-race 가드: createCharacter await 도중 소켓이 닫혔으면 command 진입 없이 bail한다(캐릭터는 이미
+    // 생성됐으나 죽은 연결을 등록하지 않는다 — 재접속 후 그 캐릭터를 선택하면 정상 진입한다). 현재 상태(create)
+    // 반환이라 applyTransition no-op으로 상태 대입도 건너뛴다.
+    if (session.isClosed()) return ConnectionState.create
     return enterCommand(session, summary.characterId)
   },
   onExit(ctx) {
     ctx.createProgress = null
+    // 동기 정리뿐이라 non-async로 두되 async onExit 계약(Promise 반환)에 맞춰 명시 Promise를 돌려준다.
+    return Promise.resolve()
   },
 }
 
@@ -387,7 +408,8 @@ function stubHandler(state: ConnectionState): StateHandler {
   return {
     handleInput(_ctx, session) {
       session.emit(sessionStateError('현재 세션 단계에서 처리할 수 없는 명령이다'))
-      return state
+      // 포트 호출 없이 즉시 상태를 돌려주지만 async handleInput 계약(Promise 반환)에 맞춰 명시 Promise로 반환한다.
+      return Promise.resolve(state)
     },
   }
 }
@@ -410,14 +432,18 @@ export const stateHandlers: Record<ConnectionState, StateHandler> = {
  * 진입하면 rearm해 미진행 연결을 설정한다. create 진입 시 enterState rearm + onEnter의 advanceCreate rearm이
  * 이중 호출되나 무해하다(둘 다 같은 타이머를 새로 설정).
  */
-function enterState(ctx: FsmContext, session: SessionContext, state: ConnectionState): void {
+async function enterState(
+  ctx: FsmContext,
+  session: SessionContext,
+  state: ConnectionState,
+): Promise<void> {
   ctx.state = state
   if (state === ConnectionState.command) {
     session.clearDeadline()
   } else {
     session.rearmDeadline()
   }
-  stateHandlers[state].onEnter?.(ctx, session)
+  await stateHandlers[state].onEnter?.(ctx, session)
 }
 
 /**
@@ -426,20 +452,26 @@ function enterState(ctx: FsmContext, session: SessionContext, state: ConnectionS
  * 같은 상태면 no-op이라 onEnter를 재구동하지 않는다(reject·유지·create 서브스텝 전진 시 초기 이벤트
  * 재발화 방지). 다르면 현 상태 onExit → enterState(대입 + 다음 onEnter) 순으로 구동한다.
  */
-export function applyTransition(ctx: FsmContext, session: SessionContext, next: ConnectionState): void {
+export async function applyTransition(
+  ctx: FsmContext,
+  session: SessionContext,
+  next: ConnectionState,
+): Promise<void> {
   if (next === ctx.state) return
-  stateHandlers[ctx.state].onExit?.(ctx, session)
-  enterState(ctx, session, next)
+  await stateHandlers[ctx.state].onExit?.(ctx, session)
+  await enterState(ctx, session, next)
 }
 
 /**
  * accept(핸드셰이크 완료) 시 characterSelect로 진입시킨다.
  *
- * 셸이 같은 message-handler 턴에 동기 호출해 characterList + prompt를 즉시 발화하게 한다(setImmediate 금지).
- * ctx.state 초기값이 이미 characterSelect라도 enterState로 대입·onEnter를 명시 구동해 진입 부수효과를 낸다.
+ * 셸이 같은 message-handler 프레임 처리 안에서 await 호출해 characterList + prompt를 발화하게 한다(setImmediate
+ * 금지). 이제 async이나 셸의 per-connection 프레임 큐가 이 프레임 완결 뒤에만 다음 프레임을 태우므로 emit 순서·
+ * 즉시성은 보존된다. ctx.state 초기값이 이미 characterSelect라도 enterState로 대입·onEnter를 명시 구동해 진입
+ * 부수효과를 낸다.
  */
-export function enterInitialState(ctx: FsmContext, session: SessionContext): void {
-  enterState(ctx, session, ConnectionState.characterSelect)
+export async function enterInitialState(ctx: FsmContext, session: SessionContext): Promise<void> {
+  await enterState(ctx, session, ConnectionState.characterSelect)
 }
 
 /**
@@ -448,7 +480,11 @@ export function enterInitialState(ctx: FsmContext, session: SessionContext): voi
  * 셸(plugin)이 command 이전 상태의 pass 프레임에 대해 호출한다. handleInput이 이벤트를 emit하고 다음
  * 상태를 반환하면 applyTransition이 전이를 확정한다.
  */
-export function handleSessionFrame(ctx: FsmContext, session: SessionContext, frame: unknown): void {
-  const next = stateHandlers[ctx.state].handleInput(ctx, session, frame)
-  applyTransition(ctx, session, next)
+export async function handleSessionFrame(
+  ctx: FsmContext,
+  session: SessionContext,
+  frame: unknown,
+): Promise<void> {
+  const next = await stateHandlers[ctx.state].handleInput(ctx, session, frame)
+  await applyTransition(ctx, session, next)
 }

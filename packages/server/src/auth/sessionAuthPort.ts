@@ -9,9 +9,12 @@ import type { CharacterSummary } from 'shared'
  * 실 firebase 세션 쿠키 검증 어댑터와 accountId↔character의 Mongo 영구화가 이 포트를
  * 구현한다 — 여기(E3)에는 실 firebase·Mongo 구현을 두지 않고 인메모리 어댑터로만 만족한다.
  *
- * 동기 시그니처: 인메모리 stub이라 메서드가 Promise를 반환하지 않는다. E5의 실 어댑터는
- * 네트워크·DB I/O로 async가 필요하므로, 그 시점에 포트를 `Promise<...>` 반환으로 확장하고
- * 호출부를 await로 조정한다. 지금은 async seam을 주석으로만 남기고 동기로 유지한다.
+ * async 시그니처: 네 메서드가 모두 `Promise`를 반환한다. E5의 실 어댑터는 네트워크·DB I/O로
+ * async가 필수이므로, 인메모리 stub 단계에서 미리 포트를 async로 확정해 호출부(어댑터·FSM·플러그인)를
+ * await로 정렬했다 — 실 어댑터 교체 시 시그니처 변경 없이 구현만 바꾸면 된다. 인메모리 구현은 즉시
+ * resolve하는 Promise를 돌려주지만, 셸은 소켓 프레임을 per-connection 큐로 직렬화해 await 도중 *프레임 대
+ * 프레임* 재진입(다음 프레임이 공유 상태를 동시 변이)이 없도록 보장한다. 프레임 큐와 별개 리스너인 소켓
+ * 'close'는 이 큐로 못 막으므로, FSM이 포트 await 재개 후 ctx.closed 가드로 죽은 연결의 월드 등록을 건너뛴다.
  */
 
 /**
@@ -37,10 +40,10 @@ export type CreateCharacterInput = {
  */
 export interface SessionAuthPort {
   /** 세션 쿠키를 검증해 계정 신원을 반환한다. 유효하지 않으면 null. */
-  validateSessionCookie(cookie: string): AccountIdentity | null
+  validateSessionCookie(cookie: string): Promise<AccountIdentity | null>
 
   /** account가 보유한 캐릭터 요약 목록을 반환한다. 없으면 빈 배열. */
-  listCharacters(accountId: string): CharacterSummary[]
+  listCharacters(accountId: string): Promise<CharacterSummary[]>
 
   /**
    * account에 최소 필드 dto로 캐릭터를 생성하고 그 요약을 반환한다.
@@ -48,10 +51,10 @@ export interface SessionAuthPort {
    * 가정한다. Story 5의 create 상태 핸들러가 Zod로 검증한 뒤 호출한다. 클래스/종족 코드의
    * 범위·유효성 제약은 코드 테이블이 확정되는 E5로 유예한다(E3엔 테이블이 없어 강제하지 않는다).
    */
-  createCharacter(accountId: string, dto: CreateCharacterInput): CharacterSummary
+  createCharacter(accountId: string, dto: CreateCharacterInput): Promise<CharacterSummary>
 
-  /** characterId가 accountId 소유가 아니면 throw한다. 소유하면 void. */
-  assertOwnership(accountId: string, characterId: string): void
+  /** characterId가 accountId 소유가 아니면 reject한다(OwnershipError). 소유하면 resolve. */
+  assertOwnership(accountId: string, characterId: string): Promise<void>
 }
 
 /**
