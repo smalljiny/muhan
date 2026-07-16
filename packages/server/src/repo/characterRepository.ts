@@ -33,16 +33,31 @@ export class CharacterRepository implements IRepository<Character> {
   }
 
   /**
-   * name unique 인덱스를 보장한다. createIndex는 멱등이라 반복 호출해도 안전하다.
+   * name unique 인덱스와 accountId 인덱스를 보장한다. createIndex는 멱등이라 반복 호출해도 안전하다.
+   * accountId 인덱스는 계정별 캐릭터 조회(findByAccount)를 위한 것이며 유일 제약이 아니다
+   * (한 계정이 여러 캐릭터를 소유한다).
    */
   async init(): Promise<void> {
     await this.collection.createIndex({ name: 1 }, { unique: true })
+    await this.collection.createIndex({ accountId: 1 })
   }
 
   async findById(id: string): Promise<Character | null> {
     const doc = await this.collection.findOne({ _id: id } as Filter<Character>)
     if (doc === null) return null
     return characterSchema.parse(doc)
+  }
+
+  /**
+   * 계정별 캐릭터 조회 — accountId FK로 소유 계정의 캐릭터 목록을 파생한다.
+   * status='deleted'(무덤) 캐릭터는 제외한다 — 삭제된 캐릭터로 재로그인을 차단하는 불변식.
+   * 조회 직후 characterSchema.parse로 경계 검증한다(findById와 동일 정책).
+   */
+  async findByAccount(accountId: string): Promise<Character[]> {
+    const docs = await this.collection
+      .find({ accountId, status: { $ne: 'deleted' } } as Filter<Character>)
+      .toArray()
+    return docs.map((doc) => characterSchema.parse(doc))
   }
 
   async insert(doc: Character): Promise<void> {
