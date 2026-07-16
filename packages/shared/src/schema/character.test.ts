@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest'
-// 배럴을 통해 임포트 — 네 스키마 파일 + 배럴 전체를 커버리지에 태운다.
+// 배럴을 통해 임포트 — 다섯 스키마 파일 + 배럴 전체를 커버리지에 태운다.
 import { characterSchema, type Character } from './index.js'
 
 // 유효한 캐릭터 문서 하나를 만든 뒤 케이스별로 변형한다.
 function validCharacter(): Character {
   return {
     _id: 'char-1',
+    accountId: 'acc-1',
     name: '타이',
     class: 3,
     race: 1,
@@ -13,6 +14,7 @@ function validCharacter(): Character {
     gold: 500,
     currentRoom: 1,
     schemaVersion: 1,
+    status: 'active',
   }
 }
 
@@ -69,23 +71,52 @@ describe('characterSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('자격증명·accountId 필드를 담으면 거부한다 (strict)', () => {
+  it('자격증명 필드를 담으면 거부한다 (strict)', () => {
     expect(
       characterSchema.safeParse({ ...validCharacter(), password: 'secret' }).success,
     ).toBe(false)
-    expect(
-      characterSchema.safeParse({ ...validCharacter(), accountId: 'acc-1' }).success,
-    ).toBe(false)
+  })
+
+  it('accountId가 없으면 거부한다 (필수 FK)', () => {
+    const doc = validCharacter() as Partial<Character>
+    delete doc.accountId
+    expect(characterSchema.safeParse(doc).success).toBe(false)
+  })
+
+  it('accountId·status를 담은 문서를 통과시킨다', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      accountId: 'acc-42',
+      status: 'active',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('status를 생략하면 active로 기본값을 채운다', () => {
+    const doc = validCharacter() as Partial<Character>
+    delete doc.status
+    const result = characterSchema.safeParse(doc)
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.status).toBe('active')
+  })
+
+  it('deletedAt은 선택 필드다 (soft-delete)', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      status: 'deleted',
+      deletedAt: new Date('2026-07-16T00:00:00Z'),
+    })
+    expect(result.success).toBe(true)
   })
 })
 
-// 컴파일 타임 가드 — Character 추론 타입에 inventory/accountId/자격증명 키가 없음을 tsc가 강제한다.
+// 컴파일 타임 가드 — Character 추론 타입에 accountId 키가 있고 inventory/자격증명 키가 없음을 tsc가 강제한다.
 type _NoInventory = 'inventory' extends keyof Character ? never : true
-type _NoAccountId = 'accountId' extends keyof Character ? never : true
+type _HasAccountId = 'accountId' extends keyof Character ? true : never
 type _NoPassword = 'password' extends keyof Character ? never : true
 const _noInventory: _NoInventory = true
-const _noAccountId: _NoAccountId = true
+const _hasAccountId: _HasAccountId = true
 const _noPassword: _NoPassword = true
 void _noInventory
-void _noAccountId
+void _hasAccountId
 void _noPassword
