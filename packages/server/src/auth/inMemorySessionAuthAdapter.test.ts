@@ -143,6 +143,30 @@ describe('InMemorySessionAuthAdapter', () => {
     })
   })
 
+  describe('deleteCharacter', () => {
+    it('소유한 캐릭터를 삭제하면 이후 목록에서 사라진다 (소프트 삭제)', async () => {
+      const adapter = createSeededAuthAdapter()
+      await adapter.deleteCharacter(SEED_ACCOUNT_ID, SEED_CHARACTER_ID)
+      const list = await adapter.listCharacters(SEED_ACCOUNT_ID)
+      expect(list.some((c) => c.characterId === SEED_CHARACTER_ID)).toBe(false)
+    })
+
+    it('타 계정 캐릭터 삭제는 OwnershipError로 reject하고 아무것도 지우지 않는다 (내부 이중 assert)', async () => {
+      const adapter = createSeededAuthAdapter()
+      await expect(adapter.deleteCharacter('other-account', SEED_CHARACTER_ID)).rejects.toThrow(
+        OwnershipError,
+      )
+      // 정당 소유자의 목록엔 여전히 존재한다(삭제되지 않음).
+      const list = await adapter.listCharacters(SEED_ACCOUNT_ID)
+      expect(list.some((c) => c.characterId === SEED_CHARACTER_ID)).toBe(true)
+    })
+
+    it('존재하지 않는 캐릭터 삭제는 OwnershipError로 reject한다', async () => {
+      const adapter = createSeededAuthAdapter()
+      await expect(adapter.deleteCharacter(SEED_ACCOUNT_ID, 'ghost')).rejects.toThrow(OwnershipError)
+    })
+  })
+
   describe('createSeededAuthAdapter', () => {
     it('알려진 유효 쿠키가 시드 account로 매핑되고 캐릭터를 보유한다', async () => {
       const adapter = createSeededAuthAdapter()

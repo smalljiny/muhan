@@ -102,6 +102,14 @@ export class FirebaseSessionAuthAdapter implements SessionAuthPort {
     }
   }
 
+  async deleteCharacter(accountId: string, characterId: string): Promise<void> {
+    // 내부 이중 assert(TOCTOU 방어) — 소프트 삭제 직전 소유권을 재확인한다. 대상 선택과 확정
+    // 사이에 형제 세션이 같은 캐릭터를 지목해도, 이 assert가 타 계정·미존재 삭제를 막는다.
+    await this.assertOwnership(accountId, characterId)
+    // 하드 삭제·무덤 이동 셸(system("mv")) 없이 status='deleted'로만 표시한다(재로그인 차단).
+    await this.characters.softDelete(characterId)
+  }
+
   /** 영속 Character → 와이어 CharacterSummary 매핑(characterId=_id, level=1 dev 기본값). */
   private toSummary(doc: Character): CharacterSummary {
     return {

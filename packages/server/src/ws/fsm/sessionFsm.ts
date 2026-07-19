@@ -30,6 +30,7 @@ import { OwnershipError } from '../../auth/sessionAuthPort.js'
 export enum ConnectionState {
   characterSelect = 'characterSelect',
   create = 'create',
+  delete = 'delete',
   command = 'command',
 }
 
@@ -41,6 +42,30 @@ export const SELECT_CHARACTER_PROMPT_ID = 'session:select-character'
  * `session:reply{promptId: SELECT_CHARACTER_PROMPT_ID, value: CREATE_SENTINEL}`로 답하면 create로 전이한다.
  */
 export const CREATE_SENTINEL = 'create'
+
+/**
+ * characterSelect의 select prompt에 대한 "캐릭터 삭제"(자살/suicide) 신호값. 클라가 select prompt에
+ * `session:reply{promptId: SELECT_CHARACTER_PROMPT_ID, value: DELETE_SENTINEL}`로 답하면 delete로 전이한다.
+ * CREATE_SENTINEL과 구별되는 별도 매직값이라 생성/삭제 진입이 섞이지 않는다.
+ */
+export const DELETE_SENTINEL = 'delete'
+
+/**
+ * delete 서브플로우 1단계 promptId — 삭제 대상 선택 prompt(kind selectCharacter)의 식별자.
+ * 아웃바운드 prompt에만 실리고 인바운드 session:selectCharacter 프레임은 promptId를 싣지 않는다
+ * (그 프레임 타입에 promptId 필드가 없다) — 1단계/2단계 판별은 promptId가 아니라 deleteProgress===null로 한다.
+ */
+export const DELETE_SELECT_PROMPT_ID = 'session:delete-select'
+
+/** delete 서브플로우 2단계 promptId — 「찐짜로」 확인 입력 prompt(kind createField)의 식별자. */
+export const DELETE_CONFIRM_PROMPT_ID = 'session:delete-confirm'
+
+/**
+ * 삭제 확정 승인 값 — 원작 command5.c suicide의 재확인 문구 "찐짜로? (찐짜로/뻥으로)"에서
+ * 정확히 「찐짜로」만 삭제를 확정한다(원작 strcmp 충실 이식). trim 없이 raw 정확 일치라 「찐짜로 」
+ * (뒤 공백)·「찐짜」 같은 근사값은 취소로 처리된다. 그 외 값(「뻥으로」 포함)은 재시도가 아니라 취소다.
+ */
+export const DELETE_CONFIRM_VALUE = '찐짜로'
 
 /** confirm 단계의 승인 값. 클라가 confirm prompt에 이 값으로 답해야 캐릭터 생성이 확정된다. */
 export const CREATE_CONFIRM_VALUE = 'yes'
@@ -123,6 +148,14 @@ export interface SessionContext {
 export interface FsmContext {
   state: ConnectionState
   createProgress: CreateProgress | null
+  // delete(자살) 서브플로우의 대상 슬롯 — 대상 선택(1단계) 후 확인(2단계) 전까지만 채워진다.
+  // delete 밖에선 null(delete.onExit가 정리) — createProgress와 동일한 "서브상태는 자기 상태 밖에서 null" 불변식.
+  deleteProgress: DeleteProgress | null
+}
+
+/** delete 서브플로우 진행 — 선택된 삭제 대상 캐릭터 id. `ctx.deleteProgress`에 산다(delete 밖에선 null). */
+export interface DeleteProgress {
+  targetId: string
 }
 
 /**
@@ -150,6 +183,7 @@ export interface StateHandler {
 export type CharacterSelectDecision =
   | { readonly kind: 'select'; readonly characterId: string; readonly nextState: ConnectionState.command }
   | { readonly kind: 'create'; readonly nextState: ConnectionState.create }
+  | { readonly kind: 'delete'; readonly nextState: ConnectionState.delete }
   | { readonly kind: 'reject'; readonly code: 'session_state' }
 
 /**
@@ -173,8 +207,64 @@ export function decideCharacterSelectInput(frame: unknown): CharacterSelectDecis
     ) {
       return { kind: 'create', nextState: ConnectionState.create }
     }
+    if (
+      parsed.data.type === 'session:reply' &&
+      parsed.data.promptId === SELECT_CHARACTER_PROMPT_ID &&
+      parsed.data.value === DELETE_SENTINEL
+    ) {
+      return { kind: 'delete', nextState: ConnectionState.delete }
+    }
   }
   return { kind: 'reject', code: 'session_state' }
+}
+
+/**
+ * delete 프레임 해석 결정 — 1층 순수 decider의 출력(대상 선택/확인 두 갈래).
+ *
+ * `target`은 삭제 대상 선택(1단계) 결정, `confirm`은 「찐짜로」 정확 일치(2단계) 결정,
+ * `cancel`은 확인 prompt에 정확 일치 실패 값(「뻥으로」·근사값)으로 답한 취소 결정(재시도 아님),
+ * `reject`는 상관 실패(비-selectCharacter·미일치 promptId·비-reply)로 현재 단계 유지 결정이다.
+ */
+export type DeleteTargetDecision =
+  | { readonly kind: 'target'; readonly characterId: string }
+  | { readonly kind: 'reject'; readonly code: 'session_state' }
+
+export type DeleteConfirmDecision =
+  | { readonly kind: 'confirm' }
+  | { readonly kind: 'cancel' }
+  | { readonly kind: 'reject'; readonly code: 'session_state' }
+
+/**
+ * 1층 순수 decider — delete 1단계(대상 선택). session:selectCharacter만 target으로 받고 그 외는 reject한다
+ * (포트·emit 없음). 인바운드 selectCharacter 프레임은 promptId를 싣지 않으므로 여기서 promptId를 대조하지 않는다.
+ */
+export function decideDeleteTargetInput(frame: unknown): DeleteTargetDecision {
+  const parsed = clientCommandSchema.safeParse(frame)
+  if (parsed.success && parsed.data.type === 'session:selectCharacter') {
+    return { kind: 'target', characterId: parsed.data.characterId }
+  }
+  return { kind: 'reject', code: 'session_state' }
+}
+
+/**
+ * 1층 순수 decider — delete 2단계(확인). DELETE_CONFIRM_PROMPT_ID에 대한 session:reply만 대상으로,
+ * value가 정확히 「찐짜로」(trim 없는 raw 일치)면 confirm, 그 외 값이면 cancel(재시도 아님)이다.
+ * 미일치 promptId·비-reply는 상관 실패로 reject한다(현재 단계 유지). 정확 일치만 삭제를 확정하려면
+ * value 비교에 trim·정규화를 넣지 않는다 — 「찐짜로 」는 confirm이 아니라 cancel이어야 한다.
+ */
+export function decideDeleteConfirmInput(frame: unknown): DeleteConfirmDecision {
+  const parsed = clientCommandSchema.safeParse(frame)
+  if (!parsed.success || parsed.data.type !== 'session:reply') {
+    return { kind: 'reject', code: 'session_state' }
+  }
+  if (parsed.data.promptId !== DELETE_CONFIRM_PROMPT_ID) {
+    return { kind: 'reject', code: 'session_state' }
+  }
+  // 정확 일치 게이트(원작 strcmp 충실 이식) — trim·소문자화 없이 raw 비교.
+  if (parsed.data.value === DELETE_CONFIRM_VALUE) {
+    return { kind: 'confirm' }
+  }
+  return { kind: 'cancel' }
 }
 
 /**
@@ -399,8 +489,11 @@ const characterSelectHandler: StateHandler = {
       type: 'session:prompt',
       promptId: SELECT_CHARACTER_PROMPT_ID,
       kind: 'selectCharacter',
-      // create 진입 옵션을 실어 클라가 매직값 하드코딩 없이 option.value(=CREATE_SENTINEL)를 되돌려 생성에 진입한다.
-      options: [{ value: CREATE_SENTINEL, label: '새 캐릭터 생성' }],
+      // create·delete 진입 옵션을 실어 클라가 매직값 하드코딩 없이 option.value를 되돌려 진입한다.
+      options: [
+        { value: CREATE_SENTINEL, label: '새 캐릭터 생성' },
+        { value: DELETE_SENTINEL, label: '캐릭터 삭제' },
+      ],
     })
   },
   async handleInput(_ctx, session, frame) {
@@ -409,8 +502,8 @@ const characterSelectHandler: StateHandler = {
       session.emit(sessionStateError('현재 세션 단계에서 허용되지 않는 명령이다'))
       return ConnectionState.characterSelect
     }
-    if (decision.kind === 'create') {
-      // 전이가 create.onEnter를 구동해 createProgress 초기화 + 첫 prompt를 발화한다(init·첫 prompt 미분리).
+    if (decision.kind === 'create' || decision.kind === 'delete') {
+      // 전이가 목적 상태의 onEnter를 구동해 서브상태 초기화 + 첫 prompt를 발화한다(create·delete 공통).
       return decision.nextState
     }
 
@@ -482,6 +575,84 @@ const createHandler: StateHandler = {
 }
 
 /**
+ * 2층 delete StateHandler — 자살(suicide) 서브플로우. 원작 command5.c suicide의 재설계 이식이다.
+ *
+ * 원작은 경고→암호 확인→"찐짜로? (찐짜로/뻥으로)" 재확인→무덤 이동(system("mv"))이었다. 재설계:
+ * 암호는 Firebase가 소유하므로 제거하고, system() 셸은 주입 표면이라 삭제하며, 삭제는 소프트 삭제
+ * (status='deleted')로만 한다(findByAccount가 제외해 재로그인이 막힌다 — SUICD 플래그 대체).
+ *
+ * 와이어는 프레임당 값 하나만 실으므로 대상 선택과 확인을 별도 프레임(별도 서브상태)으로 나눈다:
+ *  onEnter: characterList + 삭제 대상 선택 prompt(selectCharacter)를 발화한다.
+ *  handleInput 1단계(deleteProgress===null): session:selectCharacter로 대상을 받아 조기 assertOwnership
+ *    (확인 화면 전 깔끔한 거부)한 뒤 deleteProgress에 저장하고 confirm prompt(createField)를 발화한다.
+ *  handleInput 2단계(deleteProgress!==null): 「찐짜로」 정확 일치면 deleteCharacter(내부 이중 assert 포함)
+ *    후 characterSelect 복귀(목록 재조회에서 삭제분 자연 제외), 그 외 값은 취소(재시도 아님)로 characterSelect
+ *    복귀, 미일치 promptId(stale)는 reject로 delete 유지.
+ *  onExit: deleteProgress를 정리한다(delete 밖에선 null 불변식 — create.onExit 미러).
+ *
+ * 모든 포트 await(assertOwnership·deleteCharacter) 뒤에는 isClosed 가드를 두어, await 도중 소켓이 닫혔으면
+ * 상태 전이·부수효과 없이 현재 상태(delete)를 반환한다(죽은 연결에 emit·전이 금지 — Story 4 프레임-vs-close 패턴).
+ */
+const deleteHandler: StateHandler = {
+  async onEnter(_ctx, session) {
+    // 클라가 선택지를 표시할 수 있게 현재 목록을 재발화하고, 삭제 대상 선택 prompt를 낸다.
+    const characters = await session.sessionAuth.listCharacters(session.account.accountId)
+    session.emit({ type: 'session:characterList', characters })
+    session.emit({ type: 'session:prompt', promptId: DELETE_SELECT_PROMPT_ID, kind: 'selectCharacter' })
+  },
+  async handleInput(ctx, session, frame) {
+    if (ctx.deleteProgress === null) {
+      // 1단계: 삭제 대상 선택.
+      const decision = decideDeleteTargetInput(frame)
+      if (decision.kind === 'reject') {
+        session.emit(sessionStateError('현재 삭제 단계에서 허용되지 않는 명령이다'))
+        return ConnectionState.delete
+      }
+      // 조기 assert — 확인 화면을 보이기 전에 소유권을 검증한다. await하므로 OwnershipError가 이 try에서 잡힌다.
+      try {
+        await session.sessionAuth.assertOwnership(session.account.accountId, decision.characterId)
+      } catch (error) {
+        if (error instanceof OwnershipError) {
+          session.emit({ type: 'error', code: 'unauthorized', message: '해당 캐릭터에 대한 권한이 없다' })
+          return ConnectionState.characterSelect
+        }
+        throw error
+      }
+      // close-race 가드: assert await 도중 닫혔으면 대상 저장·confirm prompt 없이 현재 상태(delete)로 bail한다.
+      if (session.isClosed()) return ConnectionState.delete
+      ctx.deleteProgress = { targetId: decision.characterId }
+      session.emit({ type: 'session:prompt', promptId: DELETE_CONFIRM_PROMPT_ID, kind: 'createField' })
+      return ConnectionState.delete
+    }
+
+    // 2단계: 「찐짜로」 확인.
+    const decision = decideDeleteConfirmInput(frame)
+    if (decision.kind === 'reject') {
+      // stale·미일치 promptId → 거부(현재 단계 유지, 재응답 가능).
+      session.emit(sessionStateError('현재 삭제 단계에서 허용되지 않는 응답이다'))
+      return ConnectionState.delete
+    }
+    if (decision.kind === 'cancel') {
+      // 정확 일치 실패(「뻥으로」·근사값) → 취소(재시도 아님). characterSelect로 복귀(onExit가 deleteProgress 정리).
+      return ConnectionState.characterSelect
+    }
+
+    // confirm: 정확히 「찐짜로」. deleteCharacter가 내부에서 소유권을 재확인(TOCTOU 방어)하고 소프트 삭제한다.
+    await session.sessionAuth.deleteCharacter(session.account.accountId, ctx.deleteProgress.targetId)
+    // close-race 가드: deleteCharacter await 도중 닫혔으면 상태 전이·부수효과 없이 현재 상태(delete)로 bail한다
+    // (삭제는 이미 영속됐을 수 있으나 죽은 연결에서 characterSelect로 전이하지 않는다 — cleanup이 ctx째 폐기).
+    if (session.isClosed()) return ConnectionState.delete
+    // 삭제 성공 → characterSelect 복귀. onEnter가 목록을 재조회하면 삭제 캐릭터는 자연히 빠진다(직접 재발화 금지).
+    return ConnectionState.characterSelect
+  },
+  onExit(ctx) {
+    ctx.deleteProgress = null
+    // 동기 정리뿐이라 non-async로 두되 async onExit 계약(Promise 반환)에 맞춰 명시 Promise를 돌려준다.
+    return Promise.resolve()
+  },
+}
+
+/**
  * 스텁 StateHandler 팩토리 — 셸이 라우터로 위임하는 command 상태의 자리표.
  *
  * command는 셸이 프레임을 라우터(dispatch)로 위임하므로 FSM handleInput이 실제로 도달하지 않지만,
@@ -502,6 +673,7 @@ function stubHandler(state: ConnectionState): StateHandler {
 export const stateHandlers: Record<ConnectionState, StateHandler> = {
   [ConnectionState.characterSelect]: characterSelectHandler,
   [ConnectionState.create]: createHandler,
+  [ConnectionState.delete]: deleteHandler,
   [ConnectionState.command]: stubHandler(ConnectionState.command),
 }
 

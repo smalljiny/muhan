@@ -1,7 +1,7 @@
 import type { WebSocket } from 'ws'
 import { PROTOCOL_VERSION } from 'shared'
 import type { AccountIdentity } from '../auth/sessionAuthPort.js'
-import { ConnectionState, type CreateProgress } from './fsm/sessionFsm.js'
+import { ConnectionState, type CreateProgress, type DeleteProgress } from './fsm/sessionFsm.js'
 import type { Deadline } from './deadline.js'
 import type { ConnectionRateLimiter } from './messageRateLimiter.js'
 
@@ -47,6 +47,9 @@ export interface ConnectionContext {
   account: AccountIdentity | null
   state: ConnectionState
   createProgress: CreateProgress | null
+  // delete(자살) 서브플로우의 대상 슬롯 — delete 상태 밖에선 null(delete.onExit가 정리). createProgress와
+  // 동일하게 이 per-connection 컨텍스트에만 살고 cleanupConnection이 컨텍스트째 폐기한다(delete 도중 종료 = 폐기).
+  deleteProgress: DeleteProgress | null
   boundCharacterId: string | null
   // 소켓 close 발화 여부. 포트 호출이 async가 된 뒤(Story 4) FSM이 포트 await로 멈춘 사이 소켓이 닫히면
   // 'close' 핸들러(frameTail 큐와 별개 리스너)가 이 플래그를 세운다. await 재개 후 FSM은 이 플래그로 죽은 연결에
@@ -85,6 +88,7 @@ export function createConnectionContext(): ConnectionContext {
     account: null,
     state: ConnectionState.characterSelect,
     createProgress: null,
+    deleteProgress: null,
     boundCharacterId: null,
     closed: false,
     frameTail: Promise.resolve(),

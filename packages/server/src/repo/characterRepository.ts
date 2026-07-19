@@ -78,6 +78,19 @@ export class CharacterRepository implements IRepository<Character> {
   }
 
   /**
+   * 소프트 삭제(자살/suicide) — 문서를 물리적으로 지우지 않고 무덤 상태로 표시한다.
+   *
+   * status='deleted' + deletedAt 세팅만 하고 문서는 보존한다. findByAccount가 status!=='deleted'로
+   * 필터하므로 삭제 캐릭터로의 재로그인이 막히고(원작 SUICD 플래그 대체), findById는 여전히 문서를
+   * 돌려줘 감사·복원 여지를 남긴다(하드 삭제와의 차이). 원작 command5.c suicide의 `system("mv")`
+   * 무덤 이동 셸은 재현하지 않는다(주입 표면 제거). updateById를 재사용하므로 0건 매칭 시
+   * DocumentNotFoundError로 fail-loud한다(존재하지 않는 캐릭터 삭제는 조용히 삼키지 않는다).
+   */
+  async softDelete(id: string): Promise<void> {
+    await this.updateById(id, { status: 'deleted', deletedAt: new Date() })
+  }
+
+  /**
    * 캐릭터 인벤토리 뷰 — object.owner={type:'character', id}를 역참조해 소유 오브젝트를 파생한다.
    * 캐릭터 문서에 권한 배열을 두지 않는 단일 소유권 모델의 조회 경로다.
    */

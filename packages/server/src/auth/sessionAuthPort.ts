@@ -62,6 +62,15 @@ export interface SessionAuthPort {
 
   /** characterId가 accountId 소유가 아니면 reject한다(OwnershipError). 소유하면 resolve. */
   assertOwnership(accountId: string, characterId: string): Promise<void>
+
+  /**
+   * characterId를 소프트 삭제한다(자살/suicide 서브플로우의 최종 부수효과). 구현은 삭제 *전에*
+   * 내부적으로 소유권을 재확인하고(TOCTOU 방어 — 대상 선택과 확정 사이 형제 세션이 같은 캐릭터를
+   * 지목할 수 있는 창을 닫는다), 소유가 아니거나 존재하지 않으면 OwnershipError로 reject한다.
+   * FSM 조기 assert(대상 선택 시점)와 이 내부 assert를 둘 다 유지하는 것이 옳은 이중 방어다.
+   * 소프트 삭제라 문서는 보존되고 재로그인만 차단된다(원작 SUICD 플래그·무덤 이동 셸의 재설계).
+   */
+  deleteCharacter(accountId: string, characterId: string): Promise<void>
 }
 
 /**

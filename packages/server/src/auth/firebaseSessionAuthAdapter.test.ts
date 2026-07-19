@@ -208,4 +208,33 @@ describe('FirebaseSessionAuthAdapter (integration)', () => {
       expect(persisted?.stats).toEqual([20, 3, 3, 17, 2])
     })
   })
+
+  describe('deleteCharacter', () => {
+    it('소유한 캐릭터를 소프트 삭제한다 (findById 보존·status=deleted, findByAccount 제외)', async () => {
+      await characters.insert(makeCharacter({ _id: 'del', name: '삭제대상', accountId: 'uid-1' }))
+
+      await adapter.deleteCharacter('uid-1', 'del')
+
+      // 물리 보존 측: 문서는 남되 무덤 상태로 표시된다.
+      const persisted = await characters.findById('del')
+      expect(persisted?.status).toBe('deleted')
+      expect(persisted?.deletedAt).toBeInstanceOf(Date)
+      // 논리 부재 측: 목록에서 사라진다(재로그인 차단).
+      expect(await adapter.listCharacters('uid-1')).toEqual([])
+    })
+
+    it('타 계정 캐릭터 삭제는 OwnershipError를 던지고 소프트 삭제하지 않는다 (내부 이중 assert)', async () => {
+      await characters.insert(makeCharacter({ _id: 'other-del', name: '남캐릭', accountId: 'other' }))
+
+      await expect(adapter.deleteCharacter('uid-1', 'other-del')).rejects.toThrow(OwnershipError)
+
+      // 내부 assertOwnership이 막아 softDelete가 실행되지 않는다(여전히 active).
+      const persisted = await characters.findById('other-del')
+      expect(persisted?.status).toBe('active')
+    })
+
+    it('존재하지 않는 캐릭터 삭제는 OwnershipError를 던진다', async () => {
+      await expect(adapter.deleteCharacter('uid-1', 'nope')).rejects.toThrow(OwnershipError)
+    })
+  })
 })

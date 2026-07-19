@@ -65,6 +65,7 @@ describe('Story 4 회귀: 프레임 직렬화 + async-gap liveness', () => {
       listCharacters: () => listGate,
       createCharacter: () => Promise.reject(new Error('이 테스트에서 미사용')),
       assertOwnership: () => Promise.resolve(),
+      deleteCharacter: () => Promise.resolve(),
     }
 
     const app = buildSeededApp({ sessionAuth: fakeAuth })
@@ -125,6 +126,7 @@ describe('Story 4 회귀: 프레임 직렬화 + async-gap liveness', () => {
         ]),
       createCharacter: () => Promise.reject(new Error('이 테스트에서 미사용')),
       assertOwnership: () => Promise.reject(new Error('어댑터 내부 오류(비-Ownership)')),
+      deleteCharacter: () => Promise.resolve(),
     }
 
     const app = buildSeededApp({ sessionAuth: fakeAuth })
@@ -173,6 +175,7 @@ describe('Story 4 회귀: 프레임 직렬화 + async-gap liveness', () => {
       listCharacters: () => listGate,
       createCharacter: () => Promise.reject(new Error('이 테스트에서 미사용')),
       assertOwnership: () => Promise.resolve(),
+      deleteCharacter: () => Promise.resolve(),
     }
 
     const app = buildSeededApp({ sessionAuth: fakeAuth })
@@ -227,6 +230,7 @@ describe('Story 4 회귀: 프레임 직렬화 + async-gap liveness', () => {
         ]),
       createCharacter: () => Promise.reject(new Error('이 테스트에서 미사용')),
       assertOwnership: () => ownershipGate,
+      deleteCharacter: () => Promise.resolve(),
     }
 
     const app = buildSeededApp({ sessionAuth: fakeAuth })

@@ -12,8 +12,14 @@ import {
   CREATE_SENTINEL,
   CREATE_CONFIRM_VALUE,
   CREATE_PROMPT_IDS,
+  DELETE_SENTINEL,
+  DELETE_SELECT_PROMPT_ID,
+  DELETE_CONFIRM_PROMPT_ID,
+  DELETE_CONFIRM_VALUE,
   decideCharacterSelectInput,
   decideCreateInput,
+  decideDeleteTargetInput,
+  decideDeleteConfirmInput,
   advanceCreate,
   stateHandlers,
   applyTransition,
@@ -70,7 +76,7 @@ function makeSession(): {
 
 /** create 대화 상태를 담는 FsmContext를 만든다. 무상태 핸들러 테스트도 이 ctx를 넘긴다(사용하지 않아도 무해). */
 function makeCtx(state: ConnectionState = ConnectionState.characterSelect): FsmContext {
-  return { state, createProgress: null }
+  return { state, createProgress: null, deleteProgress: null }
 }
 
 /** 유효 포인트바이 입력 문자열(합 50 ≤ 54, 각 3~18) — [힘,민첩,맷집,지식,신앙심]. */
@@ -138,9 +144,12 @@ describe('characterSelect StateHandler.onEnter (2층)', () => {
       promptId: SELECT_CHARACTER_PROMPT_ID,
       kind: 'selectCharacter',
     })
-    // select prompt는 create 진입 옵션을 실어, 클라가 매직값 하드코딩 없이 option.value를 되돌려 생성에 진입한다.
+    // select prompt는 create·delete 진입 옵션을 실어, 클라가 매직값 하드코딩 없이 option.value를 되돌려 진입한다.
     expect(events[1]).toMatchObject({
-      options: [{ value: CREATE_SENTINEL, label: '새 캐릭터 생성' }],
+      options: [
+        { value: CREATE_SENTINEL, label: '새 캐릭터 생성' },
+        { value: DELETE_SENTINEL, label: '캐릭터 삭제' },
+      ],
     })
   })
 })
@@ -227,6 +236,7 @@ describe('characterSelect StateHandler.handleInput (2층)', () => {
         listCharacters: () => Promise.resolve([]),
         createCharacter: () => Promise.reject(boom),
         assertOwnership: () => Promise.reject(boom),
+        deleteCharacter: () => Promise.reject(boom),
       },
       emit: (event) => {
         events.push(event)
@@ -263,7 +273,7 @@ describe('create StateHandler (2층 — 생성 다단 대화)', () => {
 
   it('name 응답은 createProgress를 gender 단계로 전진하고 create:gender prompt를 발화한다 (create 유지)', async () => {
     const { session, events } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.create, createProgress: { step: 'name', collected: {} } }
+    const ctx: FsmContext = { state: ConnectionState.create, createProgress: { step: 'name', collected: {} }, deleteProgress: null }
 
     const next = await stateHandlers[ConnectionState.create].handleInput(ctx, session, {
       type: 'session:reply',
@@ -283,6 +293,7 @@ describe('create StateHandler (2층 — 생성 다단 대화)', () => {
     const ctx: FsmContext = {
       state: ConnectionState.create,
       createProgress: { step: 'confirm', collected: FULL_COLLECTED },
+      deleteProgress: null,
     }
 
     const next = await stateHandlers[ConnectionState.create].handleInput(ctx, session, {
@@ -301,6 +312,7 @@ describe('create StateHandler (2층 — 생성 다단 대화)', () => {
     const ctx: FsmContext = {
       state: ConnectionState.create,
       createProgress: { step: 'class', collected: { name: '아무개', gender: 1 } },
+      deleteProgress: null,
     }
 
     const next = await stateHandlers[ConnectionState.create].handleInput(ctx, session, {
@@ -319,6 +331,7 @@ describe('create StateHandler (2층 — 생성 다단 대화)', () => {
     const ctx: FsmContext = {
       state: ConnectionState.create,
       createProgress: { step: 'stats', collected: { name: '아무개', gender: 1, class: 2 } },
+      deleteProgress: null,
     }
 
     const next = await stateHandlers[ConnectionState.create].handleInput(ctx, session, {
@@ -334,7 +347,7 @@ describe('create StateHandler (2층 — 생성 다단 대화)', () => {
 
   it('createProgress가 null인데 프레임이 오면(불변식 위반) session_state error를 발화한다', async () => {
     const { session, events } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.create, createProgress: null }
+    const ctx: FsmContext = { state: ConnectionState.create, createProgress: null, deleteProgress: null }
 
     const next = await stateHandlers[ConnectionState.create].handleInput(ctx, session, {
       type: 'session:reply',
@@ -350,6 +363,7 @@ describe('create StateHandler (2층 — 생성 다단 대화)', () => {
     const ctx: FsmContext = {
       state: ConnectionState.create,
       createProgress: { step: 'name', collected: {} },
+      deleteProgress: null,
     }
 
     await stateHandlers[ConnectionState.create].onExit?.(ctx, makeSession().session)
@@ -383,6 +397,7 @@ describe('close-race 가드 (Story 4 — 포트 await 도중 소켓 close)', () 
     const ctx: FsmContext = {
       state: ConnectionState.create,
       createProgress: { step: 'confirm', collected: FULL_COLLECTED },
+      deleteProgress: null,
     }
 
     const next = await stateHandlers[ConnectionState.create].handleInput(ctx, session, {
@@ -399,7 +414,7 @@ describe('close-race 가드 (Story 4 — 포트 await 도중 소켓 close)', () 
   it('handleSessionFrame: isClosed면 ctx.state가 command로 전이하지 않는다(상태 대입 스킵)', async () => {
     const { session, enterWorld, clearDeadline, isClosed } = makeSession()
     isClosed.mockReturnValue(true)
-    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
     await handleSessionFrame(ctx, session, {
       type: 'session:selectCharacter',
@@ -431,7 +446,7 @@ describe('command 스텁 StateHandler (2층 — 라우터 위임 이전)', () =>
 describe('advanceCreate (서브스텝 진행 단일 지점 — BLOCKER 1 / Story 6 seam)', () => {
   it('ctx.createProgress를 다음 단계·누적 필드로 교체한다', async () => {
     const { session } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.create, createProgress: { step: 'name', collected: {} } }
+    const ctx: FsmContext = { state: ConnectionState.create, createProgress: { step: 'name', collected: {} }, deleteProgress: null }
 
     await advanceCreate(ctx, session, 'class', { name: '아무개' })
 
@@ -440,7 +455,7 @@ describe('advanceCreate (서브스텝 진행 단일 지점 — BLOCKER 1 / Story
 
   it('progress 변이 후 rearmDeadline을 호출한다 (create 서브상태 전진 seam)', async () => {
     const { session, rearmDeadline } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.create, createProgress: { step: 'name', collected: {} } }
+    const ctx: FsmContext = { state: ConnectionState.create, createProgress: { step: 'name', collected: {} }, deleteProgress: null }
 
     await advanceCreate(ctx, session, 'class', { name: '아무개' })
 
@@ -451,7 +466,7 @@ describe('advanceCreate (서브스텝 진행 단일 지점 — BLOCKER 1 / Story
 describe('데드라인 seam (Story 6 — 진행 시 rearm, command 도달 시 clear)', () => {
   it('characterSelect 진입 시 rearmDeadline을 호출한다 (미진행 연결 설정)', async () => {
     const { session, rearmDeadline, clearDeadline } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
     await enterInitialState(ctx, session)
 
@@ -461,7 +476,7 @@ describe('데드라인 seam (Story 6 — 진행 시 rearm, command 도달 시 cl
 
   it('create 서브상태를 매 단계 전진할 때마다 rearmDeadline을 호출한다', async () => {
     const { session, rearmDeadline } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
     // characterSelect 진입(rearm 1) → create 신호(create.onEnter의 advanceCreate rearm + enterState rearm).
     await enterInitialState(ctx, session)
@@ -487,7 +502,7 @@ describe('데드라인 seam (Story 6 — 진행 시 rearm, command 도달 시 cl
 
   it('command 도달 시 clearDeadline을 호출한다 (in-world 도달점 — 진행 데드라인 해제)', async () => {
     const { session, clearDeadline } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
     await handleSessionFrame(ctx, session, {
       type: 'session:selectCharacter',
@@ -502,7 +517,7 @@ describe('데드라인 seam (Story 6 — 진행 시 rearm, command 도달 시 cl
 describe('applyTransition (3층 — ctx.state 변이 단일화)', () => {
   it('상태가 바뀌면 목적 상태의 onEnter를 구동하고 ctx.state를 대입한다', async () => {
     const { session, events } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
     await applyTransition(ctx, session, ConnectionState.command)
 
@@ -513,7 +528,7 @@ describe('applyTransition (3층 — ctx.state 변이 단일화)', () => {
 
   it('동일 상태로의 전이는 no-op이며 onEnter를 재구동하지 않는다 (재발화 없음)', async () => {
     const { session, events } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
     await applyTransition(ctx, session, ConnectionState.characterSelect)
 
@@ -525,7 +540,7 @@ describe('applyTransition (3층 — ctx.state 변이 단일화)', () => {
 describe('enterInitialState (3층 — accept 시 characterSelect 진입)', () => {
   it('characterSelect onEnter를 구동해 characterList+prompt를 발화한다', async () => {
     const { session, events } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
     await enterInitialState(ctx, session)
 
@@ -540,7 +555,7 @@ describe('회귀: emit 순서 보존 (async 마이그레이션 불변식)', () =
   // 정확히 2개를 발화해야 하고, create 왕복은 매 단계 prompt가 순서대로 나온 뒤 마지막에 entered가 와야 한다.
   it('characterSelect 진입은 characterList를 select prompt보다 먼저 정확히 2개 발화한다', async () => {
     const { session, events } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
     await enterInitialState(ctx, session)
 
@@ -552,7 +567,7 @@ describe('회귀: emit 순서 보존 (async 마이그레이션 불변식)', () =
 
   it('create 왕복은 8단계 prompt 순서 뒤 마지막에 entered를 발화한다', async () => {
     const { session, events } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
     await enterInitialState(ctx, session)
     await driveFullCreate(ctx, session)
@@ -598,7 +613,7 @@ async function driveFullCreate(ctx: FsmContext, session: SessionContext): Promis
 describe('handleSessionFrame (3층 — handleInput + applyTransition 결합)', () => {
   it('유효 선택 프레임으로 entered 발화 후 ctx.state를 command로 전이한다', async () => {
     const { session, events } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
     await handleSessionFrame(ctx, session, {
       type: 'session:selectCharacter',
@@ -611,7 +626,7 @@ describe('handleSessionFrame (3층 — handleInput + applyTransition 결합)', (
 
   it('거부 프레임은 error만 발화하고 상태를 유지한다', async () => {
     const { session, events } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
     await handleSessionFrame(ctx, session, { type: 'debug:echo', text: '핑' })
 
@@ -621,7 +636,7 @@ describe('handleSessionFrame (3층 — handleInput + applyTransition 결합)', (
 
   it('create 신호→8단계 왕복으로 command에 도달하고 create.onExit가 progress를 정리한다', async () => {
     const { session, events } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
     // characterSelect에서 create 신호 → create 진입(첫 prompt는 create.onEnter가 발화).
     await handleSessionFrame(ctx, session, {
@@ -910,7 +925,7 @@ describe('와이어 계약 보존 (신규 메시지 타입·프로토콜 미변�
 
   it('8단계 인터뷰가 발화하는 create prompt는 모두 kind=createField다 (신규 wire 타입 미도입)', async () => {
     const { session, events } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
     await enterInitialState(ctx, session)
     await driveFullCreate(ctx, session)
@@ -928,7 +943,7 @@ describe('와이어 계약 보존 (신규 메시지 타입·프로토콜 미변�
 
   it('인터뷰는 session:prompt·session:reply·session:entered 밖의 신규 session:* 타입을 쓰지 않는다', async () => {
     const { session, events } = makeSession()
-    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
     await enterInitialState(ctx, session)
     await driveFullCreate(ctx, session)
@@ -938,6 +953,401 @@ describe('와이어 계약 보존 (신규 메시지 타입·프로토콜 미변�
       'session:prompt',
       'session:entered',
       'session:resumed',
+    ])
+    for (const e of events) {
+      expect(allowed.has(e.type)).toBe(true)
+    }
+  })
+})
+
+describe('decideCharacterSelectInput — delete 진입 신호 (T8.2)', () => {
+  it('select prompt에 DELETE_SENTINEL로 답하면 delete 결정으로 해석한다', () => {
+    const decision = decideCharacterSelectInput({
+      type: 'session:reply',
+      promptId: SELECT_CHARACTER_PROMPT_ID,
+      value: DELETE_SENTINEL,
+    })
+    expect(decision).toEqual({ kind: 'delete', nextState: ConnectionState.delete })
+  })
+})
+
+describe('decideDeleteTargetInput (1층 순수 decider — 삭제 대상 선택)', () => {
+  it('session:selectCharacter를 target 결정으로 해석한다', () => {
+    const decision = decideDeleteTargetInput({
+      type: 'session:selectCharacter',
+      characterId: SEED_CHARACTER_ID,
+    })
+    expect(decision).toEqual({ kind: 'target', characterId: SEED_CHARACTER_ID })
+  })
+
+  it('session:selectCharacter가 아닌 프레임은 reject한다', () => {
+    expect(decideDeleteTargetInput({ type: 'debug:echo', text: '핑' })).toEqual({
+      kind: 'reject',
+      code: 'session_state',
+    })
+    expect(decideDeleteTargetInput(null)).toEqual({ kind: 'reject', code: 'session_state' })
+  })
+})
+
+describe('decideDeleteConfirmInput (1층 순수 decider — 「찐짜로」 정확 일치 게이트, T8.3)', () => {
+  const confirm = (value: string): unknown => reply(DELETE_CONFIRM_PROMPT_ID, value)
+
+  it('정확히 「찐짜로」이면 confirm으로 해석한다', () => {
+    expect(decideDeleteConfirmInput(confirm(DELETE_CONFIRM_VALUE))).toEqual({ kind: 'confirm' })
+  })
+
+  it('「뻥으로」는 cancel로 해석한다 (재시도 아님)', () => {
+    expect(decideDeleteConfirmInput(confirm('뻥으로'))).toEqual({ kind: 'cancel' })
+  })
+
+  it('「찐짜로 」(뒤 공백)는 cancel로 해석한다 (no-trim 정확 일치 증거 — trim이면 삭제됐을 것)', () => {
+    expect(decideDeleteConfirmInput(confirm('찐짜로 '))).toEqual({ kind: 'cancel' })
+  })
+
+  it('「찐짜」(부분 문자열)는 cancel로 해석한다', () => {
+    expect(decideDeleteConfirmInput(confirm('찐짜'))).toEqual({ kind: 'cancel' })
+  })
+
+  it('현재 confirm promptId와 다른 promptId 응답은 reject한다 (stale — 단계 유지)', () => {
+    expect(decideDeleteConfirmInput(reply('session:some-other', DELETE_CONFIRM_VALUE))).toEqual({
+      kind: 'reject',
+      code: 'session_state',
+    })
+  })
+
+  it('session:reply가 아닌 프레임은 reject한다', () => {
+    expect(
+      decideDeleteConfirmInput({ type: 'session:selectCharacter', characterId: 'x' }),
+    ).toEqual({ kind: 'reject', code: 'session_state' })
+  })
+})
+
+describe('delete StateHandler (2층 — 자살 서브플로우, T8.2/T8.3)', () => {
+  it('onEnter는 characterList와 삭제 대상 선택 prompt(selectCharacter)를 발화한다', async () => {
+    const { session, events } = makeSession()
+
+    await stateHandlers[ConnectionState.delete].onEnter?.(makeCtx(ConnectionState.delete), session)
+
+    expect(events[0]).toMatchObject({ type: 'session:characterList' })
+    expect(events.at(-1)).toMatchObject({
+      type: 'session:prompt',
+      promptId: DELETE_SELECT_PROMPT_ID,
+      kind: 'selectCharacter',
+    })
+  })
+
+  it('1단계: 소유 대상 선택 시 deleteProgress에 target을 저장하고 confirm prompt(createField)를 발화한다 (delete 유지)', async () => {
+    const { session, events } = makeSession()
+    const ctx = makeCtx(ConnectionState.delete)
+
+    const next = await stateHandlers[ConnectionState.delete].handleInput(ctx, session, {
+      type: 'session:selectCharacter',
+      characterId: SEED_CHARACTER_ID,
+    })
+
+    expect(next).toBe(ConnectionState.delete)
+    expect(ctx.deleteProgress).toEqual({ targetId: SEED_CHARACTER_ID })
+    expect(events).toEqual([
+      { type: 'session:prompt', promptId: DELETE_CONFIRM_PROMPT_ID, kind: 'createField' },
+    ])
+  })
+
+  it('1단계: 소유하지 않은 대상 선택은 unauthorized error 발화 후 characterSelect로 복귀한다', async () => {
+    const { session, events } = makeSession()
+    const ctx = makeCtx(ConnectionState.delete)
+
+    const next = await stateHandlers[ConnectionState.delete].handleInput(ctx, session, {
+      type: 'session:selectCharacter',
+      characterId: 'not-owned',
+    })
+
+    expect(next).toBe(ConnectionState.characterSelect)
+    expect(ctx.deleteProgress).toBeNull()
+    expect(events).toEqual([expect.objectContaining({ type: 'error', code: 'unauthorized' })])
+  })
+
+  it('1단계: session:selectCharacter가 아닌 프레임은 session_state error 발화 후 delete를 유지한다', async () => {
+    const { session, events } = makeSession()
+    const ctx = makeCtx(ConnectionState.delete)
+
+    const next = await stateHandlers[ConnectionState.delete].handleInput(ctx, session, {
+      type: 'debug:echo',
+      text: '핑',
+    })
+
+    expect(next).toBe(ConnectionState.delete)
+    expect(ctx.deleteProgress).toBeNull()
+    expect(events).toEqual([expect.objectContaining({ type: 'error', code: 'session_state' })])
+  })
+
+  it('1단계: OwnershipError가 아닌 포트 예외는 삼키지 않고 그대로 전파한다 (셸 격리에 위임)', async () => {
+    const boom = new Error('어댑터 내부 오류')
+    const { session } = makeSession()
+    const faulty: SessionContext = {
+      ...session,
+      sessionAuth: { ...session.sessionAuth, assertOwnership: () => Promise.reject(boom) },
+    }
+
+    await expect(
+      stateHandlers[ConnectionState.delete].handleInput(makeCtx(ConnectionState.delete), faulty, {
+        type: 'session:selectCharacter',
+        characterId: SEED_CHARACTER_ID,
+      }),
+    ).rejects.toThrow(boom)
+  })
+
+  it('2단계: 정확히 「찐짜로」면 deleteCharacter 호출 후 characterSelect로 복귀한다', async () => {
+    const { session } = makeSession()
+    const deleteSpy = vi.spyOn(session.sessionAuth, 'deleteCharacter')
+    const ctx: FsmContext = {
+      state: ConnectionState.delete,
+      createProgress: null,
+      deleteProgress: { targetId: SEED_CHARACTER_ID },
+    }
+
+    const next = await stateHandlers[ConnectionState.delete].handleInput(
+      ctx,
+      session,
+      reply(DELETE_CONFIRM_PROMPT_ID, DELETE_CONFIRM_VALUE),
+    )
+
+    expect(next).toBe(ConnectionState.characterSelect)
+    expect(deleteSpy).toHaveBeenCalledWith(SEED_ACCOUNT_ID, SEED_CHARACTER_ID)
+  })
+
+  it('2단계: 「뻥으로」는 삭제 없이 취소하고 characterSelect로 복귀한다 (cancel-not-retry)', async () => {
+    const { session } = makeSession()
+    const deleteSpy = vi.spyOn(session.sessionAuth, 'deleteCharacter')
+    const ctx: FsmContext = {
+      state: ConnectionState.delete,
+      createProgress: null,
+      deleteProgress: { targetId: SEED_CHARACTER_ID },
+    }
+
+    const next = await stateHandlers[ConnectionState.delete].handleInput(
+      ctx,
+      session,
+      reply(DELETE_CONFIRM_PROMPT_ID, '뻥으로'),
+    )
+
+    expect(next).toBe(ConnectionState.characterSelect)
+    expect(deleteSpy).not.toHaveBeenCalled()
+  })
+
+  it('2단계: 「찐짜로 」(뒤 공백)은 삭제 없이 취소한다 (no-trim 정확 일치)', async () => {
+    const { session } = makeSession()
+    const deleteSpy = vi.spyOn(session.sessionAuth, 'deleteCharacter')
+    const ctx: FsmContext = {
+      state: ConnectionState.delete,
+      createProgress: null,
+      deleteProgress: { targetId: SEED_CHARACTER_ID },
+    }
+
+    const next = await stateHandlers[ConnectionState.delete].handleInput(
+      ctx,
+      session,
+      reply(DELETE_CONFIRM_PROMPT_ID, '찐짜로 '),
+    )
+
+    expect(next).toBe(ConnectionState.characterSelect)
+    expect(deleteSpy).not.toHaveBeenCalled()
+  })
+
+  it('2단계: 미일치 promptId(stale) 응답은 session_state error 발화 후 delete를 유지한다', async () => {
+    const { session } = makeSession()
+    const deleteSpy = vi.spyOn(session.sessionAuth, 'deleteCharacter')
+    const ctx: FsmContext = {
+      state: ConnectionState.delete,
+      createProgress: null,
+      deleteProgress: { targetId: SEED_CHARACTER_ID },
+    }
+    const events: ServerEvent[] = []
+    const sessionWithEvents: SessionContext = { ...session, emit: (e) => void events.push(e) }
+
+    const next = await stateHandlers[ConnectionState.delete].handleInput(
+      ctx,
+      sessionWithEvents,
+      reply('session:stale', DELETE_CONFIRM_VALUE),
+    )
+
+    expect(next).toBe(ConnectionState.delete)
+    expect(deleteSpy).not.toHaveBeenCalled()
+    expect(events).toEqual([expect.objectContaining({ type: 'error', code: 'session_state' })])
+  })
+
+  it('onExit는 deleteProgress를 null로 정리한다 (delete 밖에선 null 불변식)', async () => {
+    const ctx: FsmContext = {
+      state: ConnectionState.delete,
+      createProgress: null,
+      deleteProgress: { targetId: SEED_CHARACTER_ID },
+    }
+
+    await stateHandlers[ConnectionState.delete].onExit?.(ctx, makeSession().session)
+
+    expect(ctx.deleteProgress).toBeNull()
+  })
+})
+
+describe('delete close-race 가드 (Story 4 프레임-vs-close 패턴, T8.2)', () => {
+  it('1단계: assertOwnership await 도중 닫히면 target 저장·confirm prompt 없이 delete로 bail한다', async () => {
+    const { session, events, isClosed } = makeSession()
+    isClosed.mockReturnValue(true)
+    const ctx = makeCtx(ConnectionState.delete)
+
+    const next = await stateHandlers[ConnectionState.delete].handleInput(ctx, session, {
+      type: 'session:selectCharacter',
+      characterId: SEED_CHARACTER_ID,
+    })
+
+    // 현재 상태(delete) 반환 → applyTransition no-op. target 미저장·confirm prompt 미발화.
+    expect(next).toBe(ConnectionState.delete)
+    expect(ctx.deleteProgress).toBeNull()
+    expect(events).toEqual([])
+  })
+
+  it('2단계: deleteCharacter await 도중 닫히면 상태 전이·부수효과 없이 delete로 bail한다', async () => {
+    const { session, events, isClosed } = makeSession()
+    isClosed.mockReturnValue(true)
+    const ctx: FsmContext = {
+      state: ConnectionState.delete,
+      createProgress: null,
+      deleteProgress: { targetId: SEED_CHARACTER_ID },
+    }
+
+    const next = await stateHandlers[ConnectionState.delete].handleInput(
+      ctx,
+      session,
+      reply(DELETE_CONFIRM_PROMPT_ID, DELETE_CONFIRM_VALUE),
+    )
+
+    // 죽은 연결에서 characterSelect로 전이하지 않는다(현재 상태 반환 → no-op). emit 없음.
+    expect(next).toBe(ConnectionState.delete)
+    expect(events).toEqual([])
+  })
+
+  it('handleSessionFrame: 2단계 confirm 중 isClosed면 ctx.state가 characterSelect로 전이하지 않는다', async () => {
+    const { session, isClosed } = makeSession()
+    isClosed.mockReturnValue(true)
+    const ctx: FsmContext = {
+      state: ConnectionState.delete,
+      createProgress: null,
+      deleteProgress: { targetId: SEED_CHARACTER_ID },
+    }
+
+    await handleSessionFrame(ctx, session, reply(DELETE_CONFIRM_PROMPT_ID, DELETE_CONFIRM_VALUE))
+
+    // 상태 대입이 일어나지 않아 delete로 유지되고, deleteProgress도 정리되지 않는다(onExit 미구동).
+    expect(ctx.state).toBe(ConnectionState.delete)
+  })
+})
+
+describe('delete 전체 흐름 (T8.5 — handleSessionFrame 통합)', () => {
+  it('characterSelect → DELETE_SENTINEL → 대상 선택 → 「찐짜로」 → 캐릭터가 삭제되고 재조회 목록에서 사라진다', async () => {
+    const { session, events } = makeSession()
+    const ctx: FsmContext = {
+      state: ConnectionState.characterSelect,
+      createProgress: null,
+      deleteProgress: null,
+    }
+
+    await enterInitialState(ctx, session)
+    // delete 진입 신호.
+    await handleSessionFrame(ctx, session, {
+      type: 'session:reply',
+      promptId: SELECT_CHARACTER_PROMPT_ID,
+      value: DELETE_SENTINEL,
+    })
+    expect(ctx.state).toBe(ConnectionState.delete)
+    // 대상 선택.
+    await handleSessionFrame(ctx, session, {
+      type: 'session:selectCharacter',
+      characterId: SEED_CHARACTER_ID,
+    })
+    expect(ctx.deleteProgress).toEqual({ targetId: SEED_CHARACTER_ID })
+    // 정확 확인 → 삭제 → characterSelect 복귀.
+    await handleSessionFrame(ctx, session, reply(DELETE_CONFIRM_PROMPT_ID, DELETE_CONFIRM_VALUE))
+
+    expect(ctx.state).toBe(ConnectionState.characterSelect)
+    // onExit가 deleteProgress를 정리했다.
+    expect(ctx.deleteProgress).toBeNull()
+    // characterSelect.onEnter가 재조회한 마지막 characterList에는 삭제된 캐릭터가 없다.
+    const lastList = [...events].reverse().find(
+      (e): e is Extract<ServerEvent, { type: 'session:characterList' }> =>
+        e.type === 'session:characterList',
+    )
+    expect(lastList?.characters.some((c) => c.characterId === SEED_CHARACTER_ID)).toBe(false)
+  })
+
+  it('mid-abort 폐기: delete 도중 연결이 끊기면 deleteProgress는 per-ctx라 폐기되고, 재연결(새 ctx)은 characterSelect에서 시작한다', async () => {
+    const shared = makeSession()
+    // 첫 연결: delete 1단계까지 진행(대상 선택, 확인 전).
+    const ctx1: FsmContext = {
+      state: ConnectionState.characterSelect,
+      createProgress: null,
+      deleteProgress: null,
+    }
+    await enterInitialState(ctx1, shared.session)
+    await handleSessionFrame(ctx1, shared.session, {
+      type: 'session:reply',
+      promptId: SELECT_CHARACTER_PROMPT_ID,
+      value: DELETE_SENTINEL,
+    })
+    await handleSessionFrame(ctx1, shared.session, {
+      type: 'session:selectCharacter',
+      characterId: SEED_CHARACTER_ID,
+    })
+    expect(ctx1.deleteProgress).toEqual({ targetId: SEED_CHARACTER_ID })
+
+    // 연결 종료 = ctx1 폐기(cleanupConnection). 재연결은 완전히 새 ctx로 시작한다.
+    const ctx2: FsmContext = {
+      state: ConnectionState.characterSelect,
+      createProgress: null,
+      deleteProgress: null,
+    }
+    await enterInitialState(ctx2, shared.session)
+
+    expect(ctx2.state).toBe(ConnectionState.characterSelect)
+    expect(ctx2.deleteProgress).toBeNull()
+    // 확인을 안 했으므로 캐릭터는 여전히 존재한다(삭제 미확정).
+    const list = await shared.session.sessionAuth.listCharacters(SEED_ACCOUNT_ID)
+    expect(list.some((c) => c.characterId === SEED_CHARACTER_ID)).toBe(true)
+  })
+})
+
+describe('delete 와이어 계약 보존 (T8.5 — 신규 메시지 타입 없음)', () => {
+  it('delete 서브플로우는 selectCharacter·createField 밖의 prompt kind를 쓰지 않는다', async () => {
+    const { session, events } = makeSession()
+    const ctx: FsmContext = {
+      state: ConnectionState.characterSelect,
+      createProgress: null,
+      deleteProgress: null,
+    }
+
+    await enterInitialState(ctx, session)
+    await handleSessionFrame(ctx, session, {
+      type: 'session:reply',
+      promptId: SELECT_CHARACTER_PROMPT_ID,
+      value: DELETE_SENTINEL,
+    })
+    await handleSessionFrame(ctx, session, {
+      type: 'session:selectCharacter',
+      characterId: SEED_CHARACTER_ID,
+    })
+    await handleSessionFrame(ctx, session, reply(DELETE_CONFIRM_PROMPT_ID, DELETE_CONFIRM_VALUE))
+
+    const prompts = events.filter(
+      (e): e is Extract<ServerEvent, { type: 'session:prompt' }> => e.type === 'session:prompt',
+    )
+    for (const p of prompts) {
+      expect(promptKindSchema.options).toContain(p.kind)
+    }
+    // 신규 session:* 타입도 없다.
+    const allowed = new Set([
+      'session:characterList',
+      'session:prompt',
+      'session:entered',
+      'session:resumed',
+      'error',
     ])
     for (const e of events) {
       expect(allowed.has(e.type)).toBe(true)

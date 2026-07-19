@@ -89,4 +89,21 @@ export class InMemorySessionAuthAdapter implements SessionAuthPort {
     }
     return Promise.resolve()
   }
+
+  deleteCharacter(accountId: string, characterId: string): Promise<void> {
+    // 내부 이중 assert(TOCTOU 방어) — 삭제 직전 소유권을 재확인한다. 소유가 아니거나 존재하지
+    // 않으면 OwnershipError로 reject하고 저장소를 건드리지 않는다.
+    const list = this.charactersByAccount.get(accountId) ?? []
+    const owns = list.some((c) => c.characterId === characterId)
+    if (!owns) {
+      return Promise.reject(new OwnershipError(accountId, characterId))
+    }
+    // 인메모리 어댑터는 무덤 상태를 저장할 필드가 없어(요약만 보관) 목록에서 물리 제거로 소프트
+    // 삭제의 관찰 가능한 결과(이후 목록에서 사라짐)를 재현한다. 새 배열로 교체해 불변성을 지킨다.
+    this.charactersByAccount.set(
+      accountId,
+      list.filter((c) => c.characterId !== characterId),
+    )
+    return Promise.resolve()
+  }
 }

@@ -195,6 +195,26 @@ describe('CharacterRepository (integration)', () => {
     await expect(repo.updateById('missing', { gold: 10 })).rejects.toThrow(DocumentNotFoundError)
   })
 
+  it('softDelete는 문서를 물리 보존하되 status=deleted+deletedAt로 표시하고 findByAccount에서 제외한다 (양방향 무덤)', async () => {
+    const doc = makeCharacter({ _id: 'sd1', name: '자살자', accountId: 'acc-sd' })
+    await repo.insert(doc)
+
+    await repo.softDelete(doc._id)
+
+    // 물리 존재 측: findById는 여전히 문서를 돌려주되 status=deleted + deletedAt 세팅(하드 삭제와 구별).
+    const found = await repo.findById(doc._id)
+    expect(found).not.toBeNull()
+    expect(found?.status).toBe('deleted')
+    expect(found?.deletedAt).toBeInstanceOf(Date)
+    // 논리 부재 측: findByAccount는 무덤 캐릭터를 제외한다(재로그인 차단 불변식).
+    const list = await repo.findByAccount('acc-sd')
+    expect(list.map((c) => c._id)).not.toContain('sd1')
+  })
+
+  it('존재하지 않는 id softDelete는 DocumentNotFoundError를 던진다', async () => {
+    await expect(repo.softDelete('missing')).rejects.toThrow(DocumentNotFoundError)
+  })
+
   it('존재하지 않는 id deleteById는 DocumentNotFoundError를 던진다', async () => {
     await expect(repo.deleteById('missing')).rejects.toThrow(DocumentNotFoundError)
   })
