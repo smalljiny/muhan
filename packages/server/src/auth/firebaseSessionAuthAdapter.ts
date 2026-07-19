@@ -55,6 +55,9 @@ export class FirebaseSessionAuthAdapter implements SessionAuthPort {
 
     const accountId = verified.uid
     await this.ensureAccountUpserted(accountId)
+    // account.status='banned' 강제는 여기 없다 — ban을 세팅하는 admin 명령이 A13으로 유예됐고,
+    // 즉시 세션 차단은 쿠키 revocation(checkRevoked) 결정과 얽힌다. A13에서 ban 명령을 붙일 때
+    // 이 지점에 접속 시 banned 거부를 추가한다(accountRepository.setStatus 주석 참조).
     return { accountId }
   }
 
@@ -96,8 +99,12 @@ export class FirebaseSessionAuthAdapter implements SessionAuthPort {
 
   async assertOwnership(accountId: string, characterId: string): Promise<void> {
     const doc = await this.characters.findById(characterId)
-    // 미존재와 타 계정 소유를 한 에러로 합친다(존재 여부 비노출 — 포트 계약 준수).
-    if (doc === null || doc.accountId !== accountId) {
+    // 미존재·타 계정 소유·무덤(status='deleted')을 한 에러로 합친다(존재 여부 비노출 — 포트 계약 준수).
+    // status 검사가 핵심: findById는 findByAccount와 달리 status를 필터하지 않으므로(감사·복원 여지),
+    // 이 게이트에서 걸러내지 않으면 소유자가 자기 삭제 캐릭터의 id로 select→command 진입해 재로그인
+    // 차단 불변식(Story 8)을 우회한다. deleteCharacter의 이중 assert 경로도 이 검사를 공유한다 —
+    // 이미 삭제된 캐릭터 재삭제는 OwnershipError로 fail(중복 deletedAt 재기록 방지).
+    if (doc === null || doc.accountId !== accountId || doc.status === 'deleted') {
       throw new OwnershipError(accountId, characterId)
     }
   }

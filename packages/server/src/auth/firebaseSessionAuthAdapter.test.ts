@@ -153,6 +153,23 @@ describe('FirebaseSessionAuthAdapter (integration)', () => {
     it('존재하지 않는 캐릭터는 OwnershipError를 던진다', async () => {
       await expect(adapter.assertOwnership('uid-1', 'nope')).rejects.toThrow(OwnershipError)
     })
+
+    it('소유하지만 무덤(status=deleted)인 캐릭터는 OwnershipError를 던진다 (삭제 후 재진입 차단)', async () => {
+      // 다층 guard: accountId는 uid-1로 일치(소유 검사 통과)하고 status='deleted'에서만 실패시켜,
+      // 소유 검사가 아니라 신규 status 검사가 거부의 원인임을 고정한다. findById는 findByAccount와
+      // 달리 status를 필터하지 않으므로, 이 검사가 없으면 소유자가 자기 삭제 캐릭터 id로 select→
+      // command 진입해 재로그인 차단 불변식(Story 8)을 우회한다.
+      await characters.insert(
+        makeCharacter({
+          _id: 'own-dead',
+          name: '내무덤',
+          accountId: 'uid-1',
+          status: 'deleted',
+          deletedAt: new Date(),
+        }),
+      )
+      await expect(adapter.assertOwnership('uid-1', 'own-dead')).rejects.toThrow(OwnershipError)
+    })
   })
 
   describe('createCharacter', () => {

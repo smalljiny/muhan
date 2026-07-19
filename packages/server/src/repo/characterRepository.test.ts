@@ -96,6 +96,22 @@ describe('CharacterRepository (integration)', () => {
     await expect(repo.updateById(doc._id, { gold: -1 })).rejects.toThrow()
   })
 
+  it('updateById는 status를 담지 않은 패치가 status default를 재주입하지 않는다 (무덤 부활 방지)', async () => {
+    // 무덤(status='deleted') 문서에 status를 뺀 부분 패치를 적용한다. characterSchema.status에
+    // 걸린 .default('active')가 patch 검증에서 재발화하면 $set에 status:'active'가 섞여 무덤이
+    // 부활한다(silent lost-write). removeDefault 파생 패치 스키마가 이를 막는지 고정한다.
+    const doc = makeCharacter({ status: 'deleted', deletedAt: new Date() })
+    await repo.insert(doc)
+
+    await repo.updateById(doc._id, { gold: 999 })
+
+    const found = await repo.findById(doc._id)
+    expect(found?.gold).toBe(999)
+    // 핵심 단언: status가 건드려지지 않아 여전히 'deleted'다(수정 전이면 'active'로 부활).
+    expect(found?.status).toBe('deleted')
+    expect(found?.deletedAt).toBeInstanceOf(Date)
+  })
+
   it('deleteById는 문서를 제거한다', async () => {
     const doc = makeCharacter()
     await repo.insert(doc)

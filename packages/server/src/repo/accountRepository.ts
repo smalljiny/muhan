@@ -79,6 +79,11 @@ export class AccountRepository {
     if (result.matchedCount === 0) throw new DocumentNotFoundError(COLLECTION_NAME, id)
   }
 
+  // status='banned'를 기록하는 저장 경로는 여기 있으나, 연결 게이트(validateSessionCookie·
+  // gameAuthPreValidation)는 아직 banned를 강제하지 않는다 — ban을 세팅하는 admin 명령이 A13
+  // (RBAC 명령 배선)로 유예됐기 때문이다. A13에서 ban 명령을 붙일 때 validateSessionCookie에
+  // 접속 시점 banned 거부(또는 주기적 검사)를 함께 추가한다(assertRole defer와 동일 선). 지금은
+  // 어떤 경로도 banned를 세팅하지 않아 트리거 불가한 잠복 갭이다.
   async setStatus(id: string, status: Account['status']): Promise<void> {
     const patch = { status: statusSchema.parse(status) }
     const result = await this.collection.updateOne({ _id: id }, { $set: patch })
