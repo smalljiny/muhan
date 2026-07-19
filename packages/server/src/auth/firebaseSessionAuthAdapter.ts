@@ -63,6 +63,9 @@ export class FirebaseSessionAuthAdapter implements SessionAuthPort {
 
   // verify RESULT는 캐싱하지 않는다 — verify는 연결/업그레이드당 1회 실행이지 프레임당 실행이
   // 아니므로 결과 캐시가 불필요하다. dedup은 오직 멱등 upsert WRITE의 반복만 막는다(Open Q #1/#3).
+  // A13 주의: banned-status 강제를 붙일 때 이 dedup 경로에 status 검사를 얹지 말 것 — 캐시 hit면
+  // upsert가 skip돼 재검증에서 status 검사도 함께 건너뛴다. 강제는 validateSessionCookie 본체(매 검증
+  // 실행)에 두고, dedup은 insert-write 회피 용도로만 한정한다.
   private async ensureAccountUpserted(accountId: string): Promise<void> {
     if (this.upsertedAccounts.has(accountId)) return
     await this.accounts.upsert({ _id: accountId })

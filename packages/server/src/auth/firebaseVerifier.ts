@@ -18,10 +18,13 @@ import type { SessionCookieVerifier } from './sessionCookieVerifier.js'
  * 배선 코드 취급 — vitest.config.ts exclude). seam(FirebaseSessionAuthAdapter)은 FAKE verifier로 통합
  * 테스트가 관통 검증한다(sessionAuthFlow.integration.test.ts).
  *
- * 자격증명 범위 주의: `initializeApp({ projectId })`(명시 credential 없음)는 세션 쿠키 서명 검증에
- * 충분하다 — verifySessionCookie는 Google 공개 인증서 + projectId(aud/iss)만 필요하다. 단
- * `verifySessionCookie(cookie, true)`(checkRevoked)로 바꾸면 getUser 경로가 서비스 계정 자격증명을
- * 요구하므로, 그 전환 시 부팅에 credential 주입을 함께 배선해야 한다(현재 비폐기 경로만 지원).
+ * 수용된 보안 한계(revocation 미검사): `verifySessionCookie(cookie)`는 checkRevoked 없이 서명·만료만
+ * 검증하므로, 명시 revoke된(비번 변경·강제 로그아웃) 세션 쿠키가 자연 만료 시점(최대 ~2주)까지 계속
+ * 인증을 통과한다. 이는 편의가 아니라 **의도적으로 유예한 보안 트레이드오프**다 — 즉시 세션 차단이
+ * 필요하면 `verifySessionCookie(cookie, true)`(checkRevoked)로 전환해야 하는데, 그 경로의 getUser는
+ * 서비스 계정 자격증명을 요구한다(`initializeApp({ projectId })` 서명 검증용 설정으로는 부족). 따라서
+ * revocation 강제는 프로덕션 Firebase credential 프로비저닝과 함께 배선하는 하드닝 작업으로 유예하며,
+ * account.status='banned' 강제(A13)와 같은 후속 이슈로 추적한다.
  */
 export function createFirebaseVerifier(projectId: string): SessionCookieVerifier {
   if (getApps().length === 0) {
