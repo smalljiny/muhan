@@ -1,10 +1,13 @@
 import { buildApp } from './app.js'
 import { getConfig } from './config/env.js'
 import { createDevSeedAuthAdapterFromEnv } from './auth/devSeedSessionAuth.js'
+import { FirebaseSessionAuthAdapter } from './auth/firebaseSessionAuthAdapter.js'
+import { createFirebaseVerifier } from './auth/firebaseVerifier.js'
 import { connectMongo } from './db/connection.js'
 import { pingDb } from './db/health.js'
 import { ObjectRepository } from './repo/objectRepository.js'
 import { CharacterRepository } from './repo/characterRepository.js'
+import { AccountRepository } from './repo/accountRepository.js'
 import { BankRepository } from './repo/bankRepository.js'
 import { WorldRepository } from './repo/worldRepository.js'
 import { SaveEngine } from './save/saveEngine.js'
@@ -19,6 +22,24 @@ import { createWorldRuntime } from './world/worldRuntime.js'
 // 커버리지에서 제외(배선 코드). PORT는 getConfig().PORT 단일 출처를 쓴다(인라인 파싱 소거).
 // SaveEngine.shutdown()의 drain+flush 로직은 테스트 가능한 곳(saveEngine.ts)에 두고, 여기서는
 // 시그널 핸들러 등록만 한다.
+/**
+ * 실 FirebaseSessionAuthAdapter를 조립한다(DEV_LOGIN off 경로). FIREBASE_PROJECT_ID가 없으면
+ * throw해 fail-fast한다 — 검증 불능 어댑터(모든 쿠키를 무효 처리)가 프로덕션에 배포되는 것을 막는다.
+ * firebase-admin import는 verifier 팩토리로 국한하고, 어댑터는 주입된 verifier seam에만 의존한다.
+ */
+function buildFirebaseSessionAuth(
+  config: ReturnType<typeof getConfig>,
+  accounts: AccountRepository,
+  characters: CharacterRepository,
+): FirebaseSessionAuthAdapter {
+  const projectId = config.FIREBASE_PROJECT_ID
+  if (projectId === undefined || projectId.length === 0) {
+    throw new Error('FIREBASE_PROJECT_ID가 필요하다 (DEV_LOGIN_ENABLED=false 프로덕션 세션 인증 경로)')
+  }
+  const verifier = createFirebaseVerifier(projectId)
+  return new FirebaseSessionAuthAdapter(verifier, accounts, characters)
+}
+
 async function boot(): Promise<void> {
   const config = getConfig()
 
@@ -28,24 +49,25 @@ async function boot(): Promise<void> {
   // 저장소 인덱스를 프로덕션에서 보장한다. WorldRepository는 _id=roomId 자연키라 init 없음.
   const objects = new ObjectRepository(conn.db)
   const characters = new CharacterRepository(conn.db, objects)
+  const accounts = new AccountRepository(conn.db)
   const bank = new BankRepository(conn.db, objects)
   const world = new WorldRepository(conn.db)
-  await Promise.all([objects.init(), characters.init(), bank.init()])
+  await Promise.all([objects.init(), characters.init(), accounts.init(), bank.init()])
 
   // 정본 방 번들을 인메모리 그래프로 로드한다(부팅 스코프에 보관). 템플릿·리스폰은 E4 범위.
   const worldGraph = loadWorldGraph()
 
-  // ping을 /health의 진실 원천으로 주입한다. DEV_LOGIN_ENABLED가 true일 때만 dev 시드 어댑터와
-  // /dev/login 라우트를 배선한다. 플래그 off(프로덕션)면 미주입 → buildApp이 빈 어댑터로 부팅하고
-  // 라우트가 마운트되지 않아 유효 쿠키가 0개다(기존 동작 불변).
+  // ping을 /health의 진실 원천으로 주입한다. 세션 인증 어댑터는 플래그로 분기한다:
+  // - DEV_LOGIN_ENABLED true(dev): dev 시드 어댑터 + /dev/login 라우트를 배선한다(기존 동작 불변).
+  // - false(프로덕션): 실 FirebaseSessionAuthAdapter를 조립해 주입한다. firebase-admin 기반 verifier를
+  //   FIREBASE_PROJECT_ID로 세우고, AccountRepository·CharacterRepository를 넘긴다. PROJECT_ID가 없으면
+  //   무효 어댑터가 배포되지 않도록 fail-fast한다(optional 스키마의 프로덕션 경로 보강).
+  const sessionAuthDeps = config.DEV_LOGIN_ENABLED
+    ? { sessionAuth: createDevSeedAuthAdapterFromEnv(config), devLoginSeedCookie: config.DEV_SEED_COOKIE }
+    : { sessionAuth: buildFirebaseSessionAuth(config, accounts, characters) }
   const app = buildApp({
     pingDb: () => pingDb(conn.db),
-    ...(config.DEV_LOGIN_ENABLED
-      ? {
-          sessionAuth: createDevSeedAuthAdapterFromEnv(config),
-          devLoginSeedCookie: config.DEV_SEED_COOKIE,
-        }
-      : {}),
+    ...sessionAuthDeps,
   })
   app.log.info(`world graph loaded: ${worldGraph.size} rooms`)
 

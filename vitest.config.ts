@@ -14,6 +14,7 @@ export default defineConfig({
       include: ['packages/*/src/**/*.{ts,tsx}'],
       exclude: [
         'packages/server/src/index.ts',
+        'packages/server/src/auth/firebaseVerifier.ts',
         'packages/client/src/main.tsx',
         'packages/client/src/test/setup.ts',
         'packages/port/**',

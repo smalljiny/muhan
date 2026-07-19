@@ -59,6 +59,10 @@ export const EnvSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((s) => s === 'true'),
+  // Firebase 프로젝트 식별자 — 실 세션 쿠키 검증 어댑터(DEV_LOGIN off 경로) 조립에만 쓰인다.
+  // dev 부팅(DEV_LOGIN on)은 이 값을 요구하지 않으므로 optional로 둔다. 실 어댑터 조립 시점(index.ts)에서
+  // 부재를 fail-fast로 방어한다 — optional 스키마가 프로덕션 경로의 fail-fast를 대체하지 않는다.
+  FIREBASE_PROJECT_ID: z.string().optional(),
   // 시드 세션 쿠키·계정 식별자. 플래그 off일 때도 파싱이 실패하지 않도록 빈 문자열 default를 둔다.
   // 플래그 on인데 값이 비면 devSeedSessionAuth 조립 단계에서 fail-fast로 방어한다(빈 유효 쿠키 배포 방지).
   DEV_SEED_COOKIE: z.string().default(''),

@@ -14,6 +14,7 @@
   "dependencies": {
     "@fastify/websocket": "catalog:",
     "fastify": "catalog:",
+    "firebase-admin": "catalog:",
     "mongodb": "catalog:",
     "shared": "workspace:*",
     "zod": "catalog:"
