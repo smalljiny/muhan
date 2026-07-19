@@ -25,6 +25,13 @@ export const characterSchema = z.strictObject({
   status: z.enum(['active', 'deleted']).default('active'),
   // soft-delete 시각. active 문서에는 없다(선택).
   deletedAt: z.coerce.date().optional(),
+  // 생성 인터뷰(create_ply)가 고른 성별 — 1=남/2=여. 최소 스칼라 저장(선택; .default 아님 —
+  // default는 추론 타입에서 필수가 돼 기존 픽스처를 깨므로 deletedAt처럼 .optional로 둔다).
+  gender: z.int().optional(),
+  // 생성 시 고른 성향 — 1=선/2=악(단일 스칼라). -1000..+1000 성향 시스템은 E6로 유예한다.
+  alignment: z.int().optional(),
+  // 생성 시 고른 주력 무기 — 1~5(도/검/봉/창/궁). proficiency[5] 숙련 배열은 E6로 유예한다.
+  weapon: z.int().optional(),
 })
 
 export type Character = z.infer<typeof characterSchema>

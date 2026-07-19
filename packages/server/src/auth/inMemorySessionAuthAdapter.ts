@@ -64,6 +64,9 @@ export class InMemorySessionAuthAdapter implements SessionAuthPort {
   }
 
   createCharacter(accountId: string, dto: CreateCharacterInput): Promise<CharacterSummary> {
+    // 인메모리 어댑터는 CharacterSummary만 저장하고 스탯·gender·weapon·alignment를 영속하지 않는다
+    // (요약엔 이 필드가 없다). 전체 DTO를 받되 요약에 필요한 name·class·race만 투영한다 — 종족 보정 수학은
+    // Character 문서를 조립하는 firebase 어댑터가 소유한다.
     const summary: CharacterSummary = {
       characterId: `char-${this.nextCharacterSeq++}`,
       name: dto.name,

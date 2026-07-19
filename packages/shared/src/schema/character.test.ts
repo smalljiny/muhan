@@ -108,6 +108,32 @@ describe('characterSchema', () => {
     })
     expect(result.success).toBe(true)
   })
+
+  it('gender·weapon·alignment는 선택 필드다 (생략해도 통과 — 기존 픽스처 불변)', () => {
+    const doc = validCharacter() as Partial<Character>
+    expect('gender' in doc).toBe(false)
+    const result = characterSchema.safeParse(doc)
+    expect(result.success).toBe(true)
+  })
+
+  it('gender·weapon·alignment 정수를 담은 문서를 통과시킨다 (생성 선택 저장)', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      gender: 1,
+      weapon: 2,
+      alignment: 2,
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.gender).toBe(1)
+      expect(result.data.weapon).toBe(2)
+      expect(result.data.alignment).toBe(2)
+    }
+  })
+
+  it('gender가 정수가 아니면 거부한다', () => {
+    expect(characterSchema.safeParse({ ...validCharacter(), gender: 1.5 }).success).toBe(false)
+  })
 })
 
 // 컴파일 타임 가드 — Character 추론 타입에 accountId 키가 있고 inventory/자격증명 키가 없음을 tsc가 강제한다.

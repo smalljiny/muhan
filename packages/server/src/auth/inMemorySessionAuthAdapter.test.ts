@@ -7,7 +7,22 @@ import {
   SEED_ACCOUNT_ID,
   SEED_CHARACTER_ID,
 } from './seedSessionAuth.testutil.js'
+import type { CreateCharacterInput } from './sessionAuthPort.js'
 import { OwnershipError } from './sessionAuthPort.js'
+
+/** 전체 create_ply DTO 팩토리 — 인메모리 어댑터 테스트가 name/class/race만 관찰하므로 나머지는 기본값. */
+function makeCreateDto(overrides: Partial<CreateCharacterInput> = {}): CreateCharacterInput {
+  return {
+    name: '신규영웅',
+    gender: 1,
+    class: 2,
+    race: 3,
+    stats: [10, 10, 10, 10, 10],
+    weapon: 2,
+    alignment: 1,
+    ...overrides,
+  }
+}
 
 /**
  * InMemorySessionAuthAdapter 계약 단위 테스트 — firebase 없이 결정적으로 포트 4개 메서드를
@@ -66,11 +81,7 @@ describe('InMemorySessionAuthAdapter', () => {
     it('생성한 캐릭터가 목록에 반영된다', async () => {
       const adapter = createSeededAuthAdapter()
       const before = (await adapter.listCharacters(SEED_ACCOUNT_ID)).length
-      const created = await adapter.createCharacter(SEED_ACCOUNT_ID, {
-        name: '신규영웅',
-        class: 2,
-        race: 3,
-      })
+      const created = await adapter.createCharacter(SEED_ACCOUNT_ID, makeCreateDto())
       const after = await adapter.listCharacters(SEED_ACCOUNT_ID)
       expect(after.length).toBe(before + 1)
       expect(after.some((c) => c.characterId === created.characterId)).toBe(true)
@@ -78,7 +89,7 @@ describe('InMemorySessionAuthAdapter', () => {
 
     it('알 수 없는 account에 생성하면 그 account 목록에 추가된다', async () => {
       const adapter = new InMemorySessionAuthAdapter()
-      const created = await adapter.createCharacter('newacct', { name: '탐험가', class: 1, race: 1 })
+      const created = await adapter.createCharacter('newacct', makeCreateDto({ name: '탐험가', class: 1, race: 1 }))
       const list = await adapter.listCharacters('newacct')
       expect(list).toHaveLength(1)
       expect(list[0]!.characterId).toBe(created.characterId)
@@ -86,11 +97,10 @@ describe('InMemorySessionAuthAdapter', () => {
 
     it('반환된 요약은 shared characterSummarySchema를 만족한다', async () => {
       const adapter = createSeededAuthAdapter()
-      const created = await adapter.createCharacter(SEED_ACCOUNT_ID, {
-        name: '검증대상',
-        class: 4,
-        race: 5,
-      })
+      const created = await adapter.createCharacter(
+        SEED_ACCOUNT_ID,
+        makeCreateDto({ name: '검증대상', class: 4, race: 5 }),
+      )
       expect(() => characterSummarySchema.parse(created)).not.toThrow()
       expect(created.characterId.length).toBeGreaterThan(0)
       expect(created.name).toBe('검증대상')
@@ -100,14 +110,14 @@ describe('InMemorySessionAuthAdapter', () => {
 
     it('생성마다 고유한 characterId를 부여한다', async () => {
       const adapter = new InMemorySessionAuthAdapter()
-      const a = await adapter.createCharacter('acct', { name: 'A', class: 0, race: 0 })
-      const b = await adapter.createCharacter('acct', { name: 'B', class: 0, race: 0 })
+      const a = await adapter.createCharacter('acct', makeCreateDto({ name: 'A', class: 0, race: 0 }))
+      const b = await adapter.createCharacter('acct', makeCreateDto({ name: 'B', class: 0, race: 0 }))
       expect(a.characterId).not.toBe(b.characterId)
     })
 
     it('반환한 요약을 변형해도 내부 저장소에 영향을 주지 않는다', async () => {
       const adapter = new InMemorySessionAuthAdapter()
-      const created = await adapter.createCharacter('acct', { name: '원본', class: 0, race: 0 })
+      const created = await adapter.createCharacter('acct', makeCreateDto({ name: '원본', class: 0, race: 0 }))
       created.name = '변조됨'
       const stored = (await adapter.listCharacters('acct'))[0]!
       expect(stored.name).toBe('원본')

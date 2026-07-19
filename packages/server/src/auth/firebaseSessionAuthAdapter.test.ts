@@ -156,8 +156,22 @@ describe('FirebaseSessionAuthAdapter (integration)', () => {
   })
 
   describe('createCharacter', () => {
-    it('Character를 삽입하고(accountId·gold=500·기본 스탯) CharacterSummary를 반환한다', async () => {
-      const summary = await adapter.createCharacter('uid-1', { name: '새캐릭', class: 2, race: 5 })
+    /** 전체 create_ply DTO 팩토리 — 케이스별로 override한다. */
+    function makeDto(overrides: Partial<Parameters<typeof adapter.createCharacter>[1]> = {}) {
+      return {
+        name: '새캐릭',
+        gender: 1,
+        class: 2,
+        race: 5, // HUMAN [+0,+0,+1,+0,+0]
+        stats: [10, 10, 10, 10, 10] as [number, number, number, number, number],
+        weapon: 2,
+        alignment: 1,
+        ...overrides,
+      }
+    }
+
+    it('Character를 삽입하고(accountId·gold=500·종족보정 스탯) CharacterSummary를 반환한다', async () => {
+      const summary = await adapter.createCharacter('uid-1', makeDto())
 
       expect(summary.name).toBe('새캐릭')
       expect(summary.class).toBe(2)
@@ -169,9 +183,29 @@ describe('FirebaseSessionAuthAdapter (integration)', () => {
       expect(persisted).not.toBeNull()
       expect(persisted?.accountId).toBe('uid-1')
       expect(persisted?.gold).toBe(500)
-      expect(persisted?.stats).toEqual([10, 10, 10, 10, 10])
+      // HUMAN 보정 [+0,+0,+1,+0,+0]: 맷집만 +1.
+      expect(persisted?.stats).toEqual([10, 10, 11, 10, 10])
       expect(persisted?.name).toBe('새캐릭')
       expect(persisted?.status).toBe('active')
+    })
+
+    it('gender·weapon·alignment를 선택 필드로 영속한다', async () => {
+      const summary = await adapter.createCharacter('uid-1', makeDto({ gender: 2, weapon: 5, alignment: 2 }))
+      const persisted = await characters.findById(summary.characterId)
+      expect(persisted?.gender).toBe(2)
+      expect(persisted?.weapon).toBe(5)
+      expect(persisted?.alignment).toBe(2)
+    })
+
+    it('종족 보정을 포인트바이 스탯에 더하되 3~18을 벗어나도 재클램프하지 않는다 (no-clamp 양방향 증거)', async () => {
+      // 포인트바이 [18,3,3,18,3](합 45 ≤54, 각 3~18) + HALFGIANT(7) [+2,0,0,-1,-1]
+      //   → 저장 [20,3,3,17,2]: 힘 20(>18)·신앙 2(<3) 둘 다 미클램프.
+      const summary = await adapter.createCharacter(
+        'uid-1',
+        makeDto({ race: 7, stats: [18, 3, 3, 18, 3] }),
+      )
+      const persisted = await characters.findById(summary.characterId)
+      expect(persisted?.stats).toEqual([20, 3, 3, 17, 2])
     })
   })
 })

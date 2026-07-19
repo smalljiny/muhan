@@ -24,7 +24,7 @@ import { OwnershipError } from '../../auth/sessionAuthPort.js'
  * 연결 상태 — 원작 `io->fn`이 가리키던 상태별 처리기를 enum으로 대체한다.
  *
  * characterSelect: 핸드셰이크 완료 직후 진입점. 캐릭터 목록·선택 prompt를 제시하고 선택을 받는다.
- * create: 캐릭터 생성 다단 대화(이름→클래스→종족→확인 서브상태). 서브상태는 `ctx.createProgress`에 산다.
+ * create: 캐릭터 생성 다단 대화(이름→성별→직업→능력치→주력무기→성향→종족→확인 서브상태). 서브상태는 `ctx.createProgress`에 산다.
  * command: 월드 진입 후 명령 라우팅 상태. 이 상태의 프레임은 셸이 라우터(dispatch)로 위임한다.
  */
 export enum ConnectionState {
@@ -46,14 +46,20 @@ export const CREATE_SENTINEL = 'create'
 export const CREATE_CONFIRM_VALUE = 'yes'
 
 /**
- * create 서브상태별 고정 promptId 규약 — 선형 유한 흐름(이름→클래스→종족→확인)이라 counter 없이
- * step→promptId 고정 맵으로 충분하다. `ctx.createProgress.step`을 저장하고 여기서 기대 promptId를
- * 파생한다(step만 저장, promptId는 파생 — derivable-state 중복 저장 금지). reply.promptId가 현재 step의
- * promptId와 불일치하면(미일치·지나간 step의 stale reply) 거부한다.
+ * create 서브상태별 고정 promptId 규약 — create_ply 8단계 선형 흐름
+ * (이름→성별→직업→능력치→주력무기→성향→종족→확인)이라 counter 없이 step→promptId 고정 맵으로 충분하다.
+ * `ctx.createProgress.step`을 저장하고 여기서 기대 promptId를 파생한다(step만 저장, promptId는 파생 —
+ * derivable-state 중복 저장 금지). reply.promptId가 현재 step의 promptId와 불일치하면(미일치·지나간 step의
+ * stale reply) 거부한다. 원작 create_ply의 암호 단계는 Firebase가 소유하므로 제외하고, 이름은 원작 로그인
+ * 단계에서 인터뷰 앞으로 옮겼다(재설계).
  */
 export const CREATE_PROMPT_IDS = {
   name: 'create:name',
+  gender: 'create:gender',
   class: 'create:class',
+  stats: 'create:stats',
+  weapon: 'create:weapon',
+  alignment: 'create:alignment',
   race: 'create:race',
   confirm: 'create:confirm',
 } as const
@@ -64,7 +70,12 @@ export type CreateStep = keyof typeof CREATE_PROMPT_IDS
 /** create 진행 중 누적되는 필드(서버 권위 — 클라 reply로 왕복시키지 않는다). */
 export interface CreateCollected {
   name?: string
+  gender?: number
   class?: number
+  // 포인트바이 raw 배분 [힘,민첩,맷집,지식,신앙심] — 종족 보정 전 값(어댑터가 finalize 시 보정 적용).
+  stats?: [number, number, number, number, number]
+  weapon?: number
+  alignment?: number
   race?: number
 }
 
@@ -191,13 +202,60 @@ export type CreateDecision =
  */
 const createNameSchema = z.string().trim().min(1).max(40)
 
-/** class/race 검증·변환 — reply.value(string)를 정수로 강제 변환한다(비정수·비수치 거부). */
+/** class 등 검증·변환 — reply.value(string)를 정수로 강제 변환한다(비정수·비수치 거부). */
 const createIntSchema = z.coerce.number().int()
 
+/** 성별 검증 — 1=남/2=여만 허용. */
+const createGenderSchema = createIntSchema.refine((n) => n === 1 || n === 2)
+
+/** 주력 무기 검증 — 1~5(도/검/봉/창/궁)만 허용. */
+const createWeaponSchema = createIntSchema.refine((n) => n >= 1 && n <= 5)
+
+/** 성향 검증 — 1=선/2=악만 허용(단일 스칼라, -1000..+1000 성향 시스템은 E6 유예). */
+const createAlignmentSchema = createIntSchema.refine((n) => n === 1 || n === 2)
+
+/** 종족 검증 — 1~8(오라클 RACE 상수 8종)만 허용. */
+const createRaceSchema = createIntSchema.refine((n) => n >= 1 && n <= 8)
+
+/** 포인트바이 스탯 한 원소의 상·하한. */
+const STAT_MIN = 3
+const STAT_MAX = 18
+/** 포인트바이 총점 상한(합 ≤ 54). */
+const POINT_BUY_TOTAL = 54
+
+/**
+ * 54점 포인트바이 검증 — reply.value(공백 구분 정수 5개 "## ## ## ## ##")를 파싱한다.
+ * 순서 [힘,민첩,맷집,지식,신앙심](= characterSchema.stats 튜플 순서). 검증: 정확히 5개 정수, 각 3~18,
+ * 합 ≤54. 위반 시 reject(reducer가 stats 단계 유지 → 재응답 가능). 종족 보정은 이 검증 *후* 어댑터가 적용한다.
+ */
+const pointBuyStatsSchema = z
+  .string()
+  .transform((raw) => raw.trim().split(/\s+/))
+  .refine((parts) => parts.length === 5, { message: '능력치는 정확히 5개여야 한다' })
+  // 순수 10진수 토큰만 허용한다 — Number()는 "1e1"(10)·"0x10"(16)·"+5"를 조용히 받아들이므로,
+  // 지수·16진·부호 표기가 능력치로 새는 것을 파싱 전에 차단한다(3~18 범위라 비악용이나 입력 계약을 엄격화).
+  .refine((parts) => parts.every((p) => /^\d+$/.test(p)), { message: '능력치는 10진수 정수여야 한다' })
+  .transform((parts) => parts.map((p) => Number(p)))
+  .refine((nums) => nums.every((n) => Number.isInteger(n)), { message: '능력치는 정수여야 한다' })
+  .refine((nums) => nums.every((n) => n >= STAT_MIN && n <= STAT_MAX), {
+    message: '각 능력치는 3~18이어야 한다',
+  })
+  .refine((nums) => nums.reduce((a, b) => a + b, 0) <= POINT_BUY_TOTAL, {
+    message: '능력치 총합은 54를 넘을 수 없다',
+  })
+  .transform(
+    (nums) => [nums[0], nums[1], nums[2], nums[3], nums[4]] as [number, number, number, number, number],
+  )
+
 /** 최종 dto 검증 — createCharacter 호출 전 누적 필드가 완성됐는지 확인한다(BLOCKER 2). */
+/* 각 단계별 범위 검증은 개별 step 스키마가 이미 강제하므로 여기선 presence·타입(정수·5튜플)만 확인한다. */
 const createDtoSchema = z.object({
   name: createNameSchema,
+  gender: z.int(),
   class: z.int(),
+  stats: z.tuple([z.int(), z.int(), z.int(), z.int(), z.int()]),
+  weapon: z.int(),
+  alignment: z.int(),
   race: z.int(),
 })
 
@@ -228,16 +286,42 @@ export function decideCreateInput(progress: CreateProgress, frame: unknown): Cre
     case 'name': {
       const result = createNameSchema.safeParse(replyFrame.value)
       if (!result.success) return { kind: 'reject', code: 'session_state' }
-      return { kind: 'advance', nextStep: 'class', collected: { ...progress.collected, name: result.data } }
+      return { kind: 'advance', nextStep: 'gender', collected: { ...progress.collected, name: result.data } }
     }
-    // class·race는 검증 규칙(정수 강제 변환)이 동일하다 — 누적 슬롯·다음 단계만 step에서 파생한다.
-    // (name은 string 스키마, confirm은 종단이라 각각 별도 분기로 둔다.)
-    case 'class':
-    case 'race': {
+    case 'gender': {
+      const result = createGenderSchema.safeParse(replyFrame.value)
+      if (!result.success) return { kind: 'reject', code: 'session_state' }
+      return { kind: 'advance', nextStep: 'class', collected: { ...progress.collected, gender: result.data } }
+    }
+    case 'class': {
+      // 클래스 코드 테이블이 확정되기 전(E5)이라 종족처럼 임의 정수만 강제한다(범위 미제약).
       const result = createIntSchema.safeParse(replyFrame.value)
       if (!result.success) return { kind: 'reject', code: 'session_state' }
-      const nextStep = progress.step === 'class' ? 'race' : 'confirm'
-      return { kind: 'advance', nextStep, collected: { ...progress.collected, [progress.step]: result.data } }
+      return { kind: 'advance', nextStep: 'stats', collected: { ...progress.collected, class: result.data } }
+    }
+    case 'stats': {
+      const result = pointBuyStatsSchema.safeParse(replyFrame.value)
+      if (!result.success) return { kind: 'reject', code: 'session_state' }
+      return { kind: 'advance', nextStep: 'weapon', collected: { ...progress.collected, stats: result.data } }
+    }
+    case 'weapon': {
+      const result = createWeaponSchema.safeParse(replyFrame.value)
+      if (!result.success) return { kind: 'reject', code: 'session_state' }
+      return {
+        kind: 'advance',
+        nextStep: 'alignment',
+        collected: { ...progress.collected, weapon: result.data },
+      }
+    }
+    case 'alignment': {
+      const result = createAlignmentSchema.safeParse(replyFrame.value)
+      if (!result.success) return { kind: 'reject', code: 'session_state' }
+      return { kind: 'advance', nextStep: 'race', collected: { ...progress.collected, alignment: result.data } }
+    }
+    case 'race': {
+      const result = createRaceSchema.safeParse(replyFrame.value)
+      if (!result.success) return { kind: 'reject', code: 'session_state' }
+      return { kind: 'advance', nextStep: 'confirm', collected: { ...progress.collected, race: result.data } }
     }
     case 'confirm': {
       if (replyFrame.value !== CREATE_CONFIRM_VALUE) return { kind: 'reject', code: 'session_state' }
@@ -279,7 +363,7 @@ function enterCommand(session: SessionContext, characterId: string): ConnectionS
 /**
  * 서브스텝 진행 단일 지점 — create 대화의 전진을 여기로 집중한다(BLOCKER 1 / Story 6 seam).
  *
- * create의 이름→클래스→종족→확인 전진은 create 상태 *내부*에서 일어나 applyTransition(enterState)이 못
+ * create의 8단계(이름→…→확인) 전진은 create 상태 *내부*에서 일어나 applyTransition(enterState)이 못
  * 본다(handleInput이 create를 반환해 no-op 전이). 그 서브스텝 전진을 이 단일 명명 지점으로 모아,
  * Story 6의 데드라인 reaper가 상태전이(enterState)뿐 아니라 대화 진행도 훅해 rearm할 수 있게 한다
  * (인라인 변이면 훅할 곳이 없어 이름 입력 중인 클라가 대화 도중 reap된다). progress를 변이한 뒤

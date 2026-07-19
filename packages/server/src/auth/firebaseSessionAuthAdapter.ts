@@ -8,6 +8,7 @@ import type {
   SessionAuthPort,
 } from './sessionAuthPort.js'
 import { OwnershipError } from './sessionAuthPort.js'
+import { applyRaceModifiers } from './raceModifiers.js'
 import type { SessionCookieVerifier } from './sessionCookieVerifier.js'
 
 /**
@@ -15,12 +16,6 @@ import type { SessionCookieVerifier } from './sessionCookieVerifier.js'
  * 확정된다. 생성 경로를 실행 가능하게 하려는 placeholder이므로 정본값 탐색은 유예한다.
  */
 const START_ROOM = 1
-
-/**
- * 신규 캐릭터의 중립 기본 스탯(5종 각 10). Story 6의 54포인트 인터뷰가 이 값을 대체한다 —
- * 이 Story는 생성 경로 배선만 다루므로 coarse 기본값을 채운다.
- */
-const BASE_STATS: readonly [number, number, number, number, number] = [10, 10, 10, 10, 10]
 
 /** 신규 캐릭터의 시작 소지금 기본값(dev). */
 const STARTING_GOLD = 500
@@ -78,17 +73,22 @@ export class FirebaseSessionAuthAdapter implements SessionAuthPort {
   }
 
   async createCharacter(accountId: string, dto: CreateCharacterInput): Promise<CharacterSummary> {
+    // 종족 보정을 포인트바이 raw 스탯에 적용한 값을 저장한다(종족 수학은 server E5 코드 소유, 재클램프 없음).
     const doc: Character = {
       _id: randomUUID(),
       name: dto.name,
       class: dto.class,
       race: dto.race,
-      stats: [...BASE_STATS],
+      stats: applyRaceModifiers(dto.stats, dto.race),
       gold: STARTING_GOLD,
       currentRoom: START_ROOM,
       schemaVersion: CHARACTER_SCHEMA_VERSION,
       accountId,
       status: 'active',
+      // 생성 인터뷰가 고른 선택 스칼라(선택 필드로 영속).
+      gender: dto.gender,
+      weapon: dto.weapon,
+      alignment: dto.alignment,
     }
     await this.characters.insert(doc)
     return this.toSummary(doc)

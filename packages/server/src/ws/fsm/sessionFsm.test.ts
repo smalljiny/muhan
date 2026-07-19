@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { ServerEvent } from 'shared'
+import { promptKindSchema } from 'shared'
 import {
   createSeededAuthAdapter,
   SEED_ACCOUNT_ID,
@@ -70,6 +71,20 @@ function makeSession(): {
 /** create 대화 상태를 담는 FsmContext를 만든다. 무상태 핸들러 테스트도 이 ctx를 넘긴다(사용하지 않아도 무해). */
 function makeCtx(state: ConnectionState = ConnectionState.characterSelect): FsmContext {
   return { state, createProgress: null }
+}
+
+/** 유효 포인트바이 입력 문자열(합 50 ≤ 54, 각 3~18) — [힘,민첩,맷집,지식,신앙심]. */
+const VALID_POINT_BUY = '10 10 10 10 10'
+
+/** confirm 단계에 도달한 완성 collected — 8단계 인터뷰가 전부 채운 상태(dto와 동형). */
+const FULL_COLLECTED = {
+  name: '아무개',
+  gender: 1,
+  class: 2,
+  stats: [10, 10, 10, 10, 10] as [number, number, number, number, number],
+  weapon: 2,
+  alignment: 1,
+  race: 3,
 }
 
 describe('decideCharacterSelectInput (1층 순수 decider)', () => {
@@ -246,7 +261,7 @@ describe('create StateHandler (2층 — 생성 다단 대화)', () => {
     ])
   })
 
-  it('name 응답은 createProgress를 class 단계로 전진하고 create:class prompt를 발화한다 (create 유지)', async () => {
+  it('name 응답은 createProgress를 gender 단계로 전진하고 create:gender prompt를 발화한다 (create 유지)', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = { state: ConnectionState.create, createProgress: { step: 'name', collected: {} } }
 
@@ -257,9 +272,9 @@ describe('create StateHandler (2층 — 생성 다단 대화)', () => {
     })
 
     expect(next).toBe(ConnectionState.create)
-    expect(ctx.createProgress).toEqual({ step: 'class', collected: { name: '아무개' } })
+    expect(ctx.createProgress).toEqual({ step: 'gender', collected: { name: '아무개' } })
     expect(events).toEqual([
-      { type: 'session:prompt', promptId: CREATE_PROMPT_IDS.class, kind: 'createField' },
+      { type: 'session:prompt', promptId: CREATE_PROMPT_IDS.gender, kind: 'createField' },
     ])
   })
 
@@ -267,7 +282,7 @@ describe('create StateHandler (2층 — 생성 다단 대화)', () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = {
       state: ConnectionState.create,
-      createProgress: { step: 'confirm', collected: { name: '아무개', class: 2, race: 3 } },
+      createProgress: { step: 'confirm', collected: FULL_COLLECTED },
     }
 
     const next = await stateHandlers[ConnectionState.create].handleInput(ctx, session, {
@@ -285,7 +300,7 @@ describe('create StateHandler (2층 — 생성 다단 대화)', () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = {
       state: ConnectionState.create,
-      createProgress: { step: 'class', collected: { name: '아무개' } },
+      createProgress: { step: 'class', collected: { name: '아무개', gender: 1 } },
     }
 
     const next = await stateHandlers[ConnectionState.create].handleInput(ctx, session, {
@@ -295,25 +310,25 @@ describe('create StateHandler (2층 — 생성 다단 대화)', () => {
     })
 
     expect(next).toBe(ConnectionState.create)
-    expect(ctx.createProgress).toEqual({ step: 'class', collected: { name: '아무개' } })
+    expect(ctx.createProgress).toEqual({ step: 'class', collected: { name: '아무개', gender: 1 } })
     expect(events).toEqual([expect.objectContaining({ type: 'error', code: 'session_state' })])
   })
 
-  it('무효 값(비정수 class)은 session_state error 발화 후 현재 단계를 유지한다', async () => {
+  it('무효 값(포인트바이 합 초과)은 session_state error 발화 후 현재 단계를 유지한다', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = {
       state: ConnectionState.create,
-      createProgress: { step: 'class', collected: { name: '아무개' } },
+      createProgress: { step: 'stats', collected: { name: '아무개', gender: 1, class: 2 } },
     }
 
     const next = await stateHandlers[ConnectionState.create].handleInput(ctx, session, {
       type: 'session:reply',
-      promptId: CREATE_PROMPT_IDS.class,
-      value: '어림수',
+      promptId: CREATE_PROMPT_IDS.stats,
+      value: '18 18 18 18 18', // 합 90 > 54
     })
 
     expect(next).toBe(ConnectionState.create)
-    expect(ctx.createProgress).toEqual({ step: 'class', collected: { name: '아무개' } })
+    expect(ctx.createProgress).toEqual({ step: 'stats', collected: { name: '아무개', gender: 1, class: 2 } })
     expect(events).toEqual([expect.objectContaining({ type: 'error', code: 'session_state' })])
   })
 
@@ -367,7 +382,7 @@ describe('close-race 가드 (Story 4 — 포트 await 도중 소켓 close)', () 
     isClosed.mockReturnValue(true)
     const ctx: FsmContext = {
       state: ConnectionState.create,
-      createProgress: { step: 'confirm', collected: { name: '아무개', class: 2, race: 3 } },
+      createProgress: { step: 'confirm', collected: FULL_COLLECTED },
     }
 
     const next = await stateHandlers[ConnectionState.create].handleInput(ctx, session, {
@@ -535,36 +550,12 @@ describe('회귀: emit 순서 보존 (async 마이그레이션 불변식)', () =
     expect(listIdx).toBeLessThan(promptIdx)
   })
 
-  it('create 왕복은 이름→클래스→종족→확인 prompt 순서 뒤 마지막에 entered를 발화한다', async () => {
+  it('create 왕복은 8단계 prompt 순서 뒤 마지막에 entered를 발화한다', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
 
     await enterInitialState(ctx, session)
-    await handleSessionFrame(ctx, session, {
-      type: 'session:reply',
-      promptId: SELECT_CHARACTER_PROMPT_ID,
-      value: CREATE_SENTINEL,
-    })
-    await handleSessionFrame(ctx, session, {
-      type: 'session:reply',
-      promptId: CREATE_PROMPT_IDS.name,
-      value: '아무개',
-    })
-    await handleSessionFrame(ctx, session, {
-      type: 'session:reply',
-      promptId: CREATE_PROMPT_IDS.class,
-      value: '2',
-    })
-    await handleSessionFrame(ctx, session, {
-      type: 'session:reply',
-      promptId: CREATE_PROMPT_IDS.race,
-      value: '3',
-    })
-    await handleSessionFrame(ctx, session, {
-      type: 'session:reply',
-      promptId: CREATE_PROMPT_IDS.confirm,
-      value: CREATE_CONFIRM_VALUE,
-    })
+    await driveFullCreate(ctx, session)
 
     const promptIds = events
       .filter((e): e is Extract<ServerEvent, { type: 'session:prompt' }> => e.type === 'session:prompt')
@@ -572,13 +563,37 @@ describe('회귀: emit 순서 보존 (async 마이그레이션 불변식)', () =
     expect(promptIds).toEqual([
       SELECT_CHARACTER_PROMPT_ID,
       CREATE_PROMPT_IDS.name,
+      CREATE_PROMPT_IDS.gender,
       CREATE_PROMPT_IDS.class,
+      CREATE_PROMPT_IDS.stats,
+      CREATE_PROMPT_IDS.weapon,
+      CREATE_PROMPT_IDS.alignment,
       CREATE_PROMPT_IDS.race,
       CREATE_PROMPT_IDS.confirm,
     ])
     expect(events.at(-1)).toEqual({ type: 'session:entered', characterId: 'char-1' })
   })
 })
+
+/**
+ * characterSelect에서 create 신호부터 confirm 승인까지 8단계 인터뷰 전체를 구동한다(happy path 헬퍼).
+ * enterInitialState가 이미 호출된 ctx를 받는다. 각 단계 유효 값을 순서대로 답한다.
+ */
+async function driveFullCreate(ctx: FsmContext, session: SessionContext): Promise<void> {
+  await handleSessionFrame(ctx, session, {
+    type: 'session:reply',
+    promptId: SELECT_CHARACTER_PROMPT_ID,
+    value: CREATE_SENTINEL,
+  })
+  await handleSessionFrame(ctx, session, reply(CREATE_PROMPT_IDS.name, '아무개'))
+  await handleSessionFrame(ctx, session, reply(CREATE_PROMPT_IDS.gender, '1'))
+  await handleSessionFrame(ctx, session, reply(CREATE_PROMPT_IDS.class, '2'))
+  await handleSessionFrame(ctx, session, reply(CREATE_PROMPT_IDS.stats, VALID_POINT_BUY))
+  await handleSessionFrame(ctx, session, reply(CREATE_PROMPT_IDS.weapon, '2'))
+  await handleSessionFrame(ctx, session, reply(CREATE_PROMPT_IDS.alignment, '1'))
+  await handleSessionFrame(ctx, session, reply(CREATE_PROMPT_IDS.race, '3'))
+  await handleSessionFrame(ctx, session, reply(CREATE_PROMPT_IDS.confirm, CREATE_CONFIRM_VALUE))
+}
 
 describe('handleSessionFrame (3층 — handleInput + applyTransition 결합)', () => {
   it('유효 선택 프레임으로 entered 발화 후 ctx.state를 command로 전이한다', async () => {
@@ -604,7 +619,7 @@ describe('handleSessionFrame (3층 — handleInput + applyTransition 결합)', (
     expect(events).toEqual([expect.objectContaining({ type: 'error', code: 'session_state' })])
   })
 
-  it('create 신호→이름→클래스→종족→확인 왕복으로 command에 도달하고 create.onExit가 progress를 정리한다', async () => {
+  it('create 신호→8단계 왕복으로 command에 도달하고 create.onExit가 progress를 정리한다', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
 
@@ -617,30 +632,18 @@ describe('handleSessionFrame (3층 — handleInput + applyTransition 결합)', (
     expect(ctx.state).toBe(ConnectionState.create)
     expect(ctx.createProgress).toEqual({ step: 'name', collected: {} })
 
-    await handleSessionFrame(ctx, session, {
-      type: 'session:reply',
-      promptId: CREATE_PROMPT_IDS.name,
-      value: '아무개',
-    })
-    await handleSessionFrame(ctx, session, {
-      type: 'session:reply',
-      promptId: CREATE_PROMPT_IDS.class,
-      value: '2',
-    })
-    await handleSessionFrame(ctx, session, {
-      type: 'session:reply',
-      promptId: CREATE_PROMPT_IDS.race,
-      value: '3',
-    })
+    await handleSessionFrame(ctx, session, reply(CREATE_PROMPT_IDS.name, '아무개'))
+    await handleSessionFrame(ctx, session, reply(CREATE_PROMPT_IDS.gender, '1'))
+    await handleSessionFrame(ctx, session, reply(CREATE_PROMPT_IDS.class, '2'))
+    await handleSessionFrame(ctx, session, reply(CREATE_PROMPT_IDS.stats, VALID_POINT_BUY))
+    await handleSessionFrame(ctx, session, reply(CREATE_PROMPT_IDS.weapon, '2'))
+    await handleSessionFrame(ctx, session, reply(CREATE_PROMPT_IDS.alignment, '1'))
+    await handleSessionFrame(ctx, session, reply(CREATE_PROMPT_IDS.race, '3'))
     // 확인 전까지는 create 유지(서브스텝 전진은 no-op 전이).
     expect(ctx.state).toBe(ConnectionState.create)
-    expect(ctx.createProgress).toEqual({ step: 'confirm', collected: { name: '아무개', class: 2, race: 3 } })
+    expect(ctx.createProgress).toEqual({ step: 'confirm', collected: FULL_COLLECTED })
 
-    await handleSessionFrame(ctx, session, {
-      type: 'session:reply',
-      promptId: CREATE_PROMPT_IDS.confirm,
-      value: CREATE_CONFIRM_VALUE,
-    })
+    await handleSessionFrame(ctx, session, reply(CREATE_PROMPT_IDS.confirm, CREATE_CONFIRM_VALUE))
 
     expect(ctx.state).toBe(ConnectionState.command)
     // create.onExit가 createProgress를 정리했다(create 밖에선 null).
@@ -655,48 +658,108 @@ function reply(promptId: string, value: string): unknown {
   return { type: 'session:reply', promptId, value }
 }
 
-describe('decideCreateInput (1층 순수 create reducer)', () => {
-  it('name 단계 유효 이름을 class 단계로 advance한다 (collected에 name 누적)', () => {
+describe('decideCreateInput (1층 순수 create reducer — 8단계 인터뷰)', () => {
+  it('name 단계 유효 이름을 gender 단계로 advance한다', () => {
     const progress: CreateProgress = { step: 'name', collected: {} }
     const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.name, '아무개'))
+    expect(decision).toEqual({ kind: 'advance', nextStep: 'gender', collected: { name: '아무개' } })
+  })
 
+  it('gender 단계 1(남)을 class 단계로 advance한다', () => {
+    const progress: CreateProgress = { step: 'gender', collected: { name: '아무개' } }
+    const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.gender, '1'))
     expect(decision).toEqual({
       kind: 'advance',
       nextStep: 'class',
-      collected: { name: '아무개' },
+      collected: { name: '아무개', gender: 1 },
     })
   })
 
-  it('class 단계 정수 문자열을 race 단계로 advance한다 (string→number 변환)', () => {
-    const progress: CreateProgress = { step: 'class', collected: { name: '아무개' } }
+  it('class 단계 정수 문자열을 stats 단계로 advance한다 (임의 정수 허용 — 클래스 테이블 미확정)', () => {
+    const progress: CreateProgress = { step: 'class', collected: { name: '아무개', gender: 1 } }
     const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.class, '2'))
+    expect(decision).toEqual({
+      kind: 'advance',
+      nextStep: 'stats',
+      collected: { name: '아무개', gender: 1, class: 2 },
+    })
+  })
 
+  it('stats 단계 유효 포인트바이를 weapon 단계로 advance한다 ([힘,민첩,맷집,지식,신앙심] 튜플 누적)', () => {
+    const progress: CreateProgress = { step: 'stats', collected: { name: '아무개', gender: 1, class: 2 } }
+    const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.stats, '12 10 11 13 4'))
+    expect(decision).toEqual({
+      kind: 'advance',
+      nextStep: 'weapon',
+      collected: { name: '아무개', gender: 1, class: 2, stats: [12, 10, 11, 13, 4] },
+    })
+  })
+
+  it('weapon 단계 1~5를 alignment 단계로 advance한다', () => {
+    const progress: CreateProgress = {
+      step: 'weapon',
+      collected: { name: '아무개', gender: 1, class: 2, stats: [10, 10, 10, 10, 10] },
+    }
+    const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.weapon, '3'))
+    expect(decision).toEqual({
+      kind: 'advance',
+      nextStep: 'alignment',
+      collected: { name: '아무개', gender: 1, class: 2, stats: [10, 10, 10, 10, 10], weapon: 3 },
+    })
+  })
+
+  it('alignment 단계 2(악)를 race 단계로 advance한다', () => {
+    const progress: CreateProgress = {
+      step: 'alignment',
+      collected: { name: '아무개', gender: 1, class: 2, stats: [10, 10, 10, 10, 10], weapon: 3 },
+    }
+    const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.alignment, '2'))
     expect(decision).toEqual({
       kind: 'advance',
       nextStep: 'race',
-      collected: { name: '아무개', class: 2 },
+      collected: {
+        name: '아무개',
+        gender: 1,
+        class: 2,
+        stats: [10, 10, 10, 10, 10],
+        weapon: 3,
+        alignment: 2,
+      },
     })
   })
 
-  it('race 단계 정수 문자열을 confirm 단계로 advance한다', () => {
-    const progress: CreateProgress = { step: 'race', collected: { name: '아무개', class: 2 } }
+  it('race 단계 1~8을 confirm 단계로 advance한다', () => {
+    const progress: CreateProgress = {
+      step: 'race',
+      collected: {
+        name: '아무개',
+        gender: 1,
+        class: 2,
+        stats: [10, 10, 10, 10, 10],
+        weapon: 3,
+        alignment: 2,
+      },
+    }
     const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.race, '3'))
-
     expect(decision).toEqual({
       kind: 'advance',
       nextStep: 'confirm',
-      collected: { name: '아무개', class: 2, race: 3 },
+      collected: {
+        name: '아무개',
+        gender: 1,
+        class: 2,
+        stats: [10, 10, 10, 10, 10],
+        weapon: 3,
+        alignment: 2,
+        race: 3,
+      },
     })
   })
 
   it('confirm 단계 승인 값에서 완성 dto로 complete한다', () => {
-    const progress: CreateProgress = {
-      step: 'confirm',
-      collected: { name: '아무개', class: 2, race: 3 },
-    }
+    const progress: CreateProgress = { step: 'confirm', collected: FULL_COLLECTED }
     const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.confirm, CREATE_CONFIRM_VALUE))
-
-    expect(decision).toEqual({ kind: 'complete', dto: { name: '아무개', class: 2, race: 3 } })
+    expect(decision).toEqual({ kind: 'complete', dto: FULL_COLLECTED })
   })
 
   it('세션 응답이 아닌 프레임(session:selectCharacter)은 session_state reject다', () => {
@@ -709,7 +772,7 @@ describe('decideCreateInput (1층 순수 create reducer)', () => {
   })
 
   it('현재 단계와 다른 promptId(미일치)로 답하면 reject한다 (상관 강제)', () => {
-    const progress: CreateProgress = { step: 'class', collected: { name: '아무개' } }
+    const progress: CreateProgress = { step: 'class', collected: { name: '아무개', gender: 1 } }
     const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.name, '2'))
     expect(decision).toEqual({ kind: 'reject', code: 'session_state' })
   })
@@ -720,30 +783,164 @@ describe('decideCreateInput (1층 순수 create reducer)', () => {
     expect(decision).toEqual({ kind: 'reject', code: 'session_state' })
   })
 
+  it('범위 밖 gender(3)는 reject한다 (1|2만 허용)', () => {
+    const progress: CreateProgress = { step: 'gender', collected: { name: '아무개' } }
+    const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.gender, '3'))
+    expect(decision).toEqual({ kind: 'reject', code: 'session_state' })
+  })
+
   it('비정수 class 값은 reject한다', () => {
-    const progress: CreateProgress = { step: 'class', collected: { name: '아무개' } }
+    const progress: CreateProgress = { step: 'class', collected: { name: '아무개', gender: 1 } }
     const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.class, '어림수'))
     expect(decision).toEqual({ kind: 'reject', code: 'session_state' })
   })
 
-  it('비정수 race 값은 reject한다', () => {
-    const progress: CreateProgress = { step: 'race', collected: { name: '아무개', class: 2 } }
-    const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.race, '1.5'))
+  it('범위 밖 weapon(6)은 reject한다 (1~5만 허용)', () => {
+    const progress: CreateProgress = {
+      step: 'weapon',
+      collected: { name: '아무개', gender: 1, class: 2, stats: [10, 10, 10, 10, 10] },
+    }
+    const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.weapon, '6'))
+    expect(decision).toEqual({ kind: 'reject', code: 'session_state' })
+  })
+
+  it('범위 밖 alignment(0)는 reject한다 (1|2만 허용)', () => {
+    const progress: CreateProgress = {
+      step: 'alignment',
+      collected: { name: '아무개', gender: 1, class: 2, stats: [10, 10, 10, 10, 10], weapon: 3 },
+    }
+    const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.alignment, '0'))
+    expect(decision).toEqual({ kind: 'reject', code: 'session_state' })
+  })
+
+  it('범위 밖 race(9)는 reject한다 (1~8만 허용)', () => {
+    const progress: CreateProgress = {
+      step: 'race',
+      collected: {
+        name: '아무개',
+        gender: 1,
+        class: 2,
+        stats: [10, 10, 10, 10, 10],
+        weapon: 3,
+        alignment: 2,
+      },
+    }
+    const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.race, '9'))
     expect(decision).toEqual({ kind: 'reject', code: 'session_state' })
   })
 
   it('confirm 단계에서 승인 값이 아니면 reject한다 (현재 단계 유지)', () => {
-    const progress: CreateProgress = {
-      step: 'confirm',
-      collected: { name: '아무개', class: 2, race: 3 },
-    }
+    const progress: CreateProgress = { step: 'confirm', collected: FULL_COLLECTED }
     const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.confirm, '아니오'))
     expect(decision).toEqual({ kind: 'reject', code: 'session_state' })
   })
 
   it('confirm 단계에서 collected가 불완전하면(방어) reject한다', () => {
-    const progress: CreateProgress = { step: 'confirm', collected: { name: '아무개', class: 2 } }
+    const progress: CreateProgress = { step: 'confirm', collected: { name: '아무개', gender: 1, class: 2 } }
     const decision = decideCreateInput(progress, reply(CREATE_PROMPT_IDS.confirm, CREATE_CONFIRM_VALUE))
     expect(decision).toEqual({ kind: 'reject', code: 'session_state' })
+  })
+})
+
+describe('decideCreateInput 포인트바이 54점 검증 (stats 단계 — T6.3)', () => {
+  const statsProgress: CreateProgress = {
+    step: 'stats',
+    collected: { name: '아무개', gender: 1, class: 2 },
+  }
+
+  it('5개 정수·각 3~18·합 ≤54를 만족하면 튜플로 accept한다', () => {
+    const decision = decideCreateInput(statsProgress, reply(CREATE_PROMPT_IDS.stats, '3 3 3 3 3'))
+    expect(decision).toEqual({
+      kind: 'advance',
+      nextStep: 'weapon',
+      collected: { name: '아무개', gender: 1, class: 2, stats: [3, 3, 3, 3, 3] },
+    })
+  })
+
+  it('정확히 합 54(경계)를 accept한다', () => {
+    const decision = decideCreateInput(statsProgress, reply(CREATE_PROMPT_IDS.stats, '18 18 6 6 6'))
+    expect(decision).toEqual({
+      kind: 'advance',
+      nextStep: 'weapon',
+      collected: { name: '아무개', gender: 1, class: 2, stats: [18, 18, 6, 6, 6] },
+    })
+  })
+
+  it('정수가 4개면 reject한다 (정확히 5개 요구)', () => {
+    const decision = decideCreateInput(statsProgress, reply(CREATE_PROMPT_IDS.stats, '10 10 10 10'))
+    expect(decision).toEqual({ kind: 'reject', code: 'session_state' })
+  })
+
+  it('정수가 6개면 reject한다', () => {
+    const decision = decideCreateInput(statsProgress, reply(CREATE_PROMPT_IDS.stats, '10 10 10 10 10 10'))
+    expect(decision).toEqual({ kind: 'reject', code: 'session_state' })
+  })
+
+  it('비정수 원소가 있으면 reject한다', () => {
+    const decision = decideCreateInput(statsProgress, reply(CREATE_PROMPT_IDS.stats, '10 10 10 10 나쁨'))
+    expect(decision).toEqual({ kind: 'reject', code: 'session_state' })
+  })
+
+  it('소수 원소가 있으면 reject한다', () => {
+    const decision = decideCreateInput(statsProgress, reply(CREATE_PROMPT_IDS.stats, '10 10 10 10 1.5'))
+    expect(decision).toEqual({ kind: 'reject', code: 'session_state' })
+  })
+
+  it('원소가 3 미만이면 reject한다 (하한 경계 미달)', () => {
+    const decision = decideCreateInput(statsProgress, reply(CREATE_PROMPT_IDS.stats, '2 10 10 10 10'))
+    expect(decision).toEqual({ kind: 'reject', code: 'session_state' })
+  })
+
+  it('원소가 18 초과면 reject한다 (상한 경계 초과)', () => {
+    const decision = decideCreateInput(statsProgress, reply(CREATE_PROMPT_IDS.stats, '19 3 3 3 3'))
+    expect(decision).toEqual({ kind: 'reject', code: 'session_state' })
+  })
+
+  it('각 값 범위 안이면서 합만 54 초과면 reject한다 (합 경계 격리)', () => {
+    // 12*5 = 60 > 54, 각 12는 3~18 범위 안 — 합 초과만 단독 검증.
+    const decision = decideCreateInput(statsProgress, reply(CREATE_PROMPT_IDS.stats, '12 12 12 12 12'))
+    expect(decision).toEqual({ kind: 'reject', code: 'session_state' })
+  })
+})
+
+describe('와이어 계약 보존 (신규 메시지 타입·프로토콜 미변경 잠금 — T6.7)', () => {
+  it('promptKindSchema는 정확히 [selectCharacter, createField] 두 종류만 갖는다 (신규 kind 없음)', () => {
+    expect(promptKindSchema.options).toEqual(['selectCharacter', 'createField'])
+  })
+
+  it('8단계 인터뷰가 발화하는 create prompt는 모두 kind=createField다 (신규 wire 타입 미도입)', async () => {
+    const { session, events } = makeSession()
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+
+    await enterInitialState(ctx, session)
+    await driveFullCreate(ctx, session)
+
+    const createPrompts = events.filter(
+      (e): e is Extract<ServerEvent, { type: 'session:prompt' }> =>
+        e.type === 'session:prompt' && e.promptId !== SELECT_CHARACTER_PROMPT_ID,
+    )
+    // name~confirm 8개 create prompt가 모두 createField kind로 나온다.
+    expect(createPrompts).toHaveLength(8)
+    for (const p of createPrompts) {
+      expect(p.kind).toBe('createField')
+    }
+  })
+
+  it('인터뷰는 session:prompt·session:reply·session:entered 밖의 신규 session:* 타입을 쓰지 않는다', async () => {
+    const { session, events } = makeSession()
+    const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null }
+
+    await enterInitialState(ctx, session)
+    await driveFullCreate(ctx, session)
+
+    const allowed = new Set([
+      'session:characterList',
+      'session:prompt',
+      'session:entered',
+      'session:resumed',
+    ])
+    for (const e of events) {
+      expect(allowed.has(e.type)).toBe(true)
+    }
   })
 })

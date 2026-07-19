@@ -26,13 +26,20 @@ export interface AccountIdentity {
 }
 
 /**
- * 캐릭터 생성 입력 DTO — 최소 필드(이름·클래스 코드·종족 코드)만 받는다.
- * level 등 파생 값은 어댑터가 기본값으로 채운다.
+ * 캐릭터 생성 입력 DTO — create_ply 인터뷰(Story 6)가 수집한 전체 필드.
+ *
+ * `stats`는 포인트바이 raw 배분 [힘,민첩,맷집,지식,신앙심]이며 종족 보정 *전* 값이다 — 어댑터가
+ * `applyRaceModifiers(stats, race)`로 저장 스탯을 만든다(종족 수학은 server E5 코드 소유). gender(1=남/2=여)·
+ * weapon(1~5)·alignment(1=선/2=악)은 생성 선택을 담는 최소 스칼라다. level 등 파생 값은 어댑터가 채운다.
  */
 export type CreateCharacterInput = {
   name: string
+  gender: number
   class: number
   race: number
+  stats: [number, number, number, number, number]
+  weapon: number
+  alignment: number
 }
 
 /**

@@ -16,7 +16,10 @@ import type { ConnectionRateLimiter } from './messageRateLimiter.js'
  * 핸드셰이크 완료(accept) 전엔 FSM 미진입이라 초기값 characterSelect를 두되 onEnter는 accept 시 구동한다
  * (`ready` 플래그가 진입 전/후를 구분). `createProgress`는 create 다단 대화의 서브상태 슬롯으로, create
  * 상태 밖에선 null이다(create.onEnter가 초기화, onExit가 정리). SessionContext가 매 프레임 재조립되므로
- * 대화 상태는 소켓 수명 동안 유지되는 이 컨텍스트에 둔다. `boundCharacterId`는 이 연결이 세션 레지스트리에
+ * 대화 상태는 소켓 수명 동안 유지되는 이 컨텍스트에 둔다. **create 도중 연결 종료 = 폐기**(Story 6):
+ * createProgress는 이 per-connection 컨텍스트에만 살고 cleanupConnection이 컨텍스트째 제거한다. create 상태는
+ * 세션 레지스트리(월드 진입 시 등록)에 등록되지 않으므로 재연결 시 되살릴 부분 상태가 없다 — 재연결은
+ * characterSelect부터 인터뷰를 다시 시작한다(부분 상태 resume 없음). `boundCharacterId`는 이 연결이 세션 레지스트리에
  * 등록한 캐릭터 id(월드 입장 시 `register`/`rebind`가 대입, 그 전엔 null)로, close 핸들러가 이 값으로
  * 자신의 세션 바인딩을 역참조해 link-dead/종결 경로를 판정한다(레지스트리는 소켓이 아니라 이 컨텍스트를
  * 가리키므로 역방향 열쇠가 필요하다). `ready`·`heartbeat`·`account`·`state`·`createProgress`·

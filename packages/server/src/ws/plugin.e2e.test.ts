@@ -146,7 +146,7 @@ describe('WS transport E2E (실 소켓)', () => {
     // 서버·클라이언트 정리는 afterEach가 소유한다(실패 경로 포함).
   })
 
-  it('T7.2: create 다단 — sentinel→이름→클래스→종족→확인→entered→command→echo', async () => {
+  it('T7.2: create 다단 — sentinel→8단계 인터뷰→entered→command→echo', async () => {
     const url = await startTracked(buildSeededApp())
     const client = trackedClient(url)
 
@@ -162,10 +162,26 @@ describe('WS transport E2E (실 소켓)', () => {
     expect(namePrompt).toMatchObject({ type: 'session:prompt', kind: 'createField', promptId: CREATE_PROMPT_IDS.name })
 
     client.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.name, value: '테스토스' }))
+    const genderPrompt = await reader.next() // session:prompt(create:gender)
+    expect(genderPrompt).toMatchObject({ type: 'session:prompt', promptId: CREATE_PROMPT_IDS.gender })
+
+    client.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.gender, value: '1' }))
     const classPrompt = await reader.next() // session:prompt(create:class)
     expect(classPrompt).toMatchObject({ type: 'session:prompt', promptId: CREATE_PROMPT_IDS.class })
 
     client.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.class, value: '2' }))
+    const statsPrompt = await reader.next() // session:prompt(create:stats)
+    expect(statsPrompt).toMatchObject({ type: 'session:prompt', promptId: CREATE_PROMPT_IDS.stats })
+
+    client.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.stats, value: '10 10 10 10 10' }))
+    const weaponPrompt = await reader.next() // session:prompt(create:weapon)
+    expect(weaponPrompt).toMatchObject({ type: 'session:prompt', promptId: CREATE_PROMPT_IDS.weapon })
+
+    client.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.weapon, value: '2' }))
+    const alignmentPrompt = await reader.next() // session:prompt(create:alignment)
+    expect(alignmentPrompt).toMatchObject({ type: 'session:prompt', promptId: CREATE_PROMPT_IDS.alignment })
+
+    client.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.alignment, value: '1' }))
     const racePrompt = await reader.next() // session:prompt(create:race)
     expect(racePrompt).toMatchObject({ type: 'session:prompt', promptId: CREATE_PROMPT_IDS.race })
 
