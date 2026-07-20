@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { computeAc, computeThaco, type EffectiveStatContext, type Character } from 'shared'
 import { toPlayerCombatState, type WeaponDamage } from './playerState.js'
+import { F_ISSET, PFEARS } from '../world/hexFlags.js'
 
 /**
  * playerState 조립 헬퍼 — armor/thaco를 stats-core(computeAc/computeThaco)로 파생하고,
@@ -87,9 +88,29 @@ describe('toPlayerCombatState', () => {
     expect(state.alignment).toBe(0)
   })
 
-  it('flags를 0으로 기본한다', () => {
+  it('flags를 빈 hex로 기본한다(creature flags와 동일 표현)', () => {
     const state = toPlayerCombatState(character, ctx, weapon)
-    expect(state.flags).toBe(0)
+    expect(state.flags).toBe('')
+  })
+
+  it('신선한 플레이어는 상태 플래그가 없다(F_ISSET false)', () => {
+    const state = toPlayerCombatState(character, ctx, weapon)
+    expect(F_ISSET(state.flags, PFEARS)).toBe(false)
+  })
+
+  it('class를 character.class로 채운다(피해 분기 소비)', () => {
+    const state = toPlayerCombatState(character, ctx, weapon)
+    expect(state.class).toBe(4)
+  })
+
+  it('effectiveStrength를 effectiveContext에서 채운다(bonus[str] 소비)', () => {
+    const state = toPlayerCombatState(character, ctx, weapon)
+    expect(state.effectiveStrength).toBe(ctx.effectiveStrength)
+  })
+
+  it('무기 미착용이면 weapon을 null로 이식한다(맨손 분기)', () => {
+    const state = toPlayerCombatState(character, ctx, null)
+    expect(state.weapon).toBeNull()
   })
 
   it('무기 데미지 서술자를 중첩 weapon으로 이식한다(mdice 소비 편의)', () => {

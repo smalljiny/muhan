@@ -63,4 +63,13 @@ describe('F_SET / F_CLR — 새 hex string 반환(불변)', () => {
     expect(F_ISSET(set, MBEFUD)).toBe(true)
     expect(F_ISSET(F_CLR(set, MBEFUD), MBEFUD)).toBe(false)
   })
+
+  it('짧은/빈 문자열에 고비트 세팅 시 zero-pad해 올바른 바이트에 기록한다(bit51, byte6)', () => {
+    // 빈 문자열에 bit51(byte6)을 세팅한다. zero-pad 없으면 substring이 짧은 문자열
+    // 전체를 반환해 고비트가 byte0에 잘못 실린다(플레이어 flags '' + F_SET 경로).
+    const set = F_SET('', MBEFUD)
+    expect(F_ISSET(set, MBEFUD)).toBe(true)
+    // 낮은 비트로 오염되지 않는다(bit3은 byte0 bit3 — 오배치 시 참이 됐을 자리).
+    expect(F_ISSET(set, 3)).toBe(false)
+  })
 })

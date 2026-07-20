@@ -31,6 +31,14 @@ export const MBEFUD = 51
 /** 사망 시 부하 소환(Story 5 onDeathSummon). */
 export const MSUMMO = 61
 
+// ── 플레이어 P-flag 비트(help/pflags 검증) ───────────────────────────────────
+// 원작 무한/Mordor는 플레이어도 creature 구조체라 P-flag는 creature flags와 동일 바이트 배열이다.
+// 비트 인덱스가 31을 넘으므로(43·44) 32비트 number bitfield로는 표현 불가 — hex string 표현이 정본.
+/** 실명(blind) 상태 — 명중 임계 +5(command5.c:234). */
+export const PBLIND = 43
+/** 공포(fear) 상태 — 명중 임계 +2(command5.c:233). */
+export const PFEARS = 44
+
 // ── object flag 비트(scavenge 제외 판정) ─────────────────────────────────────
 /** 영구 아이템(회수 불가). */
 export const OPERMT = 0
@@ -52,11 +60,19 @@ function byteAt(hex: string, bit: number): number {
   return Number.isNaN(v) ? 0 : v
 }
 
-/** 지정 바이트 인덱스를 새 값으로 교체한 hex string을 반환한다(불변). */
+/**
+ * 지정 바이트 인덱스를 새 값으로 교체한 hex string을 반환한다(불변).
+ *
+ * 입력이 대상 바이트 오프셋보다 짧으면(예: 빈 문자열에 고비트 세팅) 대상 오프셋까지 '0'으로
+ * 채운 뒤 교체한다 — zero-pad가 없으면 substring이 짧은 문자열 전체를 반환해 고바이트 비트를
+ * 낮은 바이트에 잘못 기록한다(플레이어 flags '' + PFEARS=44 경로). 16자 full-width 입력에는
+ * padEnd가 no-op이라 기존 크리처/오브젝트 flags 동작은 불변.
+ */
 function withByte(hex: string, byteIdx: number, value: number): string {
   const i = byteIdx * 2
   const hexByte = (value & 0xff).toString(16).padStart(2, '0')
-  return hex.substring(0, i) + hexByte + hex.substring(i + 2)
+  const padded = hex.padEnd(i, '0')
+  return padded.slice(0, i) + hexByte + padded.slice(i + 2)
 }
 
 /** 원본 F_ISSET — 비트가 세팅됐는지. 짧은/빈 hex는 미세팅(false)으로 취급한다. */

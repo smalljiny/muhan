@@ -30,4 +30,20 @@ describe('combat 배럴', () => {
     expect(typeof combat.toPlayerCombatState).toBe('function')
     expect(typeof combat.createCombatRegistry).toBe('function')
   })
+
+  it('combatant·attackStats 표면을 재export한다', () => {
+    expect(typeof combat.toCombatant).toBe('function')
+    expect(typeof combat.hitThreshold).toBe('function')
+    expect(typeof combat.playerBaseDamage).toBe('function')
+    expect(typeof combat.monsterDamage).toBe('function')
+    expect(typeof combat.applyPaladinAlignment).toBe('function')
+  })
+
+  it('클래스 인덱스 상수를 재export한다', () => {
+    expect(combat.BARBARIAN).toBe(2)
+    expect(combat.CLERIC).toBe(3)
+    expect(combat.MAGE).toBe(5)
+    expect(combat.PALADIN).toBe(6)
+    expect(combat.INVINCIBLE).toBe(9)
+  })
 })

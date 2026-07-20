@@ -21,18 +21,26 @@ export type PlayerCombatState = {
   /** 현재 MP — 마법 소비가 in-place 차감(가변). */
   mpCurrent: number
   readonly level: number
+  /** 클래스 인덱스(1-12) — 피해 분기(BARBARIAN/MAGE/CLERIC/INVINCIBLE)·PALADIN 정렬 보정에 소비. */
+  readonly class: number
+  /** 유효 힘(effectiveContext.effectiveStrength) — 피해 `bonus[str]` 항에 bonusOf로 소비. */
+  readonly effectiveStrength: number
   /** 파생 방어도(computeAc 결과). */
   readonly armor: number
   /** 파생 THAC0(computeThaco 결과). */
   readonly thaco: number
   /** 유효 민첩(effectiveContext.effectiveDexterity). */
   readonly dexterity: number
-  /** 플레이어 상태 플래그 비트(PFEARS/PBLIND 등 명중 보정에 Story 5가 소비). */
-  readonly flags: number
+  /**
+   * 플레이어 상태 플래그 — creature flags와 동일한 hex string 바이트 배열(원작에서 플레이어도
+   * creature 구조체). PBLIND=43·PFEARS=44는 비트 인덱스 >31이라 number bitfield로 표현 불가하므로
+   * hex string이 정본이다. F_ISSET(flags, bit)로 판정하며 신선한 플레이어는 빈 hex(상태 플래그 없음).
+   */
+  readonly flags: string
   /** 성향(PALADIN 정렬 보정에 Story 5가 소비). */
   readonly alignment: number
-  /** 무기 데미지 서술자(ndice/sdice/pdice는 DiceSpec 호환 — mdice 직접 소비). */
-  readonly weapon: WeaponDamage
+  /** 무기 데미지 서술자 — 미착용이면 null(맨손 분기). mdice(weapon)은 착용 시에만 소비. */
+  readonly weapon: WeaponDamage | null
   /**
    * LT_ATTCK 반격 쿨다운 게이트 — 다음 공격 도래 시각.
    * 몬스터 CreatureInstance.nextActionAt과 **구분되는 별도 필드**다(플레이어 세션 액터 타이머).
@@ -54,23 +62,26 @@ export type WeaponDamage = DiceSpec & {
  * Character + 유효 스탯 컨텍스트 + 무기 데미지 서술자를 라이브 PlayerCombatState로 조립한다.
  *
  * armor/thaco는 반드시 computeAc/computeThaco로 파생한다(재구현 금지 — stats-core 소비).
- * base 필드는 character에서, dexterity는 effectiveContext에서, 무기는 weaponDamage에서 취한다.
- * alignment는 character.alignment ?? 0, flags/nextAttackAt은 초기값 0. 새 객체를 반환한다.
+ * base 필드는 character에서, dexterity/effectiveStrength는 effectiveContext에서, 무기는 weaponDamage에서
+ * 취한다(미착용이면 null 전달). alignment는 character.alignment ?? 0, flags는 빈 hex(상태 플래그 없음),
+ * nextAttackAt은 초기값 0. 새 객체를 반환한다.
  */
 export function toPlayerCombatState(
   character: Character,
   effectiveContext: EffectiveStatContext,
-  weaponDamage: WeaponDamage,
+  weaponDamage: WeaponDamage | null,
 ): PlayerCombatState {
   return {
     characterId: character._id,
     hpCurrent: character.hpCurrent,
     mpCurrent: character.mpCurrent,
     level: character.level,
+    class: character.class,
+    effectiveStrength: effectiveContext.effectiveStrength,
     armor: computeAc(effectiveContext),
     thaco: computeThaco(effectiveContext),
     dexterity: effectiveContext.effectiveDexterity,
-    flags: 0,
+    flags: '',
     alignment: character.alignment ?? 0,
     weapon: weaponDamage,
     nextAttackAt: 0,

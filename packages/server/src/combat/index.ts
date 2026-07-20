@@ -10,8 +10,16 @@ export {
   HIT_ROLL_MAX_PLAYER,
   HIT_ROLL_MAX_MONSTER,
   PVP_COOLDOWN_INCREMENT,
+  BARBARIAN,
+  CLERIC,
+  MAGE,
+  PALADIN,
+  INVINCIBLE,
 } from './constants.js'
 export { toPlayerCombatState } from './playerState.js'
 export type { PlayerCombatState, WeaponDamage } from './playerState.js'
 export { createCombatRegistry } from './combatRegistry.js'
 export type { CombatRegistry } from './combatRegistry.js'
+export { toCombatant } from './combatant.js'
+export type { Combatant, PlayerCombatant, CreatureCombatant } from './combatant.js'
+export { hitThreshold, playerBaseDamage, monsterDamage, applyPaladinAlignment } from './attackStats.js'
