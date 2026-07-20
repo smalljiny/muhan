@@ -289,7 +289,7 @@ describe('WS transport', () => {
     await app.ready()
 
     const ws = await injectAuthedWS(app)
-    // select prompt→create 신호→이름→클래스→종족→확인→entered까지 왕복해 command 도달.
+    // select prompt→create 신호→8단계 인터뷰→entered까지 왕복해 command 도달.
     const reader = await enterCreateFlow(ws)
     expect([...app.wsConnections.values()][0]?.state).toBe(ConnectionState.command)
     // 대화 상태는 command 진입 시 정리됐다.
@@ -341,17 +341,17 @@ describe('WS transport', () => {
     ws.send(JSON.stringify({ type: 'session:reply', promptId: SELECT_CHARACTER_PROMPT_ID, value: CREATE_SENTINEL }))
     await reader.next() // prompt(create:name)
 
-    // name에 정상 응답 → class 단계로 전진.
+    // name에 정상 응답 → gender 단계로 전진.
     ws.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.name, value: '아무개' }))
-    await reader.next() // prompt(create:class)
+    await reader.next() // prompt(create:gender)
 
-    // 이제 단계는 class인데 지나간 name promptId로 다시 답한다(stale·미해결).
+    // 이제 단계는 gender인데 지나간 name promptId로 다시 답한다(stale·미해결).
     ws.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.name, value: '재입력' }))
     const event = await reader.next()
 
     expect(event).toMatchObject({ type: 'error', code: 'session_state' })
-    // 단계가 전진하지 않고 class에 머문다.
-    expect([...app.wsConnections.values()][0]?.createProgress).toMatchObject({ step: 'class' })
+    // 단계가 전진하지 않고 gender에 머문다.
+    expect([...app.wsConnections.values()][0]?.createProgress).toMatchObject({ step: 'gender' })
 
     ws.terminate()
     await app.close()

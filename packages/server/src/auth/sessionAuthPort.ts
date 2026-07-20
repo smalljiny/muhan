@@ -9,9 +9,12 @@ import type { CharacterSummary } from 'shared'
  * 실 firebase 세션 쿠키 검증 어댑터와 accountId↔character의 Mongo 영구화가 이 포트를
  * 구현한다 — 여기(E3)에는 실 firebase·Mongo 구현을 두지 않고 인메모리 어댑터로만 만족한다.
  *
- * 동기 시그니처: 인메모리 stub이라 메서드가 Promise를 반환하지 않는다. E5의 실 어댑터는
- * 네트워크·DB I/O로 async가 필요하므로, 그 시점에 포트를 `Promise<...>` 반환으로 확장하고
- * 호출부를 await로 조정한다. 지금은 async seam을 주석으로만 남기고 동기로 유지한다.
+ * async 시그니처: 네 메서드가 모두 `Promise`를 반환한다. E5의 실 어댑터는 네트워크·DB I/O로
+ * async가 필수이므로, 인메모리 stub 단계에서 미리 포트를 async로 확정해 호출부(어댑터·FSM·플러그인)를
+ * await로 정렬했다 — 실 어댑터 교체 시 시그니처 변경 없이 구현만 바꾸면 된다. 인메모리 구현은 즉시
+ * resolve하는 Promise를 돌려주지만, 셸은 소켓 프레임을 per-connection 큐로 직렬화해 await 도중 *프레임 대
+ * 프레임* 재진입(다음 프레임이 공유 상태를 동시 변이)이 없도록 보장한다. 프레임 큐와 별개 리스너인 소켓
+ * 'close'는 이 큐로 못 막으므로, FSM이 포트 await 재개 후 ctx.closed 가드로 죽은 연결의 월드 등록을 건너뛴다.
  */
 
 /**
@@ -23,13 +26,20 @@ export interface AccountIdentity {
 }
 
 /**
- * 캐릭터 생성 입력 DTO — 최소 필드(이름·클래스 코드·종족 코드)만 받는다.
- * level 등 파생 값은 어댑터가 기본값으로 채운다.
+ * 캐릭터 생성 입력 DTO — create_ply 인터뷰(Story 6)가 수집한 전체 필드.
+ *
+ * `stats`는 포인트바이 raw 배분 [힘,민첩,맷집,지식,신앙심]이며 종족 보정 *전* 값이다 — 어댑터가
+ * `applyRaceModifiers(stats, race)`로 저장 스탯을 만든다(종족 수학은 server E5 코드 소유). gender(1=남/2=여)·
+ * weapon(1~5)·alignment(1=선/2=악)은 생성 선택을 담는 최소 스칼라다. level 등 파생 값은 어댑터가 채운다.
  */
 export type CreateCharacterInput = {
   name: string
+  gender: number
   class: number
   race: number
+  stats: [number, number, number, number, number]
+  weapon: number
+  alignment: number
 }
 
 /**
@@ -37,10 +47,10 @@ export type CreateCharacterInput = {
  */
 export interface SessionAuthPort {
   /** 세션 쿠키를 검증해 계정 신원을 반환한다. 유효하지 않으면 null. */
-  validateSessionCookie(cookie: string): AccountIdentity | null
+  validateSessionCookie(cookie: string): Promise<AccountIdentity | null>
 
   /** account가 보유한 캐릭터 요약 목록을 반환한다. 없으면 빈 배열. */
-  listCharacters(accountId: string): CharacterSummary[]
+  listCharacters(accountId: string): Promise<CharacterSummary[]>
 
   /**
    * account에 최소 필드 dto로 캐릭터를 생성하고 그 요약을 반환한다.
@@ -48,10 +58,19 @@ export interface SessionAuthPort {
    * 가정한다. Story 5의 create 상태 핸들러가 Zod로 검증한 뒤 호출한다. 클래스/종족 코드의
    * 범위·유효성 제약은 코드 테이블이 확정되는 E5로 유예한다(E3엔 테이블이 없어 강제하지 않는다).
    */
-  createCharacter(accountId: string, dto: CreateCharacterInput): CharacterSummary
+  createCharacter(accountId: string, dto: CreateCharacterInput): Promise<CharacterSummary>
 
-  /** characterId가 accountId 소유가 아니면 throw한다. 소유하면 void. */
-  assertOwnership(accountId: string, characterId: string): void
+  /** characterId가 accountId 소유가 아니면 reject한다(OwnershipError). 소유하면 resolve. */
+  assertOwnership(accountId: string, characterId: string): Promise<void>
+
+  /**
+   * characterId를 소프트 삭제한다(자살/suicide 서브플로우의 최종 부수효과). 구현은 삭제 *전에*
+   * 내부적으로 소유권을 재확인하고(TOCTOU 방어 — 대상 선택과 확정 사이 형제 세션이 같은 캐릭터를
+   * 지목할 수 있는 창을 닫는다), 소유가 아니거나 존재하지 않으면 OwnershipError로 reject한다.
+   * FSM 조기 assert(대상 선택 시점)와 이 내부 assert를 둘 다 유지하는 것이 옳은 이중 방어다.
+   * 소프트 삭제라 문서는 보존되고 재로그인만 차단된다(원작 SUICD 플래그·무덤 이동 셸의 재설계).
+   */
+  deleteCharacter(accountId: string, characterId: string): Promise<void>
 }
 
 /**

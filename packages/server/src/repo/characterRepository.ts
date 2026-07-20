@@ -7,7 +7,12 @@ const COLLECTION_NAME = 'characters'
 
 // 부분 갱신 검증 스키마 — updateById마다 재구성하지 않도록 모듈 스코프에서 1회 파생한다.
 // strictObject의 .partial()은 존재 필드만 검증하고 unknown 키는 여전히 거부한다.
-const characterPatchSchema = characterSchema.partial()
+// status의 .default('active')는 먼저 벗긴다(accountRepository와 동일 관례): patch에 status가
+// 없을 때 .partial()이라도 default가 재발화해 $set에 status:'active'가 주입되면, 무덤
+// (status='deleted') 문서를 부활시키는 silent write가 된다. removeDefault로 넘긴 값만 검증한다.
+const characterPatchSchema = characterSchema
+  .extend({ status: characterSchema.shape.status.removeDefault() })
+  .partial()
 
 /**
  * 캐릭터 영속 저장소.
@@ -33,16 +38,31 @@ export class CharacterRepository implements IRepository<Character> {
   }
 
   /**
-   * name unique 인덱스를 보장한다. createIndex는 멱등이라 반복 호출해도 안전하다.
+   * name unique 인덱스와 accountId 인덱스를 보장한다. createIndex는 멱등이라 반복 호출해도 안전하다.
+   * accountId 인덱스는 계정별 캐릭터 조회(findByAccount)를 위한 것이며 유일 제약이 아니다
+   * (한 계정이 여러 캐릭터를 소유한다).
    */
   async init(): Promise<void> {
     await this.collection.createIndex({ name: 1 }, { unique: true })
+    await this.collection.createIndex({ accountId: 1 })
   }
 
   async findById(id: string): Promise<Character | null> {
     const doc = await this.collection.findOne({ _id: id } as Filter<Character>)
     if (doc === null) return null
     return characterSchema.parse(doc)
+  }
+
+  /**
+   * 계정별 캐릭터 조회 — accountId FK로 소유 계정의 캐릭터 목록을 파생한다.
+   * status='deleted'(무덤) 캐릭터는 제외한다 — 삭제된 캐릭터로 재로그인을 차단하는 불변식.
+   * 조회 직후 characterSchema.parse로 경계 검증한다(findById와 동일 정책).
+   */
+  async findByAccount(accountId: string): Promise<Character[]> {
+    const docs = await this.collection
+      .find({ accountId, status: { $ne: 'deleted' } } as Filter<Character>)
+      .toArray()
+    return docs.map((doc) => characterSchema.parse(doc))
   }
 
   async insert(doc: Character): Promise<void> {
@@ -60,6 +80,19 @@ export class CharacterRepository implements IRepository<Character> {
   async deleteById(id: string): Promise<void> {
     const result = await this.collection.deleteOne({ _id: id })
     if (result.deletedCount === 0) throw new DocumentNotFoundError(COLLECTION_NAME, id)
+  }
+
+  /**
+   * 소프트 삭제(자살/suicide) — 문서를 물리적으로 지우지 않고 무덤 상태로 표시한다.
+   *
+   * status='deleted' + deletedAt 세팅만 하고 문서는 보존한다. findByAccount가 status!=='deleted'로
+   * 필터하므로 삭제 캐릭터로의 재로그인이 막히고(원작 SUICD 플래그 대체), findById는 여전히 문서를
+   * 돌려줘 감사·복원 여지를 남긴다(하드 삭제와의 차이). 원작 command5.c suicide의 `system("mv")`
+   * 무덤 이동 셸은 재현하지 않는다(주입 표면 제거). updateById를 재사용하므로 0건 매칭 시
+   * DocumentNotFoundError로 fail-loud한다(존재하지 않는 캐릭터 삭제는 조용히 삼키지 않는다).
+   */
+  async softDelete(id: string): Promise<void> {
+    await this.updateById(id, { status: 'deleted', deletedAt: new Date() })
   }
 
   /**

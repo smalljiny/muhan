@@ -31,6 +31,8 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
     gold: 100,
     currentRoom: 1,
     schemaVersion: 1,
+    accountId: 'acc-1',
+    status: 'active',
     ...overrides,
   }
 }

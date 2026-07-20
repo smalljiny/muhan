@@ -6,6 +6,7 @@ import {
   type ConnectionContext,
   type IdleTimer,
 } from './connection.js'
+import { ConnectionState } from './fsm/sessionFsm.js'
 import type { Deadline } from './deadline.js'
 import type { ConnectionRateLimiter } from './messageRateLimiter.js'
 
@@ -132,5 +133,33 @@ describe('cleanupConnection', () => {
 
     expect(() => cleanupConnection(connections, socket)).not.toThrow()
     expect(connections.has(socket)).toBe(false)
+  })
+})
+
+describe('create 도중 연결 종료 = 폐기 (T6.6 — mid-abort discard)', () => {
+  it('create 진행 중 disconnect는 createProgress를 컨텍스트째 폐기한다 (부분 상태 미보존)', () => {
+    const socket = fakeSocket()
+    const connections = new Map<WebSocket, ConnectionContext>()
+    const ctx = createConnectionContext()
+    // 인터뷰 중반(stats 단계)에서 연결이 끊긴 상황을 모사한다 — createProgress에 부분 누적이 살아 있다.
+    ctx.state = ConnectionState.create
+    ctx.createProgress = {
+      step: 'stats',
+      collected: { name: '중도하차', gender: 1, class: 2 },
+    }
+    connections.set(socket, ctx)
+
+    cleanupConnection(connections, socket)
+
+    // createProgress는 per-connection 컨텍스트에 살고, cleanup이 컨텍스트를 맵에서 제거해 폐기한다.
+    // create 상태는 세션 레지스트리에 등록되지 않으므로(월드 진입 전) 재연결 시 되살릴 부분 상태가 없다.
+    expect(connections.has(socket)).toBe(false)
+  })
+
+  it('신규 연결은 항상 characterSelect·createProgress=null로 시작한다 (재연결은 인터뷰 앞에서 재시작)', () => {
+    // 재연결은 새 소켓의 새 컨텍스트다 — 이전 create 부분 상태를 이어받지 않고 characterSelect부터 다시 시작한다.
+    const fresh = createConnectionContext()
+    expect(fresh.state).toBe(ConnectionState.characterSelect)
+    expect(fresh.createProgress).toBeNull()
   })
 })

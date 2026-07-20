@@ -44,23 +44,29 @@ export class InMemorySessionAuthAdapter implements SessionAuthPort {
     )
   }
 
-  validateSessionCookie(cookie: string): AccountIdentity | null {
+  // 인메모리 stub이라 실제 I/O가 없어 즉시 resolve하는 Promise를 돌려준다(non-async + Promise.resolve —
+  // async 키워드는 await가 없어 require-await에 걸린다). 포트 계약(Promise 반환)은 그대로 충족하며,
+  // E5 실 어댑터는 이 자리에서 네트워크·DB await로 몸체를 채운다.
+  validateSessionCookie(cookie: string): Promise<AccountIdentity | null> {
     const accountId = this.cookieToAccount.get(cookie)
     if (accountId === undefined) {
-      return null
+      return Promise.resolve(null)
     }
-    return { accountId }
+    return Promise.resolve({ accountId })
   }
 
-  listCharacters(accountId: string): CharacterSummary[] {
+  listCharacters(accountId: string): Promise<CharacterSummary[]> {
     const list = this.charactersByAccount.get(accountId)
     if (list === undefined) {
-      return []
+      return Promise.resolve([])
     }
-    return list.map((c) => ({ ...c }))
+    return Promise.resolve(list.map((c) => ({ ...c })))
   }
 
-  createCharacter(accountId: string, dto: CreateCharacterInput): CharacterSummary {
+  createCharacter(accountId: string, dto: CreateCharacterInput): Promise<CharacterSummary> {
+    // 인메모리 어댑터는 CharacterSummary만 저장하고 스탯·gender·weapon·alignment를 영속하지 않는다
+    // (요약엔 이 필드가 없다). 전체 DTO를 받되 요약에 필요한 name·class·race만 투영한다 — 종족 보정 수학은
+    // Character 문서를 조립하는 firebase 어댑터가 소유한다.
     const summary: CharacterSummary = {
       characterId: `char-${this.nextCharacterSeq++}`,
       name: dto.name,
@@ -72,14 +78,32 @@ export class InMemorySessionAuthAdapter implements SessionAuthPort {
     // summary는 이 함수에서만 만든 미별칭 로컬이라 저장본으로 그대로 넘긴다. 저장본과 반환본이
     // 다른 참조이기만 하면 저장소 오염이 막히므로 복사는 반환 경로에만 둔다.
     this.charactersByAccount.set(accountId, [...existing, summary])
-    return { ...summary }
+    return Promise.resolve({ ...summary })
   }
 
-  assertOwnership(accountId: string, characterId: string): void {
+  assertOwnership(accountId: string, characterId: string): Promise<void> {
     const list = this.charactersByAccount.get(accountId) ?? []
     const owns = list.some((c) => c.characterId === characterId)
     if (!owns) {
-      throw new OwnershipError(accountId, characterId)
+      return Promise.reject(new OwnershipError(accountId, characterId))
     }
+    return Promise.resolve()
+  }
+
+  deleteCharacter(accountId: string, characterId: string): Promise<void> {
+    // 내부 이중 assert(TOCTOU 방어) — 삭제 직전 소유권을 재확인한다. 소유가 아니거나 존재하지
+    // 않으면 OwnershipError로 reject하고 저장소를 건드리지 않는다.
+    const list = this.charactersByAccount.get(accountId) ?? []
+    const owns = list.some((c) => c.characterId === characterId)
+    if (!owns) {
+      return Promise.reject(new OwnershipError(accountId, characterId))
+    }
+    // 인메모리 어댑터는 무덤 상태를 저장할 필드가 없어(요약만 보관) 목록에서 물리 제거로 소프트
+    // 삭제의 관찰 가능한 결과(이후 목록에서 사라짐)를 재현한다. 새 배열로 교체해 불변성을 지킨다.
+    this.charactersByAccount.set(
+      accountId,
+      list.filter((c) => c.characterId !== characterId),
+    )
+    return Promise.resolve()
   }
 }

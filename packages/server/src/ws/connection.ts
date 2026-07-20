@@ -1,7 +1,7 @@
 import type { WebSocket } from 'ws'
 import { PROTOCOL_VERSION } from 'shared'
 import type { AccountIdentity } from '../auth/sessionAuthPort.js'
-import { ConnectionState, type CreateProgress } from './fsm/sessionFsm.js'
+import { ConnectionState, type CreateProgress, type DeleteProgress } from './fsm/sessionFsm.js'
 import type { Deadline } from './deadline.js'
 import type { ConnectionRateLimiter } from './messageRateLimiter.js'
 
@@ -16,7 +16,10 @@ import type { ConnectionRateLimiter } from './messageRateLimiter.js'
  * 핸드셰이크 완료(accept) 전엔 FSM 미진입이라 초기값 characterSelect를 두되 onEnter는 accept 시 구동한다
  * (`ready` 플래그가 진입 전/후를 구분). `createProgress`는 create 다단 대화의 서브상태 슬롯으로, create
  * 상태 밖에선 null이다(create.onEnter가 초기화, onExit가 정리). SessionContext가 매 프레임 재조립되므로
- * 대화 상태는 소켓 수명 동안 유지되는 이 컨텍스트에 둔다. `boundCharacterId`는 이 연결이 세션 레지스트리에
+ * 대화 상태는 소켓 수명 동안 유지되는 이 컨텍스트에 둔다. **create 도중 연결 종료 = 폐기**(Story 6):
+ * createProgress는 이 per-connection 컨텍스트에만 살고 cleanupConnection이 컨텍스트째 제거한다. create 상태는
+ * 세션 레지스트리(월드 진입 시 등록)에 등록되지 않으므로 재연결 시 되살릴 부분 상태가 없다 — 재연결은
+ * characterSelect부터 인터뷰를 다시 시작한다(부분 상태 resume 없음). `boundCharacterId`는 이 연결이 세션 레지스트리에
  * 등록한 캐릭터 id(월드 입장 시 `register`/`rebind`가 대입, 그 전엔 null)로, close 핸들러가 이 값으로
  * 자신의 세션 바인딩을 역참조해 link-dead/종결 경로를 판정한다(레지스트리는 소켓이 아니라 이 컨텍스트를
  * 가리키므로 역방향 열쇠가 필요하다). `ready`·`heartbeat`·`account`·`state`·`createProgress`·
@@ -44,7 +47,20 @@ export interface ConnectionContext {
   account: AccountIdentity | null
   state: ConnectionState
   createProgress: CreateProgress | null
+  // delete(자살) 서브플로우의 대상 슬롯 — delete 상태 밖에선 null(delete.onExit가 정리). createProgress와
+  // 동일하게 이 per-connection 컨텍스트에만 살고 cleanupConnection이 컨텍스트째 폐기한다(delete 도중 종료 = 폐기).
+  deleteProgress: DeleteProgress | null
   boundCharacterId: string | null
+  // 소켓 close 발화 여부. 포트 호출이 async가 된 뒤(Story 4) FSM이 포트 await로 멈춘 사이 소켓이 닫히면
+  // 'close' 핸들러(frameTail 큐와 별개 리스너)가 이 플래그를 세운다. await 재개 후 FSM은 이 플래그로 죽은 연결에
+  // 대한 월드 등록(register)·command 상태 대입·데드라인 rearm 같은 부수효과를 건너뛴다(좀비 바인딩·형제 evict 방지).
+  closed: boolean
+  // per-connection 프레임 직렬화 큐의 tail promise. message 핸들러가 이제 async 경로(FSM·핸드셰이크 accept)를
+  // 태울 수 있어, ws가 리스너를 await하지 않는 이상 프레임 2의 'message'가 프레임 1의 await 도중 시작돼 공유
+  // 상태(state·createProgress·deadline)를 동시 변이할 수 있다. 각 프레임 처리를 이 tail에 .then으로 체이닝해
+  // 프레임 N+1이 프레임 N 완결 뒤에만 시작하도록 강제한다. 소켓 수명 동안 유지돼야 하므로(리스너 로컬은 프레임
+  // 간 소멸) 여기 둔다. 초기값은 즉시 resolve된 Promise다.
+  frameTail: Promise<void>
 }
 
 /**
@@ -72,7 +88,10 @@ export function createConnectionContext(): ConnectionContext {
     account: null,
     state: ConnectionState.characterSelect,
     createProgress: null,
+    deleteProgress: null,
     boundCharacterId: null,
+    closed: false,
+    frameTail: Promise.resolve(),
   }
 }
 

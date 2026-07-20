@@ -266,21 +266,28 @@ export async function enterCommandState(ws: WebSocket, timeoutMs = 1000): Promis
   return reader
 }
 
-/** enterCreateFlow가 각 create 필드에 답할 값(생략 시 유효 기본값). class·race는 문자열로 실린다(reply.value). */
+/**
+ * enterCreateFlow가 각 create 필드에 답할 값(생략 시 유효 기본값). 모두 문자열로 실린다(reply.value).
+ * stats는 공백 구분 포인트바이 "## ## ## ## ##"(합 ≤54, 각 3~18) 문자열이다.
+ */
 export interface CreateFlowFields {
   name?: string
+  gender?: string
   class?: string
+  stats?: string
+  weapon?: string
+  alignment?: string
   race?: string
 }
 
 /**
- * 소켓을 connect→hello→ready→characterList→prompt→create 신호→이름→클래스→종족→확인→entered 경로로
- * 왕복시켜 create 다단 대화를 완주하고 command 상태에 도달시킨다(Story 5·7이 공유하는 단일 create traversal).
+ * 소켓을 connect→hello→ready→characterList→prompt→create 신호→8단계 인터뷰→entered 경로로 왕복시켜
+ * create 다단 대화를 완주하고 command 상태에 도달시킨다(Story 5·7이 공유하는 단일 create traversal).
  *
  * select prompt에 `session:reply{value: CREATE_SENTINEL}`로 답해 create로 전이시킨 뒤, 서버가 발화하는 각
- * create prompt(create:name·class·race·confirm)에 상관된 promptId로 순차 응답한다. `enterCommandState`와
- * 같은 유실 없는 리더 규약을 따르며(소켓 생성 직후 첫 send·open 전 호출), entered를 소비한 리더를 돌려줘
- * 호출자가 이후 프레임을 이어 읽게 한다. Story 7 T7.2가 이 헬퍼를 재사용한다(인라인 walk 금지).
+ * create prompt(name→gender→class→stats→weapon→alignment→race→confirm)에 상관된 promptId로 순차
+ * 응답한다. `enterCommandState`와 같은 유실 없는 리더 규약을 따르며(소켓 생성 직후 첫 send·open 전 호출),
+ * entered를 소비한 리더를 돌려줘 호출자가 이후 프레임을 이어 읽게 한다. Story 7 T7.2가 이 헬퍼를 재사용한다.
  */
 export async function enterCreateFlow(
   ws: WebSocket,
@@ -288,7 +295,11 @@ export async function enterCreateFlow(
   timeoutMs = 1000,
 ): Promise<MessageReader> {
   const name = fields.name ?? '아무개'
+  const gender = fields.gender ?? '1'
   const characterClass = fields.class ?? '2'
+  const stats = fields.stats ?? '10 10 10 10 10'
+  const weapon = fields.weapon ?? '2'
+  const alignment = fields.alignment ?? '1'
   const race = fields.race ?? '3'
 
   const reader = createMessageReader(ws)
@@ -303,8 +314,16 @@ export async function enterCreateFlow(
   ws.send(JSON.stringify({ type: 'session:reply', promptId: SELECT_CHARACTER_PROMPT_ID, value: CREATE_SENTINEL }))
   await reader.next(timeoutMs) // session:prompt(create:name)
   ws.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.name, value: name }))
+  await reader.next(timeoutMs) // session:prompt(create:gender)
+  ws.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.gender, value: gender }))
   await reader.next(timeoutMs) // session:prompt(create:class)
   ws.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.class, value: characterClass }))
+  await reader.next(timeoutMs) // session:prompt(create:stats)
+  ws.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.stats, value: stats }))
+  await reader.next(timeoutMs) // session:prompt(create:weapon)
+  ws.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.weapon, value: weapon }))
+  await reader.next(timeoutMs) // session:prompt(create:alignment)
+  ws.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.alignment, value: alignment }))
   await reader.next(timeoutMs) // session:prompt(create:race)
   ws.send(JSON.stringify({ type: 'session:reply', promptId: CREATE_PROMPT_IDS.race, value: race }))
   await reader.next(timeoutMs) // session:prompt(create:confirm)

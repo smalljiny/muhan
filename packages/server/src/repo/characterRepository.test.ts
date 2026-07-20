@@ -17,6 +17,9 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
     gold: 100,
     currentRoom: 1,
     schemaVersion: 1,
+    // 계정 링크 FK(Story 1로 필수화)와 soft-delete 상태 기본값.
+    accountId: 'acc-1',
+    status: 'active',
     ...overrides,
   }
 }
@@ -93,6 +96,22 @@ describe('CharacterRepository (integration)', () => {
     await expect(repo.updateById(doc._id, { gold: -1 })).rejects.toThrow()
   })
 
+  it('updateById는 status를 담지 않은 패치가 status default를 재주입하지 않는다 (무덤 부활 방지)', async () => {
+    // 무덤(status='deleted') 문서에 status를 뺀 부분 패치를 적용한다. characterSchema.status에
+    // 걸린 .default('active')가 patch 검증에서 재발화하면 $set에 status:'active'가 섞여 무덤이
+    // 부활한다(silent lost-write). removeDefault 파생 패치 스키마가 이를 막는지 고정한다.
+    const doc = makeCharacter({ status: 'deleted', deletedAt: new Date() })
+    await repo.insert(doc)
+
+    await repo.updateById(doc._id, { gold: 999 })
+
+    const found = await repo.findById(doc._id)
+    expect(found?.gold).toBe(999)
+    // 핵심 단언: status가 건드려지지 않아 여전히 'deleted'다(수정 전이면 'active'로 부활).
+    expect(found?.status).toBe('deleted')
+    expect(found?.deletedAt).toBeInstanceOf(Date)
+  })
+
   it('deleteById는 문서를 제거한다', async () => {
     const doc = makeCharacter()
     await repo.insert(doc)
@@ -141,8 +160,75 @@ describe('CharacterRepository (integration)', () => {
     await expect(repo.insert(makeCharacter({ _id: 'char-y', name: '중복이름' }))).rejects.toThrow()
   })
 
+  it('accountId는 insert→findById 왕복에서 보존된다', async () => {
+    const doc = makeCharacter({ _id: 'char-acc', accountId: 'acc-42' })
+    await repo.insert(doc)
+
+    const found = await repo.findById(doc._id)
+    expect(found?.accountId).toBe('acc-42')
+  })
+
+  it('findByAccount는 해당 계정의 삭제되지 않은 캐릭터만 반환한다', async () => {
+    await repo.insert(makeCharacter({ _id: 'c1', name: '가', accountId: 'acc-1' }))
+    await repo.insert(makeCharacter({ _id: 'c2', name: '나', accountId: 'acc-1' }))
+    await repo.insert(makeCharacter({ _id: 'c3', name: '다', accountId: 'acc-2' }))
+
+    const result = await repo.findByAccount('acc-1')
+    expect(result.map((c) => c._id).sort()).toEqual(['c1', 'c2'])
+  })
+
+  it("findByAccount는 status='deleted' 캐릭터(무덤)를 제외한다", async () => {
+    await repo.insert(makeCharacter({ _id: 'live', name: '살아있음', accountId: 'acc-9' }))
+    await repo.insert(
+      makeCharacter({
+        _id: 'dead',
+        name: '무덤',
+        accountId: 'acc-9',
+        status: 'deleted',
+        deletedAt: new Date(),
+      }),
+    )
+
+    const result = await repo.findByAccount('acc-9')
+    expect(result.map((c) => c._id)).toEqual(['live'])
+  })
+
+  it('findByAccount는 캐릭터가 없는 계정에 대해 빈 배열을 반환한다', async () => {
+    const result = await repo.findByAccount('acc-empty')
+    expect(result).toEqual([])
+  })
+
+  it('init()은 name unique 인덱스와 accountId 인덱스를 모두 보장한다', async () => {
+    const indexes = await db.collection('characters').indexes()
+    const keys = indexes.map((idx) => JSON.stringify(idx.key))
+    expect(keys).toContain(JSON.stringify({ name: 1 }))
+    expect(keys).toContain(JSON.stringify({ accountId: 1 }))
+    const nameIndex = indexes.find((idx) => JSON.stringify(idx.key) === JSON.stringify({ name: 1 }))
+    expect(nameIndex?.unique).toBe(true)
+  })
+
   it('존재하지 않는 id updateById는 DocumentNotFoundError를 던진다', async () => {
     await expect(repo.updateById('missing', { gold: 10 })).rejects.toThrow(DocumentNotFoundError)
+  })
+
+  it('softDelete는 문서를 물리 보존하되 status=deleted+deletedAt로 표시하고 findByAccount에서 제외한다 (양방향 무덤)', async () => {
+    const doc = makeCharacter({ _id: 'sd1', name: '자살자', accountId: 'acc-sd' })
+    await repo.insert(doc)
+
+    await repo.softDelete(doc._id)
+
+    // 물리 존재 측: findById는 여전히 문서를 돌려주되 status=deleted + deletedAt 세팅(하드 삭제와 구별).
+    const found = await repo.findById(doc._id)
+    expect(found).not.toBeNull()
+    expect(found?.status).toBe('deleted')
+    expect(found?.deletedAt).toBeInstanceOf(Date)
+    // 논리 부재 측: findByAccount는 무덤 캐릭터를 제외한다(재로그인 차단 불변식).
+    const list = await repo.findByAccount('acc-sd')
+    expect(list.map((c) => c._id)).not.toContain('sd1')
+  })
+
+  it('존재하지 않는 id softDelete는 DocumentNotFoundError를 던진다', async () => {
+    await expect(repo.softDelete('missing')).rejects.toThrow(DocumentNotFoundError)
   })
 
   it('존재하지 않는 id deleteById는 DocumentNotFoundError를 던진다', async () => {

@@ -166,6 +166,9 @@ function buildSession(
     rearmDeadline: () => deadline.rearm(),
     clearDeadline: () => deadline.clear(),
     enterWorld: (characterId) => lifecycle.enterWorld(ctx, account.accountId, characterId),
+    // close-race 가드 seam — FSM이 포트 await 재개 후 이 콜백으로 죽은 연결을 감지해 등록·상태 대입을 건너뛴다.
+    // 'close' 핸들러가 ctx.closed를 세운다(frameTail 큐와 별개 리스너라 프레임 직렬화로는 못 막는 경로).
+    isClosed: () => ctx.closed,
   }
 }
 
@@ -185,14 +188,18 @@ function buildSession(
  * async 훅에서 `return reply.code().send()`는 라이프사이클을 단락시켜 upgrade를 완료하지 않는다(거부).
  * 통과 시 undefined를 반환해 라이프사이클을 계속 진행시킨다.
  *
- * 불변식(정원 누수 방어): 이 함수는 진입부터 `releaseOnce` 배선(raw 소켓 'close' + req.releaseQuota 대입)까지
- * `await` 없이 동기로 실행되어야 한다. hook 진입 시점에 raw 소켓이 이미 파괴됐으면 Node의 once-only 'close'가
- * 과거에 발화하고 끝나 배선한 리스너가 영영 안 돌므로, 그 already-destroyed 경우를 위한 liveness 체크
+ * 불변식(정원 누수 방어): `reserve`(정원 점유)부터 `releaseOnce` 배선(raw 소켓 'close' + req.releaseQuota 대입)
+ * 그리고 그 직후의 `req.raw.socket?.destroyed` 체크까지의 구간은 `await` 없이 완전 동기로 실행되어야 한다.
+ * hook 진입 시점(또는 아래 async-gap 참조)에 raw 소켓이 이미 파괴됐으면 Node의 once-only 'close'가 과거에
+ * 발화하고 끝나 배선한 리스너가 영영 안 돌므로, 그 already-destroyed 경우를 위한 liveness 체크
  * (`req.raw.socket?.destroyed`)를 release 배선 직후에 두어 놓친 반납을 직접 수행한다(released 플래그가 이중
- * 반납을 차단하므로 살아 있는 소켓에는 무해). 현재 `validateSessionCookie`가 동기라 reserve와 배선 사이에 소켓이
- * 파괴될 창이 없어 이 체크는 hook 진입 전에 이미 파괴된 소켓만 커버한다. E5에서 실 어댑터가 async(`Promise` 반환)로
- * 확장되면 소켓이 await 도중에도 파괴될 수 있으므로(hook 진입 전만이 아니다), 이 liveness 체크를 await 이후에도
- * 평가하도록 확장하고 그 async-gap 경로를 회귀 테스트로 고정한다.
+ * 반납을 차단하므로 살아 있는 소켓에는 무해).
+ *
+ * async-gap 커버리지: `validateSessionCookie`가 이제 async(`Promise` 반환)라 그 await 도중에 소켓이 파괴될 수
+ * 있다. 하지만 그 await는 `reserve` **이전**에 있고, reserve~destroyed-체크 구간은 여전히 완전 동기다. 따라서
+ * await 도중 파괴된 소켓은 reserve 시점에는 이미 destroyed=true이므로 :destroyed 체크가 그 슬롯을 직접 반납한다
+ * (배선한 'close' 리스너가 안 돌아도). 이 async-gap 경로는 회귀 테스트로 고정한다(reserve와 배선 사이에 새 await를
+ * 절대 넣지 않는 것이 이 커버리지의 전제다).
  */
 export function gameAuthPreValidation(
   sessionAuth: SessionAuthPort,
@@ -207,9 +214,11 @@ export function gameAuthPreValidation(
       return reply.code(403).send({ error: 'forbidden_origin' })
     }
 
-    // (2) 세션 쿠키 게이트 — __session 부재·무효 모두 401.
+    // (2) 세션 쿠키 게이트 — __session 부재·무효 모두 401. validateSessionCookie는 이제 async라 await한다.
+    // 이 await 도중 소켓이 파괴될 수 있으나, reserve~:245 destroyed 체크 구간은 아래에서 여전히 완전 동기라
+    // 그 체크가 await-도중-파괴 경우까지 커버한다(reserve와 배선 사이에 새 await를 넣지 않는다 — 불변식).
     const cookie = extractSessionCookie(req.headers.cookie)
-    const identity = cookie === undefined ? null : sessionAuth.validateSessionCookie(cookie)
+    const identity = cookie === undefined ? null : await sessionAuth.validateSessionCookie(cookie)
     if (identity === null) {
       return reply.code(401).send({ error: 'unauthenticated' })
     }
@@ -441,30 +450,10 @@ export function registerWebsocket(
           safeSend(socket, { type: 'system:hello', protocolVersion: ctx.protocolVersion })
         })
 
-        socket.on('message', (data: RawData) => {
-          // 인바운드 유량 gate — JSON.parse보다 먼저 둔다. flood 방어의 핵심 목적이 "정상 read + 고속 프레임
-          // 투입으로 파싱·dispatch CPU를 소진시키는 공격 차단"이므로, 파싱 비용을 치르기 전에 초과분을 버려야
-          // 방어가 성립한다(파싱 뒤에 두면 이미 CPU를 소비한 뒤라 무의미). rateLimiter는 socket-open에 arm돼
-          // 항상 non-null이지만 releaseQuota 관례처럼 옵셔널 체이닝으로 방어한다 — null이면 verdict가 undefined라
-          // gate를 건너뛴다. accept가 아니면 early-return해 파싱·dispatch·그리고 아래 dispatch handled 경로의
-          // idle 재-arm(`ctx.idle?.arm()`)까지 구조적으로 우회한다 — 이것이 "drop된 프레임은 idle을 재-arm하지 않는다"의 메커니즘이다.
-          // 클록은 performance.now()(단조)를 쓴다 — 코어 refill이 now의 단조 비감소를 가정하므로, NTP 보정으로
-          // 역행할 수 있는 Date.now() 대신 단조 클록을 공급해 역방향 점프가 유발하는 정상 사용자 spurious drop을 막는다.
-          const verdict = ctx.rateLimiter?.check(performance.now())
-          if (verdict !== undefined && verdict !== 'accept') {
-            // drop-warn(연속 폐기 구간의 첫 폐기)만 1회 경고한다 — 이후 연속 drop은 침묵해 경고 증폭을 막는다.
-            if (verdict === 'drop-warn') {
-              safeSend(socket, {
-                type: 'error',
-                code: 'rate_limited',
-                message: '인바운드 속도 상한을 초과했습니다. 잠시 후 다시 시도하세요.',
-              })
-            }
-            // 지속 위반이 임계를 넘으면 graceful close한다(코어가 소유한 위반 카운터로 판정).
-            if (ctx.rateLimiter?.shouldTerminate() && socket.readyState === socket.OPEN) socket.close()
-            return
-          }
-
+        // 프레임 하나를 처리하는 async 본체 — JSON.parse부터 핸드셰이크·라우팅·FSM까지. 유량 gate 뒤에서
+        // per-connection 큐(ctx.frameTail)로 직렬화 호출된다. 내부 방어 try/catch가 어떤 throw/reject든
+        // error{internal}로 격리하므로 이 함수는 항상 resolve한다(큐 정지 방지 — trap #1).
+        const processFrame = async (data: RawData): Promise<void> => {
           // 프레임 파싱 실패는 핸드셰이크 게이트보다 우선한다(type 판별 이전). 파싱만 별도 try로 감싸
           // bad_payload로 응답하고 종료한다.
           let parsed: unknown
@@ -478,16 +467,21 @@ export function registerWebsocket(
           // 핸드셰이크·라우팅은 순수 함수(handshake.ts·router.ts)가 계산하고 여기서 부수효과(전송·close·
           // 상태 변이)를 실행한다. fastify errorHandler가 message 핸들러 예외를 잡지 못하므로, 현재 경로가
           // throw-safe하더라도 방어적으로 전체를 감싸 어떤 throw든 error{internal}로 격리하고 소켓을
-          // 생존시킨다(네트워크 진입점 견고성 — 원래 의도된 불변식을 핸들러 전체로 확장).
+          // 생존시킨다(네트워크 진입점 견고성 — 원래 의도된 불변식을 핸들러 전체로 확장). 이제 FSM 경로가
+          // async라 await한 reject도 이 try가 잡는다(큐 태스크가 항상 resolve하게 하는 격리선 — trap #1).
           try {
             const result = handleHandshakeFrame(ctx, parsed)
             switch (result.action) {
               case 'accept':
-                // 핸드셰이크 완료 → characterSelect로 진입시킨다. enterInitialState가 같은 message-handler
-                // 턴에 characterList + prompt를 동기 발화한다(setImmediate 금지 — 대화 중 클라이언트는 이미
-                // 리스너를 붙였다). ctx.state 변이는 FSM(enterState) 단일 지점에서만 일어난다(Lock D).
+                // 핸드셰이크 완료 → characterSelect로 진입시킨다. enterInitialState가 characterList + prompt를
+                // 발화한다(setImmediate 금지 — 대화 중 클라이언트는 이미 리스너를 붙였다). enterInitialState는
+                // 이제 async라 await한다 — 큐가 이 프레임 완결까지 다음 프레임을 막으므로 emit 순서가 보존된다.
+                // ctx.state 변이는 FSM(enterState) 단일 지점에서만 일어난다(Lock D).
                 ctx.ready = true
-                enterInitialState(ctx, buildSession(ctx, sessionAuth, socket, deadline, lifecycle, safeSend))
+                await enterInitialState(
+                  ctx,
+                  buildSession(ctx, sessionAuth, socket, deadline, lifecycle, safeSend),
+                )
                 break
               case 'error':
                 safeSend(socket, result.event)
@@ -505,15 +499,18 @@ export function registerWebsocket(
                 // 그 이전(characterSelect·create)이면 FSM handleInput으로 보낸다(Lock C). 이미 파싱된 객체를
                 // 재파싱 없이 넘긴다.
                 if (ctx.state === ConnectionState.command) {
-                  // buildActorContext의 배선 불변식 throw(account/boundCharacterId null)는 메시지 핸들러의
-                  // 방어 try/catch가 error{internal}로 격리한다 — 추가 배선 없이 기존 방어선을 재사용한다.
+                  // command/dispatch 분기는 동기로 유지한다 — permissionPort가 동기라 await가 불필요하며 FSM
+                  // 경계 밖이다(SessionAuthPort async 마이그레이션은 이 분기를 건드리지 않는다). buildActorContext의
+                  // 배선 불변식 throw(account/boundCharacterId null)는 위 방어 try/catch가 error{internal}로 격리한다.
                   const result = dispatch(commandRegistry, parsed, buildActorContext(ctx), permissionPort)
                   // 유효 명령 처리 성공(handled)만 무입력 타이머를 재-arm한다 — 거부(rejected:
                   // unknown_type·bad_payload·forbidden·internal)가 flood로 타이머를 무한 연장하지 못하게 한다.
                   if (result.outcome === 'handled') ctx.idle?.arm()
                   if (result.event !== undefined) safeSend(socket, result.event)
                 } else {
-                  handleSessionFrame(
+                  // handleSessionFrame은 이제 async라 await한다 — 큐가 프레임 완결 뒤에만 다음 프레임을 태워
+                  // 공유 상태(state·createProgress) 동시 변이가 없다.
+                  await handleSessionFrame(
                     ctx,
                     buildSession(ctx, sessionAuth, socket, deadline, lifecycle, safeSend),
                     parsed,
@@ -526,9 +523,9 @@ export function registerWebsocket(
                 assertNever(result)
             }
           } catch (error) {
-            // 방어선: handshake/dispatch 경로의 예상치 못한 throw를 격리한다. 원인은 클라이언트에 노출하지
-            // 않되(정적 internal 메시지), 서버에는 로깅해 운영 신호를 남긴다 — buildSession의 배선 불변식
-            // 위반(account null 등)이 여기로 올라오므로 로그 없이는 무증상 실패가 된다.
+            // 방어선: handshake/dispatch/FSM 경로의 예상치 못한 throw·reject를 격리한다. 원인은 클라이언트에
+            // 노출하지 않되(정적 internal 메시지), 서버에는 로깅해 운영 신호를 남긴다 — buildSession의 배선
+            // 불변식 위반(account null 등)이 여기로 올라오므로 로그 없이는 무증상 실패가 된다.
             app.log.error({ err: error }, 'ws message handler failed')
             safeSend(socket, {
               type: 'error',
@@ -536,9 +533,68 @@ export function registerWebsocket(
               message: '메시지 처리 중 서버 오류가 발생했다',
             })
           }
+        }
+
+        socket.on('message', (data: RawData) => {
+          // 인바운드 유량 gate — JSON.parse·enqueue보다 먼저 둔다(동기, 큐 밖). flood 방어의 핵심 목적이 "정상
+          // read + 고속 프레임 투입으로 파싱·dispatch CPU를 소진시키는 공격 차단"이므로, 파싱 비용을 치르기 전에
+          // 초과분을 버려야 방어가 성립한다. 큐 이전에 두는 것이 특히 중요하다 — accept를 큐에 태우기 전에
+          // 걸러야, flood 프레임이 tail 체인에 무한 누적돼(각 프레임이 클로저+Promise 할당) 메모리를 증폭시키는
+          // 것을 막는다(trap #2). rateLimiter는 socket-open에 arm돼 항상 non-null이지만 releaseQuota 관례처럼
+          // 옵셔널 체이닝으로 방어한다 — null이면 verdict가 undefined라 gate를 건너뛴다. accept가 아니면
+          // early-return해 파싱·dispatch·idle 재-arm까지 구조적으로 우회한다. 클록은 performance.now()(단조)를
+          // 쓴다 — 코어 refill이 now의 단조 비감소를 가정하므로, NTP 보정으로 역행할 수 있는 Date.now() 대신
+          // 단조 클록을 공급해 역방향 점프가 유발하는 정상 사용자 spurious drop을 막는다.
+          const verdict = ctx.rateLimiter?.check(performance.now())
+          if (verdict !== undefined && verdict !== 'accept') {
+            // 유량 판정은 여기서 동기로 확정한다(초과분 파싱·dispatch를 큐에 태우지 않는 flood 방어의 핵심 —
+            // 어떤 verdict든 processFrame을 호출하지 않는다). 응답(emit·close)이 필요한 경우에만, 그 응답을 큐에
+            // 실어 accept 프레임의 (지연된) 응답과 send 순서를 보존한다: 동기로 바로 보내면 뒤 프레임의 rate_limited가
+            // 앞 프레임(accept)의 큐-지연 응답을 추월해, ws가 한 TCP 세그먼트의 여러 프레임을 연속 emit할 때 순서가
+            // 어긋난다. 순서 보존이 필요한 건 emit(drop-warn)과 close(shouldTerminate)뿐이다 — 순수 침묵 drop은
+            // 아무 부수효과가 없어 큐 태스크를 만들지 않는다(flood 시 no-op 태스크 누적 방지). verdict·shouldTerminate를
+            // 지금(이 프레임의 카운터 기준) 캡처해 하나의 태스크에서 처리한다 — close 판정을 이 프레임에 묶어 원 의미를 지킨다.
+            const shouldTerminate = ctx.rateLimiter?.shouldTerminate() ?? false
+            if (verdict === 'drop-warn' || shouldTerminate) {
+              ctx.frameTail = ctx.frameTail
+                .then(() => {
+                  // drop-warn(연속 폐기 구간의 첫 폐기)만 1회 경고한다 — 이후 연속 drop은 침묵해 경고 증폭을 막는다.
+                  if (verdict === 'drop-warn') {
+                    safeSend(socket, {
+                      type: 'error',
+                      code: 'rate_limited',
+                      message: '인바운드 속도 상한을 초과했습니다. 잠시 후 다시 시도하세요.',
+                    })
+                  }
+                  // 지속 위반이 임계를 넘으면 graceful close한다(코어가 소유한 위반 카운터로 판정).
+                  if (shouldTerminate && socket.readyState === socket.OPEN) socket.close()
+                })
+                .catch((err: unknown) => {
+                  app.log.error({ err }, 'ws frame queue task failed')
+                })
+            }
+            return
+          }
+
+          // accept된 프레임만 per-connection 큐에 직렬화한다. tail에 .then으로 체이닝해 프레임 N+1이 프레임 N
+          // 완결(processFrame resolve) 뒤에만 처리되도록 강제한다(*프레임 대 프레임* 재진입 방지). ws는 message
+          // 리스너를 await하지 않으므로 이 큐가 없으면 프레임 2가 프레임 1의 await 도중 시작돼 공유 상태를 동시
+          // 변이한다. (프레임과 무관한 'close'·deadline·idle 콜백은 이 큐 밖 별개 리스너라 여기서 못 막는다 —
+          // 그 await-gap 재진입은 ctx.closed 가드가 별도로 방어한다.) 마지막
+          // .catch는 belt-and-suspenders다 — processFrame이 내부 방어 try/catch로 항상 resolve하지만, 예기치 못한
+          // rejection이 체인을 끊어(이후 .then 스킵) 연결을 영구 정지시키지 않도록 삼킨다(trap #1). 리스너는 동기
+          // 함수로 유지한다(async 리스너를 .on에 넘기면 no-misused-promises 위반이며 ws가 await하지도 않는다).
+          ctx.frameTail = ctx.frameTail
+            .then(() => processFrame(data))
+            .catch((err: unknown) => {
+              app.log.error({ err }, 'ws frame queue task failed')
+            })
         })
 
         socket.on('close', () => {
+          // close-race 가드: FSM이 포트 await로 멈춘 사이 이 close가 발화할 수 있다. 플래그를 먼저 세워, await
+          // 재개 후 FSM(SessionContext.isClosed)이 죽은 연결에 대한 월드 등록·command 상태 대입을 건너뛰게 한다.
+          ctx.closed = true
           // 매니저 stop()으로 ping 타이머를 정지하고 진행 데드라인을 clear한다.
           heartbeat.stop()
           deadline.clear()
