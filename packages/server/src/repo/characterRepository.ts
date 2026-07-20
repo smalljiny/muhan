@@ -2,6 +2,7 @@ import type { Collection, Db, Filter } from 'mongodb'
 import { characterSchema, type Character, type ObjectInstance } from 'shared'
 import { DocumentNotFoundError, type IRepository } from './types.js'
 import type { ObjectRepository } from './objectRepository.js'
+import { backfillCharacterV2 } from './characterBackfill.js'
 
 const COLLECTION_NAME = 'characters'
 
@@ -47,22 +48,32 @@ export class CharacterRepository implements IRepository<Character> {
     await this.collection.createIndex({ accountId: 1 })
   }
 
+  /**
+   * 조회 경로 공통 경계 게이트 — v1 문서를 backfill로 승격한 뒤 strict parse한다.
+   * "backfill은 parse에 선행한다" 불변식(strict parse가 hpCurrent/mpCurrent/level 없는 v1
+   * 문서를 거부)을 두 load 경로가 공유하는 단일 구조로 강제한다. 신규 조회 쿼리가 backfill을
+   * 누락한 채 v1 문서를 파싱해 런타임 거부되는 사고를 이 게이트로 차단한다.
+   */
+  private parseCharacterDoc(doc: Record<string, unknown>): Character {
+    return characterSchema.parse(backfillCharacterV2(doc))
+  }
+
   async findById(id: string): Promise<Character | null> {
     const doc = await this.collection.findOne({ _id: id } as Filter<Character>)
     if (doc === null) return null
-    return characterSchema.parse(doc)
+    return this.parseCharacterDoc(doc)
   }
 
   /**
    * 계정별 캐릭터 조회 — accountId FK로 소유 계정의 캐릭터 목록을 파생한다.
    * status='deleted'(무덤) 캐릭터는 제외한다 — 삭제된 캐릭터로 재로그인을 차단하는 불변식.
-   * 조회 직후 characterSchema.parse로 경계 검증한다(findById와 동일 정책).
+   * 조회 직후 parseCharacterDoc으로 경계 검증한다(findById와 동일 정책).
    */
   async findByAccount(accountId: string): Promise<Character[]> {
     const docs = await this.collection
       .find({ accountId, status: { $ne: 'deleted' } } as Filter<Character>)
       .toArray()
-    return docs.map((doc) => characterSchema.parse(doc))
+    return docs.map((doc) => this.parseCharacterDoc(doc))
   }
 
   async insert(doc: Character): Promise<void> {

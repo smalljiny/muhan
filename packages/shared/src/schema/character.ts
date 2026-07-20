@@ -18,6 +18,12 @@ export const characterSchema = z.strictObject({
   gold: z.int().min(0),
   // 현재 방 번호(자연키). data/world 방 로드 경로 번호와 동일 체계.
   currentRoom: z.int().min(0),
+  // 전투 필수 영속 필드 3종. gender/weapon/alignment는 .optional()이지만(생성 인터뷰 선택),
+  // 이 3필드는 전투 resolver가 매 라운드 값을 요구하므로 required다(D3 발산). v1 문서는
+  // load 직전 backfillCharacterV2가 승격하고, 신규 문서는 생성 경로에서 시딩한다.
+  hpCurrent: z.int().min(0),
+  mpCurrent: z.int().min(0),
+  level: z.int().min(1),
   schemaVersion: z.int(),
   // 소유 계정 id(account._id = Firebase UID)로의 필수 FK.
   accountId: z.string().min(1),
