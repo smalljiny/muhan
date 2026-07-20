@@ -25,4 +25,9 @@ describe('combat 배럴', () => {
     expect('minRollRng' in combat).toBe(false)
     expect('seqRng' in combat).toBe(false)
   })
+
+  it('playerState·registry 표면을 재export한다', () => {
+    expect(typeof combat.toPlayerCombatState).toBe('function')
+    expect(typeof combat.createCombatRegistry).toBe('function')
+  })
 })

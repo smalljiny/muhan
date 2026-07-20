@@ -11,3 +11,7 @@ export {
   HIT_ROLL_MAX_MONSTER,
   PVP_COOLDOWN_INCREMENT,
 } from './constants.js'
+export { toPlayerCombatState } from './playerState.js'
+export type { PlayerCombatState, WeaponDamage } from './playerState.js'
+export { createCombatRegistry } from './combatRegistry.js'
+export type { CombatRegistry } from './combatRegistry.js'
