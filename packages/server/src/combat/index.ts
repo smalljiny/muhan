@@ -25,3 +25,5 @@ export type { Combatant, PlayerCombatant, CreatureCombatant } from './combatant.
 export { hitThreshold, playerBaseDamage, monsterDamage, applyPaladinAlignment } from './attackStats.js'
 export { checkTargetImmunity, checkPvpGate } from './pvp.js'
 export type { CombatGateResult, TargetImmunityInput, PvpGateInput } from './pvp.js'
+export { registerEnemy, createDamageLedger, accumulateDamage } from './enmity.js'
+export type { DamageLedger } from './enmity.js'

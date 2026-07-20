@@ -51,4 +51,10 @@ describe('combat 배럴', () => {
     expect(typeof combat.checkTargetImmunity).toBe('function')
     expect(typeof combat.checkPvpGate).toBe('function')
   })
+
+  it('enmity·데미지 원장 표면을 재export한다', () => {
+    expect(typeof combat.registerEnemy).toBe('function')
+    expect(typeof combat.createDamageLedger).toBe('function')
+    expect(typeof combat.accumulateDamage).toBe('function')
+  })
 })
