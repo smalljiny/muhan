@@ -19,6 +19,11 @@ function template(over: Partial<SpawnTemplate & { id: number }> = {}): SpawnTemp
     dexterity: 14,
     gold: 100,
     special: 0,
+    armor: 0,
+    thaco: 0,
+    ndice: 0,
+    sdice: 0,
+    pdice: 0,
     flags: '0000000000000000',
     numwander: 1,
     ...over,
@@ -86,6 +91,11 @@ describe('respawnPermCreatures — 입장 lazy 리스폰', () => {
       dexterity: 14,
       gold: 100,
       special: 0,
+      armor: 0,
+      thaco: 0,
+      ndice: 0,
+      sdice: 0,
+      pdice: 0,
       flags: F_SET('0000000000000000', MPERMT),
       enemies: [],
       inventory: [],
@@ -209,5 +219,15 @@ describe('loadSpawnTemplates — data/world/creatures.json', () => {
     expect(c25).toBeDefined()
     expect(c25?.numwander).toBe(3) // D9 추출값
     expect(typeof c25?.name).toBe('string')
+  })
+
+  it('전투 스탯 armor/thaco/ndice/sdice/pdice를 creatures.json에서 담는다(D6, 서브셋 드롭 없음)', () => {
+    const templates = loadSpawnTemplates()
+    const c25 = templates.get(25)
+    expect(c25?.armor).toBe(70)
+    expect(c25?.thaco).toBe(18)
+    expect(c25?.ndice).toBe(2)
+    expect(c25?.sdice).toBe(2)
+    expect(c25?.pdice).toBe(0)
   })
 })

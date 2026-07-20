@@ -16,6 +16,11 @@ const thief: CreatureSource = {
   gold: 80,
   special: 0,
   flags: '0112000000000000',
+  armor: 90,
+  thaco: 17,
+  ndice: 1,
+  sdice: 5,
+  pdice: 0,
 }
 
 describe('fromEmbedded', () => {
@@ -39,6 +44,15 @@ describe('fromEmbedded', () => {
     expect(c.hpcur).toBe(c.hpmax)
     expect(c.mpcur).toBe(c.mpmax)
     expect(c.enemies).toEqual([])
+  })
+
+  it('전투 스탯 armor/thaco/ndice/sdice/pdice를 소스에서 물질화한다(D6)', () => {
+    const c = fromEmbedded(thief, 135, 0)
+    expect(c.armor).toBe(90)
+    expect(c.thaco).toBe(17)
+    expect(c.ndice).toBe(1)
+    expect(c.sdice).toBe(5)
+    expect(c.pdice).toBe(0)
   })
 
   it('기본 rng stub은 gold를 그대로 둔다(결정적 identity)', () => {
@@ -66,6 +80,12 @@ describe('fromTemplate', () => {
     expect(c?.name).toBe('좀도둑')
     expect(c?.instanceId).toBe('200:c0')
     expect(c?.hpcur).toBe(7)
+    // 전투 스탯도 템플릿 소스에서 물질화된다(embedded는 templateId=null이라 재조회 불가 → 물질화 시점에 이동).
+    expect(c?.armor).toBe(90)
+    expect(c?.thaco).toBe(17)
+    expect(c?.ndice).toBe(1)
+    expect(c?.sdice).toBe(5)
+    expect(c?.pdice).toBe(0)
   })
 
   it('알 수 없는 templateId면 undefined를 반환한다', () => {
