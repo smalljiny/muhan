@@ -43,7 +43,9 @@
 
 `OwnershipError`는 not-found와 not-owned를 **하나의 결과로 collapse**한다(존재 비공개 — 열거 oracle 차단). 상세 메시지(accountId/characterId 포함)는 내부 전용이며 클라이언트로 나가지 않는다.
 
-`InMemorySessionAuthAdapter`는 **mock이 아니라 포트 전체 계약의 실 구현**이다 — 쿠키→accountId, accountId→캐릭터 요약을 자체 `Map`으로 소유한다(생성자 주입, 전역 싱글턴 미조회). `listCharacters`·`createCharacter`는 내부 참조를 노출하지 않고 얕은 복사본을 반환한다(불변성). `app.ts`의 `buildApp`이 `sessionAuth` 미주입 시 **빈** 어댑터로 폴백하므로, 현재 부트 경로는 유효 쿠키가 0개다(fail-closed by omission).
+`InMemorySessionAuthAdapter`는 **mock이 아니라 포트 전체 계약의 실 구현**이다 — 쿠키→accountId, accountId→캐릭터 요약을 자체 `Map`으로 소유한다(생성자 주입, 전역 싱글턴 미조회). `listCharacters`·`createCharacter`는 내부 참조를 노출하지 않고 얕은 복사본을 반환한다(불변성). `app.ts`의 `buildApp`이 `sessionAuth` 미주입 시 **빈** 어댑터로 폴백하므로, E3-2 시점의 부트 경로는 유효 쿠키가 0개다(fail-closed by omission).
+
+**E5 실현**([`account-character.md`](account-character.md)): 이 포트 표(sync)는 E5에서 Promise 반환으로 마이그레이션됐고 `deleteCharacter`(soft-delete)가 추가됐으며, firebase 세션쿠키 실 어댑터(`FirebaseSessionAuthAdapter`, 주입 verifier seam + Mongo repository)가 landed했다. `assertOwnership`은 status='deleted'까지 거부해 삭제 캐릭터 재진입을 차단한다. 부트는 `DEV_LOGIN_ENABLED` off면 실 firebase 어댑터를, on이면 dev 시드 인메모리 어댑터를 주입한다.
 
 ### 시드 테스트 유틸 (`packages/server/src/auth/seedSessionAuth.testutil.ts`)
 
@@ -121,7 +123,7 @@ E3-1 `wsTestClient.testutil.ts`(실서버 포트 0 + 실 `ws` + `injectWS`)를 �
 
 ## 제약사항
 
-- **실 firebase-admin 어댑터·세션 쿠키 발급·`accountId` Mongo 영구화는 E5(#35)** — E3-2는 세션 쿠키 **검증**만 한다. `validateSessionCookie`는 인메모리 `Map` 조회이며, 실 어댑터에서 signature 기반 검증·`checkRevoked` 정책으로 교체된다. 캐릭터는 인메모리 어댑터에만 존재한다.
+- **실 firebase-admin 어댑터·`accountId` Mongo 영구화는 E5(#35, [`account-character.md`](account-character.md) 구현 완료)** — E3-2는 세션 쿠키 **검증**만 하고 `validateSessionCookie`는 인메모리 `Map` 조회였다. E5가 firebase-admin `verifySessionCookie` 기반 실 어댑터(주입 verifier seam)·account 승급·Mongo character 영구화로 교체했다. `checkRevoked` 정책은 프로덕션 credential 프로비저닝과 함께 하드닝 defer([#89](https://github.com/smalljiny/muhan/issues/89)). 세션 쿠키 **발급**(`HttpOnly`/`Secure`/`SameSite`)은 여전히 발급자 책임으로 이 계층 밖이다.
 - **세션 쿠키 속성(`HttpOnly`/`Secure`/`SameSite`)은 E5 발급자 책임** — 이 계층은 `__session`을 읽기만 하고 발급하지 않는다.
 - **라이브 캐릭터 월드 인스턴스화(`WorldEntryPort`)는 E4(#34)** — 포트는 신원·소유권·요약까지만.
 - **세션 레지스트리·중복 로그인 방어·재연결·상태 복원은 E3-3(#47)**.

@@ -32,7 +32,7 @@
 | `currentRoom` | `int().min(0)` | 방 번호 자연키, data/world 로드 경로 번호와 동일 체계 |
 | `schemaVersion` | `int()` | |
 
-크리덴셜·`accountId` 없는 순수 게임 엔티티(E5 범위). 권위 인벤토리 배열 없음 — `object.owner={type:'character'}` 역참조로 파생.
+권위 인벤토리 배열 없음 — `object.owner={type:'character'}` 역참조로 파생. 게임 비밀번호는 담지 않는다(인증은 Firebase 소유). **E5 링크 필드**([`account-character.md`](account-character.md)): `accountId`(소유 계정 필수 FK), `status`(active/deleted soft-delete)·`deletedAt`, 생성 인터뷰 스칼라 `gender`/`weapon`/`alignment`(optional)가 추가돼, 이 표는 E5 이후 5번째 스키마 `account.ts`와 함께 확장됐다.
 
 **`object.ts`** — `objectOwnerSchema`(discriminated union) + `objectSchema`:
 
@@ -110,7 +110,7 @@ objmon 템플릿 카탈로그(`objects.json`/`creatures.json`) 로딩과 몬스�
 ## 제약사항
 
 - **세이브 정책·flush·은행 트랜잭션 원자성은 E2-2([`save-policy.md`](save-policy.md), 구현 완료)** — 이 토픽(E2-1)은 roomState 스키마를 완전 정의하고, Mongo 오버레이·주기 flush 메커니즘·dirty-flag 추적·은행 gold 이동 트랜잭션 원자성은 E2-2 세이브 정책 엔진이 구현한다. 이동 트랜잭션 원자성은 E4.
-- **인증·account는 E5** — character는 크리덴셜 없는 순수 게임 엔티티다. `accountId`, account:character 1:N, 소셜 로그인, 해싱, 로그인 FSM은 이 토픽 범위 밖.
+- **인증·account는 E5([`account-character.md`](account-character.md), 구현 완료)** — 이 토픽(E2-1) 시점의 character는 크리덴셜 없는 순수 게임 엔티티였다. `accountId` FK·account:character 1:N·accounts 컬렉션·firebase 세션 어댑터·생성 인터뷰·soft-delete는 E5가 실현했다.
 - **타이머·리스폰은 E4** — `roomStateSchema.respawn` 필드는 상태 스키마만 정의하며, 출구 타이머 틱·몬스터 리스폰 로직·objmon 템플릿 카탈로그 로딩은 이 토픽에 없다.
 - **방 바닥 아이템은 non-durable** — `ItemInstance`는 인메모리 전용이며 Mongo에 저장되지 않는다. 서버 재시작 시 방 JSON에 임베드된 `items`에서 재로드된다(실측 2341방 중 items 219개·monsters 482개 임베드, monsters는 E4 로딩 대상).
 - **라이브 상태 핸드오프 미구현** — `index.ts` boot의 `loadWorldGraph()` 결과 `Map`과 4개 repository 인스턴스는 현재 `boot()` 함수 스코프의 지역 변수다. 게임 루프·요청 핸들러가 이 라이브 그래프·repository에 접근하려면 후속 토픽에서 보존·핸드오프 메커니즘(모듈 상태·앱 데코레이트·컨텍스트 객체)이 필요하다.
