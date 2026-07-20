@@ -28,6 +28,10 @@ export const XDAYON = 17
 // 주의: 아래 방 플래그는 room.flags(8바이트=64비트) 배열을 읽는다. XNGHTO(16, 출구)와
 // RTHREE(16, 방)는 비트 번호가 같지만 서로 다른 flags 배열이라 충돌하지 않는다.
 
+/** 안전지대 — room.flags 비트 11(RNOKIL, mtype.h:312). PvP 무조건 금지(command5.c:177). */
+export const RNOKIL = 11
+/** 대련장(서바이벌 존) — room.flags 비트 36(RSUVIV, mtype.h:337). 선악 PvP 게이트 면제(command5.c:184). */
+export const RSUVIV = 36
 /** 1인 전용 방 — room.flags 비트 14. 점유자 1명 이상이면 만원. */
 export const RONEPL = 14
 /** 2인 전용 방 — room.flags 비트 15. 점유자 2명 이상이면 만원. */

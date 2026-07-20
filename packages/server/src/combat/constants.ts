@@ -28,3 +28,5 @@ export const MAGE = 5
 export const PALADIN = 6
 /** 무적(invincible) — `class > INVINCIBLE`이면 바바리안과 동일 성장 분기(command5.c:244). */
 export const INVINCIBLE = 9
+/** 운영진(caretaker) — `class < CARETAKER`인 플레이어만 MENONL 대상 무적에 걸린다(command5.c:167, mtype.h:103). */
+export const CARETAKER = 10

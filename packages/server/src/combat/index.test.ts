@@ -46,4 +46,9 @@ describe('combat 배럴', () => {
     expect(combat.PALADIN).toBe(6)
     expect(combat.INVINCIBLE).toBe(9)
   })
+
+  it('pvp 게이트 표면을 재export한다', () => {
+    expect(typeof combat.checkTargetImmunity).toBe('function')
+    expect(typeof combat.checkPvpGate).toBe('function')
+  })
 })

@@ -33,7 +33,7 @@ export type PlayerCombatState = {
   readonly dexterity: number
   /**
    * 플레이어 상태 플래그 — creature flags와 동일한 hex string 바이트 배열(원작에서 플레이어도
-   * creature 구조체). PBLIND=43·PFEARS=44는 비트 인덱스 >31이라 number bitfield로 표현 불가하므로
+   * creature 구조체). PBLIND=42·PFEARS=43은 비트 인덱스 >31이라 number bitfield로 표현 불가하므로
    * hex string이 정본이다. F_ISSET(flags, bit)로 판정하며 신선한 플레이어는 빈 hex(상태 플래그 없음).
    */
   readonly flags: string

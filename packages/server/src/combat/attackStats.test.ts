@@ -7,8 +7,8 @@ import { seqRng } from './dice.testutil.js'
 import { F_SET, PFEARS, PBLIND, MBEFUD } from '../world/hexFlags.js'
 
 /**
- * 비트가 세팅된 well-formed flag hex를 만든다. F_SET은 짧은 문자열을 zero-pad하지 않으므로
- * 고바이트 비트(PFEARS=44·MBEFUD=51 등)를 올바른 바이트에 놓으려면 8바이트(16자) 0 기반에서 세팅한다.
+ * 비트가 세팅된 well-formed flag hex를 만든다. 고바이트 비트(PFEARS=43·MBEFUD=51 등)를 명시적으로
+ * 8바이트(16자) 0 기반에서 세팅한다(F_SET이 zero-pad하지만 full-width 기반이 의도를 더 분명히 한다).
  */
 const ZERO_FLAGS = '0000000000000000'
 function flagsWith(...bits: readonly number[]): string {

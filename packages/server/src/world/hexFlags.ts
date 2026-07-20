@@ -18,6 +18,12 @@ export const MAGGRE = 6
 export const MSCAVE = 11
 /** 무언가 주움(scavenge 성공 표식 — wander-out 제외 조건). */
 export const MHASSC = 18
+/** 마법으로만 피해(무기 무효) — MMGONL(mtype.h:431). 전투 대상 무적 게이트(command5.c:161). */
+export const MMGONL = 20
+/** 마법/마법무기로만 피해 — MENONL(mtype.h:433). class<CARETAKER + 비마법무기면 거부(command5.c:167). */
+export const MENONL = 22
+/** 절대 해칠 수 없음 — MUNKIL(mtype.h:435). 전투 대상 무적 무조건 거부(command5.c:146). */
+export const MUNKIL = 24
 /** 선한 유저 공격형(정렬 alg=-1). */
 export const MGAGGR = 39
 /** 악한 유저 공격형(정렬 alg=1). */
@@ -31,13 +37,19 @@ export const MBEFUD = 51
 /** 사망 시 부하 소환(Story 5 onDeathSummon). */
 export const MSUMMO = 61
 
-// ── 플레이어 P-flag 비트(help/pflags 검증) ───────────────────────────────────
-// 원작 무한/Mordor는 플레이어도 creature 구조체라 P-flag는 creature flags와 동일 바이트 배열이다.
-// 비트 인덱스가 31을 넘으므로(43·44) 32비트 number bitfield로는 표현 불가 — hex string 표현이 정본.
-/** 실명(blind) 상태 — 명중 임계 +5(command5.c:234). */
-export const PBLIND = 43
-/** 공포(fear) 상태 — 명중 임계 +2(command5.c:233). */
-export const PFEARS = 44
+// ── 플레이어 P-flag 비트(mtype.h #define 검증) ───────────────────────────────
+// 원작 무한/Mordor는 플레이어도 creature 구조체라 P-flag는 creature flags와 동일 바이트 배열을
+// 같은 F_ISSET(0-index `flags[f/8]&(1<<(f%8))`)로 읽는다 — M-flag와 다른 오프셋 체계일 수 없다.
+// 비트 인덱스가 31을 넘으므로(42·43) 32비트 number bitfield로는 표현 불가 — hex string 표현이 정본.
+// help/pflags 문서 값(PBLIND 43·PFEARS 44)은 raw #define보다 +1이므로 mtype.h를 정본으로 채택한다.
+/** 실명(blind) 상태 — 명중 임계 +5(command5.c:234). PBLIND(mtype.h:387). */
+export const PBLIND = 42
+/** 공포(fear) 상태 — 명중 임계 +2(command5.c:233). PFEARS(mtype.h:388). */
+export const PFEARS = 43
+/** 혼돈(Chaotic/!Lawful) — PCHAOS(mtype.h:373). 선악 PvP 동의 게이트가 읽음(command5.c:184). */
+export const PCHAOS = 28
+/** 패거리 가입자 — PFAMIL(mtype.h:400). 양측 PFAMIL이면 선악 게이트를 check_war로 게이팅(command5.c:183). */
+export const PFAMIL = 55
 
 // ── object flag 비트(scavenge 제외 판정) ─────────────────────────────────────
 /** 영구 아이템(회수 불가). */
