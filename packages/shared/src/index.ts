@@ -62,3 +62,18 @@ export { upLevel, downLevel } from './progression/levelUp.js'
 // 분기 판정(classifyPrestige). Story 6 train이 classifyPrestige로 게이트 후 디스패치 소비한다(D6).
 // gold 차감(train)·dice(combat)는 미소유하고 순수 class/level/experience/vitals 전이만 소유한다.
 export { invinciblePrestige, caretakerPrestige, classifyPrestige } from './progression/prestige.js'
+
+// 주문 카탈로그 read-only 선언 테이블 — spllist 56 메타데이터 + ospell 20 realm×tier 격자(byte 정본).
+// effect 본체는 유예(#85)이고 이 배럴은 선언 테이블·타입·순수 조회 함수만 노출한다.
+export {
+  REALM,
+  SPELL_NO,
+  SPELL_CATALOG,
+  OSPELL_GRID,
+  spellByNo,
+  ospellOf,
+  type Realm,
+  type SpellFamily,
+  type SpellEntry,
+  type OspellEntry,
+} from './magic/catalog.js'
