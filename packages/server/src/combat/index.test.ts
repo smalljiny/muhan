@@ -64,4 +64,8 @@ describe('combat 배럴', () => {
     expect(combat.ATTACK_COOLDOWN_INTERVAL).toBe(1)
     expect(combat.ATTACK_COOLDOWN_BLIND).toBe(6)
   })
+
+  it('initiateAttack 오프너를 재export한다', () => {
+    expect(typeof combat.initiateAttack).toBe('function')
+  })
 })
