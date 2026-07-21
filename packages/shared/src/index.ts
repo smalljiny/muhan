@@ -47,3 +47,8 @@ export * from './stats/index.js'
 // 배럴로 노출하지 않는다 — 소비자(Story 2 backfill·Story 6 train)는 함수만 쓰고, off-by-one/
 // 선형 피벗 함정은 이 두 함수가 캡슐화한다. 실소비자가 생기면 그때 배럴에 추가한다(stats 선례).
 export { neededExp, expToLevel } from './progression/expCurve.js'
+
+// HP/MP 최대치 compute-on-read 래퍼(stats-core 폐형 + 초인 오버라이드 단일 소비 지점, D2)와
+// 현재치 불변식 클램프 헬퍼. 최대치는 저장하지 않고 class·level로 매 판독 시 파생한다.
+// Story 4·5·7·8(레벨업·강등·재생·승급)이 이 세 함수를 공유 소비한다.
+export { resolveHpMax, resolveMpMax, clampVital } from './progression/maxResolvers.js'
