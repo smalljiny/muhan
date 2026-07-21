@@ -50,6 +50,8 @@ export const PFEARS = 43
 export const PCHAOS = 28
 /** 패거리 가입자 — PFAMIL(mtype.h:400). 양측 PFAMIL이면 선악 게이트를 check_war로 게이팅(command5.c:183). */
 export const PFAMIL = 55
+/** 잠력격발 — PUPDMG(mtype.h:404). 초인 다중공격 count 게이트(command5.c:208). */
+export const PUPDMG = 59
 
 // ── object flag 비트(scavenge 제외 판정) ─────────────────────────────────────
 /** 영구 아이템(회수 불가). */
@@ -62,6 +64,10 @@ export const OPERM2 = 9
 export const ONOTAK = 17
 /** 배경 소품(회수 불가). */
 export const OSCENE = 18
+/** 저주받은 무기 — OCURSE(mtype.h:498). 불발 시 무기 낙하 제외 조건(command5.c:298). */
+export const OCURSE = 22
+/** 항상 크리티컬 무기 — OALCRT(mtype.h:518). 크리 판정 자동 통과(command5.c:281). */
+export const OALCRT = 42
 
 /** hex string에서 지정 비트가 속한 바이트 값(0–255)을 읽는다. 범위 밖이면 0. */
 function byteAt(hex: string, bit: number): number {

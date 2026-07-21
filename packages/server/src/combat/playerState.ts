@@ -56,6 +56,11 @@ export type PlayerCombatState = {
 export type WeaponDamage = DiceSpec & {
   readonly adjustment: number
   readonly proficiency: number
+  /**
+   * 무기 object flags(hex string) — 크리/불발 판정용(OALCRT=42 자동 크리, OCURSE=22 낙하 제외).
+   * 옵셔널(additive non-breaking) — 미지정이면 빈 hex로 취급해 어느 플래그도 세팅되지 않은 것과 동일.
+   */
+  readonly flags?: string
 }
 
 /**
