@@ -124,6 +124,25 @@ describe('train — exp·gold gate', () => {
     expect(result).toEqual({ ok: false, reason: 'insufficient-gold' })
     expect(markDirty).not.toHaveBeenCalled()
   })
+
+  it('L≥128 gold clamp: goldneeded=trunc(neededExp(127)/20)(5M), unclamped(9.5M) 아님', () => {
+    // 오라클 command7.c:595-596 — level>=MAXALVL(128)은 goldneeded를 needed_exp[126] 기준으로 clamp한다.
+    // 무적(class9) L128 입력: exp 게이트 expNeeded=neededExp(128)=190M(clamp 없음), gold 게이트는
+    // clamp 값 trunc(neededExp(127)/20)=5M. gold를 정확히 clamp 값으로 주면 통과해야 한다 —
+    // unclamped(trunc(190M/20)=9.5M)라면 5M<9.5M로 insufficient-gold 거부됐을 것이다.
+    const clampGold = Math.trunc(neededExp(127) / 20) // 5,000,000
+    expect(clampGold).toBe(5_000_000)
+    expect(Math.trunc(neededExp(128) / 20)).toBe(9_500_000) // unclamped 값(대조 앵커)
+    const room = { flags: roomFlags(RTRAIN) } // 무적은 class-bit 서브매칭 면제 → base RTRAIN만
+    const char = makeChar({ class: 9, level: 128, experience: neededExp(128), gold: clampGold })
+    const markDirty = vi.fn()
+    const result = train(char, room, { markDirty })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.prestige).toBe('caretaker') // L127+ 무적 → 초인 전이(prestige 우선)
+      expect(result.character.gold).toBe(0) // clamp 값(5M) 정확히 차감, unclamped였다면 게이트 거부
+    }
+  })
 })
 
 describe('train — 3게이트 통과 + 배치', () => {

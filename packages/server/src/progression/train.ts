@@ -45,8 +45,23 @@ const CARETAKER = 10
 /** normal(class<9) 레벨 상한 — 배치 루프가 정확히 이 레벨에서 정지한다. */
 const NORMAL_LEVEL_CAP = 100
 
+/** exp 레벨 배열 크기(mtype.h MAXALVL=128). goldneeded clamp 경계. */
+const MAXALVL = 128
+
 /** 영속화 대상 컬렉션명. */
 const CHARACTERS_COLLECTION = 'characters'
+
+/**
+ * 연마 gold 비용을 반환한다 — `trunc(neededExp(min(level, MAXALVL-1)) / 20)`.
+ *
+ * 오라클 command7.c:595-596: `level<MAXALVL`이면 `(expneeded/10)/2`(=trunc(neededExp(level)/20)),
+ * `level>=MAXALVL(128)`이면 `(needed_exp[MAXALVL-2]/10)/2`(=trunc(neededExp(127)/20)=5,000,000)로
+ * clamp한다. `min(level, 127)`로 두 분기를 합성한다 — level≥128은 127로 눌러 clamp 값을 얻는다.
+ * exp 게이트의 expNeeded(neededExp(level))는 clamp 없이 선형 확장하므로 별개다.
+ */
+function goldToTrain(level: number): number {
+  return Math.trunc(neededExp(Math.min(level, MAXALVL - 1)) / 20)
+}
 
 /** train 성공/거부를 구별하는 Result. 거부는 사유를, 성공은 새 Character·상승폭·승급을 담는다. */
 export type TrainResult =
@@ -111,11 +126,9 @@ export function train(char: Character, room: { flags: number[] }, deps: TrainDep
   if (locationReject !== null) return { ok: false, reason: locationReject }
 
   // ── Gate 2·3: exp·gold ────────────────────────────────────────────────────
-  // goldneeded = (expneeded/10)/2 = trunc(expneeded/20) (중첩 floor 항등, command7.c:591).
-  // 오라클 L≥128 gold clamp(goldneeded=5,000,000, command7.c:597-598)는 미구현 — 플랜 T6.3의
-  // 균일 neededExp/20 단순화. 도달 조건은 무적(class9) 배치가 127 초과 상승하는 endgame 경로뿐이다.
+  // expNeeded는 clamp 없이 선형 확장(exp 게이트), goldNeeded는 L≥128에서 오라클 clamp(goldToTrain).
   const expNeeded = neededExp(char.level)
-  const goldNeeded = Math.trunc(expNeeded / 20)
+  const goldNeeded = goldToTrain(char.level)
   if (char.experience < expNeeded) return { ok: false, reason: 'insufficient-exp' }
   if (char.gold < goldNeeded) return { ok: false, reason: 'insufficient-gold' }
 
@@ -143,7 +156,7 @@ export function train(char: Character, room: { flags: number[] }, deps: TrainDep
     current = upLevel(current)
     levelsGained += 1
     expNeed = neededExp(current.level)
-    goldNeed = Math.trunc(expNeed / 20)
+    goldNeed = goldToTrain(current.level)
   } while (expNeed <= current.experience && goldNeed <= gold)
 
   return finalize({ ...current, gold }, levelsGained, 'none', deps)
