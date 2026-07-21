@@ -52,3 +52,8 @@ export { neededExp, expToLevel } from './progression/expCurve.js'
 // 현재치 불변식 클램프 헬퍼. 최대치는 저장하지 않고 class·level로 매 판독 시 파생한다.
 // Story 4·5·7·8(레벨업·강등·재생·승급)이 이 세 함수를 공유 소비한다.
 export { resolveHpMax, resolveMpMax, clampVital } from './progression/maxResolvers.js'
+
+// 레벨업·강등 순수 변이(level_cycle 능력치 성장 + 최대치 재동기화 + 현재치 클램프). level_cycle
+// 원시 테이블은 배럴로 노출하지 않는다 — 소비자(Story 6 train·강등 경로)는 함수만 쓰고, 성장
+// 게이트·슬롯 인덱스·enum→stats 매핑 함정은 이 두 함수가 캡슐화한다(needed_exp 선례).
+export { upLevel, downLevel } from './progression/levelUp.js'
