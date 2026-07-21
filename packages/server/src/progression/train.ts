@@ -98,6 +98,12 @@ function checkLocation(
  * `연마` 명령을 처리한다 — 3게이트 판정 → prestige 우선 분기 → gold 차감 배치 upLevel.
  *
  * 성공 시 새 Character를 반환하고 markDirty로 스냅샷을 1회 기록한다. 입력 char/room은 무변이.
+ *
+ * ## 오라클 상태 guard 미구현 (전체 생략, regen/death 유예 클래스 동형)
+ * 오라클 train(command7.c:551-565)은 PBLIND(장님 → 수련 불가)·PUPDMG(버프 해제·hp/mp/주사위 조정)
+ * guard를 가진다. 본 이식은 두 guard를 통째로 생략한다 — characterSchema에 상태 플래그 필드가 없어
+ * 구현할 입력이 없다(regen의 RPHARM/ill/PPOISN·death의 DoT와 동일 유예). 상태 플래그가 스키마에
+ * 붙는 후속 토픽에서 함께 이식한다.
  */
 export function train(char: Character, room: { flags: number[] }, deps: TrainDeps): TrainResult {
   // ── Gate 1: location ──────────────────────────────────────────────────────
@@ -106,6 +112,8 @@ export function train(char: Character, room: { flags: number[] }, deps: TrainDep
 
   // ── Gate 2·3: exp·gold ────────────────────────────────────────────────────
   // goldneeded = (expneeded/10)/2 = trunc(expneeded/20) (중첩 floor 항등, command7.c:591).
+  // 오라클 L≥128 gold clamp(goldneeded=5,000,000, command7.c:597-598)는 미구현 — 플랜 T6.3의
+  // 균일 neededExp/20 단순화. 도달 조건은 무적(class9) 배치가 127 초과 상승하는 endgame 경로뿐이다.
   const expNeeded = neededExp(char.level)
   const goldNeeded = Math.trunc(expNeeded / 20)
   if (char.experience < expNeeded) return { ok: false, reason: 'insufficient-exp' }
