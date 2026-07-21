@@ -17,7 +17,8 @@
  * 유량 제한 상한. 연결 차원(capacity·refillPerSec·maxViolations)과 계정 차원(accountCapacity·
  * accountRefillPerSec)을 하나의 combined 형태로 담는다. factory는 이 단일 thunk를 받아 연결 버킷과
  * 공유 계정 버킷을 각자의 상한으로 회계한다. maxViolations는 연결 단위 종료 임계이며 계정 버킷에는
- * 위반 카운터가 없다.
+ * 위반 카운터가 없다. accountMaxEntries는 계정 버킷 레지스트리 엔트리 수의 하드 캡이다(Story 3에서
+ * 소비 — 현재는 seam으로만 존재하고 런타임 회계에 참여하지 않는다).
  */
 export interface MessageRateLimits {
   readonly capacity: number
@@ -25,6 +26,7 @@ export interface MessageRateLimits {
   readonly maxViolations: number
   readonly accountCapacity: number
   readonly accountRefillPerSec: number
+  readonly accountMaxEntries: number
 }
 
 /**

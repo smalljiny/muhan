@@ -15,6 +15,7 @@ function makeLimiter(capacity: number, refillPerSec: number, maxViolations: numb
     maxViolations,
     accountCapacity: Number.MAX_SAFE_INTEGER,
     accountRefillPerSec: 0,
+    accountMaxEntries: 4096,
   }
   return createMessageRateLimiterFactory(() => limits).createConnection('solo')
 }
@@ -27,6 +28,7 @@ function makeFactory(overrides: Partial<MessageRateLimits> = {}) {
     maxViolations: 100,
     accountCapacity: 10,
     accountRefillPerSec: 0,
+    accountMaxEntries: 4096,
     ...overrides,
   }
   return createMessageRateLimiterFactory(() => limits)
@@ -59,6 +61,7 @@ describe('연결 차원 (factory.createConnection 핸들)', () => {
       maxViolations: 5,
       accountCapacity: Number.MAX_SAFE_INTEGER,
       accountRefillPerSec: 0,
+      accountMaxEntries: 4096,
     })).createConnection('solo')
 
     // 생성 후 첫 check 전에 상한을 바꾸면 첫 check가 이 값을 시드로 반영해야 한다.

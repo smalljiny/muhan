@@ -351,7 +351,7 @@ export function registerWebsocket(
   // check 시점에 지연 조회한다(quota 관례) — 팩토리 생성 시 getConfig를 읽지 않아 미설정 env가 빌드를 막지 않는다.
   // app.wsMessageRateLimiter로 노출해 진단·테스트가 activeAccountCount()를 관찰하게 한다.
   // config는 첫 파싱 후 불변이므로 projection을 첫 check에서 한 번만 만들어 캐시한다 — check는 매 프레임 도는
-  // hot path라 프레임마다 새 5-필드 객체를 할당하면 flood 시 공격률에 비례한 GC garbage가 된다. 캐시 수명은
+  // hot path라 프레임마다 새 6-필드 객체를 할당하면 flood 시 공격률에 비례한 GC garbage가 된다. 캐시 수명은
   // 팩토리(=registerWebsocket) 수명과 같아, 앱마다 새 팩토리를 만드는 테스트에서도 staleness가 없다.
   let cachedLimits: MessageRateLimits | undefined
   const rateLimiterFactory = createMessageRateLimiterFactory(() => {
@@ -363,6 +363,7 @@ export function registerWebsocket(
       accountCapacity: c.WS_MSG_RATE_ACCOUNT_CAPACITY,
       accountRefillPerSec: c.WS_MSG_RATE_ACCOUNT_REFILL_PER_SEC,
       maxViolations: c.WS_MSG_RATE_MAX_VIOLATIONS,
+      accountMaxEntries: c.WS_MSG_RATE_ACCOUNT_MAX_ENTRIES,
     }
     return cachedLimits
   })

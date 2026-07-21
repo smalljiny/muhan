@@ -731,6 +731,16 @@ describe('getConfig', () => {
     expect(config.WS_MSG_RATE_MAX_VIOLATIONS).toBe(10)
   })
 
+  it('WS_MSG_RATE_ACCOUNT_MAX_ENTRIES 미설정이면 기본값(4096)을 채운다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    delete process.env.WS_MSG_RATE_ACCOUNT_MAX_ENTRIES
+
+    const config = getConfig()
+
+    expect(config.WS_MSG_RATE_ACCOUNT_MAX_ENTRIES).toBe(4096)
+  })
+
   it('WS_MSG_RATE_CAPACITY 문자열을 숫자로 강제 변환한다', () => {
     process.env.MONGODB_URI = 'mongodb://localhost:27017'
     process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
@@ -741,12 +751,37 @@ describe('getConfig', () => {
     expect(config.WS_MSG_RATE_CAPACITY).toBe(50)
   })
 
+  it('WS_MSG_RATE_ACCOUNT_MAX_ENTRIES 문자열을 숫자로 강제 변환한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_MSG_RATE_ACCOUNT_MAX_ENTRIES = '8192'
+
+    const config = getConfig()
+
+    expect(config.WS_MSG_RATE_ACCOUNT_MAX_ENTRIES).toBe(8192)
+  })
+
+  it('WS_MSG_RATE_ACCOUNT_MAX_ENTRIES가 정수가 아니면 fail-fast로 종료한다', () => {
+    process.env.MONGODB_URI = 'mongodb://localhost:27017'
+    process.env.WS_ALLOWED_ORIGINS = 'http://localhost'
+    process.env.WS_MSG_RATE_ACCOUNT_MAX_ENTRIES = '4096.5'
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as never)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    getConfig()
+
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
   it.each([
     'WS_MSG_RATE_CAPACITY',
     'WS_MSG_RATE_REFILL_PER_SEC',
     'WS_MSG_RATE_ACCOUNT_CAPACITY',
     'WS_MSG_RATE_ACCOUNT_REFILL_PER_SEC',
     'WS_MSG_RATE_MAX_VIOLATIONS',
+    'WS_MSG_RATE_ACCOUNT_MAX_ENTRIES',
   ])('%s가 하한(1) 미만이면 fail-fast로 종료한다', (field) => {
     // 각 속도 상한 필드가 0이면 유량 회계가 무의미하므로 최소 1을 강제한다.
     process.env.MONGODB_URI = 'mongodb://localhost:27017'
