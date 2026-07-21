@@ -415,3 +415,48 @@ describe('resolveAttack — 다중공격(초인 PUPDMG count 루프)', () => {
     expect(creatureDeaths).toHaveLength(1)
   })
 })
+
+describe('resolveAttack — 이미 사망한 defender 진입 가드(stale/재진입 방어)', () => {
+  it('HP<1 크리처 defender: 굴림·피해·death seam·ledger 없이 no-op', () => {
+    const player = makePlayer()
+    const creature = makeCreature({ hpcur: -2, enemies: ['char-1'] }) // 이전 오버킬로 음수 HP
+    // seqRng([]) — 어떤 굴림이든 시도하면 throw. 가드가 굴림 전에 차단해야 통과.
+    const { ctx, ledger, creatureDeaths } = makeCtx([])
+
+    const out = resolveAttack(toCombatant(player), toCombatant(creature), ctx)
+
+    expect(out.hit).toBe(false)
+    expect(out.died).toBe(false)
+    expect(out.damage).toBe(0)
+    expect(out.messageInputs.attacks).toHaveLength(0)
+    expect(creature.hpcur).toBe(-2) // 추가 차감 없음
+    expect(creatureDeaths).toHaveLength(0) // death seam 재발화 없음
+    expect(ledger.size).toBe(0) // 음수 ledger 누적 없음
+  })
+
+  it('HP<1 플레이어 defender: firePlayerDeath 재발화 없이 no-op', () => {
+    const attacker = makeCreature()
+    const deadPlayer = makePlayer({ characterId: 'p-dead', hpCurrent: -1 })
+    const { ctx, playerDeaths } = makeCtx([])
+
+    const out = resolveAttack(toCombatant(attacker), toCombatant(deadPlayer), ctx)
+
+    expect(out.hit).toBe(false)
+    expect(out.died).toBe(false)
+    expect(deadPlayer.hpCurrent).toBe(-1)
+    expect(playerDeaths).toHaveLength(0)
+  })
+
+  it('HP 정확히 1인 defender는 가드를 통과해 정상 처리된다(경계값)', () => {
+    const player = makePlayer()
+    const creature = makeCreature({ hpcur: 1 })
+    // 가드는 HP<1만 차단. HP=1은 통과 → hit=20,mdice=5,crit=50,fumble=50,durability=2 → 1-5=-4 사망
+    const { ctx, creatureDeaths } = makeCtx([20, 5, 50, 50, 2])
+
+    const out = resolveAttack(toCombatant(player), toCombatant(creature), ctx)
+
+    expect(out.hit).toBe(true)
+    expect(out.died).toBe(true)
+    expect(creatureDeaths).toHaveLength(1)
+  })
+})

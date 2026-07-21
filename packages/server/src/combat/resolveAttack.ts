@@ -194,7 +194,7 @@ function performStrike(attacker: Combatant, defender: Combatant, ctx: ResolveCon
   }
 
   const hpBefore = defenderHp(defender)
-  const m = Math.min(hpBefore, n) // 오버킬 캡(ledger용, command5.c:320).
+  const m = Math.max(0, Math.min(hpBefore, n)) // 오버킬 캡(ledger용, command5.c:320) + 음수 하한 방어.
   applyDamage(defender, n)
 
   // ledger 누적 — defender가 몬스터(비플레이어)일 때만(command5.c:322).
@@ -219,11 +219,29 @@ function fireDeath(defender: Combatant, ctx: ResolveContext): void {
   }
 }
 
+/** 이미 사망한 defender에 대한 no-op 결과 — 굴림·피해·death seam·ledger 누적 없이 즉시 반환. */
+const DEAD_DEFENDER_NOOP: AttackOutcome = {
+  hit: false,
+  damage: 0,
+  critical: false,
+  fumble: false,
+  died: false,
+  messageInputs: { attacks: [] },
+}
+
 /**
  * 공격 해석 진입점 — 다중공격 count만큼 타격을 반복하되, defender HP<1이면 death seam 발화 후 break한다
  * (오라클 die() 후 return). 집계 AttackOutcome을 새 객체로 반환한다.
+ *
+ * 진입 가드: 이미 사망한(HP<1) defender에 대한 stale/재진입 공격은 no-op한다. 오라클은 die()가 대상을
+ * 즉시 free/제거해 재공격이 구조적으로 불가능하나, 이 포트는 사망 제거를 커넥션 계층으로 유예하므로
+ * (D2 레지스트리 remove·방 occupants 제거가 별도) 사망 후에도 combatTick 근접 target·stale 참조로
+ * resolveAttack이 재호출될 여지가 있다. 가드 없이 진입하면 오버킬로 음수가 된 HP에서 death seam이
+ * 재발화(#83 소환·분배 중복)되고 음수 ledger가 누적된다 — 진입 시 HP<1이면 굴림 전에 차단한다.
  */
 export function resolveAttack(attacker: Combatant, defender: Combatant, ctx: ResolveContext): AttackOutcome {
+  if (defenderHp(defender) < 1) return DEAD_DEFENDER_NOOP
+
   const count = attacker.kind === 'player' ? multiAttackCount(attacker.state, ctx.rng) : 1
   const attacks: AttackDescriptor[] = []
   let died = false
