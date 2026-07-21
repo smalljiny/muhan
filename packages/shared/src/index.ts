@@ -42,3 +42,8 @@ export { assertInRange, assertMonotonic } from './property/invariants.js'
 
 // 전투·경제·레벨링 정적 룩업 테이블 + 유효 능력치 합성 + 파생 스탯 resolver(단일 배럴 출처).
 export * from './stats/index.js'
+
+// 레벨링 exp 곡선 룩업(neededExp)·역함수(expToLevel) 순수 함수. 원시 needed_exp 테이블·MAXALVL은
+// 배럴로 노출하지 않는다 — 소비자(Story 2 backfill·Story 6 train)는 함수만 쓰고, off-by-one/
+// 선형 피벗 함정은 이 두 함수가 캡슐화한다. 실소비자가 생기면 그때 배럴에 추가한다(stats 선례).
+export { neededExp, expToLevel } from './progression/expCurve.js'

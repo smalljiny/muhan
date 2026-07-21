@@ -1,0 +1,107 @@
+{
+  "fn": "needed_exp",
+  "oracle": {
+    "method": "manual",
+    "source": "global.c:129 needed_exp / command7.c:590 / misc.c:472",
+    "generatedAt": "2026-07-21T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "fn": "neededExp",
+        "arg": 1
+      },
+      "note": "L1 배열 룩업 needed_exp[0]=128",
+      "expected": 128
+    },
+    {
+      "input": {
+        "fn": "neededExp",
+        "arg": 2
+      },
+      "note": "L2 배열 룩업 needed_exp[1]=256",
+      "expected": 256
+    },
+    {
+      "input": {
+        "fn": "neededExp",
+        "arg": 36
+      },
+      "note": "L36 배열 룩업 needed_exp[35]=100000",
+      "expected": 100000
+    },
+    {
+      "input": {
+        "fn": "neededExp",
+        "arg": 104
+      },
+      "note": "L104 배열 룩업 needed_exp[103]=10000000",
+      "expected": 10000000
+    },
+    {
+      "input": {
+        "fn": "neededExp",
+        "arg": 128
+      },
+      "note": "L128 배열 상한 needed_exp[127]=190000000 (비단조 forward)",
+      "expected": 190000000
+    },
+    {
+      "input": {
+        "fn": "neededExp",
+        "arg": 129
+      },
+      "note": "L129 선형 확장 index 126 피벗 → 110000000",
+      "expected": 110000000
+    },
+    {
+      "input": {
+        "fn": "expToLevel",
+        "arg": 0
+      },
+      "note": "exp 0 → L1 (첫 임계 128 미만)",
+      "expected": 1
+    },
+    {
+      "input": {
+        "fn": "expToLevel",
+        "arg": 127
+      },
+      "note": "exp 127 → L1 (첫 임계 바로 아래)",
+      "expected": 1
+    },
+    {
+      "input": {
+        "fn": "expToLevel",
+        "arg": 128
+      },
+      "note": "exp 128 → L2 round-trip(L1 임계 충족)",
+      "expected": 2
+    },
+    {
+      "input": {
+        "fn": "expToLevel",
+        "arg": 256
+      },
+      "note": "exp 256 → L3 round-trip(L2 임계 충족)",
+      "expected": 3
+    },
+    {
+      "input": {
+        "fn": "expToLevel",
+        "arg": 100000000
+      },
+      "note": "exp 100M → L128 (index 126 임계 충족, 배열 상한)",
+      "expected": 128
+    },
+    {
+      "input": {
+        "fn": "expToLevel",
+        "arg": 110000000
+      },
+      "note": "exp 110M → L130 선형 역산 round-trip(L129)",
+      "expected": 130
+    }
+  ]
+}
