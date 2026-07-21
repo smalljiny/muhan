@@ -57,3 +57,8 @@ export { resolveHpMax, resolveMpMax, clampVital } from './progression/maxResolve
 // 원시 테이블은 배럴로 노출하지 않는다 — 소비자(Story 6 train·강등 경로)는 함수만 쓰고, 성장
 // 게이트·슬롯 인덱스·enum→stats 매핑 함정은 이 두 함수가 캡슐화한다(needed_exp 선례).
 export { upLevel, downLevel } from './progression/levelUp.js'
+
+// 승급(prestige) 순수 전이 — 무적(class<9→9·level1·exp0) / 초인(class9→10·level127) 전환과
+// 분기 판정(classifyPrestige). Story 6 train이 classifyPrestige로 게이트 후 디스패치 소비한다(D6).
+// gold 차감(train)·dice(combat)는 미소유하고 순수 class/level/experience/vitals 전이만 소유한다.
+export { invinciblePrestige, caretakerPrestige, classifyPrestige } from './progression/prestige.js'
