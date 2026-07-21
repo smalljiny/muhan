@@ -57,4 +57,11 @@ describe('combat 배럴', () => {
     expect(typeof combat.createDamageLedger).toBe('function')
     expect(typeof combat.accumulateDamage).toBe('function')
   })
+
+  it('combatTick 팩토리·반격 상수를 재export한다', () => {
+    expect(typeof combat.createCombatTick).toBe('function')
+    expect(combat.MONSTER_SPELL_CAST_CHANCE).toBe(20)
+    expect(combat.ATTACK_COOLDOWN_INTERVAL).toBe(1)
+    expect(combat.ATTACK_COOLDOWN_BLIND).toBe(6)
+  })
 })

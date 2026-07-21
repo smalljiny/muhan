@@ -16,6 +16,8 @@ export const MPERMT = 0
 export const MAGGRE = 6
 /** scavenger(바닥 아이템 회수). */
 export const MSCAVE = 11
+/** 주문 시전 가능 — MMAGIC(mtype.h:17 `#define MMAGIC 17`, "Can cast spells"). 몬스터 틱 주문 분기 게이트(update.c:348). */
+export const MMAGIC = 17
 /** 무언가 주움(scavenge 성공 표식 — wander-out 제외 조건). */
 export const MHASSC = 18
 /** 마법으로만 피해(무기 무효) — MMGONL(mtype.h:431). 전투 대상 무적 게이트(command5.c:161). */

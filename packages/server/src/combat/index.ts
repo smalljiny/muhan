@@ -15,6 +15,9 @@ export {
   MAGE,
   PALADIN,
   INVINCIBLE,
+  MONSTER_SPELL_CAST_CHANCE,
+  ATTACK_COOLDOWN_INTERVAL,
+  ATTACK_COOLDOWN_BLIND,
 } from './constants.js'
 export { toPlayerCombatState } from './playerState.js'
 export type { PlayerCombatState, WeaponDamage } from './playerState.js'
@@ -29,3 +32,5 @@ export { registerEnemy, createDamageLedger, accumulateDamage } from './enmity.js
 export type { DamageLedger } from './enmity.js'
 export { resolveAttack } from './resolveAttack.js'
 export type { ResolveContext, AttackOutcome } from './resolveAttack.js'
+export { createCombatTick } from './combatTick.js'
+export type { CombatTickDeps, CastSpellSeam, SpellCastResult } from './combatTick.js'

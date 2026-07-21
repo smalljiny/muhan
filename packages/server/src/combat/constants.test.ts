@@ -5,6 +5,9 @@ import {
   HIT_ROLL_MAX_PLAYER,
   HIT_ROLL_MAX_MONSTER,
   PVP_COOLDOWN_INCREMENT,
+  MONSTER_SPELL_CAST_CHANCE,
+  ATTACK_COOLDOWN_INTERVAL,
+  ATTACK_COOLDOWN_BLIND,
 } from './constants.js'
 
 /**
@@ -25,5 +28,14 @@ describe('combat 튜닝 상수', () => {
 
   it('PvP 쿨다운 증분은 +3', () => {
     expect(PVP_COOLDOWN_INCREMENT).toBe(3)
+  })
+
+  it('몬스터 주문 시전 확률은 20(update.c:348 n=20)', () => {
+    expect(MONSTER_SPELL_CAST_CHANCE).toBe(20)
+  })
+
+  it('반격 쿨다운 간격: 기본 1, 실명 6', () => {
+    expect(ATTACK_COOLDOWN_INTERVAL).toBe(1)
+    expect(ATTACK_COOLDOWN_BLIND).toBe(6)
   })
 })
