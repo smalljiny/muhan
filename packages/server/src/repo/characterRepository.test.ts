@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import type { Db, Filter } from 'mongodb'
-import type { Character, ObjectInstance } from 'shared'
+import { neededExp, type Character, type ObjectInstance } from 'shared'
 import { CharacterRepository } from './characterRepository.js'
 import { seedVitals } from './characterBackfill.js'
 import { ObjectRepository } from './objectRepository.js'
@@ -23,7 +23,8 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
     level: 1,
     hpCurrent: 55,
     mpCurrent: 40,
-    schemaVersion: 2,
+    experience: 0,
+    schemaVersion: 3,
     // 계정 링크 FK(Story 1로 필수화)와 soft-delete 상태 기본값.
     accountId: 'acc-1',
     status: 'active',
@@ -242,8 +243,8 @@ describe('CharacterRepository (integration)', () => {
     await expect(repo.deleteById('missing')).rejects.toThrow(DocumentNotFoundError)
   })
 
-  it('findById는 hpCurrent/mpCurrent/level 없는 v1 문서를 backfill로 승격해 parse 통과시킨다', async () => {
-    // repo.insert는 v2 스키마로 거부하므로 untyped 컬렉션에 raw v1 문서를 직접 주입한다.
+  it('findById는 vitals·experience 없는 v1 문서를 backfill 체인(V3∘V2)으로 승격해 parse 통과시킨다', async () => {
+    // repo.insert는 최신 스키마로 거부하므로 untyped 컬렉션에 raw v1 문서를 직접 주입한다.
     await db.collection<RawCharacterDoc>('characters').insertOne({
       _id: 'v1-load',
       name: '옛전사',
@@ -262,7 +263,9 @@ describe('CharacterRepository (integration)', () => {
     expect(found?.level).toBe(1)
     expect(found?.hpCurrent).toBe(seedVitals(3, 1).hpCurrent)
     expect(found?.mpCurrent).toBe(seedVitals(3, 1).mpCurrent)
-    expect(found?.schemaVersion).toBe(2)
+    // V3 스텝: level=1이라 experience 0으로 시딩, 최신 버전(3)으로 스탬프.
+    expect(found?.experience).toBe(0)
+    expect(found?.schemaVersion).toBe(3)
   })
 
   it('findByAccount도 v1 문서를 backfill로 승격해 반환한다 (parse 이전 승격)', async () => {
@@ -283,6 +286,34 @@ describe('CharacterRepository (integration)', () => {
     expect(list).toHaveLength(1)
     expect(list[0]?.hpCurrent).toBe(seedVitals(4, 1).hpCurrent)
     expect(list[0]?.level).toBe(1)
-    expect(list[0]?.schemaVersion).toBe(2)
+    expect(list[0]?.experience).toBe(0)
+    expect(list[0]?.schemaVersion).toBe(3)
+  })
+
+  it('★판별: level=50 v2 문서를 load하면 level·vitals를 보존하고 experience를 정합 시딩한다', async () => {
+    // 실데이터는 전부 level 1이라 level>1 문서라야 마이그레이션 클로버(level=1 리셋·vitals 재시딩)가
+    // 드러난다. V2 가드/스탬프가 CURRENT(3)에 매이면 이 v2 문서가 V2로 흘러 level=1로 클로버된다.
+    await db.collection<RawCharacterDoc>('characters').insertOne({
+      _id: 'v2-lv50',
+      name: '고렙전사',
+      class: 3,
+      race: 2,
+      stats: [10, 10, 10, 10, 10],
+      gold: 100,
+      currentRoom: 1,
+      hpCurrent: 777,
+      mpCurrent: 333,
+      level: 50,
+      schemaVersion: 2,
+      accountId: 'acc-v2',
+      status: 'active',
+    })
+
+    const found = await repo.findById('v2-lv50')
+    expect(found?.level).toBe(50) // 보존 — 1로 클로버 금지
+    expect(found?.hpCurrent).toBe(777) // vitals 재시딩 금지
+    expect(found?.mpCurrent).toBe(333)
+    expect(found?.experience).toBe(neededExp(49)) // level L 도달 최소 누적 = neededExp(L-1)
+    expect(found?.schemaVersion).toBe(3)
   })
 })

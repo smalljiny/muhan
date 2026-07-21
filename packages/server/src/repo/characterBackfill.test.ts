@@ -1,6 +1,17 @@
 import { describe, it, expect } from 'vitest'
-import { characterSchema, computeHpMax, computeMpMax, type EffectiveStatContext } from 'shared'
-import { backfillCharacterV2, seedVitals } from './characterBackfill.js'
+import {
+  characterSchema,
+  computeHpMax,
+  computeMpMax,
+  neededExp,
+  type EffectiveStatContext,
+} from 'shared'
+import {
+  backfillCharacterV2,
+  backfillCharacterV3,
+  seedVitals,
+  CURRENT_CHARACTER_SCHEMA_VERSION,
+} from './characterBackfill.js'
 
 /** 판독 6필드는 더미(0/false), class·level만 유효값으로 채운 컨텍스트. */
 function ctx(characterClass: number, level: number): EffectiveStatContext {
@@ -42,9 +53,12 @@ describe('backfillCharacterV2', () => {
     expect(result.schemaVersion).toBe(2)
   })
 
-  it('승격 결과는 characterSchema.parse를 통과한다 (누락 v1 → 유효 v2)', () => {
-    const result = backfillCharacterV2(rawV1())
-    expect(characterSchema.safeParse(result).success).toBe(true)
+  it('V2 단독 승격 결과는 experience가 없어 아직 parse를 통과하지 못한다 (V3 스텝 필요)', () => {
+    // V2는 v1→v2(vitals)만 담당하고 experience는 V3 스텝 소유다. 합성(V3∘V2)해야 parse를 통과한다.
+    const v2Only = backfillCharacterV2(rawV1())
+    expect('experience' in v2Only).toBe(false)
+    expect(characterSchema.safeParse(v2Only).success).toBe(false)
+    expect(characterSchema.safeParse(backfillCharacterV3(v2Only)).success).toBe(true)
   })
 
   it('원본을 변형하지 않고 새 객체를 반환한다 (immutability)', () => {
@@ -85,5 +99,83 @@ describe('seedVitals', () => {
       hpCurrent: computeHpMax(ctx(2, 1)),
       mpCurrent: computeMpMax(ctx(2, 1)),
     })
+  })
+})
+
+/** experience 없는 v2 raw 문서(vitals·level 있음, schemaVersion:2). V3 승격 입력 형태. */
+function rawV2(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    _id: 'v2',
+    name: '중간캐릭',
+    class: 3,
+    race: 2,
+    stats: [10, 10, 10, 10, 10],
+    gold: 100,
+    currentRoom: 1,
+    hpCurrent: 54,
+    mpCurrent: 50,
+    level: 1,
+    schemaVersion: 2,
+    accountId: 'acc-1',
+    status: 'active',
+    ...overrides,
+  }
+}
+
+describe('backfillCharacterV3', () => {
+  it('CURRENT_CHARACTER_SCHEMA_VERSION은 3이다', () => {
+    expect(CURRENT_CHARACTER_SCHEMA_VERSION).toBe(3)
+  })
+
+  it('schemaVersion<3 문서를 experience·schemaVersion=3으로 승격한다 (level=1 → exp 0)', () => {
+    const result = backfillCharacterV3(rawV2())
+    expect(result.experience).toBe(0)
+    expect(result.schemaVersion).toBe(3)
+    expect(result.level).toBe(1)
+  })
+
+  it('★판별: level=50 v2 문서를 승격해도 level·vitals를 보존하고 exp를 정합 계산한다', () => {
+    // 가드/스탬프가 CURRENT에 매이면 이 v2 문서가 V2로 흘러 level=1 클로버·vitals 재시딩된다.
+    // level=50이라야 1→1 불가시 클로버가 드러난다(실데이터는 전부 level 1).
+    const v2 = rawV2({ level: 50, hpCurrent: 777, mpCurrent: 333 })
+    const result = backfillCharacterV3(v2)
+    expect(result.level).toBe(50) // 보존 — 1로 클로버 금지
+    expect(result.experience).toBe(neededExp(49)) // level L 도달 최소 누적 = neededExp(L-1)
+    expect(result.hpCurrent).toBe(777) // vitals 재시딩 금지
+    expect(result.mpCurrent).toBe(333)
+    expect(result.schemaVersion).toBe(3)
+  })
+
+  it('schemaVersion>=3 문서는 그대로 반환한다 (passthrough, experience 재계산 없음)', () => {
+    const v3 = rawV2({ schemaVersion: 3, level: 50, experience: 123456 })
+    const result = backfillCharacterV3(v3)
+    expect(result).toBe(v3)
+    expect(result.experience).toBe(123456) // neededExp(49)로 덮어쓰지 않음
+  })
+
+  it('원본을 변형하지 않고 새 객체를 반환한다 (immutability)', () => {
+    const raw = rawV2()
+    const result = backfillCharacterV3(raw)
+    expect(result).not.toBe(raw)
+    expect('experience' in raw).toBe(false)
+  })
+})
+
+describe('backfill 합성 체인 (V3 ∘ V2)', () => {
+  it('v1 raw → V2가 vitals(level=1), V3가 experience=0, schemaVersion=3, parse 통과', () => {
+    const result = backfillCharacterV3(backfillCharacterV2(rawV1()))
+    expect(result.level).toBe(1)
+    expect(result.hpCurrent).toBe(computeHpMax(ctx(3, 1)))
+    expect(result.experience).toBe(0)
+    expect(result.schemaVersion).toBe(3)
+    expect(characterSchema.safeParse(result).success).toBe(true)
+  })
+
+  it('v3 문서는 두 스텝 모두 passthrough (재계산 없음)', () => {
+    const v3 = rawV2({ schemaVersion: 3, level: 7, experience: 999 })
+    const result = backfillCharacterV3(backfillCharacterV2(v3))
+    expect(result).toBe(v3)
+    expect(result.level).toBe(7)
+    expect(result.experience).toBe(999)
   })
 })
