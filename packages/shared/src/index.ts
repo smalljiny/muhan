@@ -42,3 +42,23 @@ export { assertInRange, assertMonotonic } from './property/invariants.js'
 
 // 전투·경제·레벨링 정적 룩업 테이블 + 유효 능력치 합성 + 파생 스탯 resolver(단일 배럴 출처).
 export * from './stats/index.js'
+
+// 레벨링 exp 곡선 룩업(neededExp)·역함수(expToLevel) 순수 함수. 원시 needed_exp 테이블·MAXALVL은
+// 배럴로 노출하지 않는다 — 소비자(Story 2 backfill·Story 6 train)는 함수만 쓰고, off-by-one/
+// 선형 피벗 함정은 이 두 함수가 캡슐화한다. 실소비자가 생기면 그때 배럴에 추가한다(stats 선례).
+export { neededExp, expToLevel } from './progression/expCurve.js'
+
+// HP/MP 최대치 compute-on-read 래퍼(stats-core 폐형 + 초인 오버라이드 단일 소비 지점, D2)와
+// 현재치 불변식 클램프 헬퍼. 최대치는 저장하지 않고 class·level로 매 판독 시 파생한다.
+// Story 4·5·7·8(레벨업·강등·재생·승급)이 이 세 함수를 공유 소비한다.
+export { resolveHpMax, resolveMpMax, clampVital } from './progression/maxResolvers.js'
+
+// 레벨업·강등 순수 변이(level_cycle 능력치 성장 + 최대치 재동기화 + 현재치 클램프). level_cycle
+// 원시 테이블은 배럴로 노출하지 않는다 — 소비자(Story 6 train·강등 경로)는 함수만 쓰고, 성장
+// 게이트·슬롯 인덱스·enum→stats 매핑 함정은 이 두 함수가 캡슐화한다(needed_exp 선례).
+export { upLevel, downLevel } from './progression/levelUp.js'
+
+// 승급(prestige) 순수 전이 — 무적(class<9→9·level1·exp0) / 초인(class9→10·level127) 전환과
+// 분기 판정(classifyPrestige). Story 6 train이 classifyPrestige로 게이트 후 디스패치 소비한다(D6).
+// gold 차감(train)·dice(combat)는 미소유하고 순수 class/level/experience/vitals 전이만 소유한다.
+export { invinciblePrestige, caretakerPrestige, classifyPrestige } from './progression/prestige.js'

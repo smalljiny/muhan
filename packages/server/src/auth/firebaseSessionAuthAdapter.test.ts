@@ -24,7 +24,8 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
     level: 1,
     hpCurrent: 55,
     mpCurrent: 40,
-    schemaVersion: 2,
+    experience: 0,
+    schemaVersion: 3,
     accountId: 'acc-1',
     status: 'active',
     ...overrides,
@@ -226,7 +227,9 @@ describe('FirebaseSessionAuthAdapter (integration)', () => {
       expect(persisted?.level).toBe(1)
       expect(persisted?.hpCurrent).toBe(seedVitals(2, 1).hpCurrent)
       expect(persisted?.mpCurrent).toBe(seedVitals(2, 1).mpCurrent)
-      expect(persisted?.schemaVersion).toBe(2)
+      // 1레벨 신규는 experience 0으로 시딩하고 최신 스키마 버전(3)으로 스탬프한다.
+      expect(persisted?.experience).toBe(0)
+      expect(persisted?.schemaVersion).toBe(3)
     })
 
     it('gender·weapon·alignment를 선택 필드로 영속한다', async () => {

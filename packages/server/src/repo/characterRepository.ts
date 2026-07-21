@@ -2,7 +2,7 @@ import type { Collection, Db, Filter } from 'mongodb'
 import { characterSchema, type Character, type ObjectInstance } from 'shared'
 import { DocumentNotFoundError, type IRepository } from './types.js'
 import type { ObjectRepository } from './objectRepository.js'
-import { backfillCharacterV2 } from './characterBackfill.js'
+import { backfillCharacterV2, backfillCharacterV3 } from './characterBackfill.js'
 
 const COLLECTION_NAME = 'characters'
 
@@ -49,13 +49,14 @@ export class CharacterRepository implements IRepository<Character> {
   }
 
   /**
-   * 조회 경로 공통 경계 게이트 — v1 문서를 backfill로 승격한 뒤 strict parse한다.
-   * "backfill은 parse에 선행한다" 불변식(strict parse가 hpCurrent/mpCurrent/level 없는 v1
-   * 문서를 거부)을 두 load 경로가 공유하는 단일 구조로 강제한다. 신규 조회 쿼리가 backfill을
-   * 누락한 채 v1 문서를 파싱해 런타임 거부되는 사고를 이 게이트로 차단한다.
+   * 조회 경로 공통 경계 게이트 — raw 문서를 backfill 합성 체인(V3∘V2)으로 승격한 뒤 strict parse한다.
+   * V2가 v1→v2(vitals·level), V3가 v2→v3(experience)를 순차 담당한다. "backfill은 parse에 선행한다"
+   * 불변식(strict parse가 hpCurrent/mpCurrent/level/experience 없는 구버전 문서를 거부)을 두 load
+   * 경로가 공유하는 단일 구조로 강제한다. 신규 조회 쿼리가 backfill을 누락한 채 구버전 문서를
+   * 파싱해 런타임 거부되는 사고를 이 게이트로 차단한다.
    */
   private parseCharacterDoc(doc: Record<string, unknown>): Character {
-    return characterSchema.parse(backfillCharacterV2(doc))
+    return characterSchema.parse(backfillCharacterV3(backfillCharacterV2(doc)))
   }
 
   async findById(id: string): Promise<Character | null> {

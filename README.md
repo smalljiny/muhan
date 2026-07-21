@@ -30,13 +30,15 @@
 | 디스크 포맷 역설계 + JSON 변환 | ✅ 완료 (방 2341 · object 709 · creature 674) |
 | 게임 분석 A1–A13 (런타임·전투·마법·경제·소셜·세션 전 영역) | ✅ 완료 |
 | 스택·아키텍처 결정 (ADR, 이슈 #14) | ✅ 확정 |
-| **E1** monorepo 스캐폴딩 (이슈 #30) | ✅ 완료 |
-| **E2-1** 영속화 기반 (연결·스키마·repository·부팅 로드, 이슈 #39) | ✅ 완료 |
-| **E2-2** 세이브 정책 엔진 (이슈 #40) | ✅ 완료 |
-| **E3-1** 전송·프로토콜 기반 (WS 배선·프로토콜 계약·버전 협상·하트비트·라우터, 이슈 #45) | ✅ 완료 |
-| **E3-2** 인증·세션 FSM (세션쿠키 핸드셰이크·SessionAuthPort·캐릭터 선택→생성→명령, 이슈 #46) | 🔜 다음 |
-| **E3-3** 재연결·레지스트리 (세션레지스트리·link-dead grace·자유채팅 seam, 이슈 #47) | ⏳ 예정 |
-| **E4** 월드 상태 엔진 (#34) · **E5** 인증·계정 (#35) · **E6** 게임 규칙 엔진 (#36) · **E7** 소셜·채널 (#37) · **E8** 테스트 인프라 (#33) | ⏳ 예정 |
+| **E1** monorepo 스캐폴딩·툴체인 | ✅ 완료 |
+| **E2** 영속화 — 기반(E2-1)·세이브 정책 엔진(E2-2) | ✅ 완료 |
+| **E3** 전송·세션 — 프로토콜(E3-1)·인증세션 FSM(E3-2)·연결 수명주기(E3-3)·자유채팅권한 seam(E3-4)·WS 하드닝(유량 제한·자원 가드) | ✅ 완료 |
+| **E4** 월드 상태 엔진 — 런타임 기반(1Hz 틱)·이동·방·크리처 스폰/AI | ✅ 완료 |
+| **E5** 계정·캐릭터 라이프사이클 (account 1급 모델·생성 인터뷰·진입/재개·soft-delete) | ✅ 완료 |
+| **E6** 게임 규칙 — 파생 스탯(stats-core)·근접 전투(combat)·**진행 루프(progression)** | 🔄 진행 중 (진행 루프 = 현재 PR) |
+| **웹 클라이언트** — 전송 셸(E9-1)·세션 진입(E10-1) | ✅ 부분 |
+| **테스트 인프라** — 골든 fixture 하네스·property 테스트 | ✅ 완료 |
+| **E7** 소셜·채널 · 마법·경제 규칙 엔진 확장 | ⏳ 예정 |
 
 ---
 
@@ -59,14 +61,14 @@
 ```
 muhan/
 ├── packages/
-│   ├── shared/   # 공유 Zod 스키마·타입, 월드 로더, 그래프 타입 (단일 출처)
-│   ├── server/   # Fastify 부팅, MongoDB 연결·repository, 인메모리 월드 그래프
-│   ├── client/   # Vite 웹 UI 스켈레톤
+│   ├── shared/   # 공유 Zod 스키마·타입, 월드 로더, 순수 게임 규칙(stats·progression·oracle fixture)
+│   ├── server/   # Fastify 부팅, MongoDB 연결·repository, 월드 틱·세션 FSM·전투·진행 seam 소비
+│   ├── client/   # React 웹 클라이언트 (전송 셸·세션 진입 플로우)
 │   └── port/     # 1993 디스크 포맷 파서·변환기 (순수 JS)
 ├── data/world/   # port/로 변환된 JSON 월드 데이터 (산출물, 정본)
 ├── legacy/muhan/ # 원본 C 소스·월드·세이브 (읽기 전용 oracle, EUC-KR)
 └── docs/
-    ├── specs/    # 정본 스펙 (architecture · monorepo · persistence · save-policy · transport-protocol)
+    ├── specs/    # 정본 스펙 21종 (아키텍처·영속화·전송/세션·월드/게임규칙·클라이언트·테스트 인프라)
     ├── notes/    # 게임 분석 노트 A1–A13
     └── research/ # 아키텍처·스캐폴딩 리서치 보고서
 ```
@@ -160,12 +162,60 @@ docker compose down
 
 ## 문서 안내
 
+**아키텍처·인프라**
+
 | 문서 | 내용 |
 |------|------|
-| [`docs/specs/architecture.md`](docs/specs/architecture.md) | 서버·클라이언트 스택과 8개 결정 축의 정본 ADR (이슈 #14) |
-| [`docs/specs/monorepo.md`](docs/specs/monorepo.md) | pnpm + Turborepo 4패키지 스캐폴딩·툴체인 (E1) |
-| [`docs/specs/persistence.md`](docs/specs/persistence.md) | MongoDB 연결·문서 스키마·repository·부팅 월드 로드 (E2-1) |
-| [`docs/specs/save-policy.md`](docs/specs/save-policy.md) | dirty-flag 추적·주기 flush·은행 트랜잭션 원자성 세이브 엔진 (E2-2) |
-| [`docs/specs/transport-protocol.md`](docs/specs/transport-protocol.md) | WS 게임 소켓 배선·Zod 프로토콜 계약·버전 협상·하트비트·라우터 (E3-1) |
+| [`architecture.md`](docs/specs/architecture.md) | 서버·클라이언트 스택과 8개 결정 축의 정본 ADR (이슈 #14) |
+| [`monorepo.md`](docs/specs/monorepo.md) | pnpm + Turborepo 4패키지 스캐폴딩·툴체인 (E1) |
+
+**영속화**
+
+| 문서 | 내용 |
+|------|------|
+| [`persistence.md`](docs/specs/persistence.md) | MongoDB 연결·문서 스키마·repository·부팅 월드 로드 (E2-1) |
+| [`save-policy.md`](docs/specs/save-policy.md) | dirty-flag 추적·주기 flush·은행 트랜잭션 원자성 세이브 엔진 (E2-2) |
+
+**전송·세션**
+
+| 문서 | 내용 |
+|------|------|
+| [`transport-protocol.md`](docs/specs/transport-protocol.md) | WS 게임 소켓 배선·Zod 프로토콜 계약·버전 협상·하트비트·라우터 (E3-1) |
+| [`auth-session.md`](docs/specs/auth-session.md) | 인증 게이트·세션 FSM(select→create→command)·SessionAuthPort DIP seam (E3-2) |
+| [`session-lifecycle.md`](docs/specs/session-lifecycle.md) | 세션 레지스트리·link-dead grace 재연결·idle timeout·disconnect 수렴 seam (E3-3) |
+| [`freechat-permission-seam.md`](docs/specs/freechat-permission-seam.md) | actor-context threading·ChannelPort·PermissionPort seam+skeleton (E3-4) |
+| [`ws-rate-limit.md`](docs/specs/ws-rate-limit.md) | 인바운드 프레임 토큰 버킷 유량 제한 (WS 하드닝) |
+| [`ws-resource-guard.md`](docs/specs/ws-resource-guard.md) | 연결 정원 + 아웃바운드 backpressure 자원 고갈 방어 (WS 하드닝) |
+
+**월드·게임 규칙**
+
+| 문서 | 내용 |
+|------|------|
+| [`runtime-foundation.md`](docs/specs/runtime-foundation.md) | 1Hz 중앙 월드 틱·타이머 주입 seam·graceful shutdown 수렴 (E4) |
+| [`movement-rooms.md`](docs/specs/movement-rooms.md) | 방 그래프·`tryMove`·문 상태머신·방=채널 방송·출구 자동 재잠금 |
+| [`creature-spawn.md`](docs/specs/creature-spawn.md) | 크리처 라이브 인스턴스·활성 집합·autonomic AI·스폰 3트리거·사망 라이프사이클 (E4-2) |
+| [`stats-core.md`](docs/specs/stats-core.md) | base+modifier 능력치·파생 스탯(AC·THAC0·소지량·HP/MP 최대치) 순수 계산 |
+| [`combat.md`](docs/specs/combat.md) | `resolveAttack` 단일 근접 전투 파이프·몬스터 라운드·플레이어 반격 (E6a-1) |
+| [`progression.md`](docs/specs/progression.md) | 경험치 곡선·연마 레벨업·능력치 성장·HP/MP 재생·사망 페널티·승급 ← **현재 PR** |
+
+**계정·클라이언트**
+
+| 문서 | 내용 |
+|------|------|
+| [`account-character.md`](docs/specs/account-character.md) | account 1급 모델·캐릭터 생성 인터뷰·진입/재개·soft-delete FSM·RBAC seam (E5) |
+| [`transport-shell.md`](docs/specs/transport-shell.md) | React 클라이언트 WS 인증 접속·프로토콜 왕복·Docker 개발 하네스 (E9-1) |
+| [`session-entry.md`](docs/specs/session-entry.md) | 캐릭터 목록·선택·생성·진입/재개 사용자 구동 UI 진입 계층 (E10-1) |
+
+**테스트 인프라**
+
+| 문서 | 내용 |
+|------|------|
+| [`golden-fixture-harness.md`](docs/specs/golden-fixture-harness.md) | C oracle 대조 frozen 골든 fixture approval-test 인프라 |
+| [`property-testing.md`](docs/specs/property-testing.md) | RNG 시드 고정 입력 범위 불변식 검증 fast-check property 테스트 인프라 |
+
+**노트·리서치**
+
+| 문서 | 내용 |
+|------|------|
 | `docs/notes/game-analysis-20260625/` | 게임 분석 노트 A1–A13 (런타임·전투·마법·경제·소셜·세션) |
 | `docs/research/` | 아키텍처·스캐폴딩 리서치 보고서 (결정 근거 출처) |

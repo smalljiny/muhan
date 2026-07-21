@@ -16,6 +16,7 @@ function validCharacter(): Character {
     hpCurrent: 54,
     mpCurrent: 50,
     level: 1,
+    experience: 0,
     schemaVersion: 1,
     status: 'active',
   }
@@ -153,6 +154,21 @@ describe('characterSchema', () => {
 
   it('hpCurrent가 음수이면 거부한다', () => {
     expect(characterSchema.safeParse({ ...validCharacter(), hpCurrent: -1 }).success).toBe(false)
+  })
+
+  it('experience가 없으면 거부한다 (레벨링 필수 영속 필드)', () => {
+    // level/hpCurrent/mpCurrent와 동렬 — v2 문서는 load 직전 backfillCharacterV3가 승격한다.
+    const doc = validCharacter() as Partial<Character>
+    delete doc.experience
+    expect(characterSchema.safeParse(doc).success).toBe(false)
+  })
+
+  it('experience가 음수이면 거부한다', () => {
+    expect(characterSchema.safeParse({ ...validCharacter(), experience: -1 }).success).toBe(false)
+  })
+
+  it('experience가 정수가 아니면 거부한다', () => {
+    expect(characterSchema.safeParse({ ...validCharacter(), experience: 1.5 }).success).toBe(false)
   })
 })
 

@@ -98,6 +98,8 @@ export class FirebaseSessionAuthAdapter implements SessionAuthPort {
       // 전투 필수 vitals를 1레벨 최대치로 시딩한다(만피·만마 출발). backfill과 동일 산술 출처.
       level: STARTING_LEVEL,
       ...seedVitals(dto.class, STARTING_LEVEL),
+      // 누적 경험치는 1레벨 신규라 0으로 시딩한다(backfillCharacterV3의 level<=1 시딩과 일치).
+      experience: 0,
       schemaVersion: CHARACTER_SCHEMA_VERSION,
       accountId,
       status: 'active',

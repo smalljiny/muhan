@@ -24,6 +24,10 @@ export const characterSchema = z.strictObject({
   hpCurrent: z.int().min(0),
   mpCurrent: z.int().min(0),
   level: z.int().min(1),
+  // 누적 경험치. level과 동렬의 레벨링 필수 영속 필드(D3 발산)로, progression resolver·train이
+  // 값을 요구하므로 required다. v1/v2 문서는 load 직전 backfillCharacterV3가 level 정합값으로
+  // 시딩(level<=1이면 0, 아니면 neededExp(level-1))하고, 신규 문서는 생성 경로에서 0으로 시딩한다.
+  experience: z.int().min(0),
   schemaVersion: z.int(),
   // 소유 계정 id(account._id = Firebase UID)로의 필수 FK.
   accountId: z.string().min(1),

@@ -33,6 +33,9 @@ describe('toPlayerCombatState', () => {
     hpCurrent: 42,
     mpCurrent: 15,
     level: 7,
+    // 이 픽스처는 PlayerCombatState 어댑트 입력이며 load 경로(backfill)를 거치지 않아 experience는
+    // 검증되지 않는다. Character 타입(required) 충족을 위한 최소값 0으로 둔다.
+    experience: 0,
     schemaVersion: 2,
     accountId: 'acct-1',
     status: 'active',

@@ -1,0 +1,137 @@
+{
+  "fn": "level_cycle",
+  "oracle": {
+    "method": "manual",
+    "source": "global.c:78 level_cycle / player.c:770 up_level",
+    "generatedAt": "2026-07-21T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "characterClass": 1,
+        "targetLevel": 40
+      },
+      "note": "assassin L1→40 성장 분포",
+      "expected": [
+        4,
+        4,
+        2,
+        0,
+        0
+      ]
+    },
+    {
+      "input": {
+        "characterClass": 2,
+        "targetLevel": 40
+      },
+      "note": "barbarian L1→40 성장 분포",
+      "expected": [
+        2,
+        2,
+        0,
+        2,
+        4
+      ]
+    },
+    {
+      "input": {
+        "characterClass": 3,
+        "targetLevel": 40
+      },
+      "note": "cleric L1→40 성장 분포",
+      "expected": [
+        2,
+        0,
+        4,
+        4,
+        0
+      ]
+    },
+    {
+      "input": {
+        "characterClass": 4,
+        "targetLevel": 40
+      },
+      "note": "fighter L1→40 성장 분포",
+      "expected": [
+        2,
+        4,
+        0,
+        2,
+        2
+      ]
+    },
+    {
+      "input": {
+        "characterClass": 5,
+        "targetLevel": 40
+      },
+      "note": "mage L1→40 성장 분포",
+      "expected": [
+        2,
+        0,
+        0,
+        4,
+        4
+      ]
+    },
+    {
+      "input": {
+        "characterClass": 6,
+        "targetLevel": 40
+      },
+      "note": "paladin L1→40 성장 분포",
+      "expected": [
+        0,
+        2,
+        4,
+        2,
+        2
+      ]
+    },
+    {
+      "input": {
+        "characterClass": 7,
+        "targetLevel": 40
+      },
+      "note": "ranger L1→40 성장 분포",
+      "expected": [
+        0,
+        4,
+        0,
+        4,
+        2
+      ]
+    },
+    {
+      "input": {
+        "characterClass": 8,
+        "targetLevel": 40
+      },
+      "note": "thief L1→40 성장 분포",
+      "expected": [
+        0,
+        2,
+        2,
+        2,
+        4
+      ]
+    },
+    {
+      "input": {
+        "characterClass": 9,
+        "targetLevel": 40
+      },
+      "note": "invincible L1→40 균등 분포",
+      "expected": [
+        2,
+        2,
+        2,
+        2,
+        2
+      ]
+    }
+  ]
+}
