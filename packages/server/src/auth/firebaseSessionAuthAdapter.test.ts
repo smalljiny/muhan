@@ -4,6 +4,7 @@ import type { Db } from 'mongodb'
 import type { Character } from 'shared'
 import { AccountRepository } from '../repo/accountRepository.js'
 import { CharacterRepository } from '../repo/characterRepository.js'
+import { seedVitals } from '../repo/characterBackfill.js'
 import { ObjectRepository } from '../repo/objectRepository.js'
 import { createMongoTestDb, type MongoTestDb } from '../repo/mongoTestDb.testutil.js'
 import { FirebaseSessionAuthAdapter } from './firebaseSessionAuthAdapter.js'
@@ -20,7 +21,10 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
     stats: [10, 10, 10, 10, 10],
     gold: 100,
     currentRoom: 1,
-    schemaVersion: 1,
+    level: 1,
+    hpCurrent: 55,
+    mpCurrent: 40,
+    schemaVersion: 2,
     accountId: 'acc-1',
     status: 'active',
     ...overrides,
@@ -133,6 +137,13 @@ describe('FirebaseSessionAuthAdapter (integration)', () => {
       expect(c1).toEqual({ characterId: 'c1', name: '가', class: 3, race: 4, level: 1 })
     })
 
+    it('요약 level은 dev 상수가 아니라 문서 level을 그대로 반영한다', async () => {
+      // level!=1 문서로 toSummary가 doc.level을 투영함을 고정한다(하드코딩 level:1이면 실패).
+      await characters.insert(makeCharacter({ _id: 'lv5', name: '고렙', accountId: 'uid-1', level: 5 }))
+      const summary = (await adapter.listCharacters('uid-1')).find((s) => s.characterId === 'lv5')
+      expect(summary?.level).toBe(5)
+    })
+
     it('캐릭터가 없으면 빈 배열을 반환한다', async () => {
       const summaries = await adapter.listCharacters('uid-empty')
       expect(summaries).toEqual([])
@@ -204,6 +215,18 @@ describe('FirebaseSessionAuthAdapter (integration)', () => {
       expect(persisted?.stats).toEqual([10, 10, 11, 10, 10])
       expect(persisted?.name).toBe('새캐릭')
       expect(persisted?.status).toBe('active')
+    })
+
+    it('전투 vitals(level=1·hpCurrent·mpCurrent)를 최대치로 시딩하고 insert parse를 통과한다', async () => {
+      // makeDto는 class:2 — level 1 최대치로 hpCurrent/mpCurrent를 시딩한다(만피·만마 출발).
+      const summary = await adapter.createCharacter('uid-1', makeDto({ class: 2 }))
+      expect(summary.level).toBe(1)
+
+      const persisted = await characters.findById(summary.characterId)
+      expect(persisted?.level).toBe(1)
+      expect(persisted?.hpCurrent).toBe(seedVitals(2, 1).hpCurrent)
+      expect(persisted?.mpCurrent).toBe(seedVitals(2, 1).mpCurrent)
+      expect(persisted?.schemaVersion).toBe(2)
     })
 
     it('gender·weapon·alignment를 선택 필드로 영속한다', async () => {

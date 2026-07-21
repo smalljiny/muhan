@@ -2,9 +2,13 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import type { Db, Filter } from 'mongodb'
 import type { Character, ObjectInstance } from 'shared'
 import { CharacterRepository } from './characterRepository.js'
+import { seedVitals } from './characterBackfill.js'
 import { ObjectRepository } from './objectRepository.js'
 import { DocumentNotFoundError } from './types.js'
 import { createMongoTestDb, type MongoTestDb } from './mongoTestDb.testutil.js'
+
+/** raw v1 문서 직접 주입용 컬렉션 스키마 — 문자열 _id를 강제하고 임의 필드를 허용한다. */
+type RawCharacterDoc = { _id: string } & Record<string, unknown>
 
 /** 테스트용 유효 Character 팩토리 — 스키마 shape를 정확히 만족한다. */
 function makeCharacter(overrides: Partial<Character> = {}): Character {
@@ -16,7 +20,10 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
     stats: [10, 10, 10, 10, 10],
     gold: 100,
     currentRoom: 1,
-    schemaVersion: 1,
+    level: 1,
+    hpCurrent: 55,
+    mpCurrent: 40,
+    schemaVersion: 2,
     // 계정 링크 FK(Story 1로 필수화)와 soft-delete 상태 기본값.
     accountId: 'acc-1',
     status: 'active',
@@ -233,5 +240,49 @@ describe('CharacterRepository (integration)', () => {
 
   it('존재하지 않는 id deleteById는 DocumentNotFoundError를 던진다', async () => {
     await expect(repo.deleteById('missing')).rejects.toThrow(DocumentNotFoundError)
+  })
+
+  it('findById는 hpCurrent/mpCurrent/level 없는 v1 문서를 backfill로 승격해 parse 통과시킨다', async () => {
+    // repo.insert는 v2 스키마로 거부하므로 untyped 컬렉션에 raw v1 문서를 직접 주입한다.
+    await db.collection<RawCharacterDoc>('characters').insertOne({
+      _id: 'v1-load',
+      name: '옛전사',
+      class: 3,
+      race: 2,
+      stats: [10, 10, 10, 10, 10],
+      gold: 100,
+      currentRoom: 1,
+      schemaVersion: 1,
+      accountId: 'acc-v1',
+      status: 'active',
+    })
+
+    const found = await repo.findById('v1-load')
+    expect(found).not.toBeNull()
+    expect(found?.level).toBe(1)
+    expect(found?.hpCurrent).toBe(seedVitals(3, 1).hpCurrent)
+    expect(found?.mpCurrent).toBe(seedVitals(3, 1).mpCurrent)
+    expect(found?.schemaVersion).toBe(2)
+  })
+
+  it('findByAccount도 v1 문서를 backfill로 승격해 반환한다 (parse 이전 승격)', async () => {
+    await db.collection<RawCharacterDoc>('characters').insertOne({
+      _id: 'v1-acc',
+      name: '옛사제',
+      class: 4,
+      race: 1,
+      stats: [10, 10, 10, 10, 10],
+      gold: 100,
+      currentRoom: 1,
+      schemaVersion: 1,
+      accountId: 'acc-v1b',
+      status: 'active',
+    })
+
+    const list = await repo.findByAccount('acc-v1b')
+    expect(list).toHaveLength(1)
+    expect(list[0]?.hpCurrent).toBe(seedVitals(4, 1).hpCurrent)
+    expect(list[0]?.level).toBe(1)
+    expect(list[0]?.schemaVersion).toBe(2)
   })
 })

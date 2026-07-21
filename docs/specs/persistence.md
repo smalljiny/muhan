@@ -30,9 +30,12 @@
 | `stats` | `tuple([int, int, int, int, int])` | 능력치 5종 고정 튜플(오라클 순서 유지) |
 | `gold` | `int().min(0)` | 상한 없음(§제약사항 참조) |
 | `currentRoom` | `int().min(0)` | 방 번호 자연키, data/world 로드 경로 번호와 동일 체계 |
+| `hpCurrent` | `int().min(0)` | 현재 HP(전투 required, 매 라운드 차감) |
+| `mpCurrent` | `int().min(0)` | 현재 MP(마법 소비 차감) |
+| `level` | `int().min(1)` | 레벨(파생 thaco/hpMax 계산 필수) |
 | `schemaVersion` | `int()` | |
 
-권위 인벤토리 배열 없음 — `object.owner={type:'character'}` 역참조로 파생. 게임 비밀번호는 담지 않는다(인증은 Firebase 소유). **E5 링크 필드**([`account-character.md`](account-character.md)): `accountId`(소유 계정 필수 FK), `status`(active/deleted soft-delete)·`deletedAt`, 생성 인터뷰 스칼라 `gender`/`weapon`/`alignment`(optional)가 추가돼, 이 표는 E5 이후 5번째 스키마 `account.ts`와 함께 확장됐다.
+권위 인벤토리 배열 없음 — `object.owner={type:'character'}` 역참조로 파생. 게임 비밀번호는 담지 않는다(인증은 Firebase 소유). **E5 링크 필드**([`account-character.md`](account-character.md)): `accountId`(소유 계정 필수 FK), `status`(active/deleted soft-delete)·`deletedAt`, 생성 인터뷰 스칼라 `gender`/`weapon`/`alignment`(optional)가 추가돼, 이 표는 E5 이후 5번째 스키마 `account.ts`와 함께 확장됐다. **E6 전투 필드**([`combat.md`](combat.md)): `hpCurrent`/`mpCurrent`/`level` 3종이 전투 resolver의 매-라운드 operand로 required 추가됐다(gender/weapon/alignment의 optional과 달리 required — 전투가 항상 값을 요구). 정의·시딩만 E6 소관이고 변이 의미론(레벨업·재생·exp)은 진행 루프(#81)가 얹는다. `schemaVersion`은 v2로 증분됐고, v1 문서는 load 직전 `backfillCharacterV2`가 `seedVitals`(class·level→`computeHpMax`/`computeMpMax`)로 승격한다(write-back 없는 lazy 마이그레이션·멱등, `level=1` 고정). 신규 문서는 생성 경로(`createCharacter`)에서 만피/만마로 시딩한다.
 
 **`object.ts`** — `objectOwnerSchema`(discriminated union) + `objectSchema`:
 

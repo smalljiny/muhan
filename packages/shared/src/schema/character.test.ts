@@ -13,6 +13,9 @@ function validCharacter(): Character {
     stats: [10, 12, 14, 8, 16],
     gold: 500,
     currentRoom: 1,
+    hpCurrent: 54,
+    mpCurrent: 50,
+    level: 1,
     schemaVersion: 1,
     status: 'active',
   }
@@ -133,6 +136,23 @@ describe('characterSchema', () => {
 
   it('gender가 정수가 아니면 거부한다', () => {
     expect(characterSchema.safeParse({ ...validCharacter(), gender: 1.5 }).success).toBe(false)
+  })
+
+  it('hpCurrent·mpCurrent·level이 없으면 거부한다 (전투 필수 영속 필드)', () => {
+    // D3 발산: gender/weapon/alignment는 선택이지만 이 3필드는 전투가 값을 요구해 required다.
+    const base = validCharacter() as Partial<Character>
+    delete base.hpCurrent
+    delete base.mpCurrent
+    delete base.level
+    expect(characterSchema.safeParse(base).success).toBe(false)
+  })
+
+  it('level이 1 미만이면 거부한다', () => {
+    expect(characterSchema.safeParse({ ...validCharacter(), level: 0 }).success).toBe(false)
+  })
+
+  it('hpCurrent가 음수이면 거부한다', () => {
+    expect(characterSchema.safeParse({ ...validCharacter(), hpCurrent: -1 }).success).toBe(false)
   })
 })
 

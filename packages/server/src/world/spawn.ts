@@ -41,6 +41,12 @@ export function buildSpawnTemplateIndex(raw: readonly RawCreatureTemplate[]): Sp
       dexterity: c.dexterity,
       gold: c.gold,
       special: c.special,
+      // 전투 스탯(D6) — creatures.json 소스에서 그대로 옮긴다(fromTemplate 물질화가 인스턴스로 전파).
+      armor: c.armor,
+      thaco: c.thaco,
+      ndice: c.ndice,
+      sdice: c.sdice,
+      pdice: c.pdice,
       flags: c.flags,
       numwander: c.numwander,
     })

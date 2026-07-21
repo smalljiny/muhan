@@ -78,6 +78,18 @@ export type CreatureInstance = {
   dexterity: number
   gold: number
   special: number
+  /**
+   * 전투 스탯(콘텐츠, 불변) — cross-topic creature-spawn 필드 확장(`enemies` 선례). 스펙 §3.2
+   * monster operand 실현: E6 전투 해석이 armor(AC)·thaco(공격표)·ndice/sdice/pdice(피해 굴림
+   * N d S + P)를 읽는다. 소스 JSON(creatures.json / rooms.json `monsters[]`, port templates.js
+   * 오프셋 340/341/352/354/356)에 이미 존재하며 물질화 시점에 옮긴다 — embedded 몬스터는
+   * `templateId=null`이라 재조회가 불가능하기 때문이다. armor·thaco는 부호 있는 정수 가능.
+   */
+  armor: number
+  thaco: number
+  ndice: number
+  sdice: number
+  pdice: number
   flags: string
   enemies: string[]
   /**

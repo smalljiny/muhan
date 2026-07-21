@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { Character, CharacterSummary } from 'shared'
 import type { AccountRepository } from '../repo/accountRepository.js'
 import type { CharacterRepository } from '../repo/characterRepository.js'
+import { seedVitals, CURRENT_CHARACTER_SCHEMA_VERSION } from '../repo/characterBackfill.js'
 import type {
   AccountIdentity,
   CreateCharacterInput,
@@ -20,8 +21,14 @@ const START_ROOM = 1
 /** 신규 캐릭터의 시작 소지금 기본값(dev). */
 const STARTING_GOLD = 500
 
-/** 현재 Character 스키마 버전 — 기존 픽스처·스키마와 동일 정수. */
-const CHARACTER_SCHEMA_VERSION = 1
+/**
+ * 현재 Character 스키마 버전 — characterBackfill의 backfill 게이트와 단일 출처를 공유한다.
+ * 시딩 경로(createCharacter)와 backfill 게이트가 같은 상수를 참조해 버전 드리프트를 차단한다.
+ */
+const CHARACTER_SCHEMA_VERSION = CURRENT_CHARACTER_SCHEMA_VERSION
+
+/** 신규 캐릭터의 시작 레벨(dev). up_level 성장식은 계승하되 생성은 1레벨에서 출발한다. */
+const STARTING_LEVEL = 1
 
 /**
  * SessionAuthPort의 실 어댑터 — 주입된 verifier seam + Mongo 저장소 위에 구현한다.
@@ -29,8 +36,8 @@ const CHARACTER_SCHEMA_VERSION = 1
  * firebase-admin을 직접 import하지 않는다(Story 7이 부팅에서 조립). 생성자로 verifier·
  * accounts·characters를 주입받으며 전역 싱글턴을 조회하지 않는다.
  *
- * 매핑 규약: CharacterSummary.characterId = Character._id. 영속 Character에는 level 필드가
- * 없으므로(파생 스탯, #80 stats-core로 유예) 요약의 level은 dev 기본값 1로 채운다.
+ * 매핑 규약: CharacterSummary.characterId = Character._id. level은 v2에서 영속 필드가 됐으므로
+ * 요약의 level은 문서 값을 그대로 투영한다(생성 시 seedVitals와 함께 1레벨로 시딩).
  */
 export class FirebaseSessionAuthAdapter implements SessionAuthPort {
   // 최초 validate에서 upsert를 이미 수행한 accountId 집합(중복 write 방지용 dedup 캐시).
@@ -88,6 +95,9 @@ export class FirebaseSessionAuthAdapter implements SessionAuthPort {
       stats: applyRaceModifiers(dto.stats, dto.race),
       gold: STARTING_GOLD,
       currentRoom: START_ROOM,
+      // 전투 필수 vitals를 1레벨 최대치로 시딩한다(만피·만마 출발). backfill과 동일 산술 출처.
+      level: STARTING_LEVEL,
+      ...seedVitals(dto.class, STARTING_LEVEL),
       schemaVersion: CHARACTER_SCHEMA_VERSION,
       accountId,
       status: 'active',
@@ -120,15 +130,15 @@ export class FirebaseSessionAuthAdapter implements SessionAuthPort {
     await this.characters.softDelete(characterId)
   }
 
-  /** 영속 Character → 와이어 CharacterSummary 매핑(characterId=_id, level=1 dev 기본값). */
+  /** 영속 Character → 와이어 CharacterSummary 매핑(characterId=_id, level은 영속 필드 반영). */
   private toSummary(doc: Character): CharacterSummary {
     return {
       characterId: doc._id,
       name: doc.name,
       class: doc.class,
       race: doc.race,
-      // level은 영속에 없다 — 파생 level은 #80 stats-core에서 온다. 그때까지 dev 기본값 1.
-      level: 1,
+      // level은 이제 영속 필드다(v2) — dev 기본값 대신 문서 값을 그대로 투영한다.
+      level: doc.level,
     }
   }
 }

@@ -120,6 +120,12 @@ describe('loadWorldGraph — 실제 번들', () => {
     expect(thief.gold).toBe(80)
     expect(thief.flags).toBe('0112000000000000')
     expect(thief.instanceId).toBe('135:c0')
+    // D6: rooms.json monsters[]의 전투 스탯이 물질화 시점에 인스턴스로 옮겨진다(RawMonster → materialize).
+    expect(thief.armor).toBe(90)
+    expect(thief.thaco).toBe(17)
+    expect(thief.ndice).toBe(1)
+    expect(thief.sdice).toBe(5)
+    expect(thief.pdice).toBe(0)
   })
 
   it('rooms.json 번들의 스폰 필드를 RoomNode에 싣는다(방135 traffic·random·permMon)', () => {

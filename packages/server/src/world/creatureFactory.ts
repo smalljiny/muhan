@@ -21,7 +21,19 @@ import type { CreatureInstance } from 'shared'
  */
 export type CreatureSource = Pick<
   CreatureInstance,
-  'name' | 'level' | 'hpmax' | 'mpmax' | 'dexterity' | 'gold' | 'special' | 'flags'
+  | 'name'
+  | 'level'
+  | 'hpmax'
+  | 'mpmax'
+  | 'dexterity'
+  | 'gold'
+  | 'special'
+  | 'armor'
+  | 'thaco'
+  | 'ndice'
+  | 'sdice'
+  | 'pdice'
+  | 'flags'
 >
 
 /**
@@ -61,6 +73,12 @@ function materialize(
     dexterity: src.dexterity,
     gold: rng(src.gold),
     special: src.special,
+    // 전투 스탯(D6) — 소스에서 그대로 옮긴다(콘텐츠 불변). embedded는 templateId=null이라 재조회 불가.
+    armor: src.armor,
+    thaco: src.thaco,
+    ndice: src.ndice,
+    sdice: src.sdice,
+    pdice: src.pdice,
     flags: src.flags,
     enemies: [],
     // inventory는 라이브 가변 배열(scavenge 회수분·Story 5 드롭 출처). 스폰 시 빈 배열이며,
