@@ -14,6 +14,8 @@
 export const MPERMT = 0
 /** 무차별 공격형. */
 export const MAGGRE = 6
+/** 투명 탐지(Detect invisibility) — MDINVI(mtype.h:432). aggro 타깃선정 시 PINVIS 플레이어 자격 부여(update.c:589~592). */
+export const MDINVI = 21
 /** 독 특수공격 — MPOISS(mtype.h). 근접 후 독 부여 게이트 rng(1,100)<=15(update.c:387~480). */
 export const MPOISS = 13
 /** 브레스 특수공격 보유 — MBRETH(mtype.h). 브레스 발동 게이트 rng(1,30)<5(update.c:387~480). */
@@ -64,6 +66,14 @@ export const MSUMMO = 61
 // 같은 F_ISSET(0-index `flags[f/8]&(1<<(f%8))`)로 읽는다 — M-flag와 다른 오프셋 체계일 수 없다.
 // 비트 인덱스가 31을 넘으므로(42·43) 32비트 number bitfield로는 표현 불가 — hex string 표현이 정본.
 // help/pflags 문서 값(PBLIND 43·PFEARS 44)은 raw #define보다 +1이므로 mtype.h를 정본으로 채택한다.
+/** 숨음(hidden) 상태 — PHIDDN(mtype.h:346). aggro 타깃선정 자격 제외(player.c:1327 lowest_piety, 1490 low_piety_alg). */
+export const PHIDDN = 1
+/** 투명(invisibility) 상태 — PINVIS(mtype.h:347). aggro 타깃선정 시 공격자 MDINVI 없으면 자격 제외(player.c:1328). */
+export const PINVIS = 2
+/** DM 투명 — PDMINV(mtype.h:355). aggro 타깃선정 무조건 자격 제외(player.c:1329). */
+export const PDMINV = 10
+/** 소심(wimpy) 도주 모드 — PWIMPY(mtype.h:359). hpcur<=wimpyValue면 도주 결정(update.c:534~538). */
+export const PWIMPY = 14
 /** 중독(poison) 상태 — 주기 피해 상태이상(interval 틱마다 피해). PPOISN(mtype.h `#define PPOISN 16`). */
 export const PPOISN = 16
 /** 질병(disease) 상태 — 주기 피해 상태이상(interval 틱마다 피해). PDISEA(mtype.h `#define PDISEA 41`). */
