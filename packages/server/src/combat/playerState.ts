@@ -25,6 +25,13 @@ export type PlayerCombatState = {
   readonly class: number
   /** 유효 힘(effectiveContext.effectiveStrength) — 피해 `bonus[str]` 항에 bonusOf로 소비. */
   readonly effectiveStrength: number
+  /**
+   * 유효 지능 — magic 에픽(#84) Caster.intBonus의 소싱 입력(bonusOf로 사전 계산). effectiveStrength가
+   * effectiveContext에서 오는 것과 달리 EffectiveStatContext에 intelligence 슬롯이 없어(shared zod
+   * 스키마·context 타입 불변 제약) character.stats[3]에서 직접 소싱한다 — #84엔 int-수정 장비가 없어
+   * base==effective이며, #85가 실 effective 합성으로 정밀화한다(realm=[0,0,0,0] seam과 동일 패턴).
+   */
+  readonly effectiveIntelligence: number
   /** 파생 방어도(computeAc 결과). */
   readonly armor: number
   /** 파생 THAC0(computeThaco 결과). */
@@ -83,6 +90,9 @@ export function toPlayerCombatState(
     level: character.level,
     class: character.class,
     effectiveStrength: effectiveContext.effectiveStrength,
+    // 오라클 능력치 튜플 순서: strength0·dexterity1·constitution2·intelligence3·piety4.
+    // #84엔 int-수정 장비가 없어 base==effective — #85가 실 effective 합성으로 대체한다.
+    effectiveIntelligence: character.stats[3],
     armor: computeAc(effectiveContext),
     thaco: computeThaco(effectiveContext),
     dexterity: effectiveContext.effectiveDexterity,

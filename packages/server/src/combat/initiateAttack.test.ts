@@ -26,6 +26,7 @@ function makePlayer(overrides: Partial<PlayerCombatState> = {}): PlayerCombatSta
     level: 10,
     class: 4,
     effectiveStrength: 10,
+    effectiveIntelligence: 10,
     armor: 0,
     thaco: 10,
     dexterity: 12,

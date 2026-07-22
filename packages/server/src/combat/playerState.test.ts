@@ -111,6 +111,12 @@ describe('toPlayerCombatState', () => {
     expect(state.effectiveStrength).toBe(ctx.effectiveStrength)
   })
 
+  it('effectiveIntelligence를 character.stats[3](intelligence)에서 소싱한다(#84 base==effective)', () => {
+    // stats 튜플 순서: strength0·dexterity1·constitution2·intelligence3·piety4. 픽스처 stats[3]=10.
+    const state = toPlayerCombatState(character, ctx, weapon)
+    expect(state.effectiveIntelligence).toBe(10)
+  })
+
   it('무기 미착용이면 weapon을 null로 이식한다(맨손 분기)', () => {
     const state = toPlayerCombatState(character, ctx, null)
     expect(state.weapon).toBeNull()
