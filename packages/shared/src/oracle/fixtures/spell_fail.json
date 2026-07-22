@@ -1,0 +1,271 @@
+{
+  "fn": "spell_fail",
+  "oracle": {
+    "method": "manual",
+    "source": "magic8.c:791-897 (A6 §3)",
+    "generatedAt": "2026-07-16T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "class": 1,
+        "level": 5,
+        "intBonus": 2,
+        "n": 50
+      },
+      "expected": false,
+      "note": "n==chance → 성공(경계)"
+    },
+    {
+      "input": {
+        "class": 1,
+        "level": 5,
+        "intBonus": 2,
+        "n": 51
+      },
+      "expected": true,
+      "note": "n==chance+1 → 실패"
+    },
+    {
+      "input": {
+        "class": 2,
+        "level": 5,
+        "intBonus": 2,
+        "n": 20
+      },
+      "expected": false,
+      "note": "n==chance → 성공(경계)"
+    },
+    {
+      "input": {
+        "class": 2,
+        "level": 5,
+        "intBonus": 2,
+        "n": 21
+      },
+      "expected": true,
+      "note": "n==chance+1 → 실패"
+    },
+    {
+      "input": {
+        "class": 3,
+        "level": 5,
+        "intBonus": 2,
+        "n": 85
+      },
+      "expected": false,
+      "note": "n==chance → 성공(경계)"
+    },
+    {
+      "input": {
+        "class": 3,
+        "level": 5,
+        "intBonus": 2,
+        "n": 86
+      },
+      "expected": true,
+      "note": "n==chance+1 → 실패"
+    },
+    {
+      "input": {
+        "class": 4,
+        "level": 5,
+        "intBonus": 2,
+        "n": 30
+      },
+      "expected": false,
+      "note": "n==chance → 성공(경계)"
+    },
+    {
+      "input": {
+        "class": 4,
+        "level": 5,
+        "intBonus": 2,
+        "n": 31
+      },
+      "expected": true,
+      "note": "n==chance+1 → 실패"
+    },
+    {
+      "input": {
+        "class": 5,
+        "level": 5,
+        "intBonus": 2,
+        "n": 95
+      },
+      "expected": false,
+      "note": "n==chance → 성공(경계)"
+    },
+    {
+      "input": {
+        "class": 5,
+        "level": 5,
+        "intBonus": 2,
+        "n": 96
+      },
+      "expected": true,
+      "note": "n==chance+1 → 실패"
+    },
+    {
+      "input": {
+        "class": 6,
+        "level": 5,
+        "intBonus": 2,
+        "n": 70
+      },
+      "expected": false,
+      "note": "n==chance → 성공(경계)"
+    },
+    {
+      "input": {
+        "class": 6,
+        "level": 5,
+        "intBonus": 2,
+        "n": 71
+      },
+      "expected": true,
+      "note": "n==chance+1 → 실패"
+    },
+    {
+      "input": {
+        "class": 7,
+        "level": 5,
+        "intBonus": 2,
+        "n": 72
+      },
+      "expected": false,
+      "note": "n==chance → 성공(경계)"
+    },
+    {
+      "input": {
+        "class": 7,
+        "level": 5,
+        "intBonus": 2,
+        "n": 73
+      },
+      "expected": true,
+      "note": "n==chance+1 → 실패"
+    },
+    {
+      "input": {
+        "class": 8,
+        "level": 5,
+        "intBonus": 2,
+        "n": 46
+      },
+      "expected": false,
+      "note": "n==chance → 성공(경계)"
+    },
+    {
+      "input": {
+        "class": 8,
+        "level": 5,
+        "intBonus": 2,
+        "n": 47
+      },
+      "expected": true,
+      "note": "n==chance+1 → 실패"
+    },
+    {
+      "input": {
+        "class": 5,
+        "level": 100,
+        "intBonus": 5,
+        "n": 1
+      },
+      "expected": false,
+      "note": "무cap: chance=225, n=1 성공"
+    },
+    {
+      "input": {
+        "class": 5,
+        "level": 100,
+        "intBonus": 5,
+        "n": 50
+      },
+      "expected": false,
+      "note": "무cap: chance=225, n=50 성공"
+    },
+    {
+      "input": {
+        "class": 5,
+        "level": 100,
+        "intBonus": 5,
+        "n": 100
+      },
+      "expected": false,
+      "note": "무cap: chance=225, n=100 성공"
+    },
+    {
+      "input": {
+        "class": 0,
+        "level": 1,
+        "intBonus": 0,
+        "n": 100
+      },
+      "expected": false,
+      "note": "default: 무조건 성공"
+    },
+    {
+      "input": {
+        "class": 9,
+        "level": 50,
+        "intBonus": 3,
+        "n": 100
+      },
+      "expected": false,
+      "note": "default(INVINCIBLE): 무조건 성공"
+    },
+    {
+      "input": {
+        "class": 11,
+        "level": 50,
+        "intBonus": 3,
+        "n": 100
+      },
+      "expected": false,
+      "note": "default: 무조건 성공"
+    },
+    {
+      "input": {
+        "class": 12,
+        "level": 50,
+        "intBonus": 3,
+        "n": 100
+      },
+      "expected": false,
+      "note": "default(DM): 무조건 성공"
+    },
+    {
+      "input": {
+        "class": 2,
+        "level": 1,
+        "intBonus": 0,
+        "n": 50
+      },
+      "expected": true,
+      "note": "저레벨 전사: chance=5, n=50 실패"
+    },
+    {
+      "input": {
+        "class": 2,
+        "level": 1,
+        "intBonus": 0,
+        "n": 5
+      },
+      "expected": false,
+      "note": "경계: n==chance(5) 성공"
+    },
+    {
+      "input": {
+        "class": 2,
+        "level": 1,
+        "intBonus": 0,
+        "n": 6
+      },
+      "expected": true,
+      "note": "경계: n==chance+1(6) 실패"
+    }
+  ]
+}

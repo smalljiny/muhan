@@ -6,3 +6,12 @@
  */
 export { toCaster, type Caster } from './caster.js'
 export { SpellDispatch, NOT_IMPLEMENTED, type NotImplemented, type ResolveResult } from './dispatch.js'
+export type { CastContext } from './castContext.js'
+export {
+  evaluateGate,
+  applyCastGate,
+  type GateResult,
+  type GateFailure,
+  type CastRequirement,
+} from './gate.js'
+export { spellFail, spellFailChance, rollsSpellFail } from './spellFail.js'
