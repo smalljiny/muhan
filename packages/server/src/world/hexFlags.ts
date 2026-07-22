@@ -14,6 +14,22 @@
 export const MPERMT = 0
 /** 무차별 공격형. */
 export const MAGGRE = 6
+/** 독 특수공격 — MPOISS(mtype.h). 근접 후 독 부여 게이트 rng(1,100)<=15(update.c:387~480). */
+export const MPOISS = 13
+/** 브레스 특수공격 보유 — MBRETH(mtype.h). 브레스 발동 게이트 rng(1,30)<5(update.c:387~480). */
+export const MBRETH = 19
+/** 브레스 타입 비트1 — MBRWP1(mtype.h). MBRWP2와 2비트 조합으로 브레스 4타입 분기(update.c:387~480). */
+export const MBRWP1 = 28
+/** 브레스 타입 비트2 — MBRWP2(mtype.h). MBRWP1과 2비트 조합으로 브레스 4타입 분기(update.c:387~480). */
+export const MBRWP2 = 29
+/** 에너지드레인 특수공격 — MENEDR(mtype.h). 브레스 미발동 시에만 드레인 게이트 rng(1,100)<10(update.c:387~480). */
+export const MENEDR = 30
+/** 질병 특수공격 — MDISEA(mtype.h). 근접 후 질병 부여 게이트 rng(1,100)<=10(update.c:387~480). */
+export const MDISEA = 34
+/** 장비용해 특수공격 — MDISIT(mtype.h). 근접 후 게이트 rng(1,100)<=15(update.c:387~480, 효과는 유예). */
+export const MDISIT = 35
+/** 실명 특수공격 — MBLNDR(mtype.h). 근접 후 실명 부여 게이트 rng(1,100)<=10(update.c:387~480). */
+export const MBLNDR = 45
 /** scavenger(바닥 아이템 회수). */
 export const MSCAVE = 11
 /** 주문 시전 가능 — MMAGIC(mtype.h:17 `#define MMAGIC 17`, "Can cast spells"). 몬스터 틱 주문 분기 게이트(update.c:348). */
@@ -56,6 +72,16 @@ export const PBLIND = 42
 export const PFEARS = 43
 /** 혼돈(Chaotic/!Lawful) — PCHAOS(mtype.h:373). 선악 PvP 동의 게이트가 읽음(command5.c:184). */
 export const PCHAOS = 28
+/**
+ * 화염 저항(방어자) — PRFIRE(mtype.h). 화염 브레스 데미지 반감 게이트 — 세팅 시 dice((lv+3)/4,2,0),
+ * 미세팅 시 dice((lv+3)/4,4,0)(update.c:387~480).
+ */
+export const PRFIRE = 30
+/**
+ * 냉기 저항(방어자) — PRCOLD(mtype.h). 냉기 브레스 데미지 반감 게이트 — 세팅 시 dice((lv+3)/4,2,0),
+ * 미세팅 시 dice((lv+3)/4,4,0)(update.c:387~480).
+ */
+export const PRCOLD = 36
 /** 패거리 가입자 — PFAMIL(mtype.h:400). 양측 PFAMIL이면 선악 게이트를 check_war로 게이팅(command5.c:183). */
 export const PFAMIL = 55
 /** 잠력격발 — PUPDMG(mtype.h:404). 초인 다중공격 count 게이트(command5.c:208). */
