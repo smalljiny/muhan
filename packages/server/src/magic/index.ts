@@ -29,3 +29,4 @@ export {
   type OffensiveSpellRequest,
   type OffensiveSpellHandler,
 } from './offensiveSpell.js'
+export { crtSpell, selectSpell, isSelfTargetSpell } from './crtSpell.js'

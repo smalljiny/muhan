@@ -15,15 +15,24 @@ import { mprofic } from './mprofic.js'
  *
  * ## 범위 경계 (데미지 전용 — 게이트 분리)
  * 오라클 offensive_spell은 마나 소비(`mpcur -= osp->mp`)·spell_fail 굴림·knowledge 게이트를 함수 안에
- * 인터리브하지만, 이 포트는 그 전부를 S4 시전 게이트(gate.ts)로 분리했다 — offensiveSpell은 게이트 통과
- * **이후**의 데미지 산술만 담당한다(마나·spell_fail을 여기서 다시 소비하지 않는다).
+ * 인터리브하지만, 이 포트는 마나·클래스·knowledge 게이트를 S4 시전 게이트(gate.ts)로 분리했다 —
+ * offensiveSpell은 게이트 통과 **이후**의 데미지 산술만 담당한다(마나를 여기서 다시 소비하지 않는다).
+ * 시전 진입 경로(S6 crtSpell)가 `applyCastGate`로 게이트를 먼저 통과시킨 뒤 이 함수를 호출한다.
  *
- * ## tier-5 도술사 전용 제약 미이식(defer, 게이트 소관)
- * 오라클은 tier-5 공격 주문 4종(SICEBL=14·STHUND=38·SEQUAK=39·SFLFIL=40)을 함수 중간(`dmg=MAX(1,dmg)` 직후)에서
+ * ## spell_fail 미배선(#84 defer)
+ * 오라클은 offensive_spell 안에서 `spell_fail(ply_ptr)`를 굴리지만(magic1.c:1089, 마나 소비 後·데미지 前),
+ * 이 포트의 시전 경로(crtSpell→applyCastGate→offensiveSpell)는 spell_fail을 **굴리지 않는다**. spell_fail은
+ * S4가 standalone 모듈(`spellFail.ts`)로 fixture-lock했고(gate.ts에는 없다), 호출 조건 predicate(`rollsSpellFail`,
+ * 전사계 한정)도 거기 있다. #84 라이브 몬스터 시전(주로 class 0/default·MAGE·CLERIC — spell_fail default=무실패)은
+ * fizzle이 관측되지 않으나, 전사계 MMAGIC 몬스터의 fizzle-after-consume은 미재현이다 — 실 배선(offensive
+ * 시전 진입에 rollsSpellFail 굴림 삽입)은 후속 토픽 소관.
+ *
+ * ## tier-5 도술사 전용 제약 (S6 crtSpell이 게이트로 배선)
+ * 오라클은 tier-5 공격 주문 4종(SICEBL=14·STHUND=38·SEQUAK=39·SFLFIL=40)을 함수 중간에서
  * `if(class != MAGE && class < INVINCIBLE) return(0)`로 차단한다(magic1.c:900·1085, "도술사만이 쓸 수 있는 마법").
- * 이 per-spell 클래스 제약은 게이트 성격이라 offensiveSpell(데미지 전용)이 아닌 gate.ts 소관이다 — gate.ts는
- * requiredClasses 일반 게이트를 갖췄으나 이 4종의 실 데이터 배선(카탈로그 requiredClasses)이 아직 없다.
- * 여기서 재판정하지 않으며, 실 배선은 후속(시전 진입 배선) 토픽이 카탈로그에 requiredClasses를 채워 완결한다.
+ * 이 per-spell 클래스 제약은 게이트 성격이라 offensiveSpell(데미지 전용)이 아닌 시전 진입 게이트 소관이다 —
+ * S6 crtSpell이 tier-5 pick에 `requiredClasses=[MAGE]`를 실어 `applyCastGate`로 차단한다(비-MAGE·비-INVINCIBLE
+ * 몬스터 88종이 tier-5를 알아 라이브 도달, 오라클 `return 0`↔'none' 재현). offensiveSpell은 여기서 재판정하지 않는다.
  *
  * ## PINVIS 해제 미이식(defer)
  * 오라클은 시전 시 caster PINVIS(은둔)를 해제하지만(magic1.c:845), #84 caster는 몬스터(S6)이고 flags가

@@ -20,6 +20,12 @@ describe('magic 배럴', () => {
     expect(typeof magic.rollsSpellFail).toBe('function')
   })
 
+  it('crtSpell 시전 seam·순수 헬퍼를 재export한다', () => {
+    expect(typeof magic.crtSpell).toBe('function')
+    expect(typeof magic.selectSpell).toBe('function')
+    expect(typeof magic.isSelfTargetSpell).toBe('function')
+  })
+
   it('카탈로그 표면은 배럴에 노출하지 않는다(shared/magic 소유)', () => {
     expect('SPELL_CATALOG' in magic).toBe(false)
     expect('spellByNo' in magic).toBe(false)
