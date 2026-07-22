@@ -34,6 +34,12 @@ export type CreatureSource = Pick<
   | 'sdice'
   | 'pdice'
   | 'flags'
+  // 마법 읽기 필드(Story 2) — 소스 JSON에 존재하는 4개만 Pick한다. realm은 소스에 없으므로
+  // 제외하고 materialize가 상수 기본값을 채운다(아래 주석 참조).
+  | 'spells'
+  | 'class'
+  | 'intelligence'
+  | 'piety'
 >
 
 /**
@@ -79,6 +85,15 @@ function materialize(
     ndice: src.ndice,
     sdice: src.sdice,
     pdice: src.pdice,
+    // 마법 읽기 필드(Story 2) — spells·class·intelligence·piety는 소스에서 그대로 옮긴다(콘텐츠 불변).
+    // realm은 소스 JSON에 없으므로 상수 [0,0,0,0]을 기본값으로 채운다 — port readCrt가 offset 380
+    // realm을 추출하지 않아 정본 값이 전 몬스터 0이며, 이 기본값은 추출 결과와 byte-identical이다.
+    // 실 realm 추출·성장 write(addrealm)는 #85 소관이다.
+    spells: src.spells,
+    class: src.class,
+    intelligence: src.intelligence,
+    piety: src.piety,
+    realm: [0, 0, 0, 0],
     flags: src.flags,
     enemies: [],
     // inventory는 라이브 가변 배열(scavenge 회수분·Story 5 드롭 출처). 스폰 시 빈 배열이며,

@@ -10,7 +10,9 @@
  *     타이머·enemies·inventory), `ExitEdge.flags`+`ExitEdge.ltime`(문 개폐/재잠금 상태 머신 — oracle a4 §111
  *     `check_exits`가 ltime+interval로 재잠금), `RoomNode.permMon[].ltime`(perm 리스폰 타이머 —
  *     exit ltime과 동형, 입장 lazy 리스폰·사망 시 now로 세팅. Story 4·5).
- *   - immutable: 정적 필드 전부 + `RoomNode.flags`(64비트 raw 방 flags는 콘텐츠로 불변) +
+ *   - immutable: 정적 필드 전부(전투 스탯 + `CreatureInstance`의 마법 읽기 필드
+ *     realm·spells·class·intelligence·piety는 콘텐츠 불변 — 성장·학습 write 경로 없음, #85 유예) +
+ *     `RoomNode.flags`(64비트 raw 방 flags는 콘텐츠로 불변) +
  *     `RoomNode.random`/`RoomNode.traffic`(스폰 정의 콘텐츠, 불변).
  *   방 flags와 exit flags를 혼동하지 않는다 — 전자는 불변, 후자는 문 상태로 가변이다.
  */
@@ -90,6 +92,24 @@ export type CreatureInstance = {
   ndice: number
   sdice: number
   pdice: number
+  /**
+   * 마법 시전 읽기 필드(콘텐츠, 불변) — magic 에픽(#84)이 몬스터 주문 시전 판정에 읽는다. 소스
+   * JSON(creatures.json / rooms.json `monsters[]`)에 이미 존재하며 물질화 시점에 옮긴다 —
+   * embedded 몬스터는 `templateId=null`이라 재조회가 불가능하기 때문이다(combat 스탯 선례).
+   *
+   *   - `realm`: magic realm별 숙련 누적 경험치(길이 4). 정본 값은 전 몬스터 0이다 — port
+   *     templates.js가 offset 380 realm을 오프셋 테이블에 정의만 하고 readCrt 리더가 추출하지
+   *     않아 소스 JSON에 없으므로, 물질화가 상수 [0,0,0,0]으로 설정한다(추출 결과와 byte-identical).
+   *     realm 성장 write(`addrealm`)·실 추출은 #85 소관. 여기선 read-only.
+   *   - `spells`: 보유 주문 비트셋(16바이트 = 32 hex chars, creatures.json과 동일 hex 표현).
+   *     `S_ISSET` 판독용. 빈 hex('0'×32)는 "주문 없음". 학습 write는 없다(read-only).
+   *   - `class`·`intelligence`·`piety`: 시전 성공·주문 위력 판정 입력(직업·지능·신앙심).
+   */
+  realm: readonly number[]
+  spells: string
+  class: number
+  intelligence: number
+  piety: number
   flags: string
   enemies: string[]
   /**
