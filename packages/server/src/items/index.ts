@@ -124,3 +124,11 @@ export {
   randEnchant,
   type EnchantResult,
 } from './enchant.js'
+
+export {
+  // 소비 아이템 magic 배달 seam(오라클 magic1.c drink/readscroll/zap) — splno=magicpower-1, gated=false
+  deliverConsumable,
+  type ConsumeContext,
+  type ConsumeOutcome,
+  type DeliverConsumableParams,
+} from './consume.js'
