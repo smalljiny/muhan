@@ -1,0 +1,50 @@
+/**
+ * items 배럴 — 아이템 타입 taxonomy·착용 슬롯 매핑의 공개 표면.
+ *
+ * 오라클(mtype.h)의 object 타입(0~14)·착용 wearflag(1~20) 상수, 무기 판정(isWeapon),
+ * 착용 명령 라우팅(routeWearCommand)·다중슬롯 해소(resolveSlot)를 노출한다.
+ */
+export {
+  // object 타입 상수(0~14)
+  SHARP,
+  THRUST,
+  BLUNT,
+  POLE,
+  MISSILE,
+  ARMOR,
+  POTION,
+  SCROLL,
+  WAND,
+  CONTAINER,
+  MONEY,
+  KEY,
+  LIGHTSOURCE,
+  MISC,
+  CONTAINER2,
+  isWeapon,
+  // 착용 슬롯 상수(wearflag 1~20)
+  BODY,
+  ARMS,
+  LEGS,
+  NECK1,
+  NECK2,
+  HANDS,
+  HEAD,
+  FEET,
+  FINGER1,
+  FINGER2,
+  FINGER3,
+  FINGER4,
+  FINGER5,
+  FINGER6,
+  FINGER7,
+  FINGER8,
+  HELD,
+  SHIELD,
+  FACE,
+  WIELD,
+  MAXWEAR,
+  routeWearCommand,
+  resolveSlot,
+  type WearCommand,
+} from './taxonomy.js'
