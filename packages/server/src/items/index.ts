@@ -103,3 +103,11 @@ export {
   type EquippedPair,
   type EquipStatContribution,
 } from './equipStats.js'
+
+export {
+  // 방어구 착용 다층 게이트·슬롯 배치(오라클 command3.c wear)
+  wearGate,
+  type WearActor,
+  type WearParams,
+  type WearOutcome,
+} from './wear.js'
