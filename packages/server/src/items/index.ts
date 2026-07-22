@@ -96,3 +96,10 @@ export {
   type ObjectTemplate,
   type ObjectTemplateIndex,
 } from './objectTemplate.js'
+
+export {
+  // 착용 장비 파생 스탯 투영(EffectiveStatContext 기여 부분집합)
+  projectEquipStats,
+  type EquippedPair,
+  type EquipStatContribution,
+} from './equipStats.js'
