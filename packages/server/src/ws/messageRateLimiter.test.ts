@@ -349,3 +349,155 @@ describe('keep-until-refilled 재사용 (churn 우회 차단, issue #77)', () =>
     expect(factory.activeAccountCount()).toBe(1)
   })
 })
+
+describe('lazy sweep + 하드 캡 (bounded 레지스트리, Story 3)', () => {
+  it('[T3.1] lazy sweep — now로 리필해 완전 회복(tokens>=accountCapacity)된 zero-refcount 엔트리만 삭제한다', () => {
+    // accountCapacity=4, accountRefillPerSec=1. A는 t=0 고갈(0/4), B는 t=0 절반 소비(2/4) 후 반납.
+    const factory = makeFactory({ capacity: 100, accountCapacity: 4, refillPerSec: 0, accountRefillPerSec: 1 })
+    const a = factory.createConnection('A', 0)
+    a.check(0)
+    a.check(0)
+    a.check(0)
+    a.check(0) // A 4→0
+    factory.releaseAccount('A')
+    const b = factory.createConnection('B', 0)
+    b.check(0)
+    b.check(0) // B 4→2
+    factory.releaseAccount('B')
+    expect(factory.activeAccountCount()).toBe(2) // 둘 다 미회복 → 생존
+
+    // t=2000: A는 +2 → 2/4(미회복 survive), B는 +2 → 4/4 완전 회복(삭제). C 생성으로 sweep 트리거.
+    factory.createConnection('C', 2000)
+    // 삭제: B. 생존: A(2/4). 추가: C(live). → size 2
+    expect(factory.activeAccountCount()).toBe(2)
+
+    // B는 삭제됐다 → 재연결은 fresh(미시드 peek 0). A는 생존 → 재연결은 reused(2 유지).
+    const rb = factory.createConnection('B', 2000)
+    expect(rb.peekAccountTokens()).toBeCloseTo(0) // fresh (reused였다면 완전 회복된 4였을 것)
+    const ra = factory.createConnection('A', 2000)
+    expect(ra.peekAccountTokens()).toBeCloseTo(2) // reused — 삭제되지 않은 잔량 2
+  })
+
+  it('[T3.4] 작은 accountMaxEntries 주입: 캡 초과 시 activeAccountCount가 캡 이내로 유지된다', () => {
+    // 캡(3)보다 많은 계정을 만들고 각각 부분 소비·반납해 zero-refcount 축출 후보로 만든다(rate0이라
+    // sweep에서 완전 회복되지 않아 후보로 생존한다).
+    const factory = makeFactory({ capacity: 100, accountCapacity: 5, refillPerSec: 0, accountRefillPerSec: 0, accountMaxEntries: 3 })
+    for (let i = 0; i < 6; i++) {
+      const id = `acct${i}`
+      const h = factory.createConnection(id, 0)
+      h.check(0) // 계정 버킷 5→4
+      factory.releaseAccount(id)
+    }
+    // 매 createConnection의 sweep/캡이 zero-refcount 후보를 정리해 size를 캡 이내로 묶는다.
+    expect(factory.activeAccountCount()).toBeLessThanOrEqual(3)
+  })
+
+  it('[T3.5] 캡 축출은 zero-refcount 엔트리를 가장 가득 찬 것부터(most-refilled-first) 제거한다', () => {
+    // 가변 캡 thunk — 축출 강제 후 캡을 풀어 검증 재연결이 추가 축출을 일으키지 않게 한다.
+    let maxEntries = 3
+    const factory = createMessageRateLimiterFactory(() => ({
+      capacity: 100,
+      refillPerSec: 0,
+      maxViolations: 100,
+      accountCapacity: 5,
+      accountRefillPerSec: 0,
+      accountMaxEntries: maxEntries,
+    }))
+
+    // 잔량 서열과 삽입 순서를 어긋나게 둔다 — most-refilled-first가 삽입순(FIFO) 축출과 구별되게 하기
+    // 위함이다. A는 2/5(three checks, 첫 삽입), B는 4/5(one check, 둘째 삽입 · 가장 가득 참), C는
+    // 0/5(five checks, 셋째 삽입). FIFO면 A가, most-refilled-first면 B가 먼저 축출된다. 모두 반납.
+    const a = factory.createConnection('A', 0)
+    a.check(0)
+    a.check(0)
+    a.check(0) // 5→2
+    factory.releaseAccount('A')
+    const b = factory.createConnection('B', 0)
+    b.check(0) // 5→4 (가장 가득 참)
+    factory.releaseAccount('B')
+    const c = factory.createConnection('C', 0)
+    c.check(0)
+    c.check(0)
+    c.check(0)
+    c.check(0)
+    c.check(0) // 5→0
+    factory.releaseAccount('C')
+    expect(factory.activeAccountCount()).toBe(3)
+
+    // 새 계정 D 생성 → 캡(3) 초과 → 가장 가득 찬 B(4)가 먼저 축출된다(FIFO였다면 A).
+    factory.createConnection('D', 0)
+
+    maxEntries = 100 // 캡 완화 — 아래 검증 재연결이 추가 축출을 일으키지 않게 한다.
+    const ra = factory.createConnection('A', 0)
+    expect(ra.peekAccountTokens()).toBeCloseTo(2) // A는 생존 → reused 잔량 2 (FIFO였다면 축출돼 0)
+    const rb = factory.createConnection('B', 0)
+    expect(rb.peekAccountTokens()).toBeCloseTo(0) // B는 축출됨(가장 가득 참) → fresh 미시드
+  })
+
+  it('[T3.6] live(refCount>0) 엔트리는 캡 압력에도 절대 축출되지 않는다', () => {
+    // 캡(2)보다 많은 live 연결을 만들되 반납하지 않는다 — 셋 다 생존해야 한다(live 축출 불가).
+    const factory = makeFactory({ capacity: 100, accountCapacity: 5, refillPerSec: 0, accountRefillPerSec: 0, accountMaxEntries: 2 })
+    const l1 = factory.createConnection('L1', 0)
+    l1.check(0)
+    const l2 = factory.createConnection('L2', 0)
+    l2.check(0)
+    const l3 = factory.createConnection('L3', 0)
+    l3.check(0) // 3 live > 캡 2
+
+    expect(factory.liveAccountCount()).toBe(3) // 셋 다 live로 생존
+    expect(factory.activeAccountCount()).toBe(3) // 캡을 넘겨도 live는 축출 불가
+  })
+
+  it('[T3.7] Map-size-bound: 완전 회복된 zero-refcount 엔트리는 sweep로 제거돼 size가 (live + 미회복 zero-refcount)로 유지된다', () => {
+    const factory = makeFactory({ capacity: 100, accountCapacity: 3, refillPerSec: 0, accountRefillPerSec: 1, accountMaxEntries: 4096 })
+    const a = factory.createConnection('A', 0)
+    a.check(0)
+    a.check(0)
+    a.check(0) // A 고갈 0/3
+    factory.releaseAccount('A')
+    const b = factory.createConnection('B', 0)
+    b.check(0)
+    b.check(0)
+    b.check(0) // B 고갈 0/3
+    factory.releaseAccount('B')
+    expect(factory.activeAccountCount()).toBe(2) // 아직 미회복 → 생존
+
+    // refill-horizon(3초) 경과 후 C 생성 → sweep가 A,B를 완전 회복(3=capacity) 판정해 삭제.
+    factory.createConnection('C', 3000)
+    expect(factory.activeAccountCount()).toBe(1) // C(live)만 남는다
+    expect(factory.liveAccountCount()).toBe(1)
+  })
+
+  it('[T3.8 churn] 캡 압력 하 재연결: 대상은 축출 후 fresh가 아니라 고갈 버킷을 재사용한다', () => {
+    // 재연결 대상 T는 sweep·캡 축출 후보에서 제외돼 in-place 재사용된다(depleted→fresh 우회 차단).
+    const factory = makeFactory({ capacity: 100, accountCapacity: 3, refillPerSec: 0, accountRefillPerSec: 0, accountMaxEntries: 2 })
+    const t = factory.createConnection('T', 0)
+    t.check(0)
+    t.check(0) // T 계정 3→1 (고갈에 가까운 잔량 1)
+    factory.releaseAccount('T')
+    const y = factory.createConnection('Y', 0)
+    y.check(0)
+    y.check(0)
+    y.check(0) // Y 계정 3→0
+    factory.releaseAccount('Y')
+    expect(factory.activeAccountCount()).toBe(2)
+
+    // 캡(2) 압력 하 T 재연결 — Y는 축출 후보지만 T(대상)는 절대 축출·리셋되지 않는다.
+    const t2 = factory.createConnection('T', 0)
+    expect(t2.peekAccountTokens()).toBeCloseTo(1) // 재사용된 잔량 1 (fresh였다면 0)
+  })
+
+  it('[T3.3 inspector] liveAccountCount는 refCount>0 엔트리 수를 정확히 반환한다', () => {
+    const factory = makeFactory({ capacity: 100, accountCapacity: 5, refillPerSec: 0, accountRefillPerSec: 0 })
+    expect(factory.liveAccountCount()).toBe(0)
+
+    factory.createConnection('A', 0) // refCount 1
+    factory.createConnection('B', 0) // refCount 1
+    expect(factory.liveAccountCount()).toBe(2)
+    expect(factory.activeAccountCount()).toBe(2)
+
+    factory.releaseAccount('A') // A refCount 0 (zero-refcount 생존)
+    expect(factory.liveAccountCount()).toBe(1) // B만 live
+    expect(factory.activeAccountCount()).toBe(2) // A는 아직 레지스트리에 생존
+  })
+})
