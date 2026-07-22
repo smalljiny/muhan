@@ -100,9 +100,9 @@ export const EnvSchema = z.object({
   // 연속 위반 종료 임계. 일시 버스트(accept가 카운터 리셋)엔 여유를 주되 지속 flooder는 빠르게 초과해
   // graceful close된다. env 튜닝 가능이라 정확값은 저위험이다.
   WS_MSG_RATE_MAX_VIOLATIONS: z.coerce.number().int().min(1).default(10),
-  // 계정 버킷 레지스트리 엔트리 수의 하드 캡(Story 3에서 소비). refCount=0에 도달하면 엔트리를 삭제해
-  // churn 누적을 막지만, 삭제 직전의 살아남은 zero-refcount 엔트리가 순간적으로 잔존할 수 있어 이 캡으로
-  // 상한을 명시한다. 기본값 4096 근거: 동시에 살아 있는 서로 다른 계정 수는 WS_MAX_CONNECTIONS(기본
+  // 계정 버킷 레지스트리 엔트리 수의 하드 캡. refCount=0에 도달해도 엔트리를 즉시 삭제하지 않고
+  // keep-until-refilled로 유지해(완전 회복 시에만 lazy sweep이 제거) churn 재사용 우회를 닫는 대신,
+  // zero-refcount 엔트리가 누적될 수 있어 이 캡으로 상한을 명시한다. 기본값 4096 근거: 동시에 살아 있는 서로 다른 계정 수는 WS_MAX_CONNECTIONS(기본
   // 1000)을 넘을 수 없고(계정당 5연결 상한은 서로 다른 계정 수를 오히려 낮춘다), 4096은 그 live 상한
   // 1000 위로 ≈3k 헤드룸을 남겨 정상 부하에서 캡에 닿지 않게 한다. 0이면 어떤 계정도 등록 못 해
   // 무의미하므로 최소 1을 강제한다(WS_MSG_RATE_* 관례 미러).
