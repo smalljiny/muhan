@@ -46,6 +46,10 @@ export const MSUMMO = 61
 // 같은 F_ISSET(0-index `flags[f/8]&(1<<(f%8))`)로 읽는다 — M-flag와 다른 오프셋 체계일 수 없다.
 // 비트 인덱스가 31을 넘으므로(42·43) 32비트 number bitfield로는 표현 불가 — hex string 표현이 정본.
 // help/pflags 문서 값(PBLIND 43·PFEARS 44)은 raw #define보다 +1이므로 mtype.h를 정본으로 채택한다.
+/** 중독(poison) 상태 — 주기 피해 상태이상(interval 틱마다 피해). PPOISN(mtype.h `#define PPOISN 16`). */
+export const PPOISN = 16
+/** 질병(disease) 상태 — 주기 피해 상태이상(interval 틱마다 피해). PDISEA(mtype.h `#define PDISEA 41`). */
+export const PDISEA = 41
 /** 실명(blind) 상태 — 명중 임계 +5(command5.c:234). PBLIND(mtype.h:387). */
 export const PBLIND = 42
 /** 공포(fear) 상태 — 명중 임계 +2(command5.c:233). PFEARS(mtype.h:388). */
