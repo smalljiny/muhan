@@ -329,7 +329,7 @@ describe('keep-until-refilled 재사용 (churn 우회 차단, issue #77)', () =>
     // 형제 refCount 안전성: a가 살아 있는 동안 b 반납·c 재연결·c 반납이 반복돼도 공유 버킷은 그대로다.
     const factory = makeFactory({ capacity: 100, accountCapacity: 3, refillPerSec: 0, accountRefillPerSec: 0 })
     const a = factory.createConnection('acct1', 0) // refCount 1
-    const b = factory.createConnection('acct1', 0) // refCount 2 (공유 버킷)
+    factory.createConnection('acct1', 0) // refCount 2 (공유 버킷) — 핸들 미사용, refCount 증가 부수효과만
 
     // 공유 계정 버킷 3개를 모두 소비.
     expect(a.check(0)).toBe('accept')
