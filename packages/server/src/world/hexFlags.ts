@@ -32,6 +32,8 @@ export const MDISIT = 35
 export const MBLNDR = 45
 /** scavenger(바닥 아이템 회수). */
 export const MSCAVE = 11
+/** 아이템 소지형 — MTRADE(mtype.h:448 "monster will give items"). 사망 시 인벤토리 드롭 억제 게이트(creature.c:311). */
+export const MTRADE = 37
 /** 주문 시전 가능 — MMAGIC(mtype.h:17 `#define MMAGIC 17`, "Can cast spells"). 몬스터 틱 주문 분기 게이트(update.c:348). */
 export const MMAGIC = 17
 /** 무언가 주움(scavenge 성공 표식 — wander-out 제외 조건). */
