@@ -77,10 +77,11 @@ pnpm 버전은 루트 `package.json`의 `packageManager: "pnpm@10.33.0"`가 단�
 | `brace-expansion@<1.1.16` | `>=1.1.16 <2.0.0` | eslint → minimatch → brace-expansion | GHSA-3jxr-9vmj-r5cp (ReDoS) |
 | `brace-expansion@>=2.0.0 <2.1.2` | `>=2.1.2 <3.0.0` | @vitest/coverage-v8 → test-exclude → glob → minimatch → brace-expansion | GHSA-3jxr-9vmj-r5cp (ReDoS) |
 | `uuid@<11.1.1` | `>=11.1.1 <12.0.0` | firebase-admin → @google-cloud/storage → gaxios → uuid | GHSA-w5hq-g745-h8pq |
+| `fast-uri@<3.1.4` | `>=3.1.4 <4.0.0` | packages/server → fastify → @fastify/ajv-compiler → fast-uri | GHSA-v2hh-gcrm-f6hx (host confusion) |
 
 정책 두 축:
 - **LHS 대역 한정**: 취약 대역에 해당하는 노드만 재해석하고 다른 소비자는 건드리지 않아 blast radius를 최소화한다. 무범위 override(`"uuid": ">=11.1.1"`)는 전 트리를 강제해 부작용 위험이 크므로 금지한다.
-- **RHS "다음 메이저 미만" 상한**: 각 RHS를 취약 대역과 같은 메이저 라인에 고정한다(`<2.0.0`/`<3.0.0`/`<12.0.0`). 상한 없는 `>=`는 최고 만족 버전을 끌어와 cross-major breaking을 유발한다 — 실제로 무상한 `>=2.1.2`는 minimatch@9.0.9(brace-expansion `^2.0.2` 소비)에 brace-expansion 5.0.7(ESM named-export)을 강제해 CJS `.default` interop을 깨뜨렸고, 무상한 `>=11.1.1`은 uuid를 14.x로 점프시켰다.
+- **RHS "다음 메이저 미만" 상한**: 각 RHS를 취약 대역과 같은 메이저 라인에 고정한다(`<2.0.0`/`<3.0.0`/`<12.0.0`/`<4.0.0`). 상한 없는 `>=`는 최고 만족 버전을 끌어와 cross-major breaking을 유발한다 — 실제로 무상한 `>=2.1.2`는 minimatch@9.0.9(brace-expansion `^2.0.2` 소비)에 brace-expansion 5.0.7(ESM named-export)을 강제해 CJS `.default` interop을 깨뜨렸고, 무상한 `>=11.1.1`은 uuid를 14.x로 점프시켰다. fast-uri도 4.x 라인이 존재해 무상한 `>=3.1.4`는 미검증 메이저를 끌어올 수 있으므로 `<4.0.0`으로 고정한다.
 
 override는 transitive 버전만 바꾸므로 애플리케이션 소스는 무변경이며, 검증은 audit 0건 + build·type-check·test 회귀 부재로 갈음한다. 시점 반응 패치이므로 향후 dependency bump가 취약 대역을 재도입할 수 있고, CI에는 아직 `pnpm audit` 게이트가 없어(향후 별도 토픽) 재검출은 로컬 `pnpm audit`에 의존한다.
 
