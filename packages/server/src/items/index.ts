@@ -118,3 +118,9 @@ export {
   type HoldParams,
   type WearOutcome,
 } from './wear.js'
+
+export {
+  // rand_enchant 확률 순수 함수(오라클 object.c) — draw>98→+3(2%)·>90→+2·>50→+1·≤50→무변화
+  randEnchant,
+  type EnchantResult,
+} from './enchant.js'
