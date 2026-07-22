@@ -1,0 +1,572 @@
+{
+  "fn": "offensive_spell",
+  "oracle": {
+    "method": "manual",
+    "source": "magic1.c:820-1170 (A6 §2)",
+    "generatedAt": "2026-07-16T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "gated": false,
+        "caster": {
+          "class": 5,
+          "realm": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "intBonus": 0
+        },
+        "osp": {
+          "realm": 2,
+          "ndice": 1,
+          "sdice": 8,
+          "pdice": 0,
+          "bonusType": 1
+        },
+        "target": {
+          "kind": "creature",
+          "hpcur": 30,
+          "flags": "0000000000000000",
+          "piety": 0,
+          "intelligence": 0
+        },
+        "roomFlags": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rolls": [
+          6
+        ]
+      },
+      "expected": {
+        "dmg": 6,
+        "finalHp": 24,
+        "died": false,
+        "ledgerAmount": 6,
+        "deathFires": 0
+      },
+      "note": "tier1 1d8+0: dmg=6"
+    },
+    {
+      "input": {
+        "gated": false,
+        "caster": {
+          "class": 5,
+          "realm": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "intBonus": 0
+        },
+        "osp": {
+          "realm": 2,
+          "ndice": 2,
+          "sdice": 5,
+          "pdice": 7,
+          "bonusType": 2
+        },
+        "target": {
+          "kind": "creature",
+          "hpcur": 30,
+          "flags": "0000000000000000",
+          "piety": 0,
+          "intelligence": 0
+        },
+        "roomFlags": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rolls": [
+          3,
+          4
+        ]
+      },
+      "expected": {
+        "dmg": 14,
+        "finalHp": 16,
+        "died": false,
+        "ledgerAmount": 14,
+        "deathFires": 0
+      },
+      "note": "tier2 2d5+7: dmg=14"
+    },
+    {
+      "input": {
+        "gated": false,
+        "caster": {
+          "class": 5,
+          "realm": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "intBonus": 0
+        },
+        "osp": {
+          "realm": 2,
+          "ndice": 4,
+          "sdice": 5,
+          "pdice": 30,
+          "bonusType": 3
+        },
+        "target": {
+          "kind": "creature",
+          "hpcur": 100,
+          "flags": "0000000000000000",
+          "piety": 0,
+          "intelligence": 0
+        },
+        "roomFlags": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rolls": [
+          3,
+          4,
+          5,
+          2
+        ]
+      },
+      "expected": {
+        "dmg": 44,
+        "finalHp": 56,
+        "died": false,
+        "ledgerAmount": 44,
+        "deathFires": 0
+      },
+      "note": "tier5 4d5+30: dmg=44"
+    },
+    {
+      "input": {
+        "gated": true,
+        "caster": {
+          "class": 5,
+          "realm": [
+            0,
+            0,
+            0,
+            3072
+          ],
+          "intBonus": 2
+        },
+        "osp": {
+          "realm": 4,
+          "ndice": 2,
+          "sdice": 5,
+          "pdice": 7,
+          "bonusType": 2
+        },
+        "target": {
+          "kind": "creature",
+          "hpcur": 100,
+          "flags": "0000000000000000",
+          "piety": 0,
+          "intelligence": 0
+        },
+        "roomFlags": [
+          0,
+          0,
+          64,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rolls": [
+          3,
+          4
+        ]
+      },
+      "expected": {
+        "dmg": 26,
+        "finalHp": 74,
+        "died": false,
+        "ledgerAmount": 26,
+        "deathFires": 0
+      },
+      "note": "방 상성 동속성 ×2: bns=12, dmg=26"
+    },
+    {
+      "input": {
+        "gated": true,
+        "caster": {
+          "class": 5,
+          "realm": [
+            0,
+            0,
+            0,
+            3072
+          ],
+          "intBonus": 2
+        },
+        "osp": {
+          "realm": 4,
+          "ndice": 2,
+          "sdice": 5,
+          "pdice": 7,
+          "bonusType": 2
+        },
+        "target": {
+          "kind": "creature",
+          "hpcur": 100,
+          "flags": "0000000000000000",
+          "piety": 0,
+          "intelligence": 0
+        },
+        "roomFlags": [
+          0,
+          0,
+          32,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rolls": [
+          3,
+          4
+        ]
+      },
+      "expected": {
+        "dmg": 8,
+        "finalHp": 92,
+        "died": false,
+        "ledgerAmount": 8,
+        "deathFires": 0
+      },
+      "note": "방 상성 반대속성 약화: bns=-6, dmg=8"
+    },
+    {
+      "input": {
+        "gated": true,
+        "caster": {
+          "class": 5,
+          "realm": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "intBonus": 0
+        },
+        "osp": {
+          "realm": 4,
+          "ndice": 1,
+          "sdice": 8,
+          "pdice": 0,
+          "bonusType": 1
+        },
+        "target": {
+          "kind": "creature",
+          "hpcur": 30,
+          "flags": "0000000000000000",
+          "piety": 0,
+          "intelligence": 0
+        },
+        "roomFlags": [
+          0,
+          0,
+          32,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rolls": [
+          1
+        ]
+      },
+      "expected": {
+        "dmg": 1,
+        "finalHp": 29,
+        "died": false,
+        "ledgerAmount": 1,
+        "deathFires": 0
+      },
+      "note": "max(1) floor: bns=-5, dmg=1"
+    },
+    {
+      "input": {
+        "gated": false,
+        "caster": {
+          "class": 5,
+          "realm": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "intBonus": 0
+        },
+        "osp": {
+          "realm": 2,
+          "ndice": 2,
+          "sdice": 5,
+          "pdice": 7,
+          "bonusType": 2
+        },
+        "target": {
+          "kind": "creature",
+          "hpcur": 30,
+          "flags": "0000000800000000",
+          "piety": 15,
+          "intelligence": 10
+        },
+        "roomFlags": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rolls": [
+          3,
+          4
+        ]
+      },
+      "expected": {
+        "dmg": 7,
+        "finalHp": 23,
+        "died": false,
+        "ledgerAmount": 7,
+        "deathFires": 0
+      },
+      "note": "마법저항 50% 감산: dmg 14→7"
+    },
+    {
+      "input": {
+        "gated": false,
+        "caster": {
+          "class": 5,
+          "realm": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "intBonus": 0
+        },
+        "osp": {
+          "realm": 2,
+          "ndice": 2,
+          "sdice": 5,
+          "pdice": 7,
+          "bonusType": 2
+        },
+        "target": {
+          "kind": "creature",
+          "hpcur": 30,
+          "flags": "0000000800000000",
+          "piety": 40,
+          "intelligence": 20
+        },
+        "roomFlags": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rolls": [
+          3,
+          4
+        ]
+      },
+      "expected": {
+        "dmg": 0,
+        "finalHp": 30,
+        "died": false,
+        "ledgerAmount": 0,
+        "deathFires": 0
+      },
+      "note": "마법저항 완전무효: dmg 14→0, hp 불변"
+    },
+    {
+      "input": {
+        "gated": false,
+        "caster": {
+          "class": 5,
+          "realm": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "intBonus": 0
+        },
+        "osp": {
+          "realm": 2,
+          "ndice": 2,
+          "sdice": 5,
+          "pdice": 7,
+          "bonusType": 2
+        },
+        "target": {
+          "kind": "creature",
+          "hpcur": 5,
+          "flags": "0000000000000000",
+          "piety": 0,
+          "intelligence": 0
+        },
+        "roomFlags": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rolls": [
+          3,
+          4
+        ]
+      },
+      "expected": {
+        "dmg": 14,
+        "finalHp": -9,
+        "died": true,
+        "ledgerAmount": 5,
+        "deathFires": 1
+      },
+      "note": "creature 사망 + 오버킬 캡: m=5, finalHp=-9, deathFires=1"
+    },
+    {
+      "input": {
+        "gated": false,
+        "caster": {
+          "class": 5,
+          "realm": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "intBonus": 0
+        },
+        "osp": {
+          "realm": 2,
+          "ndice": 2,
+          "sdice": 5,
+          "pdice": 7,
+          "bonusType": 2
+        },
+        "target": {
+          "kind": "player",
+          "hpcur": 3,
+          "flags": "",
+          "piety": 0,
+          "intelligence": 0
+        },
+        "roomFlags": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rolls": [
+          3,
+          4
+        ]
+      },
+      "expected": {
+        "dmg": 14,
+        "finalHp": -11,
+        "died": true,
+        "ledgerAmount": 0,
+        "deathFires": 1
+      },
+      "note": "player 사망: ledger 0, deathFires=1"
+    },
+    {
+      "input": {
+        "gated": false,
+        "caster": {
+          "class": 5,
+          "realm": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "intBonus": 0
+        },
+        "osp": {
+          "realm": 2,
+          "ndice": 2,
+          "sdice": 5,
+          "pdice": 7,
+          "bonusType": 2
+        },
+        "target": {
+          "kind": "player",
+          "hpcur": 30,
+          "flags": "",
+          "piety": 0,
+          "intelligence": 0
+        },
+        "roomFlags": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rolls": [
+          3,
+          4
+        ]
+      },
+      "expected": {
+        "dmg": 14,
+        "finalHp": 16,
+        "died": false,
+        "ledgerAmount": 0,
+        "deathFires": 0
+      },
+      "note": "player 생존: dmg=14, ledger 0"
+    }
+  ]
+}

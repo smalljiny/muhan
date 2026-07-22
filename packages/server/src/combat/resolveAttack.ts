@@ -1,6 +1,6 @@
 import { proficDivisorOf, type CreatureInstance, type RoomNode } from 'shared'
 import type { CombatRng } from './dice.js'
-import type { Combatant } from './combatant.js'
+import { combatantHp, applyCombatantDamage, type Combatant } from './combatant.js'
 import type { PlayerCombatState } from './playerState.js'
 import type { DamageLedger } from './enmity.js'
 import { accumulateDamage } from './enmity.js'
@@ -151,20 +151,6 @@ function computeStrike(attacker: Combatant, defender: Combatant, rng: CombatRng)
   return resolveCritFumble(state, n, rng)
 }
 
-/** defender 원본 참조의 현재 HP를 읽는다(Combatant.hpCurrent는 스냅샷 뷰이므로 원본에서 판독). */
-function defenderHp(defender: Combatant): number {
-  return defender.kind === 'player' ? defender.state.hpCurrent : defender.instance.hpcur
-}
-
-/** defender 원본 참조에 피해를 in-place 차감한다(worldGraph 승인 carve-out). */
-function applyDamage(defender: Combatant, n: number): void {
-  if (defender.kind === 'player') {
-    defender.state.hpCurrent -= n
-  } else {
-    defender.instance.hpcur -= n
-  }
-}
-
 /** attacker 식별자 — 플레이어=characterId, 몬스터=instanceId(ledger 키). */
 function attackerId(attacker: Combatant): string {
   return attacker.kind === 'player' ? attacker.state.characterId : attacker.instance.instanceId
@@ -193,9 +179,9 @@ function performStrike(attacker: Combatant, defender: Combatant, ctx: ResolveCon
     durabilityHit = rng(0, 3) === 0
   }
 
-  const hpBefore = defenderHp(defender)
+  const hpBefore = combatantHp(defender)
   const m = Math.max(0, Math.min(hpBefore, n)) // 오버킬 캡(ledger용, command5.c:320) + 음수 하한 방어.
-  applyDamage(defender, n)
+  applyCombatantDamage(defender, n)
 
   // ledger 누적 — defender가 몬스터(비플레이어)일 때만(command5.c:322).
   if (defender.kind === 'creature') accumulateDamage(ctx.ledger, attackerId(attacker), m)
@@ -210,8 +196,11 @@ function performStrike(attacker: Combatant, defender: Combatant, ctx: ResolveCon
   }
 }
 
-/** defender 사망 seam을 kind별로 정확히 1회 발화한다(command5.c:341). */
-function fireDeath(defender: Combatant, ctx: ResolveContext): void {
+/**
+ * defender 사망 seam을 kind별로 정확히 1회 발화한다(command5.c:341). 근접(여기)·주문(offensiveSpell)이
+ * 공유하는 death seam — CastContext가 ResolveContext를 확장하므로 주문 경로도 동일 시그니처로 소비한다.
+ */
+export function fireDeath(defender: Combatant, ctx: ResolveContext): void {
   if (defender.kind === 'creature') {
     ctx.fireCreatureDeath(defender.instance, ctx.room, ctx.now)
   } else {
@@ -240,7 +229,7 @@ const DEAD_DEFENDER_NOOP: AttackOutcome = {
  * 재발화(#83 소환·분배 중복)되고 음수 ledger가 누적된다 — 진입 시 HP<1이면 굴림 전에 차단한다.
  */
 export function resolveAttack(attacker: Combatant, defender: Combatant, ctx: ResolveContext): AttackOutcome {
-  if (defenderHp(defender) < 1) return DEAD_DEFENDER_NOOP
+  if (combatantHp(defender) < 1) return DEAD_DEFENDER_NOOP
 
   const count = attacker.kind === 'player' ? multiAttackCount(attacker.state, ctx.rng) : 1
   const attacks: AttackDescriptor[] = []
@@ -252,7 +241,7 @@ export function resolveAttack(attacker: Combatant, defender: Combatant, ctx: Res
 
     // 사망 판정은 오라클처럼 명중 타격 내부에서만 수행한다(빗나감은 HP 불변이라 진입 불가·불발은
     // hit=true라 포함). command5.c:341이 명중 블록 안에 위치.
-    if (descriptor.hit && defenderHp(defender) < 1) {
+    if (descriptor.hit && combatantHp(defender) < 1) {
       died = true
       fireDeath(defender, ctx)
       break

@@ -47,6 +47,12 @@ export function buildSpawnTemplateIndex(raw: readonly RawCreatureTemplate[]): Sp
       ndice: c.ndice,
       sdice: c.sdice,
       pdice: c.pdice,
+      // 마법 읽기 필드(Story 2) — creatures.json 소스에서 그대로 옮긴다(fromTemplate 물질화가 인스턴스로
+      // 전파). realm은 소스에 없어 materialize가 [0,0,0,0] 기본값을 채운다.
+      spells: c.spells,
+      class: c.class,
+      intelligence: c.intelligence,
+      piety: c.piety,
       flags: c.flags,
       numwander: c.numwander,
     })

@@ -73,7 +73,7 @@
 라운드 동작:
 1. 적 없으면(`enemies.length===0`) 즉시 종료(선공 타깃 선정은 #83).
 2. **present 적 해소**: `enemies` 순서를 보존하며 방 `occupants`에 있고 레지스트리에 등록된 플레이어만 수집. "첫 적"은 `enemies[0]`이 아니라 첫 present 플레이어다.
-3. **MMAGIC 분기**: `MMAGIC && !MCHARM`이면 `rng(1,100) <= 20`(`MONSTER_SPELL_CAST_CHANCE`) 통과 시 `castSpell` seam 호출 — `'cast'` 반환이면 그 라운드 근접만 스킵(반격은 유지). 기본 seam은 `'none'`(근접 진행). 마법 데미지 공식은 범위 밖(#84/A6).
+3. **MMAGIC 분기**: `MMAGIC && !MCHARM`이면 `rng(1,100) <= 20`(`MONSTER_SPELL_CAST_CHANCE`) 통과 시 `castSpell` seam 호출 — `'cast'` 반환이면 그 라운드 근접만 스킵(반격은 유지). 기본 seam은 `'none'`(근접 진행). 이 seam은 [magic](magic.md)의 `crtSpell`이 채우며, 마법 데미지 공식·시전 게이트는 magic 소관(#84)이다.
 4. **몬스터 근접**: `resolveAttack(creature, target, ctx)`.
 5. **플레이어 반격**: present 적마다 독립 반응. `nextAttackAt > now`(쿨다운 미도래)면 스킵, 통과 시 `resolveAttack(player, creature, ctx)` 후 `nextAttackAt = now + (PBLIND ? 6 : 1)`. 몬스터가 이전 반격에 사망하면(`hpcur<1`) break(death seam 중복 방지).
 
@@ -108,12 +108,13 @@
 | 소비 | creature-spawn `CreatureInstance`·`nextAction` 케이던스·`activeSet` | 몬스터 operand·틱 케이던스·활성 집합 |
 | 채움 | creature-spawn `onCombatTick(creature, room)` | 몬스터 라운드 실행(no-op → 구현) |
 | 발화 | creature-spawn `onCreatureDeath`, 플레이어 사망 seam(#81) | HP<1 감지 시(제거·분배는 후속 토픽) |
-| 제공 | `castSpell` seam(#84), `DamageLedger`(#83) | 후속 토픽 소비 |
+| 공유 | `resolveAttack.fireDeath`·`combatant.combatantHp`/`applyCombatantDamage` | [magic](magic.md) offensive 데미지가 재사용(auto-hit — hit path 우회, 사망 1회 발화) |
+| 제공 | `castSpell` seam([magic](magic.md)이 `crtSpell`로 소비), `DamageLedger`(#83) | 후속 토픽 소비 |
 
 ## 제약사항 / 범위 밖
 
 - **사망 분배·특수공격·DoT·전투 AI → #83**. HP<1 감지·death seam 발화·기여 데미지 원장 누적까지만. 경험치 분배·전리품·`cp` 그룹킬 보너스·몬스터 특수공격 6종·상태이상 DoT·선공 aggro 타깃 선정은 #83.
-- **마법 데미지 → #84/A6**. 몬스터 MMAGIC 시전 게이트 seam(`castSpell`)만 남기고 데미지 공식은 다루지 않는다.
+- **마법 데미지 → [magic](magic.md)(#84)**. 몬스터 MMAGIC 시전 게이트 seam(`castSpell`)·death seam(`fireDeath`)만 제공하고, 데미지 공식·시전 게이트·spell_fail은 magic 계층이 소유한다.
 - **`hpCurrent`/`mpCurrent`/`level` 변이 의미론 → #81**. 레벨업/다운·재생·exp 손실·부활은 #81. 이 계층은 필드 정의·시딩·전투 차감만.
 - **플레이어 WS 명령 배선 → 명령 에픽**. `initiateAttack` 함수는 제공하나 "공격 <대상>" 파싱·라우팅·권한, `nextAttackAt` 실 타이머 세팅은 범위 밖.
 - **영속 write-back → save 경로**. 전투 중 `hpCurrent` 변경의 DB 저장은 save 정책 소관. 인메모리 라이브 상태만.
@@ -129,4 +130,4 @@
 
 - oracle: `docs/notes/game-analysis-20260625/a5-combat.md`
 - 의존 스펙: [stats-core.md](stats-core.md)(파생 thaco/AC·테이블) · [creature-spawn.md](creature-spawn.md)(활성 집합·`onCombatTick`/`onCreatureDeath` seam·`CreatureInstance`) · [persistence.md](persistence.md)(`characterSchema` 영속 필드) · [runtime-foundation.md](runtime-foundation.md)(1Hz `WorldClock`)
-- 후속: #83(전투 부가 — 특수공격·DoT·사망 분배·전투 AI) · #81(진행 루프 — 변이 의미론) · #84(마법 코어 — `castSpell` seam 소비) · #91(라운드 순서·MMGONL/MENONL aggro 충실 패치)
+- 후속: #83(전투 부가 — 특수공격·DoT·사망 분배·전투 AI) · #81(진행 루프 — 변이 의미론) · [magic.md](magic.md)(마법 코어 — `castSpell` seam·`fireDeath` death seam 소비) · #91(라운드 순서·MMGONL/MENONL aggro 충실 패치)

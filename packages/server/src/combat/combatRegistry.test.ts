@@ -17,6 +17,7 @@ function makeState(characterId: string): PlayerCombatState {
     level: 5,
     class: 4,
     effectiveStrength: 16,
+    effectiveIntelligence: 10,
     armor: 8,
     thaco: 15,
     dexterity: 16,

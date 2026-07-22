@@ -60,3 +60,21 @@ export function toCombatant(source: PlayerCombatState | CreatureInstance): Comba
     instance: source,
   }
 }
+
+/**
+ * Combatant의 라이브 현재 hp를 **원본 참조**에서 읽는다(스냅샷 `hpCurrent`가 아님 — 그건 어댑트 시점
+ * 값이라 차감 후 stale). 근접(resolveAttack)·주문(offensiveSpell) 데미지가 공유하는 판독 seam으로,
+ * kind-dispatch를 이 추상 소유지로 접어 소비자별 open-code 중복을 없앤다(파일 상단 주석의 예고 이행).
+ */
+export function combatantHp(target: Combatant): number {
+  return target.kind === 'creature' ? target.instance.hpcur : target.state.hpCurrent
+}
+
+/** Combatant 원본 참조에 피해를 in-place 차감한다(worldGraph 승인 carve-out — 근접·주문 데미지 공용). */
+export function applyCombatantDamage(target: Combatant, damage: number): void {
+  if (target.kind === 'creature') {
+    target.instance.hpcur -= damage
+  } else {
+    target.state.hpCurrent -= damage
+  }
+}

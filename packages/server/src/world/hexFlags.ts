@@ -26,6 +26,8 @@ export const MMGONL = 20
 export const MENONL = 22
 /** 절대 해칠 수 없음 — MUNKIL(mtype.h:435). 전투 대상 무적 무조건 거부(command5.c:146). */
 export const MUNKIL = 24
+/** 마법 저항(크리처) — MRMAGI(mtype.h:438). offensive_spell 데미지 감산 게이트(magic1.c:1113). */
+export const MRMAGI = 27
 /** 선한 유저 공격형(정렬 alg=-1). */
 export const MGAGGR = 39
 /** 악한 유저 공격형(정렬 alg=1). */
@@ -54,6 +56,11 @@ export const PCHAOS = 28
 export const PFAMIL = 55
 /** 잠력격발 — PUPDMG(mtype.h:404). 초인 다중공격 count 게이트(command5.c:208). */
 export const PUPDMG = 59
+/**
+ * 마법 저항(플레이어) — PRMAGI(mtype.h:377). offensive_spell 데미지 감산 게이트(magic1.c:1113).
+ * #84 미발동(플레이어 대상 저항은 piety store가 없어 #85 소관) — 상수만 보존한다.
+ */
+export const PRMAGI = 32
 
 // ── object flag 비트(scavenge 제외 판정) ─────────────────────────────────────
 /** 영구 아이템(회수 불가). */

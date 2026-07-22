@@ -29,16 +29,30 @@ export const ATTACK_COOLDOWN_INTERVAL = 1
 export const ATTACK_COOLDOWN_BLIND = 6
 
 // ── 클래스 인덱스 상수(tables.ts:97-98, global.c class_stats 순서) ─────────────
-// 플레이어 피해 분기·PALADIN 정렬 보정이 소비한다(command5.c:244-278).
-/** 바바리안 — 자기 주사위 + (level+3)/4 성장 분기(command5.c:244). */
+// 플레이어 피해 분기·PALADIN 정렬 보정(command5.c:244-278)과 spell_fail 클래스별 chance(magic8.c:791-897)가
+// 소비한다. 여기가 클래스 인덱스의 단일 출처다 — spell_fail이 8클래스를 전부 참조하므로 전투에서 아직
+// 안 쓰던 ASSASSIN/FIGHTER/RANGER/THIEF도 여기에 모아 매직 넘버 재출현을 막는다.
+/** 암살자 — spell_fail chance `(L4+B)*5+30`(magic8.c). */
+export const ASSASSIN = 1
+/** 바바리안 — 자기 주사위 + (level+3)/4 성장 분기(command5.c:244), spell_fail `(L4+B)*5+0`. */
 export const BARBARIAN = 2
-/** 성직자 — MAGE와 함께 숙련/오프핸드 항을 벗기는 피해 override(command5.c:254). */
+/** 성직자 — MAGE와 함께 숙련/오프핸드 항을 벗기는 피해 override(command5.c:254), spell_fail `(L4+B)*5+65`. */
 export const CLERIC = 3
-/** 마법사 — CLERIC과 함께 피해 override(command5.c:254). */
+/** 전사 — spell_fail chance `(L4+B)*5+10`(magic8.c). */
+export const FIGHTER = 4
+/** 마법사 — CLERIC과 함께 피해 override(command5.c:254), spell_fail `(L4+B)*5+75`. */
 export const MAGE = 5
-/** 성기사 — 정렬(alignment) 기반 피해 보정(command5.c:266). */
+/** 성기사 — 정렬(alignment) 기반 피해 보정(command5.c:266), spell_fail `(L4+B)*5+50`. */
 export const PALADIN = 6
-/** 무적(invincible) — `class > INVINCIBLE`이면 바바리안과 동일 성장 분기(command5.c:244). */
+/** 레인저 — spell_fail chance `(L4+B)*4+56`(magic8.c, 유일한 *4 배수). */
+export const RANGER = 7
+/** 도둑 — spell_fail chance `(L4+B)*6+22`(magic8.c, 유일한 *6 배수). */
+export const THIEF = 8
+/** 무적(invincible) — `class > INVINCIBLE`이면 바바리안과 동일 성장 분기(command5.c:244), 클래스 게이트 우회 하한(A6 §3). */
 export const INVINCIBLE = 9
 /** 운영진(caretaker) — `class < CARETAKER`인 플레이어만 MENONL 대상 무적에 걸린다(command5.c:167, mtype.h:103). */
 export const CARETAKER = 10
+/** 부운영자(sub_dm) — mprofic 숙련 테이블에서 MAGE 계열과 동일 임계(player.c:1215). */
+export const SUB_DM = 11
+/** 운영자(dm) — mprofic 숙련 테이블에서 MAGE 계열과 동일 임계(player.c:1216). */
+export const DM = 12

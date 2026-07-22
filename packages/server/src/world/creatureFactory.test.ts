@@ -21,6 +21,12 @@ const thief: CreatureSource = {
   ndice: 1,
   sdice: 5,
   pdice: 0,
+  // 마법 시전 읽기 필드(Story 2, spec §3.x): spells hex(주문 비트셋)·class·intelligence·piety.
+  // realm은 소스에 없어 CreatureSource에 포함하지 않는다(materialize가 [0,0,0,0] 기본값 설정).
+  spells: 'ff00000000000000000000000000000a',
+  class: 2,
+  intelligence: 18,
+  piety: 12,
 }
 
 describe('fromEmbedded', () => {
@@ -55,6 +61,27 @@ describe('fromEmbedded', () => {
     expect(c.pdice).toBe(0)
   })
 
+  it('마법 읽기 필드 spells/class/intelligence/piety를 소스에서 물질화한다(Story 2)', () => {
+    const c = fromEmbedded(thief, 135, 0)
+    expect(c.spells).toBe('ff00000000000000000000000000000a')
+    expect(c.class).toBe(2)
+    expect(c.intelligence).toBe(18)
+    expect(c.piety).toBe(12)
+  })
+
+  it('realm은 소스에 없어 [0,0,0,0] 상수 기본값으로 설정한다(전 몬스터 realm=0, #85 소관)', () => {
+    const c = fromEmbedded(thief, 135, 0)
+    expect(c.realm).toEqual([0, 0, 0, 0])
+  })
+
+  it('realm은 인스턴스마다 독립 배열이다(공유 참조 aliasing 없음 — #85 성장 write 오염 방지)', () => {
+    // toEqual 값 동등만으론 모듈 레벨 공유 const 리팩터링을 못 잡는다. #85가 한 인스턴스 realm을
+    // in-place 성장 write할 때 다른 인스턴스로 번지지 않도록 참조 구별을 고정한다(Story 2 핵심 속성).
+    const a = fromEmbedded(thief, 135, 0)
+    const b = fromEmbedded(thief, 135, 1)
+    expect(a.realm).not.toBe(b.realm)
+  })
+
   it('기본 rng stub은 gold를 그대로 둔다(결정적 identity)', () => {
     expect(fromEmbedded(thief, 135, 0).gold).toBe(80)
     expect(defaultCreatureRng(80)).toBe(80)
@@ -86,6 +113,12 @@ describe('fromTemplate', () => {
     expect(c?.ndice).toBe(1)
     expect(c?.sdice).toBe(5)
     expect(c?.pdice).toBe(0)
+    // 마법 읽기 필드도 템플릿 소스에서 물질화되고 realm은 기본값 [0,0,0,0]이다.
+    expect(c?.spells).toBe('ff00000000000000000000000000000a')
+    expect(c?.class).toBe(2)
+    expect(c?.intelligence).toBe(18)
+    expect(c?.piety).toBe(12)
+    expect(c?.realm).toEqual([0, 0, 0, 0])
   })
 
   it('알 수 없는 templateId면 undefined를 반환한다', () => {
