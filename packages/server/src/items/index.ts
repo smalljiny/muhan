@@ -88,3 +88,11 @@ export {
   isMarriageGated,
   needsRandEnchant,
 } from './flags.js'
+
+export {
+  // object 템플릿 인덱스(objnum → ObjectTemplate)
+  buildObjectTemplateIndex,
+  loadObjectTemplates,
+  type ObjectTemplate,
+  type ObjectTemplateIndex,
+} from './objectTemplate.js'
