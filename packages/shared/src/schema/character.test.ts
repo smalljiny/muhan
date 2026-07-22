@@ -170,6 +170,71 @@ describe('characterSchema', () => {
   it('experience가 정수가 아니면 거부한다', () => {
     expect(characterSchema.safeParse({ ...validCharacter(), experience: 1.5 }).success).toBe(false)
   })
+
+  it('statusEffects를 생략해도 통과한다 (선택 필드 — 기존 픽스처 불변)', () => {
+    const doc = validCharacter() as Partial<Character>
+    expect('statusEffects' in doc).toBe(false)
+    const result = characterSchema.safeParse(doc)
+    expect(result.success).toBe(true)
+    // .optional()이 .default({})가 아님을 런타임에서 고정한다 — default였다면 파싱 후 {}가 주입된다.
+    if (result.success) expect(result.data.statusEffects).toBeUndefined()
+  })
+
+  it('poison·disease·blind를 담은 statusEffects 문서를 통과시킨다 (절대-틱 만료)', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      statusEffects: {
+        poison: { until: 120, interval: 6 },
+        disease: { until: 300, interval: 12 },
+        blind: { until: 50 },
+      },
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.statusEffects?.poison).toEqual({ until: 120, interval: 6 })
+      expect(result.data.statusEffects?.blind).toEqual({ until: 50 })
+    }
+  })
+
+  it('statusEffects의 각 효과는 선택적이다 (poison만 담아도 통과)', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      statusEffects: { poison: { until: 60, interval: 6 } },
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('blind만 담은 statusEffects를 통과시킨다 (until만 요구)', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      statusEffects: { blind: { until: 5 } },
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('blind에 interval을 담으면 거부한다 (strictObject — until만 허용)', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      statusEffects: { blind: { until: 5, interval: 3 } },
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('poison의 until이 음수이면 거부한다', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      statusEffects: { poison: { until: -1, interval: 6 } },
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('poison에 interval이 없으면 거부한다 (until+interval 요구)', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      statusEffects: { poison: { until: 60 } },
+    })
+    expect(result.success).toBe(false)
+  })
 })
 
 // 컴파일 타임 가드 — Character 추론 타입에 accountId 키가 있고 inventory/자격증명 키가 없음을 tsc가 강제한다.
