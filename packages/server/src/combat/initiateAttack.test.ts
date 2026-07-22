@@ -5,7 +5,7 @@ import { toCombatant } from './combatant.js'
 import type { PlayerCombatState } from './playerState.js'
 import type { DamageLedger } from './enmity.js'
 import { seqRng } from './dice.testutil.js'
-import { F_SET, MUNKIL, PCHAOS } from '../world/hexFlags.js'
+import { F_SET, MUNKIL, MMGONL, MENONL, PCHAOS } from '../world/hexFlags.js'
 import { setFlag } from '../world/door.js'
 import { RNOKIL, RSUVIV } from '../world/moveGates.js'
 import { PVP_COOLDOWN_INCREMENT } from './constants.js'
@@ -235,5 +235,98 @@ describe('initiateAttack — 게이트 통과(개시 성공)', () => {
     const result = initiateAttack(attacker, toCombatant(defenderState), ctx)
 
     expect(result.ok).toBe(false)
+  })
+})
+
+/**
+ * Story 10(T10.1 ripple) — resolveAttack가 fire-free가 되면서 initiateAttack이 death 발화 책임을 진다.
+ * 오프너가 크리처를 죽이면 initiateAttack이 스스로 `if(outcome.died) fireDeath`를 호출해야 하며,
+ * 안 그러면 오프너 킬이 loot/exp/death를 silently 드롭한다. 단타 semantics는 관측상 즉시 발화로 동일하다.
+ */
+describe('initiateAttack — 오프너 킬 death 발화 (T10.1 ripple)', () => {
+  it('오프너가 크리처를 죽이면 fireCreatureDeath 정확히 1회 + died=true', () => {
+    const attacker = toCombatant(makePlayer())
+    const defender = makeCreature({ hpcur: 3 })
+    const room = makeRoom({ creatures: [] })
+    // seq: hit=20, mdice=5(>=3 사망), crit=50, fumble=50, durability=2
+    const { ctx, creatureDeaths, playerDeaths } = makeCtx([20, 5, 50, 50, 2], room, false, 2000)
+
+    const result = initiateAttack(attacker, toCombatant(defender), ctx)
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.outcome.died).toBe(true)
+    expect(defender.hpcur).toBe(-2)
+    expect(defender.enemies).toContain('char-1') // 적대 등록(발화 전)
+    expect(creatureDeaths).toHaveLength(1) // initiateAttack이 발화
+    expect(creatureDeaths[0]?.[0]).toBe(defender)
+    expect(creatureDeaths[0]?.[2]).toBe(2000)
+    expect(playerDeaths).toHaveLength(0)
+  })
+
+  it('PvP 오프너가 대상 플레이어를 죽이면 firePlayerDeath 정확히 1회 + died=true', () => {
+    const attacker = toCombatant(makePlayer({ flags: F_SET('', PCHAOS), level: 1 }))
+    const defenderState = makePlayer({ characterId: 'char-2', hpCurrent: 1, flags: F_SET('', PCHAOS) })
+    // 양측 PCHAOS·평범한 방 → PvP 게이트 통과. seq: hit=20, mdice=5(1-5=-4 사망), crit=50, fumble=50, dura=2
+    const { ctx, creatureDeaths, playerDeaths } = makeCtx([20, 5, 50, 50, 2], makeRoom(), false, 4000)
+
+    const result = initiateAttack(attacker, toCombatant(defenderState), ctx)
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.outcome.died).toBe(true)
+    expect(defenderState.hpCurrent).toBe(-4)
+    expect(playerDeaths).toHaveLength(1) // initiateAttack이 발화(PvP 경로도 fire-free ripple)
+    expect(playerDeaths[0]?.[0]).toBe(defenderState)
+    expect(creatureDeaths).toHaveLength(0)
+  })
+})
+
+/**
+ * Story 10(T10.3) — 무적 게이트 분해. 오라클 command5.c는 add_enm_crt(:153, 적대 등록)를 MUNKIL 거부(:148)
+ * 뒤·MMGONL(:160)·MENONL(:167) 거부 앞에 두어, MMGONL/MENONL 크리처를 물리 공격하면 타격은 거부돼도
+ * aggro는 등록돼 몬스터가 이후 틱에 반격한다. 게이트를 2단계로 분해한다:
+ *   - MUNKIL = pre-registerEnemy 거부(aggro 미등록).
+ *   - MMGONL·MENONL = post-registerEnemy 거부(aggro 등록·물리 공격만 실패).
+ */
+describe('initiateAttack — 무적 게이트 분해 (T10.3)', () => {
+  it('MMGONL 크리처: 물리 공격 실패하나 registerEnemy로 aggro는 등록된다', () => {
+    const attacker = toCombatant(makePlayer())
+    const defender = makeCreature({ flags: F_SET('', MMGONL) })
+    // seqRng([]) — resolveAttack가 굴림을 시도하면 throw(post-gate가 공격 전 차단해야 통과).
+    const { ctx, ledger, creatureDeaths } = makeCtx([])
+
+    const result = initiateAttack(attacker, toCombatant(defender), ctx)
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(typeof result.reason).toBe('string')
+    expect(defender.hpcur).toBe(30) // 물리 공격 실패 — 피해 없음
+    expect(defender.enemies).toContain('char-1') // aggro 등록됨(post-거부라 등록 후 차단)
+    expect(ledger.size).toBe(0)
+    expect(creatureDeaths).toHaveLength(0)
+  })
+
+  it('MENONL 크리처 + 비마법무기(class<CARETAKER): 공격 실패하나 aggro 등록', () => {
+    // class=4(<CARETAKER=10), weapon adjustment=0(비마법) → MENONL 관통 불가.
+    const attacker = toCombatant(makePlayer({ class: 4, weapon: { ndice: 1, sdice: 6, pdice: 0, adjustment: 0, proficiency: 0 } }))
+    const defender = makeCreature({ flags: F_SET('', MENONL) })
+    const { ctx } = makeCtx([])
+
+    const result = initiateAttack(attacker, toCombatant(defender), ctx)
+
+    expect(result.ok).toBe(false)
+    expect(defender.hpcur).toBe(30) // 공격 실패
+    expect(defender.enemies).toContain('char-1') // aggro 등록
+  })
+
+  it('MUNKIL 크리처: pre-거부라 registerEnemy도 하지 않는다 (aggro 미등록)', () => {
+    const attacker = toCombatant(makePlayer())
+    const defender = makeCreature({ flags: F_SET('', MUNKIL) })
+    const { ctx } = makeCtx([])
+
+    const result = initiateAttack(attacker, toCombatant(defender), ctx)
+
+    expect(result.ok).toBe(false)
+    expect(defender.enemies).toEqual([]) // pre-거부 — aggro 미등록
   })
 })

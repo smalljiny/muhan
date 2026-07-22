@@ -3,7 +3,7 @@ import type { CombatRng } from './dice.js'
 import type { CombatRegistry } from './combatRegistry.js'
 import type { DamageLedger } from './enmity.js'
 import type { PlayerCombatState } from './playerState.js'
-import { resolveAttack, type ResolveContext } from './resolveAttack.js'
+import { resolveAttack, fireDeath, type ResolveContext, type AttackOutcome } from './resolveAttack.js'
 import { toCombatant } from './combatant.js'
 import type { OnCombatTick } from '../world/creatureTick.js'
 import { F_ISSET, MMAGIC, MCHARM, PBLIND } from '../world/hexFlags.js'
@@ -26,12 +26,17 @@ import {
  * 몬스터 행동 케이던스(민첩 기반 2~3초 재스케줄)는 creatureTick 슬롯이 소유하며, 여기서는 이번 틱의
  * 근접·반격 실행만 담당한다. 플레이어 반격 쿨다운은 별도 필드 `nextAttackAt`으로만 관리한다.
  *
- * 의도적 단순화(D7 / #91 — 별도 패치로 재현): 오라클 update.c 라운드는 (a) 다른 적 반격 → target 반격
- * last, (b) `attack_crt`에 attacker-HP 가드가 없어 근접에 죽어가는 target도 마지막에 반격을 날림,
- * (c) 반격이 몬스터를 죽이면 `die(att_ptr)`를 스킵해 "막타치면 target 생존", (d) target 사망 판정을
- * end-of-round로 지연한다. 현재 구현은 Story 8의 `resolveAttack` 내부 즉시 death 발화 위에 서므로
- * target-first 순서 + 근접 즉시 사망(막타 생존 미재현)으로 근사한다. death seam은 어느 쪽이든 정확히
- * 1회 발화하므로 이번 슬라이스에서는 무해하며, 오라클 충실 라운드 순서·막타 생존은 #91 후속 패치가 다룬다.
+ * ## 오라클 충실 라운드 순서 (#91, update.c:501~530)
+ * resolveAttack가 fire-free가 되면서(Story 10 T10.1) 오라클 근접 라운드를 충실히 재현한다:
+ *   (a) counter 역순 — OTHER enemies(presentEnemies[1..]) 먼저, TARGET(presentEnemies[0]) 마지막
+ *       (오라클 first_enm->next_tag 루프 뒤 att_ptr 반격 last).
+ *   (b) attack_crt에 attacker-HP 가드가 없어 근접에 죽어가는 target도 마지막에 반격을 날린다.
+ *   (c) counter가 몬스터를 죽이면(goto crt_died; if(rtn) continue) target 사망 체크를 스킵 →
+ *       "막타치면 target 생존"(target pending death 취소).
+ *   (d) target 사망 판정을 end-of-round로 지연한다(att_ptr->hpcur<1이면 die) — 몬스터 생존 시에만.
+ * death seam은 이제 combatTick이 발화한다(resolveAttack fire-free) — 몬스터 death는 이를 죽인 counter가
+ * 1회, target death는 end-of-round 1회(취소 안 됐을 때). 근접이 target을 HP<1로 떨어뜨려도 즉시
+ * 발화하지 않고 pending으로 남긴다. flee 실 배선(update.c:526 PWIMPY/PFEARS)은 범위 밖(Story 8 순수 함수만).
  */
 
 /** 주문 시전 결과 — 'cast'=주문이 그 라운드 근접을 대체(근접 스킵), 'none'=근접 진행(update.c:348 return 1/0). */
@@ -83,6 +88,13 @@ export function createCombatTick(deps: CombatTickDeps): OnCombatTick {
     // #83 aggro 경계 — 적 없으면 즉시 종료(선공 타깃 선정은 타깃 관리 #83 소관).
     if (creature.enemies.length === 0) return
 
+    // stale-dead 가드 — 이미 사망(hpcur<1)한 몬스터는 이번 틱에 행동하지 않는다. 사망 제거가 커넥션
+    // 계층으로 유예돼(D2/#99, deathDistribution) creatureTick이 HP 가드 없이 재디스패치할 수 있으므로,
+    // 근접·counter 진입 전 차단한다(resolveAttack DEAD_DEFENDER_NOOP 선례). 없으면 counter의 NOOP 뒤
+    // `creature.hpcur<1` 관찰이 fireCreatureDeath를 재발화해 exactly-once를 깨고 정당한 target death까지
+    // 취소한다. 오라클도 die()가 크리처를 즉시 제거해 재행동이 구조적으로 불가능하다.
+    if (creature.hpcur < 1) return
+
     const now = deps.now()
 
     // present 적 플레이어 해소 — enemies 순서를 보존하며 방에 있고 레지스트리에 등록된 것만 수집한다.
@@ -122,24 +134,43 @@ export function createCombatTick(deps: CombatTickDeps): OnCombatTick {
       }
     }
 
+    // 몬스터 근접(target melee) — fire-free. target이 HP<1로 떨어져도 즉시 발화하지 않고 pending으로
+    // 남긴다(end-of-round 지연). meleeOutcome.died가 "이번 라운드에 target이 근접으로 죽었는가"의
+    // 신호다 — stale-dead(이전 틱 사망) target은 resolveAttack DEAD_DEFENDER_NOOP로 died=false라
+    // end-of-round에서 재발화되지 않고, spell-kill(doMelee=false)은 offensiveSpell이 즉시 발화하므로
+    // meleeOutcome=null이라 여기서 중복 발화하지 않는다.
+    let meleeOutcome: AttackOutcome | null = null
     if (doMelee) {
-      resolveAttack(toCombatant(creature), toCombatant(target), ctx)
+      meleeOutcome = resolveAttack(toCombatant(creature), toCombatant(target), ctx)
     }
 
-    // 반격 — present 적마다 독립 반응. 주문=근접 대체이나 반격은 플레이어 독립 반응이라 항상 진행한다.
-    for (const player of presentEnemies) {
-      // 몬스터가 이전 반격에 사망하면 후속 반격을 중단한다(death seam 중복 방지 — resolveAttack이
-      // 이미 발화했고, break가 둘째 resolveAttack 진입 자체를 막는다).
-      if (creature.hpcur < 1) break
-      // 몬스터 근접에 사망한 플레이어는 반격 불가(의도적 단순화 — 오라클은 죽어가는 target도 last에
-      // 반격, D7 / #91 후속 패치).
-      if (player.hpCurrent < 1) continue
-      // LT_ATTCK 쿨다운 미도래.
+    // counter 역순(update.c:501~530): OTHER enemies(presentEnemies[1..]) 먼저, TARGET(presentEnemies[0])
+    // 마지막. attack_crt엔 attacker-HP 가드가 없으므로 근접에 죽어가는 target도 last에 반격을 날린다
+    // (hpCurrent<1 가드를 두지 않는다). LT_ATTCK 쿨다운(nextAttackAt)만 개별 반격을 게이트한다.
+    const counterOrder = [...presentEnemies.slice(1), target]
+
+    let monsterDied = false
+    for (const player of counterOrder) {
+      // LT_ATTCK 쿨다운 미도래 → 이 반격만 스킵.
       if (player.nextAttackAt > now) continue
 
       resolveAttack(toCombatant(player), toCombatant(creature), ctx)
       // 쿨다운 재설정 — 반격 대상이 몬스터라 PvP +3 미적용(command5.c:131/135).
       player.nextAttackAt = now + (F_ISSET(player.flags, PBLIND) ? ATTACK_COOLDOWN_BLIND : ATTACK_COOLDOWN_INTERVAL)
+
+      // 몬스터가 이 counter에 사망 → death 1회 발화(fire-free 이양) + target pending death 취소 후 중단.
+      // 오라클 goto crt_died; if(rtn){ continue }로 target 사망 체크를 스킵 → "막타치면 target 생존".
+      if (creature.hpcur < 1) {
+        fireDeath(toCombatant(creature), ctx)
+        monsterDied = true
+        break
+      }
+    }
+
+    // end-of-round target 사망 판정(update.c:522 att_ptr->hpcur<1 → die) — 몬스터가 counter에 죽지
+    // 않았고(취소 안 됨) target이 이번 라운드 근접으로 죽었을 때만 1회 발화한다.
+    if (!monsterDied && meleeOutcome?.died === true) {
+      fireDeath(toCombatant(target), ctx)
     }
   }
 }

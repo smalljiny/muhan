@@ -1,6 +1,6 @@
 import type { Combatant, PlayerCombatant } from './combatant.js'
-import { resolveAttack, type ResolveContext, type AttackOutcome } from './resolveAttack.js'
-import { checkTargetImmunity, checkPvpGate } from './pvp.js'
+import { resolveAttack, fireDeath, type ResolveContext, type AttackOutcome } from './resolveAttack.js'
+import { checkTargetImmunityPre, checkTargetImmunityPost, checkPvpGate } from './pvp.js'
 import { registerEnemy } from './enmity.js'
 
 /**
@@ -30,50 +30,59 @@ export type InitiateResult =
   | { readonly ok: false; readonly reason: string }
 
 /**
- * 플레이어 오프너 — 개시 게이트 → resolveAttack 1회 → 적대 등록.
+ * 플레이어 오프너 — 개시 게이트 → resolveAttack 1회 → death 발화(fire-free ripple) → 적대 등록.
  *
- * defender가 크리처면 checkTargetImmunity(무적 게이트), 플레이어면 checkPvpGate(3중 게이트)를 적용한다.
- * 게이트 실패 시 resolveAttack를 호출하지 않고 사유를 반환한다. 통과 시 근접 1타를 굴린 뒤, 대상이
- * 크리처면 registerEnemy로 적대를 등록한다. 대상이 플레이어면 PlayerCombatState에 enemies[] 모델이 없어
- * 등록을 생략한다(지속 PvP 라운드는 E6a-1 범위 밖 — 오프너 1타만).
+ * defender가 크리처면 무적 게이트를 pre/post 2단계로 적용한다(Story 10 T10.3): MUNKIL(pre)은 registerEnemy
+ * 전에 거부(aggro 미등록), MMGONL/MENONL(post)은 registerEnemy 후에 거부(aggro 등록·물리 공격만 실패).
+ * defender가 플레이어면 checkPvpGate(3중 게이트)를 적용한다. 게이트 통과 시 근접 1타를 굴린다.
+ *
+ * ★ T10.1 ripple: resolveAttack가 fire-free가 되면서(Story 10) 오프너 킬의 death 발화 책임이 여기로
+ * 이양됐다 — `if(outcome.died) fireDeath`를 직접 호출하지 않으면 오프너 킬이 loot/exp/death를 silently
+ * 드롭한다. 단타 semantics는 관측상 즉시 발화로 동일하다(오라클 die() 후 return).
  */
 export function initiateAttack(
   attacker: PlayerCombatant,
   defender: Combatant,
   ctx: InitiateContext,
 ): InitiateResult {
-  const gate =
-    defender.kind === 'creature'
-      ? checkTargetImmunity({
-          attacker: { class: attacker.state.class, weapon: attacker.state.weapon },
-          defender: { flags: defender.instance.flags },
-        })
-      : checkPvpGate({
-          attacker: { flags: attacker.state.flags, level: attacker.state.level },
-          defender: { flags: defender.state.flags },
-          room: ctx.room,
-          checkWarResult: ctx.checkWarResult ?? false,
-        })
+  // PvP 경로(플레이어 defender) — 3중 게이트만 적용, 적대 등록 없음. 오라클도 add_enm_crt를 MONSTER
+  // 분기 안에만 두어 PvP 오프너는 적대를 등록하지 않는다(지속 PvP 라운드는 범위 밖 — 오프너 1타만).
+  if (defender.kind === 'player') {
+    const gate = checkPvpGate({
+      attacker: { flags: attacker.state.flags, level: attacker.state.level },
+      defender: { flags: defender.state.flags },
+      room: ctx.room,
+      checkWarResult: ctx.checkWarResult ?? false,
+    })
+    if (!gate.ok) return { ok: false, reason: gate.reason }
 
-  if (!gate.ok) return { ok: false, reason: gate.reason }
+    const outcome = resolveAttack(attacker, defender, ctx)
+    if (outcome.died) fireDeath(defender, ctx) // T10.1 ripple — fire-free 이양.
+    return { ok: true, outcome, cooldownIncrement: gate.cooldownIncrement }
+  }
+
+  // 크리처 경로 — 무적 게이트 2단계 분해(T10.3).
+  //
+  // pre-단계(MUNKIL): registerEnemy 전에 거부한다 — 절대 해칠 수 없는 대상은 aggro조차 등록하지 않는다
+  // (오라클 command5.c:146, add_enm_crt(:153) 이전).
+  const pre = checkTargetImmunityPre({ defender: { flags: defender.instance.flags } })
+  if (!pre.ok) return { ok: false, reason: pre.reason }
 
   // 적대 등록을 피해 해석보다 먼저 수행한다 — 오라클 순서(add_enm_crt command5.c:153 → 다중공격/피해
-  // :207+)를 복원하고, 오프너 1타가 크리처를 죽였을 때 death seam이 발화된 인스턴스에 뒤늦게 등록하는
-  // 기묘함을 없앤다. resolveAttack은 `enemies`를 읽지 않으므로(HP·flags·스탯·ledger만) 순서 이동은
-  // 행위 불변이다.
-  //
-  // 대상 크리처가 공격자를 적으로 등록해 다음 틱부터 combatTick이 반격을 구동한다(add_enm_crt).
-  // 대상이 플레이어(PvP)면 enemies[] 모델이 없어 등록 생략 — 오라클도 add_enm_crt를 MONSTER 분기
-  // 안에만 두어 PvP 오프너는 적대를 등록하지 않으므로 이는 충실하다(지속 PvP 라운드는 범위 밖).
-  //
-  // 발산(#91 fidelity basket): 오라클 add_enm_crt(command5.c:153)는 MUNKIL 거부(:148) 뒤·MMGONL(:160)·
-  // MENONL(:165) 거부 앞에 위치해, MMGONL/MENONL 크리처를 물리 공격하면 타격이 거부돼도 적대는 등록돼
-  // 몬스터가 이후 틱에 반격한다. 포트의 checkTargetImmunity(Story 6)는 세 무적 플래그를 단일 무조건-거부
-  // 게이트로 번들해 이 인터리브를 재현 못 한다 — MMGONL/MENONL 크리처는 물리 오프너에 무반응. 게이트
-  // 분해(MUNKIL=pre / MMGONL·MENONL=post 등록)는 Story 6 변경이라 별도 패치.
-  if (defender.kind === 'creature') registerEnemy(defender.instance, attacker.state.characterId)
+  // :207+)를 복원한다. resolveAttack은 `enemies`를 읽지 않으므로(HP·flags·스탯·ledger만) 순서 이동은
+  // 행위 불변이다. 대상 크리처가 공격자를 적으로 등록해 다음 틱부터 combatTick이 반격을 구동한다.
+  registerEnemy(defender.instance, attacker.state.characterId)
+
+  // post-단계(MMGONL/MENONL): registerEnemy 후에 거부한다 — 오라클 add_enm_crt(:153)가 MMGONL(:160)·
+  // MENONL(:167) 거부 앞이라, MMGONL/MENONL 크리처를 물리 공격하면 타격은 거부돼도 aggro는 등록돼
+  // 몬스터가 이후 틱에 반격한다(criterion 3). Story 6의 단일 번들 게이트가 못 하던 인터리브를 재현한다.
+  const post = checkTargetImmunityPost({
+    attacker: { class: attacker.state.class, weapon: attacker.state.weapon },
+    defender: { flags: defender.instance.flags },
+  })
+  if (!post.ok) return { ok: false, reason: post.reason }
 
   const outcome = resolveAttack(attacker, defender, ctx)
-
-  return { ok: true, outcome, cooldownIncrement: gate.cooldownIncrement }
+  if (outcome.died) fireDeath(defender, ctx) // T10.1 ripple — 오프너 킬 death 발화.
+  return { ok: true, outcome, cooldownIncrement: post.cooldownIncrement }
 }

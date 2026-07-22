@@ -1,6 +1,6 @@
 import { describe, it, expect, expectTypeOf } from 'vitest'
 import type { CreatureInstance, RoomNode } from 'shared'
-import { checkTargetImmunity, checkPvpGate } from './pvp.js'
+import { checkTargetImmunityPre, checkTargetImmunityPost, checkPvpGate } from './pvp.js'
 import type { TargetImmunityInput, PvpGateInput } from './pvp.js'
 import type { PlayerCombatState } from './playerState.js'
 import { F_SET, MUNKIL, MMGONL, MENONL, PCHAOS, PFAMIL } from '../world/hexFlags.js'
@@ -32,25 +32,50 @@ describe('게이트 입력 재사용 계약(타입 레벨)', () => {
 
 const FIGHTER = 4 // class < CARETAKER — MENONL 대상
 
-describe('checkTargetImmunity (player→creature 대상 무적 게이트)', () => {
+describe('checkTargetImmunityPre (player→creature MUNKIL, registerEnemy 前, Story 10 T10.3)', () => {
   it('MUNKIL 크리처는 마법무기여도 무조건 거부한다', () => {
-    const r = checkTargetImmunity({
-      attacker: { class: FIGHTER, weapon: { adjustment: 3 } },
+    const r = checkTargetImmunityPre({
       defender: { flags: F_SET('', MUNKIL) },
     })
     expect(r.ok).toBe(false)
   })
 
+  it('MMGONL/MENONL은 pre-단계에서 판정하지 않는다(post 소관 — 여기선 허용)', () => {
+    expect(checkTargetImmunityPre({ defender: { flags: F_SET('', MMGONL) } }).ok).toBe(true)
+    expect(checkTargetImmunityPre({ defender: { flags: F_SET('', MENONL) } }).ok).toBe(true)
+  })
+
+  it('플래그 없는 크리처는 허용하고 쿨다운 증분은 0이다', () => {
+    const r = checkTargetImmunityPre({ defender: { flags: '' } })
+    expect(r).toEqual({ ok: true, cooldownIncrement: 0 })
+  })
+
+  it('순수 함수: 입력 객체를 변형하지 않는다', () => {
+    const defender = { flags: '' }
+    checkTargetImmunityPre({ defender })
+    expect(defender).toEqual({ flags: '' })
+  })
+})
+
+describe('checkTargetImmunityPost (player→creature MMGONL/MENONL, registerEnemy 後, Story 10 T10.3)', () => {
   it('MMGONL 크리처는 마법무기여도 거부한다(마법만)', () => {
-    const r = checkTargetImmunity({
+    const r = checkTargetImmunityPost({
       attacker: { class: FIGHTER, weapon: { adjustment: 3 } },
       defender: { flags: F_SET('', MMGONL) },
     })
     expect(r.ok).toBe(false)
   })
 
+  it('MUNKIL은 post-단계에서 판정하지 않는다(pre 소관 — 여기선 허용)', () => {
+    const r = checkTargetImmunityPost({
+      attacker: { class: FIGHTER, weapon: null },
+      defender: { flags: F_SET('', MUNKIL) },
+    })
+    expect(r.ok).toBe(true)
+  })
+
   it('MENONL + class<CARETAKER + 무기 없음(맨손)이면 거부한다', () => {
-    const r = checkTargetImmunity({
+    const r = checkTargetImmunityPost({
       attacker: { class: FIGHTER, weapon: null },
       defender: { flags: F_SET('', MENONL) },
     })
@@ -58,7 +83,7 @@ describe('checkTargetImmunity (player→creature 대상 무적 게이트)', () =
   })
 
   it('MENONL + class<CARETAKER + 무기 adjustment<1이면 거부한다', () => {
-    const r = checkTargetImmunity({
+    const r = checkTargetImmunityPost({
       attacker: { class: FIGHTER, weapon: { adjustment: 0 } },
       defender: { flags: F_SET('', MENONL) },
     })
@@ -66,7 +91,7 @@ describe('checkTargetImmunity (player→creature 대상 무적 게이트)', () =
   })
 
   it('MENONL + 마법무기(adjustment>=1)면 허용한다', () => {
-    const r = checkTargetImmunity({
+    const r = checkTargetImmunityPost({
       attacker: { class: FIGHTER, weapon: { adjustment: 1 } },
       defender: { flags: F_SET('', MENONL) },
     })
@@ -74,7 +99,7 @@ describe('checkTargetImmunity (player→creature 대상 무적 게이트)', () =
   })
 
   it('MENONL + class>=CARETAKER면 무기 없어도 허용한다(운영진 면제)', () => {
-    const r = checkTargetImmunity({
+    const r = checkTargetImmunityPost({
       attacker: { class: CARETAKER, weapon: null },
       defender: { flags: F_SET('', MENONL) },
     })
@@ -82,7 +107,7 @@ describe('checkTargetImmunity (player→creature 대상 무적 게이트)', () =
   })
 
   it('플래그 없는 크리처는 허용하고 쿨다운 증분은 0이다', () => {
-    const r = checkTargetImmunity({
+    const r = checkTargetImmunityPost({
       attacker: { class: FIGHTER, weapon: null },
       defender: { flags: '' },
     })
@@ -92,7 +117,7 @@ describe('checkTargetImmunity (player→creature 대상 무적 게이트)', () =
   it('순수 함수: 입력 객체를 변형하지 않는다', () => {
     const defender = { flags: '' }
     const attacker = { class: FIGHTER, weapon: null }
-    checkTargetImmunity({ attacker, defender })
+    checkTargetImmunityPost({ attacker, defender })
     expect(defender).toEqual({ flags: '' })
     expect(attacker).toEqual({ class: FIGHTER, weapon: null })
   })

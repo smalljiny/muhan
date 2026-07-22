@@ -17,8 +17,12 @@ import {
 import { F_ISSET, PUPDMG, OALCRT, OCURSE, MBEFUD } from '../world/hexFlags.js'
 
 /**
- * resolveAttack — 명중→피해→크리/불발→적용을 단일 파이프로 통합하고 HP<1 시 death seam을 발화하는
+ * resolveAttack — 명중→피해→크리/불발→적용을 단일 파이프로 통합하고 HP<1이면 died=true를 반환하는(fire-free)
  * 오라클 충실 이식(플레이어 command5.c:207-345 / 몬스터 update.c:373-447, 플랜 G1/G5).
+ *
+ * Story 10(T10.1): death seam 발화는 호출자(initiateAttack/combatTick)가 소유한다 — 근접 라운드가
+ * target death를 end-of-round로 지연해 "막타치면 target 생존"을 재현하려면 resolveAttack이 즉시
+ * 발화하면 안 되기 때문이다. fireDeath·ResolveContext seam은 magic offensiveSpell 공유로 무변경이다.
  *
  * 순수 함수: 전역 상태·Date.now·Math.random 없이 모든 랜덤을 ctx.rng(주입 CombatRng)로만 굴린다.
  * 유일한 in-place 변형은 defender HP 차감(worldGraph 승인 carve-out)·ledger 누적이며 AttackOutcome은
@@ -246,8 +250,10 @@ function performStrike(attacker: Combatant, defender: Combatant, ctx: ResolveCon
 }
 
 /**
- * defender 사망 seam을 kind별로 정확히 1회 발화한다(command5.c:341). 근접(여기)·주문(offensiveSpell)이
- * 공유하는 death seam — CastContext가 ResolveContext를 확장하므로 주문 경로도 동일 시그니처로 소비한다.
+ * defender 사망 seam을 kind별로 발화한다(command5.c:341). resolveAttack은 fire-free이므로(Story 10)
+ * 이 함수를 호출자가 소비한다 — 근접은 initiateAttack(오프너 킬)·combatTick(end-of-round·counter 킬),
+ * 주문은 offensiveSpell이 직접 발화한다. CastContext가 ResolveContext를 확장하므로 주문 경로도 동일
+ * 시그니처로 공유한다. seam·시그니처 무변경(magic 공유).
  */
 export function fireDeath(defender: Combatant, ctx: ResolveContext): void {
   if (defender.kind === 'creature') {
@@ -269,8 +275,8 @@ const DEAD_DEFENDER_NOOP: AttackOutcome = {
 }
 
 /**
- * 공격 해석 진입점 — 다중공격 count만큼 타격을 반복하되, defender HP<1이면 death seam 발화 후 break한다
- * (오라클 die() 후 return). 집계 AttackOutcome을 새 객체로 반환한다.
+ * 공격 해석 진입점 — 다중공격 count만큼 타격을 반복하되, defender HP<1이면 died=true를 세우고 break한다
+ * (fire-free — death seam은 호출자가 발화, 오라클 die() 지연 재현). 집계 AttackOutcome을 새 객체로 반환한다.
  *
  * 진입 가드: 이미 사망한(HP<1) defender에 대한 stale/재진입 공격은 no-op한다. 오라클은 die()가 대상을
  * 즉시 free/제거해 재공격이 구조적으로 불가능하나, 이 포트는 사망 제거를 커넥션 계층으로 유예하므로
@@ -291,9 +297,14 @@ export function resolveAttack(attacker: Combatant, defender: Combatant, ctx: Res
 
     // 사망 판정은 오라클처럼 명중 타격 내부에서만 수행한다(빗나감은 HP 불변이라 진입 불가·불발은
     // hit=true라 포함). command5.c:341이 명중 블록 안에 위치.
+    //
+    // ★ Story 10(T10.1): resolveAttack는 fire-free다. HP<1을 감지하면 died=true·break만 하고 death
+    // seam을 발화하지 않는다 — 발화 책임은 호출자(initiateAttack/combatTick)로 이양한다. 근거:
+    // 오라클 update.c:501~530 근접 라운드는 target death를 end-of-round로 지연해야 counter가 target을
+    // 구할 수 있다("막타치면 target 생존"). resolveAttack이 근접 중 즉시 발화하면 이 지연이 불가능하다.
+    // fireDeath·ResolveContext seam은 magic offensiveSpell 공유로 무변경이며, 여기선 호출만 제거한다.
     if (descriptor.hit && combatantHp(defender) < 1) {
       died = true
-      fireDeath(defender, ctx)
       break
     }
   }

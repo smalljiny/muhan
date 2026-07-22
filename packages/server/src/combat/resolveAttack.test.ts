@@ -323,8 +323,15 @@ describe('resolveAttack — 몬스터 attacker (단타·무크리)', () => {
   })
 })
 
-describe('resolveAttack — 사망 감지·seam 발화', () => {
-  it('몬스터 defender 사망: died=true + fireCreatureDeath 정확히 1회', () => {
+/**
+ * Story 10(T10.1) — resolveAttack는 fire-free다. HP<1을 감지하면 died=true·break만 하고 death seam을
+ * 발화하지 않는다(호출자 initiateAttack/combatTick이 발화 책임을 진다). 근거: 오라클 update.c:501~530은
+ * 근접 중 target death를 end-of-round로 지연해야 counter가 target을 구할 수 있다("막타치면 target 생존").
+ * resolveAttack이 즉시 발화하면 이 지연이 불가능하다. fireDeath seam·시그니처는 magic offensiveSpell 공유로
+ * 무변경이며, 여기서 호출만 제거한다.
+ */
+describe('resolveAttack — 사망 감지 (fire-free — 호출자가 발화)', () => {
+  it('몬스터 defender 사망: died=true + HP·ledger 적용하되 fireCreatureDeath 미발화', () => {
     const player = makePlayer()
     const creature = makeCreature({ hpcur: 3 })
     const room = makeRoom({ creatures: [creature] })
@@ -334,16 +341,13 @@ describe('resolveAttack — 사망 감지·seam 발화', () => {
 
     expect(out.died).toBe(true)
     expect(out.damage).toBe(5) // 비캡 n
+    expect(creature.hpcur).toBe(-2) // in-place 차감(fire-free여도 HP는 적용)
     expect(ledger.get('char-1')).toBe(3) // m=min(3,5) 오버킬 캡
-    expect(creatureDeaths).toHaveLength(1)
+    expect(creatureDeaths).toHaveLength(0) // fire-free — 호출자가 발화
     expect(playerDeaths).toHaveLength(0)
-    // seam은 (dead, room, now)를 인자로 받는다(사전 바인딩 금지)
-    expect(creatureDeaths[0]?.[0]).toBe(creature)
-    expect(creatureDeaths[0]?.[1]).toBe(room)
-    expect(creatureDeaths[0]?.[2]).toBe(2000)
   })
 
-  it('플레이어 defender 사망: died=true + firePlayerDeath 정확히 1회 (ledger 미누적)', () => {
+  it('플레이어 defender 사망: died=true 하되 firePlayerDeath 미발화 (ledger 미누적)', () => {
     const monster = makeCreature({ instanceId: 'mon-1', thaco: 10, ndice: 1, sdice: 6, pdice: 0 })
     const player = makePlayer({ hpCurrent: 1, armor: 70 })
     const room = makeRoom()
@@ -353,11 +357,10 @@ describe('resolveAttack — 사망 감지·seam 발화', () => {
     const out = resolveAttack(toCombatant(monster), toCombatant(player), ctx)
 
     expect(out.died).toBe(true)
-    expect(playerDeaths).toHaveLength(1)
+    expect(player.hpCurrent).toBe(-4) // in-place 차감
+    expect(playerDeaths).toHaveLength(0) // fire-free
     expect(creatureDeaths).toHaveLength(0)
     expect(ledger.size).toBe(0)
-    expect(playerDeaths[0]?.[0]).toBe(player)
-    expect(playerDeaths[0]?.[2]).toBe(3000)
   })
 })
 
@@ -420,18 +423,18 @@ describe('resolveAttack — 다중공격(초인 PUPDMG count 루프)', () => {
     expect(out.damage).toBe(3)
   })
 
-  it('death 발화 후 남은 count 타격은 실행되지 않는다(break)', () => {
+  it('died 감지 후 남은 count 타격은 실행되지 않는다(break, fire-free)', () => {
     const player = makePlayer({ class: 11, level: 107, flags: flagsWith(PUPDMG) })
     const creature = makeCreature({ hpcur: 3 })
     const room = makeRoom({ creatures: [creature] })
-    // count=2이지만 공격1이 사망시킴. 공격2 굴림은 seq에 없음 → 시도 시 seqRng throw
+    // count=2이지만 공격1이 HP<1로 떨어뜨림. 공격2 굴림은 seq에 없음 → 시도 시 seqRng throw(break 증명)
     const { ctx, creatureDeaths } = makeCtx([2, 2, 20, 5, 50, 50, 1], room)
 
     const out = resolveAttack(toCombatant(player), toCombatant(creature), ctx)
 
     expect(out.messageInputs.attacks).toHaveLength(1)
     expect(out.died).toBe(true)
-    expect(creatureDeaths).toHaveLength(1)
+    expect(creatureDeaths).toHaveLength(0) // fire-free — 호출자가 발화
   })
 })
 
@@ -466,7 +469,7 @@ describe('resolveAttack — 이미 사망한 defender 진입 가드(stale/재진
     expect(playerDeaths).toHaveLength(0)
   })
 
-  it('HP 정확히 1인 defender는 가드를 통과해 정상 처리된다(경계값)', () => {
+  it('HP 정확히 1인 defender는 가드를 통과해 정상 처리된다(경계값, fire-free)', () => {
     const player = makePlayer()
     const creature = makeCreature({ hpcur: 1 })
     // 가드는 HP<1만 차단. HP=1은 통과 → hit=20,mdice=5,crit=50,fumble=50,durability=2 → 1-5=-4 사망
@@ -476,7 +479,8 @@ describe('resolveAttack — 이미 사망한 defender 진입 가드(stale/재진
 
     expect(out.hit).toBe(true)
     expect(out.died).toBe(true)
-    expect(creatureDeaths).toHaveLength(1)
+    expect(creature.hpcur).toBe(-4)
+    expect(creatureDeaths).toHaveLength(0) // fire-free — 호출자가 발화
   })
 })
 

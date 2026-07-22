@@ -12,11 +12,14 @@ import { F_SET, MMAGIC, MCHARM, PBLIND } from '../world/hexFlags.js'
  * 반격 command5.c). 모든 랜덤은 주입 seqRng(순서·개수 고정)로 결정화한다 — 시퀀스 초과 호출은
  * throw이므로 각 케이스의 굴림 예산이 계약으로 고정된다.
  *
- * 굴림 소비 순서: [MMAGIC 시전 굴림(있을 때)] → [몬스터 근접(hit+mdice)] → [반격 per player].
+ * 굴림 소비 순서: [MMAGIC 시전 굴림(있을 때)] → [몬스터 근접(hit+mdice)] → [반격 역순: OTHER 적들 먼저,
+ * TARGET 마지막].
  *
- * 의도적 단순화(D7 / #91): 오라클의 target-last 반격 순서·죽어가는 target의 last 반격·"막타치면 생존"·
- * end-of-round 사망 지연은 이 슬라이스에서 미재현이다(Story 8 inline death 발화 위에 근사). 아래
- * 케이스들은 이 단순화된 동작을 계약으로 고정하며, 오라클 충실 라운드는 #91 후속 패치가 검증한다.
+ * 오라클 충실 라운드(#91, update.c:501~530): 반격은 counter 역순(OTHER enemies 먼저, TARGET last)이며,
+ * attack_crt에 attacker-HP 가드가 없어 근접에 죽어가는 target도 마지막에 반격을 날린다. resolveAttack는
+ * fire-free이므로 근접이 target을 HP<1로 떨어뜨려도 즉시 발화하지 않는다(pending). counter가 몬스터를
+ * 죽이면 몬스터 death 1회 + target pending death 취소("막타치면 target 생존"), 몬스터 생존 시에만
+ * end-of-round에서 target death를 발화한다. death seam은 이제 combatTick이 발화한다(resolveAttack 아님).
  */
 
 const ZERO_FLAGS = '0000000000000000'
@@ -224,21 +227,102 @@ describe('createCombatTick — 근접 + 반격', () => {
     expect(creature.hpcur).toBe(95)
   })
 
-  it('몬스터 근접에 사망한 플레이어는 반격 불가 (의도적 단순화 — 오라클은 last 반격, D7/#91)', () => {
+  it('근접에 죽어가는 target도 last 반격한다 (오라클 충실 — attack_crt attacker-HP 가드 없음, #91)', () => {
     const player = makePlayer({ characterId: 'p1', hpCurrent: 3, nextAttackAt: 0 })
     const creature = makeCreature({ hpcur: 100, enemies: ['p1'] })
     const room = makeRoom(['p1'])
-    // 근접 [15,5]: p1 3-5=-2 사망(firePlayerDeath). 반격 진입 시 hpCurrent<1 → continue(굴림 미소비).
-    // NOTE: 오라클은 죽어가는 target도 last에 반격하고 막타치면 생존하나(#91), 여기서는 미재현이다.
-    const { deps, registry, playerDeaths } = makeDeps([15, 5], { now: 1000 })
+    // 근접 [15,5]: p1 3-5=-2 (pending death, fire-free). 죽어가는 target p1이 last 반격 [20,5,50,50,2]:
+    // creature 100-5=95. 몬스터 생존 → end-of-round에서 target death 1회 발화.
+    const { deps, registry, playerDeaths, creatureDeaths, ledger } = makeDeps([15, 5, 20, 5, 50, 50, 2], { now: 1000 })
     registry.register(player)
 
     createCombatTick(deps)(creature, room)
 
-    expect(player.hpCurrent).toBeLessThan(1)
-    expect(playerDeaths).toHaveLength(1) // resolveAttack이 발화
-    expect(creature.hpcur).toBe(100) // 반격 없음
-    expect(player.nextAttackAt).toBe(0) // 쿨다운 미설정
+    expect(player.hpCurrent).toBeLessThan(1) // 근접에 죽어감
+    expect(creature.hpcur).toBe(95) // 죽어가는 target도 반격을 날림
+    expect(ledger.get('p1')).toBe(5) // 반격 데미지 기록
+    expect(playerDeaths).toHaveLength(1) // end-of-round target death 1회
+    expect(creatureDeaths).toHaveLength(0) // 몬스터 생존
+    expect(player.nextAttackAt).toBe(1001) // 반격했으므로 쿨다운 설정
+  })
+
+  it('막타 생존: 죽어가는 target이 last 반격으로 몬스터를 죽이면 target death 미발화 (end-of-round 취소, #91)', () => {
+    const player = makePlayer({ characterId: 'p1', hpCurrent: 3, nextAttackAt: 0 })
+    const creature = makeCreature({ hpcur: 3, enemies: ['p1'] })
+    const room = makeRoom(['p1'])
+    // 근접 [15,5]: p1 3-5=-2 (pending). target p1 last 반격 [20,5,50,50,2]: creature 3-5=-2 사망 →
+    // fireCreatureDeath 1회 + p1 pending death 취소(막타 생존, update.c goto crt_died→continue).
+    const { deps, registry, playerDeaths, creatureDeaths } = makeDeps([15, 5, 20, 5, 50, 50, 2], { now: 1000 })
+    registry.register(player)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(player.hpCurrent).toBeLessThan(1) // target HP는 dead 상태(막타로 살아남지만 HP<1)
+    expect(creature.hpcur).toBeLessThan(1) // 몬스터 사망(막타)
+    expect(creatureDeaths).toHaveLength(1) // 몬스터 death 1회
+    expect(playerDeaths).toHaveLength(0) // ★ target death 미발화 — 막타 생존
+  })
+
+  it('stale-dead target(HP<1로 진입)은 end-of-round death를 재발화하지 않는다 (exactly-once, #91)', () => {
+    // D2 사망 제거 유예로 이전 틱에 죽은 target이 방·레지스트리에 남아 재진입할 수 있다. 근접은
+    // DEAD_DEFENDER_NOOP로 died=false라 meleeOutcome.died=false → end-of-round 재발화 없음. `meleeOutcome.died`
+    // 대신 `target.hpCurrent<1`로 판정하면 여기서 cross-tick 중복 발화가 재유입되므로 이 케이스가 그 회귀 lock이다.
+    const player = makePlayer({ characterId: 'p1', hpCurrent: -3, nextAttackAt: 0 }) // 이미 사망 상태로 진입
+    const creature = makeCreature({ hpcur: 100, enemies: ['p1'] })
+    const room = makeRoom(['p1'])
+    // 근접: DEAD_DEFENDER_NOOP → 굴림 미소비. 죽어가는 target도 last 반격 [20,5,50,50,2] → monster 95.
+    const { deps, registry, playerDeaths, creatureDeaths } = makeDeps([20, 5, 50, 50, 2], { now: 1000 })
+    registry.register(player)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(creature.hpcur).toBe(95) // stale-dead target도 반격은 날림(attacker-HP 가드 없음)
+    expect(playerDeaths).toHaveLength(0) // ★ meleeOutcome.died=false → target death 재발화 없음
+    expect(creatureDeaths).toHaveLength(0) // 몬스터 생존
+  })
+
+  it('stale-dead 몬스터(hpcur<1로 진입)는 counter 준비돼도 fireCreatureDeath 재발화 안 함 (exactly-once, #91)', () => {
+    // 사망 제거가 #99로 유예돼(deathDistribution) creatureTick이 HP 가드 없이 due 크리처를 재디스패치할 수
+    // 있다. 가드 없으면 counter가 DEAD_DEFENDER_NOOP(미발화)를 반환해도 이후 `creature.hpcur<1` 관찰이
+    // 여전히 true라 fireCreatureDeath가 재발화된다 — stale-dead 진입 가드가 이 exactly-once 위반의 lock이다.
+    const player = makePlayer({ characterId: 'p1', hpCurrent: 50, nextAttackAt: 0 })
+    const creature = makeCreature({ hpcur: -2, enemies: ['p1'] }) // 이전 틱 사망분이 미제거로 재진입
+    const room = makeRoom(['p1'])
+    // seq [15,5]는 가드 없을 때 근접이 소비하는 굴림. 가드가 있으면 조기 return으로 미소비(under-consume 무해).
+    const { deps, registry, creatureDeaths, playerDeaths, ledger } = makeDeps([15, 5], { now: 1000 })
+    registry.register(player)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(creatureDeaths).toHaveLength(0) // ★ stale-dead 몬스터 death 재발화 없음
+    expect(playerDeaths).toHaveLength(0)
+    expect(creature.hpcur).toBe(-2) // 불변 — 근접·counter 미실행
+    expect(player.hpCurrent).toBe(50) // 근접도 차단 — 무피해
+    expect(ledger.size).toBe(0)
+  })
+
+  it('target-last 반격 순서: OTHER 적이 먼저·target이 마지막 (ledger로 순서 pin, #91)', () => {
+    const p1 = makePlayer({ characterId: 'p1', hpCurrent: 50, nextAttackAt: 0 }) // target(presentEnemies[0])
+    const p2 = makePlayer({ characterId: 'p2', hpCurrent: 50, nextAttackAt: 0 }) // OTHER(presentEnemies[1])
+    const creature = makeCreature({ hpcur: 100, armor: 0, enemies: ['p1', 'p2'] })
+    const room = makeRoom(['p1', 'p2'])
+    // 근접 target p1: [15,5] → p1 45. counter 역순: p2(OTHER) 먼저 [20,6,50,50,2]=dmg6, p1(TARGET)
+    // 마지막 [20,3,50,50,2]=dmg3. 순서가 뒤집히면 ledger p2/p1이 3/6이 되어 실패.
+    const { deps, registry, ledger, creatureDeaths, playerDeaths } = makeDeps(
+      [15, 5, 20, 6, 50, 50, 2, 20, 3, 50, 50, 2],
+      { now: 1000 },
+    )
+    registry.register(p1)
+    registry.register(p2)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(p1.hpCurrent).toBe(45) // 근접 피격 대상 = target
+    expect(creature.hpcur).toBe(91) // 100 - 6(p2 먼저) - 3(p1 마지막)
+    expect(ledger.get('p2')).toBe(6) // OTHER가 첫 counter 굴림 소비 → dmg 6
+    expect(ledger.get('p1')).toBe(3) // TARGET이 마지막 counter 굴림 소비 → dmg 3
+    expect(creatureDeaths).toHaveLength(0)
+    expect(playerDeaths).toHaveLength(0)
   })
 
   it("'첫 적' = enemies 중 첫 present 플레이어 (미해소 id는 건너뜀)", () => {
@@ -378,13 +462,13 @@ describe('createCombatTick — 케이던스 비소유(criterion 5)', () => {
 })
 
 describe('createCombatTick — death seam 1회 + break', () => {
-  it('첫 반격이 몬스터를 죽이면 fireCreatureDeath 1회 + 둘째 반격 미발생', () => {
-    const p1 = makePlayer({ characterId: 'p1', hpCurrent: 50, nextAttackAt: 0 })
-    const p2 = makePlayer({ characterId: 'p2', hpCurrent: 50, nextAttackAt: 0 })
+  it('counter가 몬스터를 죽이면 combatTick이 fireCreatureDeath 1회 + 남은 counter 미발생', () => {
+    const p1 = makePlayer({ characterId: 'p1', hpCurrent: 50, nextAttackAt: 0 }) // target
+    const p2 = makePlayer({ characterId: 'p2', hpCurrent: 50, nextAttackAt: 0 }) // OTHER(먼저 반격)
     const creature = makeCreature({ hpcur: 3, enemies: ['p1', 'p2'] })
     const room = makeRoom(['p1', 'p2'])
-    // 근접 target=p1: [15,5]. p1 반격: hit=20,mdice=5(>=3 사망),crit=50,fumble=50,dura=2.
-    // p2 반격 굴림은 시퀀스에 없음 → break 미준수 시 seqRng throw.
+    // 근접 target=p1: [15,5]. counter 역순 → OTHER p2 먼저: hit=20,mdice=5(>=3 사망),crit=50,fumble=50,dura=2.
+    // 몬스터 사망 → death 1회 발화 + break. TARGET p1 counter 굴림은 시퀀스에 없음 → break 미준수 시 seqRng throw.
     const { deps, registry, creatureDeaths } = makeDeps([15, 5, 20, 5, 50, 50, 2], { now: 1000 })
     registry.register(p1)
     registry.register(p2)
@@ -392,8 +476,10 @@ describe('createCombatTick — death seam 1회 + break', () => {
     createCombatTick(deps)(creature, room)
 
     expect(creature.hpcur).toBeLessThan(1) // 사망
-    expect(creatureDeaths).toHaveLength(1) // resolveAttack이 1회 발화, 핸들러는 추가 발화 안 함
+    expect(creatureDeaths).toHaveLength(1) // combatTick이 정확히 1회 발화(resolveAttack fire-free)
     expect(p1.hpCurrent).toBe(45) // 근접 피격 대상
-    expect(p2.hpCurrent).toBe(50) // 반격 전 break → 무피해
+    expect(p2.hpCurrent).toBe(50) // OTHER는 공격자라 무피해
+    expect(p2.nextAttackAt).toBe(1001) // OTHER가 killing counter를 날림
+    expect(p1.nextAttackAt).toBe(0) // TARGET은 last라 break로 반격 못 함
   })
 })
