@@ -405,7 +405,9 @@ export function registerWebsocket(
         // accountId는 여기서 한 번만 읽어 상수로 고정한다 — 아래 close 리스너가 이 캡처값을 쓴다(재조회 금지).
         const accountId = req.account?.accountId
         if (accountId !== undefined) {
-          ctx.rateLimiter = rateLimiterFactory.createConnection(accountId)
+          // check와 동일한 단조 clock(performance.now())을 넘겨, 생존 계정 버킷 재사용 시 리필 기준을
+          // 일치시킨다 — 즉시 재연결은 고갈 유지, refill-horizon 경과 후면 회복(churn 우회 차단, issue #77).
+          ctx.rateLimiter = rateLimiterFactory.createConnection(accountId, performance.now())
 
           // 계정 버킷 반납을 once-guard 클로저로 ws 'close'에 배선한다(releaseQuota 관례 미러). ws 'close'는 이
           // 코드베이스에서 2회 이상 발화할 수 있어(그래서 releaseQuota도 releaseOnce다), 가드가 없으면

@@ -218,8 +218,8 @@ describe('WS 인바운드 유량 제한 배선', () => {
     await app.close()
   })
 
-  // ── (6) 마지막 연결 close 시 계정 버킷 반납 ─────────────────────────────────────
-  it('마지막 연결 close 시 releaseAccount가 발화해 activeAccountCount가 감소한다', async () => {
+  // ── (6) 마지막 연결 close 시 계정 버킷 반납 (keep-until-refilled) ─────────────────
+  it('마지막 연결 close 시 releaseAccount가 발화해도 계정 엔트리는 zero-refcount로 생존한다', async () => {
     setLimits({ capacity: '100', refill: '100', accountCapacity: '1000', accountRefill: '1000' })
     const app = buildSeededApp()
     await app.ready()
@@ -230,9 +230,10 @@ describe('WS 인바운드 유량 제한 배선', () => {
     await waitFor(() => app.wsMessageRateLimiter.activeAccountCount() === 1)
 
     ws.terminate()
-    // close 리스너가 releaseAccount를 발화해 refCount 0 → 엔트리 삭제 → activeAccountCount 0.
-    await waitFor(() => app.wsMessageRateLimiter.activeAccountCount() === 0)
-    expect(app.wsMessageRateLimiter.activeAccountCount()).toBe(0)
+    await waitFor(() => app.wsConnections.size === 0)
+    // close 리스너가 releaseAccount를 발화해 refCount 0에 도달하지만, keep-until-refilled면 엔트리를
+    // 삭제하지 않고 생존시킨다(즉시 재연결이 고갈 버킷을 재사용하도록, issue #77). activeAccountCount는 1 유지.
+    expect(app.wsMessageRateLimiter.activeAccountCount()).toBe(1)
 
     await app.close()
   })
@@ -250,17 +251,19 @@ describe('WS 인바운드 유량 제한 배선', () => {
     await waitFor(() => app.wsConnections.size === 2)
     expect(app.wsMessageRateLimiter.activeAccountCount()).toBe(1)
 
-    // 서버측 소켓(wsConnections 키)을 첫 emit 전에 캡처한다 — cleanup이 첫 close에서 엔트리를 삭제한다.
+    // 서버측 소켓(wsConnections 키)을 첫 emit 전에 캡처한다.
     const serverSockets = [...app.wsConnections.keys()]
     const sock1 = serverSockets[0]
 
     // ⚠️ ws 'close'는 이 코드베이스에서 2회 이상 발화할 수 있다(releaseQuota가 releaseOnce인 이유와 동일).
-    // 첫 연결의 close를 2회 합성 발화한다 — once-guard가 없으면 releaseAccount가 이중 감소해 살아 있는
-    // 형제 연결의 계정 엔트리를 지운다(activeAccountCount 0, cap 우회). once-guard가 있으면 refCount 2→1로 유지.
+    // once-guard가 없으면 releaseAccount가 이중 감소해 refCount 2→0으로 떨어진다. Story 2의 keep-until-
+    // refilled에서는 refCount 0이어도 엔트리를 삭제하지 않으므로 activeAccountCount로는 이 이중 감소가
+    // 관측되지 않는다(항상 1) — once-guard는 refCount 정확성만 지킨다. once-guard 관측성은 Story 3의 lazy
+    // sweep이 삭제를 재도입하면 부활한다(그때 refCount 0 오판이 살아 있는 형제 엔트리를 sweep 대상으로 만든다).
     sock1?.emit('close')
     sock1?.emit('close')
 
-    // 형제(ws2) 연결이 살아 있으므로 계정 엔트리는 삭제되지 않고 유지된다(정확히 1회 감소).
+    // keep-until-refilled라 어느 경우든 엔트리는 생존한다 — activeAccountCount 1 유지.
     expect(app.wsMessageRateLimiter.activeAccountCount()).toBe(1)
 
     ws1.terminate()

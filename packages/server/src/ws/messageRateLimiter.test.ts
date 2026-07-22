@@ -17,7 +17,7 @@ function makeLimiter(capacity: number, refillPerSec: number, maxViolations: numb
     accountRefillPerSec: 0,
     accountMaxEntries: 4096,
   }
-  return createMessageRateLimiterFactory(() => limits).createConnection('solo')
+  return createMessageRateLimiterFactory(() => limits).createConnection('solo', 0)
 }
 
 /** 고정 상한으로 factory를 만든다. 결정적 상수를 combined limits로 넘긴다. */
@@ -62,7 +62,7 @@ describe('연결 차원 (factory.createConnection 핸들)', () => {
       accountCapacity: Number.MAX_SAFE_INTEGER,
       accountRefillPerSec: 0,
       accountMaxEntries: 4096,
-    })).createConnection('solo')
+    })).createConnection('solo', 0)
 
     // 생성 후 첫 check 전에 상한을 바꾸면 첫 check가 이 값을 시드로 반영해야 한다.
     capacity = 2
@@ -160,8 +160,8 @@ describe('createMessageRateLimiterFactory', () => {
   it('[OQ1 공유 + 트랩#1] 같은 accountId 두 연결이 계정 버킷을 공유한다 — A로 고갈 후 B는 drop, B 연결 토큰 미소비', () => {
     // capacity=10(연결 여유), accountCapacity=3(계정이 먼저 고갈), refill=0.
     const factory = makeFactory({ capacity: 10, accountCapacity: 3, refillPerSec: 0, accountRefillPerSec: 0 })
-    const a = factory.createConnection('acct1')
-    const b = factory.createConnection('acct1')
+    const a = factory.createConnection('acct1', 0)
+    const b = factory.createConnection('acct1', 0)
 
     // A가 공유 계정 버킷 3개를 모두 소비(연결 버킷은 10 중 3만 소비).
     expect(a.check(0)).toBe('accept')
@@ -183,7 +183,7 @@ describe('createMessageRateLimiterFactory', () => {
   it('[트랩#1 역방향] 연결 버킷 空 + 계정 버킷 有 → drop, 계정 토큰 미감소', () => {
     // capacity=2(연결이 먼저 고갈), accountCapacity=10, refill=0.
     const factory = makeFactory({ capacity: 2, accountCapacity: 10, refillPerSec: 0, accountRefillPerSec: 0 })
-    const a = factory.createConnection('acct1')
+    const a = factory.createConnection('acct1', 0)
 
     expect(a.check(0)).toBe('accept') // conn 2→1, acct 10→9
     expect(a.check(0)).toBe('accept') // conn 1→0, acct 9→8
@@ -196,38 +196,42 @@ describe('createMessageRateLimiterFactory', () => {
     expect(a.peekAccountTokens()).toBeCloseTo(8) // 미감소
   })
 
-  it('[OQ1 refcount] 같은 accountId 2회 생성 → activeAccountCount 1, 2회 release → 0', () => {
+  it('[OQ1 refcount] 같은 accountId 2회 생성 → activeAccountCount 1, 마지막 release 후에도 엔트리 생존', () => {
     const factory = makeFactory()
-    factory.createConnection('acct1')
-    factory.createConnection('acct1')
+    factory.createConnection('acct1', 0)
+    factory.createConnection('acct1', 0)
     expect(factory.activeAccountCount()).toBe(1)
 
     factory.releaseAccount('acct1')
     expect(factory.activeAccountCount()).toBe(1) // refCount 2→1, 아직 살아 있음
     factory.releaseAccount('acct1')
-    expect(factory.activeAccountCount()).toBe(0) // refCount 1→0, 삭제
+    // keep-until-refilled — refCount 1→0이어도 엔트리는 zero-refcount로 생존한다(즉시 재연결 시
+    // fresh full 버스트 대신 고갈 버킷을 재사용하기 위해). 삭제는 Story 3의 lazy sweep이 담당한다.
+    expect(factory.activeAccountCount()).toBe(1)
   })
 
   it('[OQ1 refcount] 부재·중복 releaseAccount는 no-op이다 (음수·누수 없음)', () => {
     const factory = makeFactory()
-    factory.releaseAccount('ghost') // 부재 계정 → no-op
+    factory.releaseAccount('ghost') // 부재 계정 → 엔트리 생성 없이 no-op
     expect(factory.activeAccountCount()).toBe(0)
 
-    factory.createConnection('acct1')
-    factory.releaseAccount('acct1') // 0 도달, 엔트리 삭제
-    factory.releaseAccount('acct1') // 이미 삭제된 계정 중복 release → no-op
-    expect(factory.activeAccountCount()).toBe(0)
+    factory.createConnection('acct1', 0)
+    factory.releaseAccount('acct1') // refCount 1→0, 엔트리 생존(keep)
+    factory.releaseAccount('acct1') // zero-refcount 엔트리 중복 release → refCount<=0 가드로 no-op(음수 방지)
+    expect(factory.activeAccountCount()).toBe(1) // 생존한 엔트리 하나
 
-    // 중복 release가 음수를 남기지 않았다면 재생성은 refCount=1로 정상 시작한다.
-    factory.createConnection('acct1')
+    // 중복 release가 refCount를 음수로 만들지 않았다면 재연결은 refCount 0→1로 정상 복귀한다.
+    // (음수였다면 release 한 번으로는 0에 못 미쳐 sibling-refcount 회계가 깨진다 — Story 3 sweep의 전제.)
+    factory.createConnection('acct1', 0) // 생존 엔트리 재사용, refCount 0→1
     expect(factory.activeAccountCount()).toBe(1)
-    factory.releaseAccount('acct1')
-    expect(factory.activeAccountCount()).toBe(0)
+    factory.releaseAccount('acct1') // 1→0
+    factory.releaseAccount('acct1') // 이미 0 → no-op
+    expect(factory.activeAccountCount()).toBe(1)
   })
 
   it('accept 시 연결·계정 버킷에서 각각 정확히 1개씩 소비한다', () => {
     const factory = makeFactory({ capacity: 5, accountCapacity: 5, refillPerSec: 0, accountRefillPerSec: 0 })
-    const a = factory.createConnection('acct1')
+    const a = factory.createConnection('acct1', 0)
 
     expect(a.check(0)).toBe('accept')
     expect(a.peekConnectionTokens()).toBeCloseTo(4)
@@ -236,8 +240,8 @@ describe('createMessageRateLimiterFactory', () => {
 
   it('서로 다른 accountId는 독립 계정 버킷을 가진다', () => {
     const factory = makeFactory({ capacity: 10, accountCapacity: 1, refillPerSec: 0, accountRefillPerSec: 0 })
-    const a = factory.createConnection('acct1')
-    const b = factory.createConnection('acct2')
+    const a = factory.createConnection('acct1', 0)
+    const b = factory.createConnection('acct2', 0)
 
     expect(a.check(0)).toBe('accept') // acct1 계정 버킷 고갈
     expect(a.check(0)).toBe('drop-warn')
@@ -253,7 +257,7 @@ describe('createMessageRateLimiterFactory', () => {
       refillPerSec: 0,
       accountRefillPerSec: 1,
     })
-    const a = factory.createConnection('acct1')
+    const a = factory.createConnection('acct1', 0)
 
     expect(a.check(0)).toBe('accept') // acct 1→0
     expect(a.check(0)).toBe('drop-warn') // 계정 고갈
@@ -264,14 +268,14 @@ describe('createMessageRateLimiterFactory', () => {
     const factory = createMessageRateLimiterFactory(() => {
       throw new Error('생성 시 조회되면 안 된다')
     })
-    expect(() => factory.createConnection('acct1')).not.toThrow()
+    expect(() => factory.createConnection('acct1', 0)).not.toThrow()
   })
 
   it('shouldTerminate는 연결 단위 위반 임계다 — 공유 계정 고갈이라도 핸들별로 독립 카운트', () => {
     // maxViolations=2. 공유 계정 버킷 고갈로 둘 다 drop되지만 위반 카운터는 핸들별로 분리된다.
     const factory = makeFactory({ capacity: 10, accountCapacity: 1, maxViolations: 2, refillPerSec: 0, accountRefillPerSec: 0 })
-    const a = factory.createConnection('acct1')
-    const b = factory.createConnection('acct1')
+    const a = factory.createConnection('acct1', 0)
+    const b = factory.createConnection('acct1', 0)
 
     expect(a.check(0)).toBe('accept') // 공유 계정 1→0
     a.check(0) // a 위반 1
@@ -281,5 +285,67 @@ describe('createMessageRateLimiterFactory', () => {
 
     // b는 아직 check한 적 없어 위반 0 — 계정 공유와 무관하게 독립이다.
     expect(b.shouldTerminate()).toBe(false)
+  })
+})
+
+describe('keep-until-refilled 재사용 (churn 우회 차단, issue #77)', () => {
+  it('[reuse] drain→release→즉시 reconnect: 살아남은 고갈 버킷을 재사용한다(fresh full 버스트 없음)', () => {
+    // accountCapacity=3, accountRefillPerSec=1. 계정 버킷을 고갈시킨 뒤 반납하고 같은 now에 재연결한다.
+    // keep-until-refilled면 엔트리가 생존하고, 재연결이 리필-후-재사용하지만 경과 0이라 여전히 고갈이어야 한다.
+    const factory = makeFactory({ capacity: 100, accountCapacity: 3, refillPerSec: 0, accountRefillPerSec: 1 })
+    const a = factory.createConnection('acct1', 0)
+    expect(a.check(0)).toBe('accept') // acct 3→2
+    expect(a.check(0)).toBe('accept') // 2→1
+    expect(a.check(0)).toBe('accept') // 1→0
+    expect(a.peekAccountTokens()).toBeCloseTo(0)
+
+    factory.releaseAccount('acct1') // refCount 1→0, 엔트리 생존
+    expect(factory.activeAccountCount()).toBe(1)
+
+    // 즉시(now=0) 재연결 — 고갈 버킷을 리필-후-재사용. 경과 0이라 회복 없음 → 여전히 고갈.
+    const b = factory.createConnection('acct1', 0)
+    expect(b.peekAccountTokens()).toBeCloseTo(0) // fresh full(=3)이 아니라 고갈 유지
+    expect(b.check(0)).toBe('drop-warn') // 계정 버킷 비어 즉시 drop — 버스트 우회 차단
+  })
+
+  it('[reuse] drain→release→refill-horizon 경과 후 reconnect: 계정 버킷이 full로 회복된다', () => {
+    // accountCapacity=3, accountRefillPerSec=1. 고갈·반납 후 3초 경과 재연결 → 3토큰 회복 = full.
+    const factory = makeFactory({ capacity: 100, accountCapacity: 3, refillPerSec: 0, accountRefillPerSec: 1 })
+    const a = factory.createConnection('acct1', 0)
+    a.check(0)
+    a.check(0)
+    a.check(0)
+    expect(a.peekAccountTokens()).toBeCloseTo(0)
+
+    factory.releaseAccount('acct1') // 엔트리 생존
+    expect(factory.activeAccountCount()).toBe(1)
+
+    // 3초 경과 후 재연결 — 리필-후-재사용이 accountRefillPerSec=1로 3토큰 회복 → capacity 3에서 clamp.
+    const b = factory.createConnection('acct1', 3000)
+    expect(b.peekAccountTokens()).toBeCloseTo(3) // full 회복 (check 없이 재연결 시점에 관측)
+  })
+
+  it('[reuse] 형제 연결(refCount>0) 생존 중 reconnect+release는 계정 엔트리를 조기 삭제·리셋하지 않는다', () => {
+    // 형제 refCount 안전성: a가 살아 있는 동안 b 반납·c 재연결·c 반납이 반복돼도 공유 버킷은 그대로다.
+    const factory = makeFactory({ capacity: 100, accountCapacity: 3, refillPerSec: 0, accountRefillPerSec: 0 })
+    const a = factory.createConnection('acct1', 0) // refCount 1
+    const b = factory.createConnection('acct1', 0) // refCount 2 (공유 버킷)
+
+    // 공유 계정 버킷 3개를 모두 소비.
+    expect(a.check(0)).toBe('accept')
+    expect(a.check(0)).toBe('accept')
+    expect(a.check(0)).toBe('accept')
+    expect(a.peekAccountTokens()).toBeCloseTo(0)
+
+    factory.releaseAccount('acct1') // refCount 2→1, a 살아 있어 생존
+    expect(factory.activeAccountCount()).toBe(1)
+
+    // a 생존 중 재연결 — refCount 1→2. accountRefillPerSec=0이라 재사용 버킷은 고갈 유지.
+    const c = factory.createConnection('acct1', 5000)
+    expect(c.peekAccountTokens()).toBeCloseTo(0) // 공유 고갈 버킷 재사용(형제와 동일 상태)
+    expect(a.peekAccountTokens()).toBeCloseTo(0) // 형제 a도 같은 버킷 — 리셋되지 않음
+
+    factory.releaseAccount('acct1') // refCount 2→1, 여전히 a 살아 있어 생존
+    expect(factory.activeAccountCount()).toBe(1)
   })
 })
