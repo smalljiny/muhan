@@ -24,7 +24,7 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
     hpCurrent: 55,
     mpCurrent: 40,
     experience: 0,
-    schemaVersion: 3,
+    schemaVersion: 4,
     // 계정 링크 FK(Story 1로 필수화)와 soft-delete 상태 기본값.
     accountId: 'acc-1',
     status: 'active',
@@ -263,9 +263,9 @@ describe('CharacterRepository (integration)', () => {
     expect(found?.level).toBe(1)
     expect(found?.hpCurrent).toBe(seedVitals(3, 1).hpCurrent)
     expect(found?.mpCurrent).toBe(seedVitals(3, 1).mpCurrent)
-    // V3 스텝: level=1이라 experience 0으로 시딩, 최신 버전(3)으로 스탬프.
+    // V3 스텝: level=1이라 experience 0으로 시딩. V4 스텝: 최신 버전(4)으로 스탬프.
     expect(found?.experience).toBe(0)
-    expect(found?.schemaVersion).toBe(3)
+    expect(found?.schemaVersion).toBe(4)
   })
 
   it('findByAccount도 v1 문서를 backfill로 승격해 반환한다 (parse 이전 승격)', async () => {
@@ -287,7 +287,7 @@ describe('CharacterRepository (integration)', () => {
     expect(list[0]?.hpCurrent).toBe(seedVitals(4, 1).hpCurrent)
     expect(list[0]?.level).toBe(1)
     expect(list[0]?.experience).toBe(0)
-    expect(list[0]?.schemaVersion).toBe(3)
+    expect(list[0]?.schemaVersion).toBe(4)
   })
 
   it('★판별: level=50 v2 문서를 load하면 level·vitals를 보존하고 experience를 정합 시딩한다', async () => {
@@ -314,6 +314,33 @@ describe('CharacterRepository (integration)', () => {
     expect(found?.hpCurrent).toBe(777) // vitals 재시딩 금지
     expect(found?.mpCurrent).toBe(333)
     expect(found?.experience).toBe(neededExp(49)) // level L 도달 최소 누적 = neededExp(L-1)
-    expect(found?.schemaVersion).toBe(3)
+    expect(found?.schemaVersion).toBe(4)
+  })
+
+  it('v3 문서를 load하면 V4가 schemaVersion=4로 스탬프하되 기존 필드는 보존한다 (statusEffects 미시딩)', async () => {
+    // statusEffects는 선택 필드라 V4는 버전만 3→4로 올린다. vitals·level·experience는 불변.
+    await db.collection<RawCharacterDoc>('characters').insertOne({
+      _id: 'v3-load',
+      name: '삼세대',
+      class: 3,
+      race: 2,
+      stats: [10, 10, 10, 10, 10],
+      gold: 100,
+      currentRoom: 1,
+      hpCurrent: 60,
+      mpCurrent: 45,
+      level: 12,
+      experience: 34567,
+      schemaVersion: 3,
+      accountId: 'acc-v3',
+      status: 'active',
+    })
+
+    const found = await repo.findById('v3-load')
+    expect(found?.schemaVersion).toBe(4)
+    expect(found?.level).toBe(12)
+    expect(found?.hpCurrent).toBe(60)
+    expect(found?.experience).toBe(34567)
+    expect(found?.statusEffects).toBeUndefined()
   })
 })
