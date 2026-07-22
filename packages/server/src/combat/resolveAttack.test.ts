@@ -5,7 +5,20 @@ import { toCombatant } from './combatant.js'
 import type { PlayerCombatState } from './playerState.js'
 import type { DamageLedger } from './enmity.js'
 import { seqRng } from './dice.testutil.js'
-import { F_SET, PUPDMG, OALCRT, OCURSE, MBEFUD } from '../world/hexFlags.js'
+import {
+  F_SET,
+  PUPDMG,
+  OALCRT,
+  OCURSE,
+  MBEFUD,
+  MBRETH,
+  MBRWP1,
+  MENEDR,
+  MPOISS,
+  MDISEA,
+  MBLNDR,
+  MDISIT,
+} from '../world/hexFlags.js'
 
 /**
  * resolveAttack — 명중→피해→크리/불발→적용 단일 파이프의 오라클 충실 이식(command5.c / update.c).
@@ -464,5 +477,122 @@ describe('resolveAttack — 이미 사망한 defender 진입 가드(stale/재진
     expect(out.hit).toBe(true)
     expect(out.died).toBe(true)
     expect(creatureDeaths).toHaveLength(1)
+  })
+})
+
+/**
+ * Story 9 — 몬스터 명중 경로에 특수공격(update.c:387~480) 배선.
+ *
+ * 배선 계약 pin:
+ *   - 몬스터 한정: 특수공격은 attacker.kind==='creature'일 때만 굴림. 플레이어 attacker는 미호출.
+ *   - breath-replace(`??` lazy): 브레스 발동 시 monsterDamage를 굴리지 않고 breath 데미지로 대체.
+ *     seqRng를 breath dice까지만 채워 monsterDamage 굴림이 없음을 소진으로 증명한다.
+ *   - MBEFUD fork: 브레스 발동 + MBEFUD면 breath 데미지에도 trunc(/3)을 적용(melee path는 monsterDamage
+ *     내부가 이미 적용). marker의 breathDamage는 raw(보정 前), 적용 피해는 보정 後.
+ *   - rng 순서: hit → MBRETH → (breath|MENEDR drain) → MPOISS → MDISEA → MBLNDR → MDISIT → monsterDamage(lazy).
+ *     melee-position은 오라클(중간) 대비 last로 밀리는 inert divergence(status 게이트가 melee 값과 독립).
+ */
+describe('resolveAttack — 몬스터 특수공격 배선 (Story 9)', () => {
+  it('breath 발동: normal melee를 대체하고 specialAttack 마커를 표면화 (monsterDamage 미굴림)', () => {
+    // level 5 → q=trunc(8/4)=2. spit=dice(2,3,0). MBEFUD 없음.
+    const monster = makeCreature({ instanceId: 'mon-1', level: 5, flags: flagsWith(MBRETH, MBRWP1), thaco: 10 })
+    const player = makePlayer({ hpCurrent: 50, armor: 0 })
+    // seq 정확히 [hit=15, MBRETH gate=4, breath 3, breath 3]: monsterDamage mdice 시도 시 seqRng throw.
+    const { ctx, ledger } = makeCtx([15, 4, 3, 3])
+
+    const out = resolveAttack(toCombatant(monster), toCombatant(player), ctx)
+
+    expect(out.hit).toBe(true)
+    expect(out.damage).toBe(6) // breath spit 3+3
+    expect(player.hpCurrent).toBe(44)
+    expect(out.specialAttack?.breathType).toBe('spit')
+    expect(out.specialAttack?.breathDamage).toBe(6)
+    expect(out.messageInputs.attacks[0]?.specialAttack?.breathDamage).toBe(6)
+    expect(ledger.size).toBe(0) // 플레이어 defender는 미누적
+  })
+
+  it('breath 미발동: monsterDamage로 fall through (?? lazy 굴림)', () => {
+    const monster = makeCreature({ instanceId: 'mon-1', flags: flagsWith(MBRETH), thaco: 10, ndice: 1, sdice: 6, pdice: 0 })
+    const player = makePlayer({ hpCurrent: 50, armor: 0 })
+    // seq [hit=15, MBRETH gate=5(미발동), monsterDamage mdice=5] → n=5-trunc(70/5)=-9→1.
+    const { ctx } = makeCtx([15, 5, 5])
+
+    const out = resolveAttack(toCombatant(monster), toCombatant(player), ctx)
+
+    expect(out.hit).toBe(true)
+    expect(out.damage).toBe(1)
+    expect(player.hpCurrent).toBe(49)
+    expect(out.specialAttack?.breathDamage).toBeNull()
+  })
+
+  it('post-status 마커(MPOISS)를 monsterDamage와 함께 표면화한다', () => {
+    const monster = makeCreature({ instanceId: 'mon-1', flags: flagsWith(MPOISS), thaco: 10, ndice: 1, sdice: 6, pdice: 0 })
+    const player = makePlayer({ hpCurrent: 50, armor: 70 })
+    // seq [hit=15, MPOISS gate=15(<=15 발동), monsterDamage mdice=5] → n=5-trunc(0/5)=5.
+    const { ctx } = makeCtx([15, 15, 5])
+
+    const out = resolveAttack(toCombatant(monster), toCombatant(player), ctx)
+
+    expect(out.damage).toBe(5)
+    expect(player.hpCurrent).toBe(45)
+    expect(out.specialAttack?.poison).toBe(true)
+    expect(out.specialAttack?.breathDamage).toBeNull()
+  })
+
+  it('rng 소비 순서 보존: hit→MBRETH→MENEDR→MPOISS→MDISEA→MBLNDR→MDISIT→monsterDamage(lazy)', () => {
+    const monster = makeCreature({
+      instanceId: 'mon-1',
+      level: 5,
+      flags: flagsWith(MBRETH, MENEDR, MPOISS, MDISEA, MBLNDR, MDISIT),
+      thaco: 10,
+      ndice: 1,
+      sdice: 6,
+      pdice: 0,
+    })
+    const player = makePlayer({ hpCurrent: 50, armor: 70 })
+    // q=2. seq: hit=15, MBRETH=5(fail), MENEDR=9(<10 발동)+drain dice(2,5,10)=5,5→20,
+    //         MPOISS=15, MDISEA=10, MBLNDR=10, MDISIT=15, monsterDamage mdice=5.
+    // 순서가 어긋나면 seqRng 값 불일치로 실패 → 오라클 특수공격 순서 pin.
+    const { ctx } = makeCtx([15, 5, 9, 5, 5, 15, 10, 10, 15, 5])
+
+    const out = resolveAttack(toCombatant(monster), toCombatant(player), ctx)
+
+    expect(out.damage).toBe(5) // monsterDamage(melee last)
+    expect(out.specialAttack?.breathDamage).toBeNull()
+    expect(out.specialAttack?.expDrain).toBe(20) // MAX_SAFE_INTEGER 상한이라 raw drain 그대로
+    expect(out.specialAttack?.poison).toBe(true)
+    expect(out.specialAttack?.disease).toBe(true)
+    expect(out.specialAttack?.blind).toBe(true)
+    expect(out.specialAttack?.dissolveItemRolled).toBe(true)
+  })
+
+  it('MBEFUD + breath: breath 데미지에도 trunc(/3) 적용 (marker는 raw 보존)', () => {
+    // level 5 → q=2. fire=dice(2,4,0). MBEFUD → 적용 피해 trunc(8/3)=2, marker breathDamage=8.
+    const monster = makeCreature({ instanceId: 'mon-1', level: 5, flags: flagsWith(MBRETH, MBEFUD), thaco: 10 })
+    const player = makePlayer({ hpCurrent: 50, armor: 0 })
+    // seq [hit=15, MBRETH gate=4, breath 4, breath 4]: monsterDamage 미굴림.
+    const { ctx } = makeCtx([15, 4, 4, 4])
+
+    const out = resolveAttack(toCombatant(monster), toCombatant(player), ctx)
+
+    expect(out.damage).toBe(2) // trunc(8/3)
+    expect(player.hpCurrent).toBe(48)
+    expect(out.specialAttack?.breathType).toBe('fire')
+    expect(out.specialAttack?.breathDamage).toBe(8) // raw breath(보정 前)
+  })
+
+  it('플레이어 attacker는 특수공격을 굴리지 않는다 (specialAttack=null)', () => {
+    // 플레이어에 특수공격 M-flag를 실어도 몬스터 한정이라 미호출. seq는 플레이어 정상타 5굴림뿐.
+    const player = makePlayer({ flags: flagsWith(MBRETH, MBRWP1) })
+    const creature = makeCreature({ hpcur: 30 })
+    // seq 정확히 [hit=20, mdice=5, crit=50, fumble=50, dura=2]: 특수공격 굴림이 끼면 어긋나 실패.
+    const { ctx } = makeCtx([20, 5, 50, 50, 2])
+
+    const out = resolveAttack(toCombatant(player), toCombatant(creature), ctx)
+
+    expect(out.damage).toBe(5)
+    expect(out.specialAttack).toBeNull()
+    expect(out.messageInputs.attacks[0]?.specialAttack).toBeNull()
+    expect(creature.hpcur).toBe(25)
   })
 })
