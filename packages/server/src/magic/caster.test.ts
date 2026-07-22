@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { bonusOf, type CreatureInstance } from 'shared'
 import type { PlayerCombatState } from '../combat/playerState.js'
 import { F_SET } from '../world/hexFlags.js'
-import { toCaster, type Caster } from './caster.js'
+import { toCaster } from './caster.js'
 
 /**
  * Caster 계약 경계 테스트 — 몹·플레이어 공유 추상의 6필드와 write-through를 못박는다.

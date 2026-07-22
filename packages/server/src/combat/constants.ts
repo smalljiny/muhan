@@ -52,3 +52,7 @@ export const THIEF = 8
 export const INVINCIBLE = 9
 /** 운영진(caretaker) — `class < CARETAKER`인 플레이어만 MENONL 대상 무적에 걸린다(command5.c:167, mtype.h:103). */
 export const CARETAKER = 10
+/** 부운영자(sub_dm) — mprofic 숙련 테이블에서 MAGE 계열과 동일 임계(player.c:1215). */
+export const SUB_DM = 11
+/** 운영자(dm) — mprofic 숙련 테이블에서 MAGE 계열과 동일 임계(player.c:1216). */
+export const DM = 12

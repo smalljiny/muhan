@@ -1,0 +1,207 @@
+{
+  "fn": "mprofic",
+  "oracle": {
+    "method": "manual",
+    "source": "player.c:1204-1261 (A6 §2)",
+    "generatedAt": "2026-07-16T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "class": 5,
+        "realm": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "index": 1
+      },
+      "expected": 0,
+      "note": "realm=0 → prof=0(MAGE)"
+    },
+    {
+      "input": {
+        "class": 3,
+        "realm": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "index": 2
+      },
+      "expected": 0,
+      "note": "realm=0 → prof=0(CLERIC)"
+    },
+    {
+      "input": {
+        "class": 4,
+        "realm": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "index": 3
+      },
+      "expected": 0,
+      "note": "realm=0 → prof=0(default/FIGHTER)"
+    },
+    {
+      "input": {
+        "class": 5,
+        "realm": [
+          1024,
+          0,
+          0,
+          0
+        ],
+        "index": 1
+      },
+      "expected": 10,
+      "note": "엄격 < 경계: n==1024 → i=1, prof=10"
+    },
+    {
+      "input": {
+        "class": 5,
+        "realm": [
+          1023,
+          0,
+          0,
+          0
+        ],
+        "index": 1
+      },
+      "expected": 9,
+      "note": "경계 직하: n=1023 → i=0, prof=9대역"
+    },
+    {
+      "input": {
+        "class": 5,
+        "realm": [
+          3072,
+          0,
+          0,
+          0
+        ],
+        "index": 1
+      },
+      "expected": 25,
+      "note": "MAGE 보간: 3072 → 25"
+    },
+    {
+      "input": {
+        "class": 5,
+        "realm": [
+          5000,
+          0,
+          0,
+          0
+        ],
+        "index": 1
+      },
+      "expected": 32,
+      "note": "MAGE trunc 분수항: 5000 → 32"
+    },
+    {
+      "input": {
+        "class": 3,
+        "realm": [
+          4092,
+          0,
+          0,
+          0
+        ],
+        "index": 1
+      },
+      "expected": 20,
+      "note": "CLERIC 테이블: 4092 → 20"
+    },
+    {
+      "input": {
+        "class": 6,
+        "realm": [
+          8192,
+          0,
+          0,
+          0
+        ],
+        "index": 1
+      },
+      "expected": 20,
+      "note": "PALADIN 테이블: 8192 → 20"
+    },
+    {
+      "input": {
+        "class": 7,
+        "realm": [
+          8192,
+          0,
+          0,
+          0
+        ],
+        "index": 1
+      },
+      "expected": 20,
+      "note": "RANGER 테이블: 8192 → 20"
+    },
+    {
+      "input": {
+        "class": 4,
+        "realm": [
+          40000,
+          0,
+          0,
+          0
+        ],
+        "index": 1
+      },
+      "expected": 20,
+      "note": "default 테이블: 40000 → 20"
+    },
+    {
+      "input": {
+        "class": 5,
+        "realm": [
+          0,
+          3072,
+          0,
+          0
+        ],
+        "index": 2
+      },
+      "expected": 25,
+      "note": "index=2 → realm[1] 선택"
+    },
+    {
+      "input": {
+        "class": 5,
+        "realm": [
+          0,
+          0,
+          0,
+          3072
+        ],
+        "index": 4
+      },
+      "expected": 25,
+      "note": "index=4 → realm[3] 선택"
+    },
+    {
+      "input": {
+        "class": 5,
+        "realm": [
+          500000000,
+          0,
+          0,
+          0
+        ],
+        "index": 1
+      },
+      "expected": 110,
+      "note": "OOB clamp: n>=5억 → 110"
+    }
+  ]
+}
