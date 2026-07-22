@@ -53,6 +53,10 @@ export function buildSpawnTemplateIndex(raw: readonly RawCreatureTemplate[]): Sp
       class: c.class,
       intelligence: c.intelligence,
       piety: c.piety,
+      // 사망 분배 읽기 필드(Story 6) — creatures.json 소스에서 그대로 옮긴다. 명시 매핑이므로
+      // 여기서 누락하면 fromTemplate 물질화가 undefined를 실어 Story 7 분배가 값을 못 읽는다.
+      experience: c.experience,
+      alignment: c.alignment,
       flags: c.flags,
       numwander: c.numwander,
     })
