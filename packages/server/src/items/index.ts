@@ -48,3 +48,43 @@ export {
   resolveSlot,
   type WearCommand,
 } from './taxonomy.js'
+
+export {
+  // object 플래그 비트 상수(mtype.h)
+  ONOMAG,
+  OGOODO,
+  OEVILO,
+  OENCHA,
+  OSIZE1,
+  OSIZE2,
+  ORENCH,
+  OWEARS,
+  ONOMAL,
+  ONOFEM,
+  OCLSEL,
+  OMARRI,
+  OEVENT,
+  OWHELD,
+  ONEWEV,
+  // 종족 상수(RACE)
+  DWARF,
+  ELF,
+  HALFELF,
+  HOBBIT,
+  HUMAN,
+  ORC,
+  HALFGIANT,
+  GNOME,
+  // 성별 상수
+  MALE,
+  FEMALE,
+  // 게이트 predicate
+  genderAllowed,
+  alignmentAllowed,
+  classAllowed,
+  sizeAllowed,
+  isCursed,
+  isPersonalBound,
+  isMarriageGated,
+  needsRandEnchant,
+} from './flags.js'
