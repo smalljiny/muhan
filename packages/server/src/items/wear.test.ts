@@ -1,10 +1,44 @@
 import { describe, it, expect } from 'vitest'
 import type { ObjectInstance } from 'shared'
-import { F_SET, OCURSE } from '../world/hexFlags.js'
-import { MAGE, CLERIC, FIGHTER, INVINCIBLE } from '../combat/constants.js'
-import { ARMOR, POTION, BODY, NECK1, FINGER1, WIELD, HELD, HEAD } from './taxonomy.js'
-import { ONOMAG, ONOFEM, ONOMAL, OMARRI, OGOODO, OEVILO, OCLSEL, ONEWEV, OSIZE2, MALE, FEMALE, HUMAN, DWARF } from './flags.js'
-import { wearGate, type WearActor, type WearParams } from './wear.js'
+import { F_SET, OCURSE, OALCRT } from '../world/hexFlags.js'
+import {
+  MAGE,
+  CLERIC,
+  FIGHTER,
+  BARBARIAN,
+  ASSASSIN,
+  THIEF,
+  PALADIN,
+  RANGER,
+  INVINCIBLE,
+} from '../combat/constants.js'
+import { SHARP, THRUST, BLUNT, ARMOR, POTION, BODY, NECK1, FINGER1, WIELD, HELD, HEAD } from './taxonomy.js'
+import {
+  ONOMAG,
+  ONOFEM,
+  ONOMAL,
+  OMARRI,
+  OGOODO,
+  OEVILO,
+  OCLSEL,
+  ONEWEV,
+  ONSHAT,
+  OEVENT,
+  OSIZE2,
+  MALE,
+  FEMALE,
+  HUMAN,
+  DWARF,
+} from './flags.js'
+import {
+  wearGate,
+  readyGate,
+  holdGate,
+  type WearActor,
+  type WearParams,
+  type ReadyParams,
+  type HoldParams,
+} from './wear.js'
 
 // ── 최소 팩토리 — 모든 게이트를 통과하는 baseline. 테스트마다 필드 하나만 뒤집는다. ──
 function baseInstance(): ObjectInstance {
@@ -307,5 +341,414 @@ describe('wearGate — immutability (T5.3)', () => {
     const outcome = wearGate(p)
     expect(outcome.kind).toBe('equipped')
     if (outcome.kind === 'equipped') expect(outcome.object.slot).toBe(HEAD - 1)
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════
+// Story 6 — 무기 장착(ready)·쥠(hold) 게이트
+// ══════════════════════════════════════════════════════════════════════════
+
+const WIELD_SLOT = WIELD - 1 // 19
+const HELD_SLOT = HELD - 1 // 16
+
+// ── readyGate 최소 팩토리 — 모든 게이트를 통과하는 baseline(SHARP 무기, dice 낮음). ──
+function baseReadyParams(): ReadyParams {
+  return {
+    flags: '',
+    type: SHARP,
+    wearflag: WIELD,
+    ndice: 1,
+    sdice: 1,
+    pdice: 0,
+    shotsmax: 10,
+    shotscur: 10,
+    questnum: 0,
+    instance: baseInstance(),
+    occupiedSlots: new Set<number>(),
+    actor: baseActor(),
+    // ⑫가 비대상 테스트를 오염시키지 않도록 소유자 일치를 기본값으로 둔다.
+    isBoundOwner: true,
+  }
+}
+
+describe('readyGate — 오라클 command3.c:691~ 순서', () => {
+  it('baseline은 equipped(slot=WIELD_SLOT=19)를 반환한다', () => {
+    const outcome = readyGate(baseReadyParams())
+    expect(outcome.kind).toBe('equipped')
+    if (outcome.kind === 'equipped') {
+      expect(outcome.object.equipped).toBe(true)
+      expect(outcome.object.slot).toBe(WIELD_SLOT)
+    }
+  })
+
+  // ── ① WIELD 아님 ───────────────────────────────────────────────────────────
+  it('① wearflag!==WIELD(BODY)이면 rejected', () => {
+    expect(readyGate({ ...baseReadyParams(), wearflag: BODY }).kind).toBe('rejected')
+  })
+  it('① wearflag===HELD이면 rejected', () => {
+    expect(readyGate({ ...baseReadyParams(), wearflag: HELD }).kind).toBe('rejected')
+  })
+
+  // ── ② 마법사 무거운무기(dice합>14, ONOMAG 아님) ────────────────────────────
+  it('② SHARP dice합>14 + MAGE면 rejected (ONOMAG 없이도 발화)', () => {
+    // ndice5*sdice3+pdice0 = 15 > 14. ONOMAG 플래그 미설정.
+    const p = { ...baseReadyParams(), ndice: 5, sdice: 3, pdice: 0, actor: { ...baseActor(), class: MAGE } }
+    expect(readyGate(p).kind).toBe('rejected')
+  })
+  it('② SHARP dice합>14 + CLERIC면 rejected', () => {
+    const p = { ...baseReadyParams(), ndice: 5, sdice: 3, pdice: 0, actor: { ...baseActor(), class: CLERIC } }
+    expect(readyGate(p).kind).toBe('rejected')
+  })
+  it('② SHARP dice합>14 + FIGHTER면 ② 미발화 → equipped', () => {
+    // dice 15, FIGHTER: ② 미발화(MAGE/CLERIC 아님). ⑪ check_dmg 15-7=8 not>15 → skip → equipped.
+    const p = { ...baseReadyParams(), ndice: 5, sdice: 3, pdice: 0, actor: { ...baseActor(), class: FIGHTER } }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+  it('② dice합===14(경계, >14 아님) + MAGE면 ② 미발화 → equipped', () => {
+    // 14는 >14 아님. MAGE check_dmg 14 not >15 → ⑪ 통과 → equipped.
+    const p = { ...baseReadyParams(), ndice: 7, sdice: 2, pdice: 0, actor: { ...baseActor(), class: MAGE } }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+  it('② questnum!==0이면 ② 미발화(dice>14 MAGE라도 통과)', () => {
+    const p = { ...baseReadyParams(), ndice: 5, sdice: 3, pdice: 0, questnum: 5, actor: { ...baseActor(), class: MAGE } }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+  it('② ONEWEV이면 ② 미발화(dice>14 MAGE라도 통과, isBoundOwner true)', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', ONEWEV), ndice: 5, sdice: 3, pdice: 0, actor: { ...baseActor(), class: MAGE }, isBoundOwner: true }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+  it('② THRUST도 dice합>14 + MAGE면 rejected', () => {
+    const p = { ...baseReadyParams(), type: THRUST, ndice: 5, sdice: 3, pdice: 0, actor: { ...baseActor(), class: MAGE } }
+    expect(readyGate(p).kind).toBe('rejected')
+  })
+
+  // ── ③ 성별 (SHARP/THRUST 조건부) ────────────────────────────────────────────
+  it('③ SHARP + ONOFEM + 여성이면 rejected', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', ONOFEM), actor: { ...baseActor(), gender: FEMALE } }
+    expect(readyGate(p).kind).toBe('rejected')
+  })
+  it('③ SHARP + ONOMAL + 남성이면 rejected', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', ONOMAL), actor: { ...baseActor(), gender: MALE } }
+    expect(readyGate(p).kind).toBe('rejected')
+  })
+  it('③ SHARP + ONOFEM + 남성이면 통과', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', ONOFEM), actor: { ...baseActor(), gender: MALE } }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+  it('③ BLUNT + ONOFEM + 여성이면 성별 게이트 미발화 → equipped (SHARP/THRUST 아님)', () => {
+    const p = { ...baseReadyParams(), type: BLUNT, flags: F_SET('', ONOFEM), actor: { ...baseActor(), gender: FEMALE } }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+
+  // ── ④ WIELD 슬롯 점유 ──────────────────────────────────────────────────────
+  it('④ WIELD 슬롯(19) 점유면 rejected (이미 무장)', () => {
+    const p = { ...baseReadyParams(), occupiedSlots: new Set([WIELD_SLOT]) }
+    expect(readyGate(p).kind).toBe('rejected')
+  })
+
+  // ── ⑤ OCLSEL ───────────────────────────────────────────────────────────────
+  it('⑤ OCLSEL + class 비트 없으면 rejected', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', OCLSEL), actor: { ...baseActor(), class: FIGHTER } }
+    expect(readyGate(p).kind).toBe('rejected')
+  })
+  it('⑤ OCLSEL + class 비트 있으면 통과', () => {
+    const flags = F_SET(F_SET('', OCLSEL), OCLSEL + FIGHTER)
+    const p = { ...baseReadyParams(), flags, actor: { ...baseActor(), class: FIGHTER } }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+
+  // ── ⑥ 정렬 → bounced ───────────────────────────────────────────────────────
+  it('⑥ OGOODO + 정렬<-50이면 bounced', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', OGOODO), actor: { ...baseActor(), alignment: -60 } }
+    expect(readyGate(p).kind).toBe('bounced')
+  })
+  it('⑥ OEVILO + 정렬>50이면 bounced', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', OEVILO), actor: { ...baseActor(), alignment: 60 } }
+    expect(readyGate(p).kind).toBe('bounced')
+  })
+  it('⑥ OGOODO + 정렬>=-50이면 통과', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', OGOODO), actor: { ...baseActor(), alignment: -50 } }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+
+  // ── ⑦ OSIZE ────────────────────────────────────────────────────────────────
+  it('⑦ OSIZE 소형 제한 + HUMAN이면 rejected', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', OSIZE2), actor: { ...baseActor(), race: HUMAN } }
+    expect(readyGate(p).kind).toBe('rejected')
+  })
+  it('⑦ OSIZE 소형 제한 + DWARF이면 통과', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', OSIZE2), actor: { ...baseActor(), race: DWARF } }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+
+  // ── ⑧ dice-소각 ────────────────────────────────────────────────────────────
+  it('⑧ dice합>39(40) + questnum===0 + !ONEWEV이면 burned', () => {
+    const p = { ...baseReadyParams(), ndice: 40, sdice: 1, pdice: 0 }
+    expect(readyGate(p).kind).toBe('burned')
+  })
+  it('⑧ 경계: dice합===39는 소각 아님(높은 레벨로 ⑪ 통과 → equipped)', () => {
+    const p = { ...baseReadyParams(), ndice: 39, sdice: 1, pdice: 0, actor: { ...baseActor(), level: 300 } }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+  it('⑧ dice합>39이라도 questnum!==0이면 ⑧ 미발화(⑨/⑪도 우회) → equipped', () => {
+    const p = { ...baseReadyParams(), ndice: 40, sdice: 1, pdice: 0, questnum: 5 }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+  it('⑧ dice합>39이라도 ONEWEV이면 ⑧ 미발화(isBoundOwner true) → equipped', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', ONEWEV), ndice: 40, sdice: 1, pdice: 0, isBoundOwner: true }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+
+  // ── ⑨ shots-소각 (비대칭! questnum 무관) ──────────────────────────────────
+  it('⑨ shotsmax>600(601) + !ONEWEV이면 burned', () => {
+    const p = { ...baseReadyParams(), shotsmax: 601 }
+    expect(readyGate(p).kind).toBe('burned')
+  })
+  it('⑨ shotscur>600(601) + !ONEWEV이면 burned', () => {
+    const p = { ...baseReadyParams(), shotscur: 601 }
+    expect(readyGate(p).kind).toBe('burned')
+  })
+  it('⑨ 경계: shotsmax===600은 소각 아님 → equipped', () => {
+    const p = { ...baseReadyParams(), shotsmax: 600 }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+  it('⑨ 비대칭: 임무무기(questnum!==0) + shots>600이면 여전히 burned', () => {
+    // questnum이 ⑨를 우회하지 못한다 — ⑧과 다르다.
+    const p = { ...baseReadyParams(), shotsmax: 601, questnum: 5 }
+    expect(readyGate(p).kind).toBe('burned')
+  })
+  it('⑨ ONEWEV이면 shots>600 소각 우회 → equipped', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', ONEWEV), shotsmax: 601, isBoundOwner: true }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+
+  // ── ⑩ shatter-crit 소각 (플랜 T6.1 요약 초과) ──────────────────────────────
+  it('⑩ ONSHAT + OALCRT이면 burned', () => {
+    const flags = F_SET(F_SET('', ONSHAT), OALCRT)
+    expect(readyGate({ ...baseReadyParams(), flags }).kind).toBe('burned')
+  })
+  it('⑩ ONSHAT 단독이면 소각 아님 → equipped', () => {
+    expect(readyGate({ ...baseReadyParams(), flags: F_SET('', ONSHAT) }).kind).toBe('equipped')
+  })
+  it('⑩ OALCRT 단독이면 소각 아님 → equipped', () => {
+    expect(readyGate({ ...baseReadyParams(), flags: F_SET('', OALCRT) }).kind).toBe('equipped')
+  })
+
+  // ── ⑪ 레벨 (check_dmg 직업별 감산) ─────────────────────────────────────────
+  it('⑪ dice합22 + FIGHTER(−7=15)면 ⑪ 미발화 → equipped(level 1)', () => {
+    // 22-7=15, not >15 → 게이트 skip.
+    const p = { ...baseReadyParams(), ndice: 22, sdice: 1, pdice: 0, actor: { ...baseActor(), class: FIGHTER, level: 1 } }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+  it('⑪ dice합22 + BARBARIAN(감산없음=22>15)면 level 1<66 → rejected', () => {
+    const p = { ...baseReadyParams(), ndice: 22, sdice: 1, pdice: 0, actor: { ...baseActor(), class: BARBARIAN, level: 1 } }
+    expect(readyGate(p).kind).toBe('rejected')
+  })
+  it('⑪ dice합22 + ASSASSIN(−3=19>15)면 level 1<57 → rejected', () => {
+    const p = { ...baseReadyParams(), ndice: 22, sdice: 1, pdice: 0, actor: { ...baseActor(), class: ASSASSIN, level: 1 } }
+    expect(readyGate(p).kind).toBe('rejected')
+  })
+  it('⑪ dice합22 + THIEF(−3=19>15)면 level 1<57 → rejected', () => {
+    const p = { ...baseReadyParams(), ndice: 22, sdice: 1, pdice: 0, actor: { ...baseActor(), class: THIEF, level: 1 } }
+    expect(readyGate(p).kind).toBe('rejected')
+  })
+  it('⑪ dice합22 + PALADIN(−2=20>15)면 level 1<60 → rejected', () => {
+    const p = { ...baseReadyParams(), ndice: 22, sdice: 1, pdice: 0, actor: { ...baseActor(), class: PALADIN, level: 1 } }
+    expect(readyGate(p).kind).toBe('rejected')
+  })
+  it('⑪ dice합22 + RANGER(−2=20>15)면 level 1<60 → rejected', () => {
+    const p = { ...baseReadyParams(), ndice: 22, sdice: 1, pdice: 0, actor: { ...baseActor(), class: RANGER, level: 1 } }
+    expect(readyGate(p).kind).toBe('rejected')
+  })
+  it('⑪ level>=check_dmg*3이면 통과(BARBARIAN dice22 level66)', () => {
+    // check_dmg 22*3=66, level 66 not <66 → 통과.
+    const p = { ...baseReadyParams(), ndice: 22, sdice: 1, pdice: 0, actor: { ...baseActor(), class: BARBARIAN, level: 66 } }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+  it('⑪ questnum!==0이면 ⑪ 미발화 → equipped', () => {
+    const p = { ...baseReadyParams(), ndice: 22, sdice: 1, pdice: 0, questnum: 5, actor: { ...baseActor(), class: BARBARIAN, level: 1 } }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+  it('⑪ ONEWEV이면 ⑪ 미발화(isBoundOwner true) → equipped', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', ONEWEV), ndice: 22, sdice: 1, pdice: 0, actor: { ...baseActor(), class: BARBARIAN, level: 1 }, isBoundOwner: true }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+
+  // ── ⑫ ONEWEV 귀속 ──────────────────────────────────────────────────────────
+  it('⑫ ONEWEV + isBoundOwner=false면 rejected (다른 사람의 물건)', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', ONEWEV), isBoundOwner: false }
+    expect(readyGate(p).kind).toBe('rejected')
+  })
+  it('⑫ ONEWEV + isBoundOwner=true면 통과', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', ONEWEV), isBoundOwner: true }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+})
+
+describe('readyGate — advisor 정밀 검증점', () => {
+  // 순서 잠금: OGOODO 정렬위반(⑥ bounced) + dice>39(⑧ burned) 동시 → ⑥ 먼저 → bounced
+  it('순서 잠금: OGOODO+정렬<-50 && dice>39면 bounced (burned 아님)', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', OGOODO), ndice: 40, sdice: 1, pdice: 0, actor: { ...baseActor(), class: FIGHTER, alignment: -60 } }
+    expect(readyGate(p).kind).toBe('bounced')
+  })
+
+  // 순서 잠금: ⑤ OCLSEL → ⑥ 정렬 순서. wear.ts는 정렬(⑧)→OCLSEL(⑨)로 역순이므로,
+  // readyGate를 wear.ts에 맞춰 재배열하면 reject↔bounce가 조용히 뒤집힌다. ⑤가 먼저 발화해 rejected여야 한다.
+  it('순서 잠금: OCLSEL-mismatch(⑤) && OGOODO+정렬<-50(⑥) → rejected (⑤ 먼저 — wear.ts와 역순)', () => {
+    const flags = F_SET(F_SET('', OCLSEL), OGOODO)
+    const p = { ...baseReadyParams(), flags, actor: { ...baseActor(), class: FIGHTER, alignment: -60 } }
+    expect(readyGate(p).kind).toBe('rejected')
+  })
+
+  // INVINCIBLE 우회: ⑤ OCLSEL·⑦ OSIZE·⑪ 레벨
+  it('INVINCIBLE은 OCLSEL(⑤) 게이트를 우회', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', OCLSEL), actor: { ...baseActor(), class: INVINCIBLE } }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+  it('INVINCIBLE은 OSIZE(⑦) 게이트를 우회', () => {
+    const p = { ...baseReadyParams(), flags: F_SET('', OSIZE2), actor: { ...baseActor(), class: INVINCIBLE, race: HUMAN } }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+  it('INVINCIBLE은 레벨(⑪) 게이트를 우회', () => {
+    // dice22 INVINCIBLE(감산없음) level 1 <66이지만 class>=INVINCIBLE이라 통과.
+    const p = { ...baseReadyParams(), ndice: 22, sdice: 1, pdice: 0, actor: { ...baseActor(), class: INVINCIBLE, level: 1 } }
+    expect(readyGate(p).kind).toBe('equipped')
+  })
+
+  // 저주(OCURSE)는 ready 게이트에 포함되지 않음(오라클 충실).
+  it('저주(OCURSE)는 ready 게이트에 포함되지 않음 → 통과', () => {
+    expect(readyGate({ ...baseReadyParams(), flags: F_SET('', OCURSE) }).kind).toBe('equipped')
+  })
+})
+
+describe('readyGate — immutability', () => {
+  it('통과 시 새 ObjectInstance를 반환하고 입력 인스턴스를 변경하지 않는다', () => {
+    const instance = baseInstance()
+    const p = { ...baseReadyParams(), instance }
+    const outcome = readyGate(p)
+    expect(outcome.kind).toBe('equipped')
+    expect(instance.equipped).toBe(false)
+    expect(instance.slot).toBe(null)
+    if (outcome.kind === 'equipped') {
+      expect(outcome.object).not.toBe(instance)
+      expect(outcome.object.equipped).toBe(true)
+      expect(outcome.object.slot).toBe(WIELD_SLOT)
+    }
+  })
+})
+
+// ── holdGate 최소 팩토리 ─────────────────────────────────────────────────────
+function baseHoldParams(): HoldParams {
+  return {
+    flags: '',
+    type: SHARP,
+    wearflag: HELD,
+    ndice: 1,
+    sdice: 1,
+    pdice: 0,
+    questnum: 0,
+    instance: baseInstance(),
+    occupiedSlots: new Set<number>(),
+    actor: baseActor(),
+  }
+}
+
+describe('holdGate — 오라클 command3.c:860~ 순서', () => {
+  it('baseline은 equipped(slot=HELD_SLOT=16)를 반환한다', () => {
+    const outcome = holdGate(baseHoldParams())
+    expect(outcome.kind).toBe('equipped')
+    if (outcome.kind === 'equipped') {
+      expect(outcome.object.equipped).toBe(true)
+      expect(outcome.object.slot).toBe(HELD_SLOT)
+    }
+  })
+
+  // ── ① HELD/WIELD 아님 ─────────────────────────────────────────────────────
+  it('① wearflag!==HELD && !==WIELD(BODY)이면 rejected', () => {
+    expect(holdGate({ ...baseHoldParams(), wearflag: BODY }).kind).toBe('rejected')
+  })
+  it('① wearflag===WIELD이면 통과(HELD 슬롯 설정)', () => {
+    const outcome = holdGate({ ...baseHoldParams(), wearflag: WIELD })
+    expect(outcome.kind).toBe('equipped')
+    if (outcome.kind === 'equipped') expect(outcome.object.slot).toBe(HELD_SLOT)
+  })
+
+  // ── ② 이벤트템/임무템 ──────────────────────────────────────────────────────
+  it('② OEVENT이면 rejected', () => {
+    expect(holdGate({ ...baseHoldParams(), flags: F_SET('', OEVENT) }).kind).toBe('rejected')
+  })
+  it('② questnum>0이면 rejected', () => {
+    expect(holdGate({ ...baseHoldParams(), questnum: 5 }).kind).toBe('rejected')
+  })
+
+  // ── ③ 귀속템 ───────────────────────────────────────────────────────────────
+  it('③ ONEWEV이면 rejected', () => {
+    expect(holdGate({ ...baseHoldParams(), flags: F_SET('', ONEWEV) }).kind).toBe('rejected')
+  })
+
+  // ── ④ HELD 슬롯 점유 ───────────────────────────────────────────────────────
+  it('④ HELD 슬롯(16) 점유면 rejected (이미 쥐고)', () => {
+    const p = { ...baseHoldParams(), occupiedSlots: new Set([HELD_SLOT]) }
+    expect(holdGate(p).kind).toBe('rejected')
+  })
+
+  // ── ⑤ 강력무기(dice합>100) ─────────────────────────────────────────────────
+  it('⑤ dice합>100(101)이면 rejected', () => {
+    const p = { ...baseHoldParams(), ndice: 101, sdice: 1, pdice: 0 }
+    expect(holdGate(p).kind).toBe('rejected')
+  })
+  it('⑤ 경계: dice합===100은 통과', () => {
+    const p = { ...baseHoldParams(), ndice: 100, sdice: 1, pdice: 0 }
+    expect(holdGate(p).kind).toBe('equipped')
+  })
+
+  // ── ⑥ OCLSEL (플랜 T6.2 요약 초과) ─────────────────────────────────────────
+  it('⑥ OCLSEL + class 비트 없으면 rejected', () => {
+    const p = { ...baseHoldParams(), flags: F_SET('', OCLSEL), actor: { ...baseActor(), class: FIGHTER } }
+    expect(holdGate(p).kind).toBe('rejected')
+  })
+  it('⑥ OCLSEL + class 비트 있으면 통과', () => {
+    const flags = F_SET(F_SET('', OCLSEL), OCLSEL + FIGHTER)
+    const p = { ...baseHoldParams(), flags, actor: { ...baseActor(), class: FIGHTER } }
+    expect(holdGate(p).kind).toBe('equipped')
+  })
+  it('⑥ INVINCIBLE은 OCLSEL 게이트를 우회', () => {
+    const p = { ...baseHoldParams(), flags: F_SET('', OCLSEL), actor: { ...baseActor(), class: INVINCIBLE } }
+    expect(holdGate(p).kind).toBe('equipped')
+  })
+
+  // ── ⑦ 정렬 → bounced (플랜 T6.2 요약 초과) ─────────────────────────────────
+  it('⑦ OGOODO + 정렬<-50이면 bounced', () => {
+    const p = { ...baseHoldParams(), flags: F_SET('', OGOODO), actor: { ...baseActor(), alignment: -60 } }
+    expect(holdGate(p).kind).toBe('bounced')
+  })
+  it('⑦ OEVILO + 정렬>50이면 bounced', () => {
+    const p = { ...baseHoldParams(), flags: F_SET('', OEVILO), actor: { ...baseActor(), alignment: 60 } }
+    expect(holdGate(p).kind).toBe('bounced')
+  })
+
+  // ── 무조건 equipped: type>=ARMOR(비무기)도 통과 시 HELD 슬롯 설정 ───────────
+  it('type===ARMOR(비무기)도 통과 시 equipped+HELD 슬롯(16) 설정', () => {
+    const outcome = holdGate({ ...baseHoldParams(), type: ARMOR })
+    expect(outcome.kind).toBe('equipped')
+    if (outcome.kind === 'equipped') {
+      expect(outcome.object.equipped).toBe(true)
+      expect(outcome.object.slot).toBe(HELD_SLOT)
+    }
+  })
+})
+
+describe('holdGate — immutability', () => {
+  it('통과 시 새 ObjectInstance를 반환하고 입력 인스턴스를 변경하지 않는다', () => {
+    const instance = baseInstance()
+    const p = { ...baseHoldParams(), instance }
+    const outcome = holdGate(p)
+    expect(outcome.kind).toBe('equipped')
+    expect(instance.equipped).toBe(false)
+    expect(instance.slot).toBe(null)
+    if (outcome.kind === 'equipped') {
+      expect(outcome.object).not.toBe(instance)
+      expect(outcome.object.slot).toBe(HELD_SLOT)
+    }
   })
 })

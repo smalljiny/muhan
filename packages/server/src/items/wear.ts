@@ -7,17 +7,29 @@
  */
 
 import type { ObjectInstance } from 'shared'
-import { F_ISSET } from '../world/hexFlags.js'
-import { MAGE, CLERIC, INVINCIBLE } from '../combat/constants.js'
-import { ARMOR, BODY, WIELD, HELD, resolveSlot } from './taxonomy.js'
+import { F_ISSET, OALCRT } from '../world/hexFlags.js'
+import {
+  MAGE,
+  CLERIC,
+  FIGHTER,
+  ASSASSIN,
+  THIEF,
+  PALADIN,
+  RANGER,
+  INVINCIBLE,
+} from '../combat/constants.js'
+import { SHARP, THRUST, ARMOR, BODY, WIELD, HELD, resolveSlot } from './taxonomy.js'
 import {
   ONOMAG,
-  OCLSEL,
   ONEWEV,
+  ONSHAT,
+  OEVENT,
   genderAllowed,
   isMarriageGated,
   alignmentAllowed,
   sizeAllowed,
+  isPersonalBound,
+  oclselBlocks,
 } from './flags.js'
 
 // ── 오라클 밸런스 상수(command3.c wear) ──────────────────────────────────────
@@ -150,11 +162,7 @@ export function wearGate(params: WearParams): WearOutcome {
   }
 
   // ⑨ OCLSEL — class<INVINCIBLE 게이트. ONOMAG은 ①에서 이미 처리하므로 OCLSEL만 개별 검사(command3.c:159).
-  if (
-    F_ISSET(flags, OCLSEL) &&
-    !F_ISSET(flags, OCLSEL + actor.class) &&
-    actor.class < INVINCIBLE
-  ) {
+  if (oclselBlocks(flags, actor.class)) {
     return { kind: 'rejected', reason: '당신의 직업에 맞지 않습니다.' }
   }
 
@@ -164,5 +172,212 @@ export function wearGate(params: WearParams): WearOutcome {
   }
 
   // 통과 — ⑥에서 얻은 slot으로 equipped 새 인스턴스(입력 불변).
+  return { kind: 'equipped', object: { ...instance, equipped: true, slot } }
+}
+
+// ── 무기 장착(ready)·쥠(hold) 게이트 상수(command3.c ready/hold) ─────────────
+// WIELD 슬롯은 WIELD−1(=19), HELD 슬롯은 HELD−1(=16)이며 단일 슬롯이므로 resolveSlot 결과를 그대로 재사용한다
+// (오라클 `ready[WIELD-1]`·`ready[HELD-1]`).
+/** 마법사 무거운무기 dice합 임계 — 초과 시 MAGE/CLERIC 거부(command3.c:724 `> 14`). */
+const MAGE_WEAPON_DICE_LIMIT = 14
+/** 무기 dice합 소각 임계 — 초과 시(questnum===0 && !ONEWEV) 소각(command3.c:786 `>39`). */
+const WEAPON_BURN_DICE_LIMIT = 39
+/** 무기 shots 소각 임계 — shotsmax/shotscur가 초과 시(!ONEWEV) 소각(command3.c:793 `> 600`). */
+const WEAPON_SHOTS_LIMIT = 600
+/** 레벨 게이트 check_dmg 임계 — 초과 시 레벨 검사(command3.c:815 `check_dmg > 15`). */
+const LEVEL_CHECK_DMG_THRESHOLD = 15
+/** 레벨 요구 배수 — level < check_dmg*3이면 거부(command3.c:816 `check_dmg * 3`). */
+const LEVEL_DMG_MULTIPLIER = 3
+/** FIGHTER check_dmg 완화(command3.c:809 `check_dmg -= 7`). */
+const FIGHTER_DMG_RELIEF = 7
+/** ASSASSIN/THIEF check_dmg 완화(command3.c:810-811 `check_dmg -= 3`). */
+const ASSASSIN_THIEF_DMG_RELIEF = 3
+/** PALADIN/RANGER check_dmg 완화(command3.c:812-813 `check_dmg -= 2`). */
+const PALADIN_RANGER_DMG_RELIEF = 2
+/** hold 강력무기 dice합 임계 — 초과 시 거부(command3.c:906 `> 100`). */
+const HELD_DICE_LIMIT = 100
+/** ready 소각 메시지(command3.c:788·795·801). */
+const READY_BURN_REASON = '당신이 무기를 쥐자 푸른 빛을 내며 사라집니다.'
+/** ready 정렬 반발 메시지(command3.c:762·771). */
+const READY_BOUNCE_REASON = '당신의 몸에서 튕겨져 나가 바닥에 떨어집니다.'
+/** hold 정렬 반발 메시지(command3.c:922·931). */
+const HOLD_BOUNCE_REASON = '당신의 손에서 튕겨져 나가 땅에 떨어집니다.'
+
+/**
+ * readyGate 입력 — object의 instance + template 무기 스탯 + 점유 슬롯 + 착용 주체 + 소유자 일치 여부.
+ * isBoundOwner는 오라클 `strcmp(obj->key[2], ply->name)==0`(command3.c:820)의 명시 입력이다(배선 유예).
+ */
+export interface ReadyParams {
+  readonly flags: string
+  readonly type: number
+  readonly wearflag: number
+  readonly ndice: number
+  readonly sdice: number
+  readonly pdice: number
+  readonly shotsmax: number
+  readonly shotscur: number
+  readonly questnum: number
+  readonly instance: ObjectInstance
+  readonly occupiedSlots: ReadonlySet<number>
+  readonly actor: WearActor
+  readonly isBoundOwner: boolean
+}
+
+/**
+ * holdGate 입력 — object의 instance + template 스탯 + 점유 슬롯 + 착용 주체(class·alignment 사용).
+ */
+export interface HoldParams {
+  readonly flags: string
+  readonly type: number
+  readonly wearflag: number
+  readonly ndice: number
+  readonly sdice: number
+  readonly pdice: number
+  readonly questnum: number
+  readonly instance: ObjectInstance
+  readonly occupiedSlots: ReadonlySet<number>
+  readonly actor: WearActor
+}
+
+/**
+ * 무기 장착(ready) 다층 게이트 — 오라클 command3.c ready()(라인 691~835)의 순서를 글자 그대로 이식한다.
+ * 게이트는 첫 실패에서 즉시 반환한다. 실 인벤 이동·객체 파괴는 outcome만 반환하고 배선은 유예한다.
+ */
+export function readyGate(params: ReadyParams): WearOutcome {
+  const { flags, type, wearflag, ndice, sdice, pdice, shotsmax, shotscur, questnum, instance, occupiedSlots, actor, isBoundOwner } =
+    params
+  const dmg = ndice * sdice + pdice
+  const isWeaponEdge = type === SHARP || type === THRUST
+
+  // ① WIELD 아님 — 무장 대상이 아니면 거부(command3.c:718).
+  if (wearflag !== WIELD) {
+    return { kind: 'rejected', reason: '당신은 그것을 무장할 수 없습니다.' }
+  }
+
+  // ② 마법사 무거운무기 제한 — dice-threshold(ONOMAG 아님!). SHARP/THRUST + dice합>14 + MAGE/CLERIC 거부.
+  // 플래그 없는 dice 규칙이다(command3.c:723-728). questnum!==0·ONEWEV이면 우회.
+  if (
+    isWeaponEdge &&
+    questnum === 0 &&
+    !F_ISSET(flags, ONEWEV) &&
+    dmg > MAGE_WEAPON_DICE_LIMIT &&
+    (actor.class === MAGE || actor.class === CLERIC)
+  ) {
+    return { kind: 'rejected', reason: '도술사, 불제자는 사용할수 없습니다.' }
+  }
+
+  // ③ 성별 — SHARP/THRUST 조건부. ONOFEM+여성·ONOMAL+남성 거부(command3.c:730-740).
+  if (isWeaponEdge && !genderAllowed(flags, actor.gender)) {
+    return { kind: 'rejected', reason: '성별이 맞지 않습니다.' }
+  }
+
+  // ④ WIELD 슬롯 점유 — resolveSlot 1회 호출. null(슬롯19 점유)이면 거부, non-null이면 통과 시 재사용(command3.c:742).
+  const slot = resolveSlot(WIELD, occupiedSlots)
+  if (slot === null) {
+    return { kind: 'rejected', reason: '당신은 이미 무장하고 있습니다.' }
+  }
+
+  // ⑤ OCLSEL — class<INVINCIBLE 게이트(command3.c:749-753).
+  if (oclselBlocks(flags, actor.class)) {
+    return { kind: 'rejected', reason: '당신의 직업에 맞지 않습니다.' }
+  }
+
+  // ⑥ 정렬 — OGOODO+정렬<-50·OEVILO+정렬>50이면 몸에서 튕겨 바닥 낙하(command3.c:755-773).
+  if (!alignmentAllowed(flags, actor.alignment)) {
+    return { kind: 'bounced', reason: READY_BOUNCE_REASON }
+  }
+
+  // ⑦ OSIZE — class<INVINCIBLE 게이트(command3.c:775-784).
+  if (!sizeAllowed(flags, actor.race) && actor.class < INVINCIBLE) {
+    return { kind: 'rejected', reason: '당신의 몸 크기와 맞지 않습니다.' }
+  }
+
+  // ⑧ dice-소각 — dice합>39 + questnum===0 + !ONEWEV이면 소각(command3.c:786-792).
+  if (dmg > WEAPON_BURN_DICE_LIMIT && questnum === 0 && !F_ISSET(flags, ONEWEV)) {
+    return { kind: 'burned', reason: READY_BURN_REASON }
+  }
+
+  // ⑨ shots-소각 — !ONEWEV + (shotsmax>600 || shotscur>600)이면 소각. questnum 무관(⑧과 비대칭, command3.c:793-798).
+  if (!F_ISSET(flags, ONEWEV) && (shotsmax > WEAPON_SHOTS_LIMIT || shotscur > WEAPON_SHOTS_LIMIT)) {
+    return { kind: 'burned', reason: READY_BURN_REASON }
+  }
+
+  // ⑩ shatter-crit 소각 — ONSHAT+OALCRT 동시면 소각(command3.c:799-803).
+  // 플랜 T6.1 요약 초과, 오라클 충실.
+  if (F_ISSET(flags, ONSHAT) && F_ISSET(flags, OALCRT)) {
+    return { kind: 'burned', reason: READY_BURN_REASON }
+  }
+
+  // ⑪ 레벨 — check_dmg 직업별 감산 후 판정(command3.c:804-818).
+  let checkDmg = dmg
+  if (actor.class === FIGHTER) checkDmg -= FIGHTER_DMG_RELIEF
+  if (actor.class === ASSASSIN || actor.class === THIEF) checkDmg -= ASSASSIN_THIEF_DMG_RELIEF
+  if (actor.class === PALADIN || actor.class === RANGER) checkDmg -= PALADIN_RANGER_DMG_RELIEF
+  if (
+    actor.class < INVINCIBLE &&
+    checkDmg > LEVEL_CHECK_DMG_THRESHOLD &&
+    !F_ISSET(flags, ONEWEV) &&
+    actor.level < checkDmg * LEVEL_DMG_MULTIPLIER &&
+    questnum === 0
+  ) {
+    return { kind: 'rejected', reason: '당신의 능력으로는 사용할 수 없는 무기입니다.' }
+  }
+
+  // ⑫ ONEWEV 귀속 — 귀속템이며 소유자가 아니면 거부(command3.c:819-822).
+  if (isPersonalBound(flags) && !isBoundOwner) {
+    return { kind: 'rejected', reason: '다른 사람의 물건은 사용할 수 없습니다.' }
+  }
+
+  // 통과 — ④에서 얻은 slot(=WIELD_SLOT)으로 equipped 새 인스턴스(입력 불변).
+  return { kind: 'equipped', object: { ...instance, equipped: true, slot } }
+}
+
+/**
+ * 쥠(hold) 다층 게이트 — 오라클 command3.c hold()(라인 860~950)의 순서를 글자 그대로 이식한다.
+ * 게이트는 첫 실패에서 즉시 반환한다. 통과 시 type과 무관하게 equipped+HELD 슬롯을 무조건 설정한다
+ * (오라클 `ready[HELD-1]=obj`는 무조건이며, `type<ARMOR` 조건은 포트가 drop한 OWHELD 플래그 전용이다).
+ */
+export function holdGate(params: HoldParams): WearOutcome {
+  const { flags, wearflag, ndice, sdice, pdice, questnum, instance, occupiedSlots, actor } = params
+  const dmg = ndice * sdice + pdice
+
+  // ① HELD/WIELD 아님 — 쥘 수 있는 대상이 아니면 거부(command3.c:887).
+  if (wearflag !== HELD && wearflag !== WIELD) {
+    return { kind: 'rejected', reason: '당신은 그것을 쥘 수 없습니다.' }
+  }
+
+  // ② 이벤트템/임무템 — OEVENT || questnum>0이면 거부(command3.c:891-894).
+  if (F_ISSET(flags, OEVENT) || questnum > 0) {
+    return { kind: 'rejected', reason: '당신은 그것을 쥘 수 없습니다.' }
+  }
+
+  // ③ 귀속템/임무템 — ONEWEV || questnum>0이면 거부(command3.c:895-898). questnum>0은 ②와 중복이나 오라클 충실.
+  if (F_ISSET(flags, ONEWEV) || questnum > 0) {
+    return { kind: 'rejected', reason: '당신은 그것을 쥘 수 없습니다.' }
+  }
+
+  // ④ HELD 슬롯 점유 — resolveSlot 1회 호출. null(슬롯16 점유)이면 거부, non-null이면 통과 시 재사용(command3.c:900).
+  const slot = resolveSlot(HELD, occupiedSlots)
+  if (slot === null) {
+    return { kind: 'rejected', reason: '당신은 이미 다른것을 쥐고 있습니다.' }
+  }
+
+  // ⑤ 강력무기 — dice합>100이면 거부(command3.c:906).
+  if (dmg > HELD_DICE_LIMIT) {
+    return { kind: 'rejected', reason: '당신은 그것을 쥘 수 없습니다.' }
+  }
+
+  // ⑥ OCLSEL — class<INVINCIBLE 게이트(command3.c:913-917). 플랜 T6.2 요약 초과, 오라클 충실.
+  if (oclselBlocks(flags, actor.class)) {
+    return { kind: 'rejected', reason: '당신의 직업에 맞지 않습니다.' }
+  }
+
+  // ⑦ 정렬 — OGOODO+정렬<-50·OEVILO+정렬>50이면 손에서 튕겨 바닥 낙하(command3.c:919-937).
+  // 플랜 T6.2 요약 초과, 오라클 충실.
+  if (!alignmentAllowed(flags, actor.alignment)) {
+    return { kind: 'bounced', reason: HOLD_BOUNCE_REASON }
+  }
+
+  // 통과 — ④에서 얻은 slot(=HELD−1=16)으로 equipped 새 인스턴스(입력 불변). type과 무관하게 무조건 설정.
   return { kind: 'equipped', object: { ...instance, equipped: true, slot } }
 }

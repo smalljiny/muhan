@@ -62,6 +62,7 @@ export {
   ONOMAL,
   ONOFEM,
   OCLSEL,
+  ONSHAT,
   OMARRI,
   OEVENT,
   OWHELD,
@@ -82,6 +83,7 @@ export {
   genderAllowed,
   alignmentAllowed,
   classAllowed,
+  oclselBlocks,
   sizeAllowed,
   isCursed,
   isPersonalBound,
@@ -107,7 +109,12 @@ export {
 export {
   // 방어구 착용 다층 게이트·슬롯 배치(오라클 command3.c wear)
   wearGate,
+  // 무기 장착(ready)·쥠(hold) 다층 게이트(오라클 command3.c ready/hold)
+  readyGate,
+  holdGate,
   type WearActor,
   type WearParams,
+  type ReadyParams,
+  type HoldParams,
   type WearOutcome,
 } from './wear.js'

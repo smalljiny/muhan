@@ -34,6 +34,7 @@ import {
   genderAllowed,
   alignmentAllowed,
   classAllowed,
+  oclselBlocks,
   sizeAllowed,
   isCursed,
   isPersonalBound,
@@ -152,6 +153,26 @@ describe('classAllowed — ONOMAG·OCLSEL 게이트', () => {
   it('플래그 없으면 모든 클래스 허용', () => {
     expect(classAllowed(EMPTY, MAGE)).toBe(true)
     expect(classAllowed(EMPTY, CLERIC)).toBe(true)
+  })
+})
+
+describe('oclselBlocks — OCLSEL 직업선택 게이트 단독 판정', () => {
+  it('OCLSEL 세트 + (OCLSEL+class) 비트 없으면 거부(true)', () => {
+    const flags = F_SET(EMPTY, OCLSEL)
+    expect(oclselBlocks(flags, MAGE)).toBe(true)
+  })
+  it('OCLSEL 세트 + (OCLSEL+class) 비트 있으면 허용(false)', () => {
+    let flags = F_SET(EMPTY, OCLSEL)
+    flags = F_SET(flags, OCLSEL + MAGE)
+    expect(oclselBlocks(flags, MAGE)).toBe(false)
+  })
+  it('OCLSEL 세트여도 INVINCIBLE 이상은 우회(false)', () => {
+    const flags = F_SET(EMPTY, OCLSEL)
+    expect(oclselBlocks(flags, INVINCIBLE)).toBe(false)
+  })
+  it('OCLSEL 미세트면 거부하지 않음(false) — ONOMAG 융합 없음', () => {
+    expect(oclselBlocks(F_SET(EMPTY, ONOMAG), MAGE)).toBe(false)
+    expect(oclselBlocks(EMPTY, MAGE)).toBe(false)
   })
 })
 

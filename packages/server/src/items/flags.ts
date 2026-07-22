@@ -35,6 +35,8 @@ export const ONOMAL = 26
 export const ONOFEM = 27
 /** 클래스 선택 게이트 — OCLSEL(command3.c:162). 세트 시 (OCLSEL+class) 비트가 있어야 허용. */
 export const OCLSEL = 31
+/** 무기 미파쇄 표식 — ONSHAT(mtype.h:517 `weapon will never shatter`). OALCRT와 동시 세트 시 ready 소각(command3.c:800). */
+export const ONSHAT = 41
 /** 결혼 게이트 — OMARRI(착용 조건에 배우자 상태 요구). */
 export const OMARRI = 45
 /** 이벤트 아이템 — OEVENT. */
@@ -114,6 +116,20 @@ export function classAllowed(flags: string, characterClass: number): boolean {
     return false
   }
   return true
+}
+
+/**
+ * OCLSEL 직업선택 게이트 단독 판정 — 오라클 command3.c:162-163·749-753·913-917.
+ * OCLSEL 세트 + (OCLSEL+class) 비트 없음 + class < INVINCIBLE이면 착용 거부(true 반환).
+ * classAllowed는 ONOMAG를 융합하지만 wear/ready/hold 게이트는 OCLSEL을 ONOMAG와 다른 순서 위치에서
+ * 검사하므로(융합 시 순서 붕괴), 이 OCLSEL 전용 predicate를 세 게이트가 공유해 INVINCIBLE 우회를 단일 출처로 둔다.
+ */
+export function oclselBlocks(flags: string, characterClass: number): boolean {
+  return (
+    F_ISSET(flags, OCLSEL) &&
+    !F_ISSET(flags, OCLSEL + characterClass) &&
+    characterClass < INVINCIBLE
+  )
 }
 
 /**
