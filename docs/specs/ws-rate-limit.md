@@ -19,9 +19,10 @@ E3 하드닝 후속(#64). [`ws-resource-guard.md`](ws-resource-guard.md)(#54)가
 
 `createMessageRateLimiterFactory(getLimits)` 팩토리가 계정별 공유 버킷 레지스트리(`Map<accountId, AccountEntry>`)를 클로저에 캡슐화하고 `MessageRateLimiterFactory` 핸들을 반환한다(`connectionQuota` factory+thunk+공유 회계 관례 미러 — 정원 카운터에 얹지 않는 별도 레지스트리다).
 
-- `createConnection(accountId): ConnectionRateLimiter` — 연결 하나의 유량 제한 핸들을 발급한다. 계정 엔트리가 있으면 refCount를 올려 공유 버킷을 참조하고, 없으면 새 버킷을 refCount=1로 등록한다. 연결 전용 버킷과 위반 카운터는 이 핸들이 소유한다.
-- `releaseAccount(accountId): void` — 계정 참조 반납. refCount를 내리고 0 도달 시 Map 엔트리를 삭제한다. 부재 계정 release·이중 반납은 완전 no-op(음수·누수 없음).
-- `activeAccountCount(): number` — 테스트 전용 인스펙터(살아 있는 계정 엔트리 수). 프로덕션 회계 미참여.
+- `createConnection(accountId, now): ConnectionRateLimiter` — 연결 하나의 유량 제한 핸들을 발급한다. 단조 시각 `now`를 받아 (1) zero-refcount 엔트리를 `now`로 lazy sweep하고(§"계정 버킷 소유·정리"), (2) hard size cap을 backstop하며, (3) 대상 계정 엔트리가 잔존하면 refCount를 올려 공유 버킷을 `now`로 refill 후 **재사용**, 없으면 새 버킷을 refCount=1로 등록한다. 연결 전용 버킷과 위반 카운터는 이 핸들이 소유한다(항상 fresh).
+- `releaseAccount(accountId): void` — 계정 참조 반납. refCount를 내리되 0 도달 시에도 **Map 엔트리를 삭제하지 않고** zero-refcount로 남긴다(keep-until-refilled). 부재 계정 release·이중 반납은 완전 no-op(음수·누수 없음).
+- `activeAccountCount(): number` — 테스트 전용 인스펙터(레지스트리의 전체 엔트리 수 = live + 미회복 zero-refcount). 프로덕션 회계 미참여.
+- `liveAccountCount(): number` — 테스트 전용 인스펙터(refCount>0 엔트리 수). 프로덕션 회계 미참여.
 
 `ConnectionRateLimiter` 핸들:
 
@@ -43,7 +44,7 @@ E3 하드닝 후속(#64). [`ws-resource-guard.md`](ws-resource-guard.md)(#54)가
 
 ### Env 정책값 (`packages/server/src/config/env.ts`)
 
-`EnvSchema`에 유량 상한 5필드를 추가한다(모두 `z.coerce.number().int().min(1)` fail-fast — `WS_MAX_*` 관례 미러, 미설정 부팅을 막지 않으면서 잘못된 값 0은 즉시 거부).
+`EnvSchema`에 유량 상한 6필드를 추가한다(모두 `z.coerce.number().int().min(1)` fail-fast — `WS_MAX_*` 관례 미러, 미설정 부팅을 막지 않으면서 잘못된 값 0은 즉시 거부).
 
 | 필드 | 기본값 | 역할 |
 |------|--------|------|
@@ -52,8 +53,9 @@ E3 하드닝 후속(#64). [`ws-resource-guard.md`](ws-resource-guard.md)(#54)가
 | `WS_MSG_RATE_ACCOUNT_CAPACITY` | 40 | 계정당 버스트 토큰 수. 계정당 5연결(정원) 하에 다중 탭 정상 사용은 허용하되 다중 연결 flood의 집계를 잡는 값. |
 | `WS_MSG_RATE_ACCOUNT_REFILL_PER_SEC` | 20 | 계정당 초당 리필. 연결 지속율(10)의 다중 연결 합을 흡수하되 계정 차원 flood는 억제. |
 | `WS_MSG_RATE_MAX_VIOLATIONS` | 10 | 연속 위반 종료 임계. 일시 버스트엔 여유를 주되 지속 flooder는 빠르게 초과해 graceful close. |
+| `WS_MSG_RATE_ACCOUNT_MAX_ENTRIES` | 4096 | 계정 버킷 레지스트리 엔트리 수의 hard cap(keep-until-refilled backstop). 동시 live 계정 수 상한(`WS_MAX_CONNECTIONS` 1000, 계정당 5연결 하에 그 이하)을 여유 있게 초과해 정상 부하에서 cap 미도달. |
 
-`min(1)`은 다섯 값 모두 load-bearing이다 — capacity가 0이면 어떤 프레임도 통과 못 한다.
+`min(1)`은 여섯 값 모두 load-bearing이다 — capacity가 0이면 어떤 프레임도 통과 못 하고, max-entries가 0이면 어떤 계정도 등록 못 한다.
 
 ## 동작
 
@@ -65,11 +67,18 @@ E3 하드닝 후속(#64). [`ws-resource-guard.md`](ws-resource-guard.md)(#54)가
 
 ### arm 시점 — socket-open
 
-유량 제한기는 **socket-open 시점**에 arm한다(`deadline` 관례 미러). handshake 완료가 아니다 — 인증 게이트를 통과한 pre-handshake 창(open → `system:ready`)의 flood도 커버 대상이다(핸드셰이크 완료를 기다리면 그 사이 flood가 무제한이다). `account`는 `preValidation` 게이트가 non-null을 보장하지만(인증 실패면 upgrade 자체가 차단) `strictNullChecks` 하에서 여전히 nullable이라, `releaseQuota`와 같은 방어적 가드로 `accountId`를 좁혀 한 번만 읽어 상수로 고정하고 close 리스너가 그 캡처값을 쓴다.
+유량 제한기는 **socket-open 시점**에 arm한다(`deadline` 관례 미러). handshake 완료가 아니다 — 인증 게이트를 통과한 pre-handshake 창(open → `system:ready`)의 flood도 커버 대상이다(핸드셰이크 완료를 기다리면 그 사이 flood가 무제한이다). arm은 `createConnection(accountId, performance.now())`로 단조 시각을 주입한다(코어 lazy sweep·refill과 `check`가 같은 clock 소스를 공유). `account`는 `preValidation` 게이트가 non-null을 보장하지만(인증 실패면 upgrade 자체가 차단) `strictNullChecks` 하에서 여전히 nullable이라, `releaseQuota`와 같은 방어적 가드로 `accountId`를 좁혀 한 번만 읽어 상수로 고정하고 close 리스너가 그 캡처값을 쓴다.
 
-### 계정 버킷 소유·정리 — refCount + delete-at-zero
+### 계정 버킷 소유·정리 — refCount + keep-until-refilled
 
-계정 버킷은 연결 간 공유 상태다. `createConnection`이 계정 엔트리 refCount를 올리고, close 리스너가 `releaseAccount`로 내려 0 도달 시 Map 엔트리를 삭제해 churn 계정의 Map 누적을 막는다. ws `'close'`가 2회 이상 발화할 수 있어(그래서 `releaseQuota`도 `releaseOnce`다) `rateReleased` once-guard 플래그가 load-bearing이다 — 가드가 없으면 `releaseAccount`가 이중 감소해 refCount를 조기에 0으로 만들어 살아 있는 형제 연결의 계정 엔트리를 지운다(계정 차원 상한 우회).
+계정 버킷은 연결 간 공유 상태다. `createConnection`이 계정 엔트리 refCount를 올리고, close 리스너가 `releaseAccount`로 내린다. refCount가 0에 도달해도 **엔트리를 삭제하지 않고 zero-refcount로 유지**한다(keep-until-refilled) — 재접속이 fresh full 버킷이 아니라 경과 시간만큼만 회복된 기존 버킷을 재사용하게 해, disconnect/reconnect churn으로 계정 유량 상한을 우회하는 갭을 닫는다(즉시 재접속은 여전히 depleted, 충분한 시간 경과 후 재접속만 full). 엔트리를 계속 유지하면 Map이 무한 성장할 수 있어, 두 backstop이 스케줄러·타이머 없이 순수 코어로 크기를 경계한다:
+
+- **lazy sweep**: `createConnection`이 매 접근마다 레지스트리를 O(n) 훑어, 대상 accountId·live(refCount>0) 엔트리를 제외한 zero-refcount 엔트리를 `now`로 refill하고 `tokens >= accountCapacity`(완전 회복 = 부재와 상태 동등)면 삭제한다.
+- **hard size cap backstop**: sweep 후에도 cap(`WS_MSG_RATE_ACCOUNT_MAX_ENTRIES`) 초과면 zero-refcount 엔트리를 most-refilled 우선으로 evict한다(live·대상 불가침, 정렬은 이 드문 경로에서만). 축출 임계는 이 호출이 엔트리를 추가하는지(`willAdd = !accounts.has(accountId)`)로 갈린다 — **신규 계정**은 1개가 추가되므로 `size >= cap`일 때 캡 미만까지 evict해 최종 `size <= cap` 보장, **기존 계정 재연결**은 reuse 경로라 추가가 없으므로 `size > cap`일 때만 evict한다(재연결이 무관한 고갈 계정을 과잉 축출해 그 계정의 churn 우회를 재노출하지 않게 하는 load-bearing 구분).
+
+Map 크기는 (live 계정 수 + 미회복 zero-refcount)로 경계된다. ws `'close'`가 2회 이상 발화할 수 있어(그래서 `releaseQuota`도 `releaseOnce`다) `rateReleased` once-guard 플래그가 load-bearing이다 — 가드가 없으면 `releaseAccount`가 이중 감소해 refCount를 조기에 0으로 만들어(음수 방지 가드가 있어도 sibling 회계가 깨진다) 살아 있는 형제 연결의 계정 상한을 우회한다.
+
+극단 cardinality(수천 개의 서로 다른 인증 계정이 동시에 drain)에서 cap 초과로 아직 미회복인 zero-refcount 엔트리까지 evict되면 **그 계정 한정 churn 우회가 재노출**될 수 있다 — 다수의 유효 계정 확보라는 높은 비용을 전제로 한 accepted degradation이며, most-refilled 우선 축출이 페널티 상태에 가장 가까운(가장 덜 회복된) 엔트리를 마지막에 버려 이를 완화한다.
 
 ### 메시지 게이트 — drop / 경고 / 종료
 
@@ -106,4 +115,4 @@ socket.on('message', (data) => {
 - [`transport-protocol.md`](transport-protocol.md) — 유량 게이트가 얹히는 message 처리 파이프라인·`errorCodeSchema` 계약 정본.
 - [`ws-resource-guard.md`](ws-resource-guard.md) — 형제 방어 계층(연결 정원 + 아웃바운드 backpressure) 정본.
 - [`auth-session.md`](auth-session.md) — arm 대상이 되는 인증된 연결의 게이트 정본.
-- 이슈 #64(본 토픽), #54(선행: 연결 정원 + backpressure). ADR #14(D1 단일프로세스).
+- 이슈 #64(인바운드 유량 상한), #77(계정 버킷 keep-until-refilled churn 우회 차단), #54(선행: 연결 정원 + backpressure). ADR #14(D1 단일프로세스).
