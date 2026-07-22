@@ -487,6 +487,46 @@ describe('lazy sweep + 하드 캡 (bounded 레지스트리, Story 3)', () => {
     expect(t2.peekAccountTokens()).toBeCloseTo(1) // 재사용된 잔량 1 (fresh였다면 0)
   })
 
+  it('[T3.9 churn] 레지스트리가 정확히 캡일 때 기존 zero-refcount 재연결은 다른 고갈 계정을 축출하지 않는다', () => {
+    // 캡 축출은 이 호출이 엔트리를 추가할 때(신규 계정)만 필요하다. 기존 zero-refcount 계정 재연결은
+    // reuse 경로라 엔트리를 추가하지 않으므로, 캡에 딱 맞은 상태에서도 최종 size가 캡을 넘지 않는다.
+    // 그런데 축출 가드가 신규/재연결을 구분하지 않으면 재연결이 다른 고갈 계정을 불필요하게 축출하고,
+    // 그 계정이 재연결하면 fresh full 버킷을 받아 churn 우회가 재개방된다.
+    const factory = makeFactory({ capacity: 100, accountCapacity: 3, refillPerSec: 0, accountRefillPerSec: 0, accountMaxEntries: 2 })
+    const a = factory.createConnection('A', 0)
+    a.check(0)
+    a.check(0) // A 계정 3→1 (고갈 잔량 1, rate0이라 sweep에서 미회복 생존)
+    factory.releaseAccount('A')
+    const b = factory.createConnection('B', 0)
+    b.check(0) // B 계정 3→2
+    factory.releaseAccount('B')
+    expect(factory.activeAccountCount()).toBe(2) // size == cap, 둘 다 zero-refcount 생존
+
+    // 기존 zero-refcount 계정 A 재연결 — 엔트리를 추가하지 않으므로 B를 축출할 이유가 없다.
+    factory.createConnection('A', 0)
+    expect(factory.activeAccountCount()).toBe(2) // B 보존 (버그면 B가 축출돼 1)
+
+    // B 재연결은 축출되지 않은 고갈 버킷(잔량 2)을 재사용해야 한다 (축출됐다면 fresh 미시드 0).
+    const rb = factory.createConnection('B', 0)
+    expect(rb.peekAccountTokens()).toBeCloseTo(2)
+  })
+
+  it('[T3.10] 신규 계정 생성은 캡에서 여전히 zero-refcount 엔트리를 축출해 공간을 만든다', () => {
+    // T3.9의 대응 케이스 — 축출 가드 분리가 신규 계정 경로(엔트리 추가)의 캡 강제를 깨지 않음을 고정한다.
+    const factory = makeFactory({ capacity: 100, accountCapacity: 3, refillPerSec: 0, accountRefillPerSec: 0, accountMaxEntries: 2 })
+    const a = factory.createConnection('A', 0)
+    a.check(0) // A 3→2
+    factory.releaseAccount('A')
+    const b = factory.createConnection('B', 0)
+    b.check(0) // B 3→2
+    factory.releaseAccount('B')
+    expect(factory.activeAccountCount()).toBe(2) // size == cap
+
+    // 신규 계정 C 생성 → 엔트리 1개 추가 → 캡 초과 → zero-refcount 1개 축출 → 최종 size <= 캡.
+    factory.createConnection('C', 0)
+    expect(factory.activeAccountCount()).toBeLessThanOrEqual(2)
+  })
+
   it('[T3.3 inspector] liveAccountCount는 refCount>0 엔트리 수를 정확히 반환한다', () => {
     const factory = makeFactory({ capacity: 100, accountCapacity: 5, refillPerSec: 0, accountRefillPerSec: 0 })
     expect(factory.liveAccountCount()).toBe(0)

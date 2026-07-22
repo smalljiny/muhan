@@ -186,9 +186,17 @@ export function createMessageRateLimiterFactory(
       // T3.2 하드 캡 backstop — sweep 후에도 size가 캡 이상이면 zero-refcount(대상·live 제외) 엔트리를
       // 가장 가득 찬 것부터(most-refilled-first) 축출해 캡 아래로 되돌린다. depleted 엔트리는 가장 덜 찬
       // 축이라 마지막에 축출되므로, 대상 제외와 무관하게도 고갈 재연결 버킷이 자연 보호된다. 정렬은 캡
-      // 초과라는 드문 경로에서만 실행된다. 대상이 부재(신규)면 아래에서 엔트리 1개가 추가되므로 캡 미만
-      // (size < cap)까지 축출해 최종 size <= cap을 보장한다.
-      if (accounts.size >= limits.accountMaxEntries) {
+      // 초과라는 드문 경로에서만 실행된다.
+      //
+      // 축출 임계는 이 호출이 엔트리를 추가하는지(willAdd)에 따라 갈린다. 신규(부재) 계정은 아래에서
+      // 엔트리 1개가 추가되므로 캡 미만(size < cap)까지 축출해 최종 size <= cap을 보장한다. 반면 기존
+      // 계정 재연결은 reuse 경로라 엔트리를 추가하지 않으므로 size <= cap이면 이미 규정 준수다 — 이때
+      // size == cap에서 축출하면 무관한 고갈 계정을 불필요하게 제거해 그 계정의 churn 우회(fresh full
+      // 재시드)를 재개방한다. 따라서 재연결은 size > cap일 때만 축출한다. 대상은 sweep에서 protected라
+      // willAdd는 sweep 전후로 불변이다.
+      const willAdd = !accounts.has(accountId)
+      const evictBelow = willAdd ? limits.accountMaxEntries : limits.accountMaxEntries + 1
+      if (accounts.size >= evictBelow) {
         const candidates: Array<{ id: string; tokens: number }> = []
         for (const [id, candidateEntry] of accounts) {
           if (isProtected(id, candidateEntry)) {
@@ -199,7 +207,7 @@ export function createMessageRateLimiterFactory(
         }
         candidates.sort((left, right) => right.tokens - left.tokens)
         for (const candidate of candidates) {
-          if (accounts.size < limits.accountMaxEntries) {
+          if (accounts.size < evictBelow) {
             break
           }
           accounts.delete(candidate.id)
