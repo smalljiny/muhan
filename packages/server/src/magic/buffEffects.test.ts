@@ -18,7 +18,6 @@ import { setFlag } from '../world/door.js'
 import { RPMEXT } from '../world/roomFlags.js'
 import { MAGE, FIGHTER } from '../combat/constants.js'
 import { seqRng } from '../combat/dice.testutil.js'
-import type { DamageLedger } from '../combat/enmity.js'
 
 /**
  * buffEffects 단위·통합 테스트 — G5 저항 버프 4주문(T7.4 플래그 set·until, T7.3 #84 저항 감산 회귀).
@@ -86,7 +85,7 @@ function makeCtx(opts: { gated?: boolean; now?: number; room?: RoomNode } = {}):
     now: opts.now ?? 1000,
     fireCreatureDeath: () => {},
     firePlayerDeath: () => {},
-    ledger: new Map<string, number>() as DamageLedger,
+    ledger: new Map<string, number>(),
   }
 }
 
