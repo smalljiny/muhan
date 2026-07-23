@@ -261,6 +261,15 @@ describe('characterSchema', () => {
     expect(characterSchema.safeParse({ ...validCharacter(), spells: bad }).success).toBe(false)
   })
 
+  it('spells 원소가 uint8 범위(0–255)를 벗어나면 거부한다 (부호확장 knows 우회 차단)', () => {
+    const neg = new Array<number>(16).fill(0)
+    neg[0] = -1
+    expect(characterSchema.safeParse({ ...validCharacter(), spells: neg }).success).toBe(false)
+    const over = new Array<number>(16).fill(0)
+    over[0] = 256
+    expect(characterSchema.safeParse({ ...validCharacter(), spells: over }).success).toBe(false)
+  })
+
   it('realm이 없으면 거부한다 (realm 누적경험치 필수 영속 필드)', () => {
     const doc = validCharacter() as Partial<Character>
     delete doc.realm
@@ -277,6 +286,12 @@ describe('characterSchema', () => {
   it('realm 원소가 정수가 아니면 거부한다', () => {
     expect(
       characterSchema.safeParse({ ...validCharacter(), realm: [0, 1.5, 0, 0] }).success,
+    ).toBe(false)
+  })
+
+  it('realm 원소가 음수이면 거부한다 (누적경험치는 비음수)', () => {
+    expect(
+      characterSchema.safeParse({ ...validCharacter(), realm: [0, -1, 0, 0] }).success,
     ).toBe(false)
   })
 

@@ -49,11 +49,11 @@ export const characterSchema = z.strictObject({
   // hpCurrent/experience와 동렬의 영속 필수 필드(D1)로, 학습(study/teach)·시전 게이트가 값을
   // 요구하므로 required다. v4 이하 문서는 load 직전 backfillCharacterV5가 빈 비트마스크(16바이트 0)로
   // 시딩하고, 신규 문서는 생성 경로에서 동일 시드로 배선한다. 비트 read/write 헬퍼는 후속 Story 소유.
-  spells: z.array(z.int()).length(16),
+  spells: z.array(z.int().min(0).max(255)).length(16),
   // realm[4] 누적경험치 — 흙/바람/불/물 계열 숙련(mstruct.h:195, A6 §5). spells와 동렬의 영속 필수
   // 필드(D1)로, 공격 주문 피해 시 성장 write가 값을 요구하므로 required다. backfillCharacterV5가
   // [0,0,0,0]으로 시딩하고, 신규 문서는 생성 경로에서 동일 시드로 배선한다.
-  realm: z.tuple([z.int(), z.int(), z.int(), z.int()]),
+  realm: z.tuple([z.int().min(0), z.int().min(0), z.int().min(0), z.int().min(0)]),
   // 버프/디버프 만료 영속(선택). 주문번호별 {until} 엔트리로, until은 statusEffects와 동일한 절대-틱
   // 만료 관례다(interval 없음 — 버프는 주기 효과가 아니다, D2). strictObject라 카탈로그 밖 키·미정의
   // 키를 거부하고, .partial()로 개별 선택, .optional()로 buffs 자체를 선택으로 둔다(.default 금지 —
