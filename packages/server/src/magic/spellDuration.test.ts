@@ -3,11 +3,13 @@ import { describe, it, expect } from 'vitest'
 import { approve, goldenFixtureSchema, SPELL_NO, type Character } from 'shared'
 import {
   computeBuffDur,
+  computeSpecialBuffDur,
   computeDebuffDur,
   grantBuff,
   isExpired,
   isBuffActive,
 } from './spellDuration.js'
+import { MAGE, FIGHTER } from '../combat/constants.js'
 
 /**
  * spellDuration 단위 테스트 — G4 버프/디버프 dur 순수식 + 만료 판정(A6 §6·§7, magic2-8.c).
@@ -168,6 +170,140 @@ describe('computeBuffDur — 표준 버프 지속(A6 §6)', () => {
       casterClass: 5,
       gated: true,
       rpmext: false,
+    })).toThrow()
+  })
+})
+
+// ── computeSpecialBuffDur (Story 9 OpenQ #3-a/#3-b, A6 §6 invis/levit/light) ──
+describe('computeSpecialBuffDur — 표준 공식 예외 3주문(A6 §6·§11)', () => {
+  // invisibility: MAX(300, 1200+B*600) + (MAGE ? 60*L4 : 0) + (rpmext ? 600 : 0). 비-CAST 1200.
+  //   OpenQ #3-b: 오라클(magic3.c:456)엔 MAX(300) 하한이 빠졌으나 §11-b 결정대로 표준 버프처럼 복원.
+  describe('invisibility(SINVIS) — MAX(300) 하한 복원(OpenQ #3-b)', () => {
+    it('MAGE 기본: MAX(300, 1200+B*600) + 60*L4', () => {
+      // B=0, level=10, MAGE → MAX(300,1200)=1200 + 60*3=180 → 1380.
+      expect(computeSpecialBuffDur(SPELL_NO.SINVIS, {
+        intBonus: 0, level: 10, casterClass: MAGE, gated: true, rpmext: false,
+      })).toBe(1380)
+    })
+
+    it('B>0: 1200+B*600', () => {
+      // B=2, MAGE, level=10 → MAX(300,2400)=2400 + 180 → 2580.
+      expect(computeSpecialBuffDur(SPELL_NO.SINVIS, {
+        intBonus: 2, level: 10, casterClass: MAGE, gated: true, rpmext: false,
+      })).toBe(2580)
+    })
+
+    it('음수 B에 MAX(300) 하한 발동(OpenQ #3-b 복원 — 비-MAGE로 클래스 보너스 격리)', () => {
+      // B=-2 → 1200-1200=0 → MAX(300,0)=300. FIGHTER라 클래스 보너스 0, rpmext 없음 → 300.
+      // 하한 미복원(원본 버그)이면 0이 되므로 이 케이스가 복원 결정을 고정한다(anti-tautology).
+      expect(computeSpecialBuffDur(SPELL_NO.SINVIS, {
+        intBonus: -2, level: 10, casterClass: FIGHTER, gated: true, rpmext: false,
+      })).toBe(300)
+    })
+
+    it('RPMEXT +600 가산(detect/fly 동렬)', () => {
+      // B=0, FIGHTER, rpmext → 1200 + 600 → 1800.
+      expect(computeSpecialBuffDur(SPELL_NO.SINVIS, {
+        intBonus: 0, level: 10, casterClass: FIGHTER, gated: true, rpmext: true,
+      })).toBe(1800)
+    })
+
+    it('비-CAST(gated=false): 1200 고정', () => {
+      expect(computeSpecialBuffDur(SPELL_NO.SINVIS, {
+        intBonus: 5, level: 60, casterClass: MAGE, gated: false, rpmext: true,
+      })).toBe(1200)
+    })
+
+    it('MAGE 복원 dur = SDINVI(computeBuffDur) 동일 입력값과 일치(교차 검증)', () => {
+      // invis 복원식과 detectinvis 표준식은 동형: MAX(300,1200+B*600)+MAGE?60*L4+rpmext?600.
+      const input = { intBonus: 1, level: 10, casterClass: MAGE, gated: true, rpmext: true }
+      expect(computeSpecialBuffDur(SPELL_NO.SINVIS, input)).toBe(computeBuffDur(SPELL_NO.SDINVI, input))
+    })
+  })
+
+  // levitate: MAX(300, 2400+B*600) + (rpmext ? 800 : 0), 클래스 보너스 없음. 비-CAST 1200.
+  describe('levitate(SLEVIT) — base 2400 + MAX(300) 하한 복원(OpenQ #3-b)', () => {
+    it('기본: MAX(300, 2400+B*600)', () => {
+      // B=0, level=10 → 2400.
+      expect(computeSpecialBuffDur(SPELL_NO.SLEVIT, {
+        intBonus: 0, level: 10, casterClass: FIGHTER, gated: true, rpmext: false,
+      })).toBe(2400)
+    })
+
+    it('B>0: 2400+B*600', () => {
+      // B=2 → 2400+1200=3600.
+      expect(computeSpecialBuffDur(SPELL_NO.SLEVIT, {
+        intBonus: 2, level: 10, casterClass: FIGHTER, gated: true, rpmext: false,
+      })).toBe(3600)
+    })
+
+    it('음수 B에 MAX(300) 하한 발동(OpenQ #3-b 복원)', () => {
+      // B=-4 → 2400-2400=0 → MAX(300,0)=300. 하한 미복원이면 0(anti-tautology).
+      expect(computeSpecialBuffDur(SPELL_NO.SLEVIT, {
+        intBonus: -4, level: 10, casterClass: FIGHTER, gated: true, rpmext: false,
+      })).toBe(300)
+    })
+
+    it('RPMEXT +800 가산(표준 동렬)', () => {
+      // B=0, rpmext → 2400+800=3200.
+      expect(computeSpecialBuffDur(SPELL_NO.SLEVIT, {
+        intBonus: 0, level: 10, casterClass: FIGHTER, gated: true, rpmext: true,
+      })).toBe(3200)
+    })
+
+    it('MAGE여도 클래스 보너스 없음(levit는 클래스 무관)', () => {
+      // MAGE, level=10, B=0 → 2400(60*L4 미가산).
+      expect(computeSpecialBuffDur(SPELL_NO.SLEVIT, {
+        intBonus: 0, level: 10, casterClass: MAGE, gated: true, rpmext: false,
+      })).toBe(2400)
+    })
+
+    it('비-CAST(gated=false): 1200 고정', () => {
+      expect(computeSpecialBuffDur(SPELL_NO.SLEVIT, {
+        intBonus: 5, level: 60, casterClass: MAGE, gated: false, rpmext: true,
+      })).toBe(1200)
+    })
+  })
+
+  // light: 300 + L4*300 + (rpmext ? 600 : 0). 하한 불필요(항상 ≥300). delivery 무관(gated 무시).
+  //   OpenQ #3-a: 원본(magic2.c:316-317)은 연산자 우선순위 버그로 항상 600 고정 → 의도된 스케일 공식 복원.
+  describe('light(SLIGHT) — 스케일 공식 복원(OpenQ #3-a, 600 고정 버그 아님)', () => {
+    it('level=10: 300 + L4*300 = 1200 (버그 600이 아님)', () => {
+      // L4=trunc(13/4)=3 → 300+900=1200. 원본 버그면 600이므로 이 케이스가 복원을 증명한다.
+      const dur = computeSpecialBuffDur(SPELL_NO.SLIGHT, {
+        intBonus: 0, level: 10, casterClass: FIGHTER, gated: true, rpmext: false,
+      })
+      expect(dur).toBe(1200)
+      expect(dur).not.toBe(600)
+    })
+
+    it('level=20: L4=5 → 300 + 1500 = 1800 (레벨 스케일 유효)', () => {
+      // L4=trunc(23/4)=5 → 300+1500=1800. 레벨에 따라 스케일하는지 확인(버그면 600 고정).
+      expect(computeSpecialBuffDur(SPELL_NO.SLIGHT, {
+        intBonus: 0, level: 20, casterClass: FIGHTER, gated: true, rpmext: false,
+      })).toBe(1800)
+    })
+
+    it('RPMEXT +600 가산', () => {
+      // level=10 → 1200 + 600 = 1800.
+      expect(computeSpecialBuffDur(SPELL_NO.SLIGHT, {
+        intBonus: 0, level: 10, casterClass: FIGHTER, gated: true, rpmext: true,
+      })).toBe(1800)
+    })
+
+    it('delivery 무관: gated true/false가 같은 dur을 낸다(원본 light엔 non-CAST 분기 없음)', () => {
+      // 오라클 light()는 how 분기 없이 unconditional interval 세팅 → CAST/아이템 동일.
+      const base = { intBonus: 3, level: 10, casterClass: MAGE, rpmext: false }
+      expect(computeSpecialBuffDur(SPELL_NO.SLIGHT, { ...base, gated: true })).toBe(
+        computeSpecialBuffDur(SPELL_NO.SLIGHT, { ...base, gated: false }),
+      )
+    })
+  })
+
+  it('표준 버프(SBLESS 등)는 이 함수 대상이 아니다 → throw', () => {
+    // 표준 공식 주문은 computeBuffDur 소관. computeSpecialBuffDur는 invis/levit/light만 처리.
+    expect(() => computeSpecialBuffDur(SPELL_NO.SBLESS, {
+      intBonus: 0, level: 10, casterClass: MAGE, gated: true, rpmext: false,
     })).toThrow()
   })
 })

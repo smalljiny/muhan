@@ -114,6 +114,29 @@ export const PRCOLD = 36
 export const PSSHLD = 38
 /** 패거리 가입자 — PFAMIL(mtype.h:400). 양측 PFAMIL이면 선악 게이트를 check_war로 게이팅(command5.c:183). */
 export const PFAMIL = 55
+
+// ── 버프·감지 P-flag 비트(mtype.h #define, Story 9 G7 timed effect) ───────────
+// 원작은 P-flag를 creature flags와 같은 바이트 배열에 F_SET한다(예 bless: F_SET(ply,PBLESS)). 이 포트의
+// Character엔 flags 필드가 없어 타이머는 buffs `{until}`로 영속하고, 활성 버프를 projectBuffFlags가 fresh
+// P-flag hex로 투영한다(resistBuff의 projectResistFlags 계약 승계). 비트값은 mtype.h를 정본으로 전사한다.
+/** 축복(bless) — PBLESS(mtype.h:345 `#define PBLESS 0`). SBLESS 시전 시 F_SET(magic3.c). PINVIS 등과 같은 flags 배열, 플레이어 문맥 비트0. */
+export const PBLESS = 0
+/** 수호(protection) — PPROTE(mtype.h:353 `#define PPROTE 8`). SPROTE 시전 시 F_SET(magic2.c:373). */
+export const PPROTE = 8
+/** 발광(light) — PLIGHT(mtype.h:362 `#define PLIGHT 17`). SLIGHT 시전 시 F_SET(magic2.c:314). */
+export const PLIGHT = 17
+/** 주문 감지(detect magic) — PDMAGI(mtype.h:365 `#define PDMAGI 20`). SDMAGI 시전 시 F_SET(magic4.c). */
+export const PDMAGI = 20
+/** 은둔 감지(detect invisible) — PDINVI(mtype.h:366 `#define PDINVI 21`). SDINVI 시전 시 F_SET(magic4.c). */
+export const PDINVI = 21
+/** 부양(levitation) — PLEVIT(mtype.h:370 `#define PLEVIT 25`). SLEVIT 시전 시 F_SET(magic5.c:509). */
+export const PLEVIT = 25
+/** 비행(flying) — PFLYSP(mtype.h:376 `#define PFLYSP 31`). SFLYSP 시전 시 F_SET(magic5.c). */
+export const PFLYSP = 31
+/** 선악 감지(know alignment) — PKNOWA(mtype.h:378 `#define PKNOWA 33`). SKNOWA 시전 시 F_SET(magic6.c). */
+export const PKNOWA = 33
+/** 수생(breathe water) — PBRWAT(mtype.h:382 `#define PBRWAT 37`). SBRWAT 시전 시 F_SET(magic7.c). */
+export const PBRWAT = 37
 /** 잠력격발 — PUPDMG(mtype.h:404). 초인 다중공격 count 게이트(command5.c:208). */
 export const PUPDMG = 59
 /**

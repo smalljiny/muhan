@@ -3,9 +3,14 @@ import { SPELL_NO, type Character, type CreatureInstance, type RoomNode } from '
 import { SpellDispatch } from './dispatch.js'
 import {
   resistBuff,
+  standardBuff,
+  specialBuff,
   projectResistFlags,
+  projectBuffFlags,
   registerResistBuffs,
+  registerTimedBuffs,
   RESIST_SPELLS,
+  TIMED_BUFF_SPELLS,
   type BuffEffectHandler,
   type BuffEffectRequest,
 } from './buffEffects.js'
@@ -13,10 +18,28 @@ import type { Caster } from './caster.js'
 import type { CastContext } from './castContext.js'
 import { offensiveSpell } from './offensiveSpell.js'
 import { toCombatant } from '../combat/combatant.js'
-import { F_ISSET, F_SET, PRFIRE, PRMAGI, PRCOLD, PSSHLD, MRMAGI } from '../world/hexFlags.js'
+import {
+  F_ISSET,
+  F_SET,
+  PRFIRE,
+  PRMAGI,
+  PRCOLD,
+  PSSHLD,
+  MRMAGI,
+  PBLESS,
+  PPROTE,
+  PINVIS,
+  PLEVIT,
+  PBRWAT,
+  PDINVI,
+  PDMAGI,
+  PKNOWA,
+  PFLYSP,
+  PLIGHT,
+} from '../world/hexFlags.js'
 import { setFlag } from '../world/door.js'
 import { RPMEXT } from '../world/roomFlags.js'
-import { MAGE, FIGHTER } from '../combat/constants.js'
+import { MAGE, FIGHTER, CLERIC } from '../combat/constants.js'
 import { seqRng } from '../combat/dice.testutil.js'
 
 /**
@@ -264,5 +287,216 @@ describe('offensiveSpell 회귀 — MRMAGI creature 저항 감산 무파괴', ()
       osp,
     )
     expect(out.dmg).toBe(10)
+  })
+})
+
+// ══ Story 9 (G7) — 버프·감지 timed effect 10주문 ════════════════════════════════
+
+// ── T9.1/T9.2/T9.3 standardBuff: computeBuffDur 소비 7주문 until 기록 ───────────
+describe('standardBuff — computeBuffDur 소비 버프/감지/fly(A6 §6 표준)', () => {
+  it('SBLESS(bless): MAGE는 클래스 보너스 없음 → until=now+1200', () => {
+    // bless는 CLERIC/PALADIN만 +60*L4. MAGE B=0 → 1200. now=1000 → until=2200.
+    const next = standardBuff(
+      req({ caster: makeCaster({ class: MAGE, intBonus: 0 }), ctx: makeCtx({ now: 1000 }) }),
+      SPELL_NO.SBLESS,
+    )
+    expect(next.buffs?.[String(SPELL_NO.SBLESS)]).toEqual({ until: 2200 })
+  })
+
+  it('SBLESS(bless): CLERIC는 +60*L4 → until=now+1380', () => {
+    // CLERIC=3, level=10 → L4=3, +180. base 1200 → 1380. now=1000 → until=2380.
+    const next = standardBuff(
+      req({ caster: makeCaster({ class: CLERIC, intBonus: 0, level: 10 }), ctx: makeCtx({ now: 1000 }) }),
+      SPELL_NO.SBLESS,
+    )
+    expect(next.buffs?.[String(SPELL_NO.SBLESS)]).toEqual({ until: 2380 })
+  })
+
+  it('SPROTE(protection): FIGHTER B=0 → until=now+1200', () => {
+    const next = standardBuff(
+      req({ caster: makeCaster({ class: FIGHTER, intBonus: 0 }), ctx: makeCtx({ now: 1000 }) }),
+      SPELL_NO.SPROTE,
+    )
+    expect(next.buffs?.[String(SPELL_NO.SPROTE)]).toEqual({ until: 2200 })
+  })
+
+  it('SBRWAT(breathe_water, family=buff → Story 9): FIGHTER B=2 → until=now+2400', () => {
+    // breathe_water 클래스 보너스 없음. B=2 → MAX(300,2400)=2400. now=1000 → 3400.
+    const next = standardBuff(
+      req({ caster: makeCaster({ class: FIGHTER, intBonus: 2 }), ctx: makeCtx({ now: 1000 }) }),
+      SPELL_NO.SBRWAT,
+    )
+    expect(next.buffs?.[String(SPELL_NO.SBRWAT)]).toEqual({ until: 3400 })
+  })
+
+  it('SDINVI(detectinvis): MAGE +60*L4 → until=now+1380', () => {
+    const next = standardBuff(
+      req({ caster: makeCaster({ class: MAGE, intBonus: 0, level: 10 }), ctx: makeCtx({ now: 1000 }) }),
+      SPELL_NO.SDINVI,
+    )
+    expect(next.buffs?.[String(SPELL_NO.SDINVI)]).toEqual({ until: 2380 })
+  })
+
+  it('SDMAGI(detectmagic): 비-MAGE는 보너스 없음 → until=now+1200', () => {
+    const next = standardBuff(
+      req({ caster: makeCaster({ class: FIGHTER, intBonus: 0 }), ctx: makeCtx({ now: 1000 }) }),
+      SPELL_NO.SDMAGI,
+    )
+    expect(next.buffs?.[String(SPELL_NO.SDMAGI)]).toEqual({ until: 2200 })
+  })
+
+  it('SKNOWA(know_alignment): RPMEXT +800 → until=now+2000', () => {
+    const flags = [0, 0, 0, 0, 0, 0, 0, 0]
+    setFlag(flags, RPMEXT)
+    const next = standardBuff(
+      req({ caster: makeCaster({ class: FIGHTER, intBonus: 0 }), ctx: makeCtx({ now: 1000, room: makeRoom(flags) }) }),
+      SPELL_NO.SKNOWA,
+    )
+    expect(next.buffs?.[String(SPELL_NO.SKNOWA)]).toEqual({ until: 3000 })
+  })
+
+  it('SFLYSP(fly, movement family지만 LT_FLYSP 타이머 보유): RPMEXT +600 → until=now+1800', () => {
+    const flags = [0, 0, 0, 0, 0, 0, 0, 0]
+    setFlag(flags, RPMEXT)
+    const next = standardBuff(
+      req({ caster: makeCaster({ class: FIGHTER, intBonus: 0 }), ctx: makeCtx({ now: 1000, room: makeRoom(flags) }) }),
+      SPELL_NO.SFLYSP,
+    )
+    expect(next.buffs?.[String(SPELL_NO.SFLYSP)]).toEqual({ until: 2800 })
+  })
+
+  it('resistBuff는 standardBuff에 위임한다(Story 7 API 유지)', () => {
+    const r = req({ caster: makeCaster({ class: FIGHTER, intBonus: 0 }), ctx: makeCtx({ now: 1000 }) })
+    expect(resistBuff(r, SPELL_NO.SRFIRE)).toEqual(standardBuff(r, SPELL_NO.SRFIRE))
+  })
+})
+
+// ── T9.1/T9.3 specialBuff: computeSpecialBuffDur 소비 3주문(OpenQ #3-a/#3-b) ────
+describe('specialBuff — invis/levit/light(A6 §6 표준 공식 예외)', () => {
+  it('SINVIS(invisibility): MAGE 복원식 → until=now+1380', () => {
+    // MAX(300,1200)=1200 + MAGE 60*3=180 → 1380. now=1000 → 2380.
+    const next = specialBuff(
+      req({ caster: makeCaster({ class: MAGE, intBonus: 0, level: 10 }), ctx: makeCtx({ now: 1000 }) }),
+      SPELL_NO.SINVIS,
+    )
+    expect(next.buffs?.[String(SPELL_NO.SINVIS)]).toEqual({ until: 2380 })
+  })
+
+  it('SINVIS: 음수 B에 MAX(300) 하한 복원(OpenQ #3-b) → until=now+300', () => {
+    // B=-2, FIGHTER → MAX(300,0)=300. 하한 미복원이면 0(anti-tautology). now=1000 → 1300.
+    const next = specialBuff(
+      req({ caster: makeCaster({ class: FIGHTER, intBonus: -2 }), ctx: makeCtx({ now: 1000 }) }),
+      SPELL_NO.SINVIS,
+    )
+    expect(next.buffs?.[String(SPELL_NO.SINVIS)]).toEqual({ until: 1300 })
+  })
+
+  it('SLEVIT(levitate): base 2400 → until=now+2400', () => {
+    const next = specialBuff(
+      req({ caster: makeCaster({ class: FIGHTER, intBonus: 0 }), ctx: makeCtx({ now: 1000 }) }),
+      SPELL_NO.SLEVIT,
+    )
+    expect(next.buffs?.[String(SPELL_NO.SLEVIT)]).toEqual({ until: 3400 })
+  })
+
+  it('SLEVIT: 음수 B에 MAX(300) 하한 복원(OpenQ #3-b) → until=now+300', () => {
+    // B=-4 → 2400-2400=0 → MAX(300,0)=300. now=1000 → 1300.
+    const next = specialBuff(
+      req({ caster: makeCaster({ class: FIGHTER, intBonus: -4 }), ctx: makeCtx({ now: 1000 }) }),
+      SPELL_NO.SLEVIT,
+    )
+    expect(next.buffs?.[String(SPELL_NO.SLEVIT)]).toEqual({ until: 1300 })
+  })
+
+  it('SLIGHT(light, utility family): 스케일 복원 level=10 → until=now+1200(600 버그 아님)', () => {
+    // 300 + L4(3)*300 = 1200. 원본 버그면 600. now=1000 → 2200.
+    const next = specialBuff(
+      req({ caster: makeCaster({ class: FIGHTER, intBonus: 0, level: 10 }), ctx: makeCtx({ now: 1000 }) }),
+      SPELL_NO.SLIGHT,
+    )
+    expect(next.buffs?.[String(SPELL_NO.SLIGHT)]).toEqual({ until: 2200 })
+  })
+})
+
+// ── T9.4 projectBuffFlags: 활성 Story 9 버프 → P-flag hex 투영 ───────────────────
+describe('projectBuffFlags — 활성 버프/감지 → P-flag hex(projectResistFlags 계약 승계)', () => {
+  const cases: ReadonlyArray<readonly [number, number]> = [
+    [SPELL_NO.SBLESS, PBLESS],
+    [SPELL_NO.SPROTE, PPROTE],
+    [SPELL_NO.SINVIS, PINVIS],
+    [SPELL_NO.SLEVIT, PLEVIT],
+    [SPELL_NO.SBRWAT, PBRWAT],
+    [SPELL_NO.SDINVI, PDINVI],
+    [SPELL_NO.SDMAGI, PDMAGI],
+    [SPELL_NO.SKNOWA, PKNOWA],
+    [SPELL_NO.SFLYSP, PFLYSP],
+    [SPELL_NO.SLIGHT, PLIGHT],
+  ]
+
+  for (const [spellNo, bit] of cases) {
+    it(`주문 ${spellNo} 활성 → P-flag 비트 ${bit} set`, () => {
+      const dispatch = new SpellDispatch<BuffEffectHandler>()
+      registerTimedBuffs(dispatch)
+      const c = dispatch.resolve(spellNo)!(req({ ctx: makeCtx({ now: 1000 }) }))
+      expect(F_ISSET(projectBuffFlags(c, 1000), bit)).toBe(true)
+    })
+  }
+
+  it('만료된 버프는 P-flag를 세팅하지 않는다', () => {
+    // SBLESS FIGHTER B=0 → dur 1200. now=500 → until=1700. tick=1701 만료.
+    const c = standardBuff(
+      req({ caster: makeCaster({ class: FIGHTER }), ctx: makeCtx({ now: 500 }) }),
+      SPELL_NO.SBLESS,
+    )
+    expect(F_ISSET(projectBuffFlags(c, 1701), PBLESS)).toBe(false)
+  })
+
+  it('버프 없는 Character는 전 P-flag off', () => {
+    const hex = projectBuffFlags(makeCharacter(), 1000)
+    for (const bit of [PBLESS, PPROTE, PINVIS, PLEVIT, PBRWAT, PDINVI, PDMAGI, PKNOWA, PFLYSP, PLIGHT]) {
+      expect(F_ISSET(hex, bit)).toBe(false)
+    }
+  })
+})
+
+// ── T9.4 registerTimedBuffs: 자체 버프 dispatch 등록 + immutability ──────────────
+describe('registerTimedBuffs — 버프-family 디스패치(10주문)', () => {
+  it('타이머 보유 10주문을 모두 등록한다', () => {
+    const dispatch = new SpellDispatch<BuffEffectHandler>()
+    registerTimedBuffs(dispatch)
+    const all = [
+      SPELL_NO.SBLESS, SPELL_NO.SPROTE, SPELL_NO.SINVIS, SPELL_NO.SLEVIT, SPELL_NO.SBRWAT,
+      SPELL_NO.SDINVI, SPELL_NO.SDMAGI, SPELL_NO.SKNOWA, SPELL_NO.SFLYSP, SPELL_NO.SLIGHT,
+    ]
+    for (const spellNo of all) expect(typeof dispatch.resolve(spellNo)).toBe('function')
+    expect(TIMED_BUFF_SPELLS).toHaveLength(10)
+  })
+
+  it('SBRWAT(family=buff)·SLIGHT(family=utility)가 이 Story에 안착한다(결정 요약 #1)', () => {
+    const dispatch = new SpellDispatch<BuffEffectHandler>()
+    registerTimedBuffs(dispatch)
+    expect(TIMED_BUFF_SPELLS).toContain(SPELL_NO.SBRWAT)
+    expect(TIMED_BUFF_SPELLS).toContain(SPELL_NO.SLIGHT)
+    expect(typeof dispatch.resolve(SPELL_NO.SBRWAT)).toBe('function')
+    expect(typeof dispatch.resolve(SPELL_NO.SLIGHT)).toBe('function')
+  })
+
+  it('resistBuff family(SRFIRE 등)와 같은 인스턴스에 공존 등록 가능(핸들러 타입 동일)', () => {
+    // buff-family 단일 dispatch: resistBuff 4 + timed 10을 한 인스턴스에 등록해도 충돌 없음.
+    const dispatch = new SpellDispatch<BuffEffectHandler>()
+    registerResistBuffs(dispatch)
+    registerTimedBuffs(dispatch)
+    expect(typeof dispatch.resolve(SPELL_NO.SRFIRE)).toBe('function')
+    expect(typeof dispatch.resolve(SPELL_NO.SBLESS)).toBe('function')
+  })
+
+  it('effect는 입력 Character·buffs를 변형하지 않는다(immutability)', () => {
+    const target = makeCharacter({ buffs: { [String(SPELL_NO.SDMAGI)]: { until: 42 } } })
+    const next = specialBuff(req({ target, caster: makeCaster({ class: FIGHTER }) }), SPELL_NO.SLIGHT)
+    // 원본 불변.
+    expect(target.buffs).toEqual({ [String(SPELL_NO.SDMAGI)]: { until: 42 } })
+    // 기존 엔트리 병합 + 새 엔트리.
+    expect(next.buffs?.[String(SPELL_NO.SDMAGI)]).toEqual({ until: 42 })
+    expect(next.buffs?.[String(SPELL_NO.SLIGHT)]).toBeDefined()
   })
 })

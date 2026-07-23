@@ -35,6 +35,9 @@ export {
   projectResistFlags,
   registerResistBuffs,
   RESIST_SPELLS,
+  registerTimedBuffs,
+  projectBuffFlags,
+  TIMED_BUFF_SPELLS,
   type BuffEffectRequest,
   type BuffEffectHandler,
 } from './buffEffects.js'

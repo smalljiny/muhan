@@ -1,8 +1,24 @@
 import { SPELL_NO, type Character } from 'shared'
 import { hasFlag } from '../world/door.js'
-import { F_SET, PRFIRE, PRMAGI, PRCOLD, PSSHLD } from '../world/hexFlags.js'
+import {
+  F_SET,
+  PRFIRE,
+  PRMAGI,
+  PRCOLD,
+  PSSHLD,
+  PBLESS,
+  PPROTE,
+  PINVIS,
+  PLEVIT,
+  PBRWAT,
+  PDINVI,
+  PDMAGI,
+  PKNOWA,
+  PFLYSP,
+  PLIGHT,
+} from '../world/hexFlags.js'
 import { RPMEXT } from '../world/roomFlags.js'
-import { isBuffActive, computeBuffDur, grantBuff } from './spellDuration.js'
+import { isBuffActive, computeBuffDur, computeSpecialBuffDur, grantBuff, type BuffDurInput } from './spellDuration.js'
 import type { Caster } from './caster.js'
 import type { CastContext } from './castContext.js'
 import type { SpellDispatch } from './dispatch.js'
@@ -72,19 +88,46 @@ export interface BuffEffectRequest {
 export type BuffEffectHandler = (req: BuffEffectRequest) => Character
 
 /**
- * resistBuff — 저항 버프 effect. until = ctx.now + computeBuffDur(...)를 buffs에 기록한 새 Character를 반환한다.
- * rpmext는 시전 방 RPMEXT 플래그로 판정한다(magic5-7.c `F_ISSET(parent_rom, RPMEXT)`).
+ * buffDurInput — BuffEffectRequest에서 dur 산출 입력(BuffDurInput)을 뽑는다. standardBuff·specialBuff
+ * 공용. rpmext는 시전 방 RPMEXT 플래그로 판정한다(magic2-8.c `F_ISSET(parent_rom, RPMEXT)`).
  */
-export function resistBuff(req: BuffEffectRequest, spellNo: number): Character {
-  const { caster, target, ctx } = req
-  const dur = computeBuffDur(spellNo, {
+function buffDurInput(req: BuffEffectRequest): BuffDurInput {
+  const { caster, ctx } = req
+  return {
     intBonus: caster.intBonus,
     level: caster.level,
     casterClass: caster.class,
     gated: ctx.gated,
     rpmext: hasFlag(ctx.room.flags, RPMEXT),
-  })
-  return grantBuff(target, spellNo, ctx.now + dur)
+  }
+}
+
+/**
+ * standardBuff — A6 §6 **표준 공식** 버프 effect(computeBuffDur 소비). until = ctx.now + dur을 buffs에 기록한
+ * 새 Character를 반환한다. resistBuff(4주문)·Story 9 표준 버프/감지/fly 7주문이 공유한다 — 전부
+ * `MAX(300, 1200+B*600) + 클래스/RPMEXT` 공식이라 dur 산출이 동일하다(BUFF_DUR_META 등록 주문 한정).
+ */
+export function standardBuff(req: BuffEffectRequest, spellNo: number): Character {
+  const dur = computeBuffDur(spellNo, buffDurInput(req))
+  return grantBuff(req.target, spellNo, req.ctx.now + dur)
+}
+
+/**
+ * specialBuff — A6 §6 **표준 공식 예외** 버프 effect(computeSpecialBuffDur 소비, SINVIS/SLEVIT/SLIGHT).
+ * until = ctx.now + dur을 buffs에 기록한 새 Character를 반환한다. invis/levit는 MAX(300) 하한 복원
+ * (OpenQ #3-b), light는 스케일 공식 복원(OpenQ #3-a) — 결정은 computeSpecialBuffDur에 고정돼 있다.
+ */
+export function specialBuff(req: BuffEffectRequest, spellNo: number): Character {
+  const dur = computeSpecialBuffDur(spellNo, buffDurInput(req))
+  return grantBuff(req.target, spellNo, req.ctx.now + dur)
+}
+
+/**
+ * resistBuff — 저항 버프 effect(Story 7 API 유지). standardBuff에 위임한다 — 저항 4주문도 A6 §6 표준
+ * dur 공식을 쓰므로 별도 산술이 없다. 이 export는 buffEffects.test/G5 소비처 계약을 보존한다.
+ */
+export function resistBuff(req: BuffEffectRequest, spellNo: number): Character {
+  return standardBuff(req, spellNo)
 }
 
 /**
@@ -107,5 +150,74 @@ export function projectResistFlags(character: Character, now: number): string {
 export function registerResistBuffs(dispatch: SpellDispatch<BuffEffectHandler>): void {
   for (const spellNo of RESIST_SPELLS) {
     dispatch.register(spellNo, (req) => resistBuff(req, spellNo))
+  }
+}
+
+// ══ Story 9 (G7) — 타이머 보유 비-offensive 10주문(buff+detect+fly+light) ═════════
+
+/**
+ * TimedBuffMeta — Story 9 주문의 투영 P-flag 비트 + dur 종류. 이 Map 하나가 (1) projectBuffFlags 비트
+ * (2) registerTimedBuffs 핸들러 선택 (3) TIMED_BUFF_SPELLS 파생 리스트의 **단일 출처**다 — resistBuff의
+ * RESIST_FLAG_BY_SPELL 패턴을 승계해 세 파생 구조의 drift를 차단한다(Story 7 drift 교훈).
+ *
+ *   special=false: A6 §6 표준 공식(computeBuffDur, BUFF_DUR_META 등록) → standardBuff.
+ *   special=true : 표준 공식 예외(computeSpecialBuffDur, OpenQ #3-a/#3-b) → specialBuff.
+ */
+interface TimedBuffMeta {
+  /** 활성 버프가 투영하는 P-flag 비트(mtype.h 전사, hexFlags.ts). */
+  readonly flag: number
+  /** true면 computeSpecialBuffDur(invis/levit/light), false면 computeBuffDur(표준 7주문). */
+  readonly special: boolean
+}
+
+/**
+ * TIMED_BUFF_META — 타이머 보유 10주문(결정 요약 #1: SBRWAT family=buff·SLIGHT family=utility 안착).
+ * Map 삽입순서=등록순서. 표준 7 {SBLESS, SPROTE, SBRWAT, SDINVI, SDMAGI, SKNOWA, SFLYSP} +
+ * 예외 3 {SINVIS, SLEVIT, SLIGHT}.
+ */
+const TIMED_BUFF_META: ReadonlyMap<number, TimedBuffMeta> = new Map([
+  [SPELL_NO.SBLESS, { flag: PBLESS, special: false }],
+  [SPELL_NO.SPROTE, { flag: PPROTE, special: false }],
+  [SPELL_NO.SBRWAT, { flag: PBRWAT, special: false }],
+  [SPELL_NO.SDINVI, { flag: PDINVI, special: false }],
+  [SPELL_NO.SDMAGI, { flag: PDMAGI, special: false }],
+  [SPELL_NO.SKNOWA, { flag: PKNOWA, special: false }],
+  [SPELL_NO.SFLYSP, { flag: PFLYSP, special: false }],
+  [SPELL_NO.SINVIS, { flag: PINVIS, special: true }],
+  [SPELL_NO.SLEVIT, { flag: PLEVIT, special: true }],
+  [SPELL_NO.SLIGHT, { flag: PLIGHT, special: true }],
+])
+
+/**
+ * TIMED_BUFF_SPELLS — Story 9 주문번호(등록·커버리지 단일 출처). TIMED_BUFF_META 키에서 파생해
+ * drift를 차단한다. 정확히 10주문이며 SBRWAT·SLIGHT를 포함한다.
+ */
+export const TIMED_BUFF_SPELLS: readonly number[] = [...TIMED_BUFF_META.keys()]
+
+/**
+ * projectBuffFlags — 활성(만료 안 된) Story 9 버프 → P-flag hex 투영(projectResistFlags 승계).
+ * 각 주문이 활성이면 대응 P-flag(PBLESS/PPROTE/PINVIS/…)를 세팅한다. 만료 버프는 제외한다. 반환 hex는
+ * F_ISSET로 판독 가능하다(감지·비행·발광 등 라이브 상태 read 소비 관용 무파괴).
+ */
+export function projectBuffFlags(character: Character, now: number): string {
+  let hex = ZERO_FLAGS
+  for (const [spellNo, meta] of TIMED_BUFF_META) {
+    if (isBuffActive(character, spellNo, now)) hex = F_SET(hex, meta.flag)
+  }
+  return hex
+}
+
+/**
+ * registerTimedBuffs — Story 9 10주문을 buff-family SpellDispatch 인스턴스에 등록한다(Story 6 패턴,
+ * offensive/debuff dispatch 재사용 금지). meta.special로 standardBuff·specialBuff 핸들러를 선택한다.
+ * resistBuff family(4주문)와 핸들러 타입(BuffEffectHandler)이 같아 동일 dispatch 인스턴스에 공존 등록
+ * 가능하다(registerResistBuffs와 함께 호출 → buff-family 단일 dispatch 14주문).
+ */
+export function registerTimedBuffs(dispatch: SpellDispatch<BuffEffectHandler>): void {
+  for (const [spellNo, meta] of TIMED_BUFF_META) {
+    const handler: BuffEffectHandler = meta.special
+      ? (req) => specialBuff(req, spellNo)
+      : (req) => standardBuff(req, spellNo)
+    dispatch.register(spellNo, handler)
   }
 }
