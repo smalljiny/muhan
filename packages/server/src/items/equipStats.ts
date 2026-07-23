@@ -28,7 +28,11 @@ export type EquipStatContribution = Pick<
 /**
  * 착용 쌍 집합과 명시 숙련값을 EffectiveStatContext 기여 필드로 투영한다.
  *
- * - equipArmor = Σ template.armor (부호 유지 — 저주 장비 음수 armor·방패 포함, 모든 착용 아이템 합).
+ * - **착용 판정**: `instance.equipped === true`인 쌍만 집계한다. 오라클 compute_ac(player.c:980)는
+ *   `ready[]`(착용 슬롯 배열)만 순회하므로 미착용(equipped=false)·stale slot 인벤 아이템은 스탯에
+ *   기여하지 않는다. 호출자가 전 인벤을 join해 넘겨도(예 ObjectRepository.findByOwner) 미착용
+ *   아이템이 AC/THAC0를 오염시키지 못하게 seam이 방어한다(defense-in-depth).
+ * - equipArmor = Σ template.armor (부호 유지 — 저주 장비 음수 armor·방패 포함, 착용 아이템 합).
  * - weaponAdjustment = WIELD 슬롯(0-based 19) 착용 아이템의 template.adjustment. 슬롯 번호로만
  *   판정한다 — HELD(16) 무기를 WIELD로 오인하지 않는다. WIELD 미착용이면 0.
  * - weaponProficiency = 명시 인자를 그대로 투영한다(Character.proficiency[5] 어댑터는 E6 유예).
@@ -39,8 +43,9 @@ export function projectEquipStats(
   equipped: ReadonlyArray<EquippedPair>,
   weaponProficiency: number,
 ): EquipStatContribution {
-  const equipArmor = equipped.reduce((sum, e) => sum + e.template.armor, 0)
-  const wield = equipped.find((e) => e.instance.slot === WIELD_SLOT)
+  const worn = equipped.filter((e) => e.instance.equipped === true)
+  const equipArmor = worn.reduce((sum, e) => sum + e.template.armor, 0)
+  const wield = worn.find((e) => e.instance.slot === WIELD_SLOT)
   const weaponAdjustment = wield?.template.adjustment ?? 0
   return { equipArmor, weaponAdjustment, weaponProficiency }
 }

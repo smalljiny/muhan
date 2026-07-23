@@ -204,7 +204,7 @@ describe('deliverConsumable — resolve 분기(deferred/unresolved/delivered)', 
     expect(instance.shotscur).toBe(5)
   })
 
-  it('offensive 등록 spellNo → 핸들러 → delivered(shotscur -1)', () => {
+  it('offensive 등록 spellNo → 핸들러 → delivered(spellNo·context, shotscur 미변경)', () => {
     const dispatch = new SpellDispatch<unknown>()
     dispatch.register(OFFENSIVE_SPELL, () => 'handler') // 핸들러 형태는 무관(호출 안 함)
     const instance = makeInstance({ type: POTION, shotscur: 3 })
@@ -219,13 +219,14 @@ describe('deliverConsumable — resolve 분기(deferred/unresolved/delivered)', 
     if (outcome.kind === 'delivered') {
       expect(outcome.spellNo).toBe(OFFENSIVE_SPELL)
       expect(outcome.context).toBe('potion')
-      expect(outcome.object.shotscur).toBe(2) // 3 → 2
     }
+    // seam은 감소하지 않는다 — shotscur 감소는 effect 성공(오라클 `if(n)`) 시 배선 계층 소관.
+    expect(instance.shotscur).toBe(3)
   })
 })
 
-describe('deliverConsumable — shotscur immutability', () => {
-  it('delivered는 shotscur -1된 새 객체를 반환하고 입력 인스턴스는 무변경', () => {
+describe('deliverConsumable — shotscur 불변(seam은 감소하지 않음)', () => {
+  it('delivered여도 seam은 입력 인스턴스를 변형하지 않는다 — 감소는 배선 유예(오라클 성공 결합)', () => {
     const dispatch = new SpellDispatch<unknown>()
     dispatch.register(OFFENSIVE_SPELL, () => 'handler')
     const instance = makeInstance({ shotscur: 1 })
@@ -237,12 +238,8 @@ describe('deliverConsumable — shotscur immutability', () => {
       dispatch,
     })
     expect(outcome.kind).toBe('delivered')
-    if (outcome.kind === 'delivered') {
-      // 반환 객체는 감소, 입력은 불변, 새 참조.
-      expect(outcome.object.shotscur).toBe(0)
-      expect(instance.shotscur).toBe(1)
-      expect(outcome.object).not.toBe(instance)
-    }
+    // delivered는 object를 담지 않는다(감소 유예). 입력 인스턴스 shotscur 무변경.
+    expect(instance.shotscur).toBe(1)
   })
 })
 

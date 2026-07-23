@@ -74,6 +74,19 @@ describe('projectEquipStats', () => {
     expect(result.equipArmor).toBe(-6)
   })
 
+  it('미착용(equipped=false) 아이템은 armor·weaponAdjustment에 기여하지 않는다', () => {
+    // 오라클 compute_ac는 ready[](착용 슬롯)만 순회한다. 호출자가 전 인벤을 넘겨도
+    // 미착용 아이템(백팩·stale slot)이 AC/THAC0를 오염시키지 못하게 seam이 방어한다.
+    const items = [
+      pair({ _id: 'worn', slot: 0, equipped: true }, { armor: 5 }),
+      pair({ _id: 'backpack', slot: 1, equipped: false }, { armor: 100 }), // 미착용 고armor
+      pair({ _id: 'stale-wield', slot: 19, equipped: false }, { type: 0, adjustment: 50 }), // 미착용 WIELD slot
+    ]
+    const result = projectEquipStats(items, 0)
+    expect(result.equipArmor).toBe(5) // 착용된 것만 합산 (100 제외)
+    expect(result.weaponAdjustment).toBe(0) // 미착용 WIELD slot 무기는 무시
+  })
+
   it('weaponAdjustment는 WIELD 슬롯(19) 착용 무기의 adjustment다', () => {
     const equipped = [pair({ _id: 'w', slot: 19 }, { type: 0, adjustment: 3 })]
     const result = projectEquipStats(equipped, 0)
