@@ -48,6 +48,16 @@ export const MENONL = 22
 export const MUNKIL = 24
 /** 마법 저항(크리처) — MRMAGI(mtype.h:438). offensive_spell 데미지 감산 게이트(magic1.c:1113). */
 export const MRMAGI = 27
+/** 혼동(befuddle) 저항 — MRBEFD(mtype.h:454 "Monster resists stun only"). 혼동술 dur=3 단축(magic3.c:775). */
+export const MRBEFD = 43
+/** 공포(fear) 상태 — MFEARS(mtype.h:458 "Monster is fearful"). fear 시전 시 F_SET(magic8.c:404). */
+export const MFEARS = 47
+/** 침묵(silence) 상태 — MSILNC(mtype.h:459 "Monster has been silenced"). silence 시전 시 F_SET(magic8.c:529). */
+export const MSILNC = 48
+/** 실명(blind) 상태 — MBLIND(mtype.h:460 "Monster is blind"). blind 시전 시 F_SET(magic8.c:276). */
+export const MBLIND = 49
+/** 매혹 불가 — MNOCHA(mtype.h:473 "Monster cannot be charmed"). charm 완전 반탄 조건(magic8.c:751). */
+export const MNOCHA = 62
 /** 선한 유저 공격형(정렬 alg=-1). */
 export const MGAGGR = 39
 /** 악한 유저 공격형(정렬 alg=1). */

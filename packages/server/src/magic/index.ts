@@ -39,6 +39,13 @@ export {
   type BuffEffectHandler,
 } from './buffEffects.js'
 export {
+  registerDebuffs,
+  DEBUFF_SPELLS,
+  type DebuffOutcome,
+  type DebuffEffectRequest,
+  type DebuffEffectHandler,
+} from './debuffEffects.js'
+export {
   canTeachSpllv,
   study,
   teach,
