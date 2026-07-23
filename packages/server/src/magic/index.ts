@@ -6,7 +6,7 @@
  * 공격주문 데미지 effect(mprofic·offensiveSpell·registerOffensiveSpells)를 노출한다.
  */
 export { toCaster, type Caster } from './caster.js'
-export { SpellDispatch, NOT_IMPLEMENTED, type NotImplemented, type ResolveResult } from './dispatch.js'
+export { SpellDispatch, type ResolveResult } from './dispatch.js'
 export type { CastContext } from './castContext.js'
 export {
   evaluateGate,

@@ -55,7 +55,7 @@ function makeInstance(overrides: Partial<ObjectInstance> = {}): ObjectInstance {
 
 describe('deliverConsumable — 카탈로그 판별 전제', () => {
   it('테스트 픽스처의 offensive/비-offensive 성질이 카탈로그와 일치한다', () => {
-    // 이 전제가 깨지면 deferred/unresolved 테스트가 의미를 잃는다(하드코딩 회피 가드).
+    // 이 전제가 깨지면 unresolved 테스트가 의미를 잃는다(하드코딩 회피 가드).
     expect(spellByNo(OFFENSIVE_SPELL)?.offensive).toBe(true)
     expect(spellByNo(NON_OFFENSIVE_SPELL)?.offensive).toBe(false)
   })
@@ -64,7 +64,7 @@ describe('deliverConsumable — 카탈로그 판별 전제', () => {
 describe('deliverConsumable — context 라우팅 + noop', () => {
   it('POTION(6)/SCROLL(7)/WAND(8)를 각 context로 라우팅한다', () => {
     const dispatch = new SpellDispatch<unknown>()
-    const magicpower = magicpowerFor(NON_OFFENSIVE_SPELL) // 비-offensive → deferred(context 관찰)
+    const magicpower = magicpowerFor(NON_OFFENSIVE_SPELL) // 비-offensive 미등록 → unresolved(context 관찰)
     const caster = makeCaster()
 
     const potion = deliverConsumable({
@@ -89,9 +89,9 @@ describe('deliverConsumable — context 라우팅 + noop', () => {
       dispatch,
     })
 
-    expect(potion).toEqual({ kind: 'deferred', spellNo: NON_OFFENSIVE_SPELL, context: 'potion' })
-    expect(scroll).toEqual({ kind: 'deferred', spellNo: NON_OFFENSIVE_SPELL, context: 'scroll' })
-    expect(wand).toEqual({ kind: 'deferred', spellNo: NON_OFFENSIVE_SPELL, context: 'wand' })
+    expect(potion).toEqual({ kind: 'unresolved', spellNo: NON_OFFENSIVE_SPELL, context: 'potion' })
+    expect(scroll).toEqual({ kind: 'unresolved', spellNo: NON_OFFENSIVE_SPELL, context: 'scroll' })
+    expect(wand).toEqual({ kind: 'unresolved', spellNo: NON_OFFENSIVE_SPELL, context: 'wand' })
   })
 
   it('POTION/SCROLL/WAND 외 타입은 noop이다(ARMOR·MISC)', () => {
@@ -166,8 +166,8 @@ describe('deliverConsumable — magicpower 특수처리(no-spell, resolve 이전
   })
 })
 
-describe('deliverConsumable — resolve 분기(deferred/unresolved/delivered)', () => {
-  it('비-offensive spellNo → NOT_IMPLEMENTED → deferred(#85 유예, shotscur 불변)', () => {
+describe('deliverConsumable — resolve 분기(unresolved/delivered)', () => {
+  it('비-offensive 미등록 spellNo → undefined → unresolved(shotscur 불변)', () => {
     const dispatch = new SpellDispatch<unknown>()
     const instance = makeInstance({ shotscur: 2 })
     const outcome = deliverConsumable({
@@ -178,11 +178,11 @@ describe('deliverConsumable — resolve 분기(deferred/unresolved/delivered)', 
       dispatch,
     })
     expect(outcome).toEqual({
-      kind: 'deferred',
+      kind: 'unresolved',
       spellNo: NON_OFFENSIVE_SPELL,
       context: 'scroll',
     })
-    // deferred는 charge를 소모하지 않는다.
+    // unresolved는 charge를 소모하지 않는다.
     expect(instance.shotscur).toBe(2)
   })
 

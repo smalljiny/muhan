@@ -10,7 +10,7 @@ import {
   type OspellEntry,
   type RoomNode,
 } from 'shared'
-import { SpellDispatch, NOT_IMPLEMENTED } from './dispatch.js'
+import { SpellDispatch } from './dispatch.js'
 import { toCombatant } from '../combat/combatant.js'
 import type { PlayerCombatState } from '../combat/playerState.js'
 import type { DamageLedger } from '../combat/enmity.js'
@@ -460,11 +460,11 @@ describe('registerOffensiveSpells — offensive 20종 배선', () => {
     expect(target.hpcur).toBe(24)
   })
 
-  it('비-offensive 주문은 NOT_IMPLEMENTED로 남는다(#85 유예)', () => {
+  it('비-offensive 주문은 offensiveSpell 디스패처에서 미등록(undefined)으로 남는다', () => {
     const dispatch = new SpellDispatch<OffensiveSpellHandler>()
     registerOffensiveSpells(dispatch)
-    // SVIGOR(회복)은 비-offensive → 등록 대상 아님.
-    expect(dispatch.resolve(SPELL_NO.SVIGOR)).toBe(NOT_IMPLEMENTED)
+    // SVIGOR(회복)은 비-offensive → registerOffensiveSpells는 등록하지 않는다(effect 모듈 소관).
+    expect(dispatch.resolve(SPELL_NO.SVIGOR)).toBeUndefined()
   })
 })
 

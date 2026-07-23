@@ -184,8 +184,9 @@ export function offensiveSpell(req: OffensiveSpellRequest, osp: OspellEntry): Sp
 
 /**
  * S3 디스패치에 공격 주문 20종을 등록한다. OSPELL_GRID(20 엔트리 단일 출처)를 순회해 각 spellNo에
- * 해당 osp를 캡처한 offensiveSpell 핸들러를 배선한다. dispatch.register가 비-offensive·카탈로그 밖을
- * 거부하므로 격자 20종만 안착한다.
+ * 해당 osp를 캡처한 offensiveSpell 핸들러를 배선한다. dispatch.register는 family-agnostic이지만
+ * 이 함수는 OSPELL_GRID(offensive 20종)만 순회하므로 이 인스턴스에는 공격 주문만 안착한다
+ * (비-offensive effect는 S7~S10이 자체 SpellDispatch 인스턴스에 등록).
  */
 export function registerOffensiveSpells(dispatch: SpellDispatch<OffensiveSpellHandler>): void {
   for (const osp of OSPELL_GRID) {
