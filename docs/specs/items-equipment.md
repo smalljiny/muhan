@@ -85,7 +85,7 @@ flags(hex string) 위에서 `world/hexFlags.js`의 `F_ISSET`으로 비트를 판
 - **배선 유예(Non-goal)**: object 물질화·인벤토리 로딩·룸 배치, WS 명령("입다"/"무장"/"마시다"/"벗다") 파싱·라우팅, 착용 outcome(equipped/burned/bounced)의 실 인벤 이동·객체 파괴, 소비 shotscur 감소(effect 성공 결합), 탈착(remove) 시점 저주 enforcement, rand_enchant per-instance 적용·저장, DB write-back.
 - **재구현 금지 경계**: stats-core는 소비만(computeAc/computeThaco 재구현 금지), magic은 seam 호출만(spell effect 본체 재구현 금지 — magic #84 소유), enchant는 rng 주입(Math.random 직접 호출 금지).
 - **E6 유예 필드 → 명시 입력**: 결혼 상태·수치 정렬·무기 숙련(proficiency[5])·ONEWEV 소유자 일치는 순수 함수의 명시 입력 인자로 받고, Character→입력 어댑터 배선은 유예한다.
-- **경제·은행 범위 밖**: 금화·상점·전당포·수리·거래·소지한도·은행 컨테이너는 별도 토픽(#87).
+- **경제·은행 범위 밖**: 금화·상점·전당포·수리·소지한도는 [economy.md](economy.md), 은행 물품 보관은 [bank-items.md](bank-items.md)에서 이식(#87). 거래(trade 물물교환)는 유예.
 
 ## 관련 문서
 
