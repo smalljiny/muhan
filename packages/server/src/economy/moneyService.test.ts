@@ -21,6 +21,13 @@ describe('moneyService', () => {
     ['NaN', Number.NaN],
   ]
 
+  // 잔액(gold/value) 위반: 0은 허용(≥0)이므로 amt와 달리 0을 포함하지 않는다.
+  const badBalances: Array<[string, number]> = [
+    ['음수', -5],
+    ['소수', 1.5],
+    ['NaN', Number.NaN],
+  ]
+
   describe('dropMoney', () => {
     it('정상: goldAfter=gold-amt, MONEY 디스크립터를 반환한다', () => {
       const result = dropMoney(100, 30)
@@ -44,6 +51,15 @@ describe('moneyService', () => {
       expect(() => dropMoney(100, 101)).toThrow(InvalidMoneyAmountError)
     })
 
+    it.each(badBalances)('gold가 %s면 InvalidMoneyAmountError를 던진다', (_label, gold) => {
+      expect(() => dropMoney(gold, 10)).toThrow(InvalidMoneyAmountError)
+    })
+
+    it('gold=0(유효 잔액)이면 정상 동작한다: amt도 0 초과여야 하므로 amt>gold로 거부', () => {
+      // 잔액 0은 유효(≥0 통과)하지만 amt=10 > gold=0이라 잔액 초과로 거부된다.
+      expect(() => dropMoney(0, 10)).toThrow(/초과/)
+    })
+
     it('반환 디스크립터는 매번 새 객체다(불변)', () => {
       const a = dropMoney(100, 40)
       const b = dropMoney(100, 40)
@@ -63,6 +79,21 @@ describe('moneyService', () => {
       const money: MoneyDescriptor = { objnum: 0, type: 10, value: 250 }
       pickupMoney(100, money)
       expect(money).toEqual({ objnum: 0, type: 10, value: 250 })
+    })
+
+    it.each(badBalances)('gold가 %s면 InvalidMoneyAmountError를 던진다', (_label, gold) => {
+      const money: MoneyDescriptor = { objnum: 0, type: 10, value: 250 }
+      expect(() => pickupMoney(gold, money)).toThrow(InvalidMoneyAmountError)
+    })
+
+    it.each(badBalances)('money.value가 %s면 InvalidMoneyAmountError를 던진다', (_label, value) => {
+      const money = { objnum: 0, type: 10, value } as unknown as MoneyDescriptor
+      expect(() => pickupMoney(100, money)).toThrow(InvalidMoneyAmountError)
+    })
+
+    it('gold=0(유효 잔액)이면 정상 흡수한다: goldAfter=money.value', () => {
+      const money: MoneyDescriptor = { objnum: 0, type: 10, value: 250 }
+      expect(pickupMoney(0, money).goldAfter).toBe(250)
     })
   })
 
@@ -85,6 +116,19 @@ describe('moneyService', () => {
       const result = giveMoney(100, 50, 100)
       expect(result.fromGoldAfter).toBe(0)
       expect(result.toGoldAfter).toBe(150)
+    })
+
+    it.each(badBalances)('fromGold가 %s면 InvalidMoneyAmountError를 던진다', (_label, fromGold) => {
+      expect(() => giveMoney(fromGold, 50, 10)).toThrow(InvalidMoneyAmountError)
+    })
+
+    it.each(badBalances)('toGold가 %s면 InvalidMoneyAmountError를 던진다', (_label, toGold) => {
+      expect(() => giveMoney(100, toGold, 10)).toThrow(InvalidMoneyAmountError)
+    })
+
+    it('fromGold=0, toGold=0(유효 잔액)이면 amt>fromGold로 거부(잔액 자체는 통과)', () => {
+      // 잔액 0은 유효(≥0)하지만 amt=10 > fromGold=0이라 잔액 초과로 거부된다.
+      expect(() => giveMoney(0, 0, 10)).toThrow(/초과/)
     })
   })
 })

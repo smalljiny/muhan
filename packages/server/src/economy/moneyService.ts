@@ -42,6 +42,17 @@ function assertPositiveIntAmount(amt: number): void {
 }
 
 /**
+ * 잔액(gold·fromGold·toGold·money.value)이 0 이상 정수인지 검증한다. 전송 금액(amt)은 ≥1이지만
+ * 잔액은 0일 수 있어 assertPositiveIntAmount와 분리한다. NaN 잔액은 amt>gold 비교가 항상 false여서
+ * 게이트를 통과하고 NaN 결과를 반환하므로(gold 손실/생성 벡터), 진입점에서 거부한다(self-defense).
+ */
+function assertNonNegativeIntBalance(value: number, label: string): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new InvalidMoneyAmountError(`${label}는 0 이상의 정수여야 합니다: ${value}`)
+  }
+}
+
+/**
  * 금화를 바닥에 떨어뜨린다(drop). gold에서 amt를 차감하고 amt를 value로 갖는 MONEY 디스크립터를
  * 만든다. amt<1(=비양수·소수·NaN) 또는 amt>gold면 InvalidMoneyAmountError를 던진다(부분 결과
  * 반환 없음). 반환 money는 소유자 없는 bare 디스크립터다.
@@ -50,6 +61,7 @@ export function dropMoney(
   gold: number,
   amt: number,
 ): { goldAfter: number; money: MoneyDescriptor } {
+  assertNonNegativeIntBalance(gold, 'gold')
   assertPositiveIntAmount(amt)
   if (amt > gold) {
     throw new InvalidMoneyAmountError(`보유 gold를 초과합니다: amt=${amt}, gold=${gold}`)
@@ -59,9 +71,12 @@ export function dropMoney(
 
 /**
  * 바닥의 금화를 줍는다(pickup). MONEY 디스크립터를 gold에 흡수한다. 객체 자체는 호출자가
- * 소비(free)한다. 유효한 디스크립터의 value≥1이므로 결과가 음수가 될 수 없다(가드 불필요).
+ * 소비(free)한다. gold·money.value를 0 이상 정수로 강제한다(self-defense) — NaN/음수 잔액이
+ * NaN 결과로 새 나가는 것을 진입점에서 차단한다.
  */
 export function pickupMoney(gold: number, money: MoneyDescriptor): { goldAfter: number } {
+  assertNonNegativeIntBalance(gold, 'gold')
+  assertNonNegativeIntBalance(money.value, 'money.value')
   return { goldAfter: gold + money.value }
 }
 
@@ -74,6 +89,8 @@ export function giveMoney(
   toGold: number,
   amt: number,
 ): { fromGoldAfter: number; toGoldAfter: number } {
+  assertNonNegativeIntBalance(fromGold, 'fromGold')
+  assertNonNegativeIntBalance(toGold, 'toGold')
   assertPositiveIntAmount(amt)
   if (amt > fromGold) {
     throw new InvalidMoneyAmountError(`보유 gold를 초과합니다: amt=${amt}, fromGold=${fromGold}`)

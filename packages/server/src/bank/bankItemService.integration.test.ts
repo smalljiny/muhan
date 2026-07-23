@@ -67,7 +67,7 @@ describe('BankItemService (integration, real db)', () => {
     await objects.insert(makeObject({ owner: { type: 'character', id: 'char-1' } }))
     await banks.insert(makeBank())
 
-    await service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', isContainer: false })
+    await service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', characterId: 'char-1', isContainer: false })
     const stored = await objects.findById('obj-1')
     expect(stored?.owner).toEqual({ type: 'bank', id: 'bank-1' })
 
@@ -80,7 +80,7 @@ describe('BankItemService (integration, real db)', () => {
     await objects.insert(makeObject({ owner: { type: 'character', id: 'char-1' } }))
     await banks.insert(makeBank())
 
-    await service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', isContainer: false })
+    await service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', characterId: 'char-1', isContainer: false })
 
     const holdings = await banks.hydrateHoldings('bank-1')
     expect(holdings.map((h) => h._id)).toEqual(['obj-1'])
@@ -95,7 +95,7 @@ describe('BankItemService (integration, real db)', () => {
     await objects.insert(makeObject({ _id: 'obj-1', owner: { type: 'character', id: 'char-1' } }))
     await banks.insert(makeBank())
 
-    await service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', isContainer: false })
+    await service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', characterId: 'char-1', isContainer: false })
 
     const holdings = await banks.hydrateHoldings('bank-1')
     expect(holdings).toHaveLength(BANK_SLOT_LIMIT)
@@ -109,7 +109,7 @@ describe('BankItemService (integration, real db)', () => {
     await banks.insert(makeBank())
 
     await expect(
-      service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', isContainer: false }),
+      service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', characterId: 'char-1', isContainer: false }),
     ).rejects.toThrow(BankSlotFullError)
 
     // 거부되었으므로 obj-1은 여전히 character 소유다.

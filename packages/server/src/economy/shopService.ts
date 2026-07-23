@@ -3,6 +3,11 @@
  * MongoDB·Character·ObjectInstance에 의존하지 않고 좁은 구조 입력만 다룬다. 영속화·인벤토리
  * 배선(_id·owner·slot·schemaVersion)·재고 소싱은 호출자(#106, 후속 토픽)의 책임이다.
  *
+ * 입력 self-defense: 각 함수는 진입점에서 숫자 입력(gold·invCount·value·piety·shotscur·shotsmax)을
+ * assertNonNegativeInt로 0 이상 정수로 강제한다 — 음수·소수·NaN이면 가격/잔액 산술이 gold 생성·손실
+ * 벡터가 되므로(예: 음의 value → 음의 price → gold 증가) invalid-input으로 거부한다. moneyService/
+ * bankTransactionService의 assertPositiveIntAmount 가드와 동형이며 유효 입력의 동작은 바꾸지 않는다.
+ *
  * D1(스키마 동결): 이 모듈은 shared의 object.ts·character.ts·schemaVersion을 import하지 않는다.
  * ShopItem·BuyerState를 로컬 좁은 타입으로 정의해 cross-package import를 가격 공식(buyPrice)
  * 하나로 최소화, 동시 worktree의 schemaVersion bump와 병합 충돌을 원천 차단한다.
@@ -48,6 +53,7 @@ export type ShopRejectReason =
   | 'bound-item'
   | 'non-empty-container'
   | 'unsellable-type'
+  | 'invalid-input'
 
 /** 상점 거래가 규칙 게이트에 걸려 거부될 때 던진다. reason으로 사유를 구분한다. */
 export class ShopRejectError extends Error {
@@ -57,6 +63,17 @@ export class ShopRejectError extends Error {
   ) {
     super(message)
     this.name = 'ShopRejectError'
+  }
+}
+
+/**
+ * 값이 음의 정수가 아닌지(즉 0 이상 정수) 검증한다. object.value·gold·shotscur 등 경제 입력이
+ * 음수·소수·NaN이면 가격/잔액 산술이 gold 생성·손실 벡터가 되므로 진입점에서 거부한다
+ * (moneyService.assertPositiveIntAmount와 동형의 self-defense).
+ */
+function assertNonNegativeInt(value: number, label: string): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new ShopRejectError('invalid-input', `${label}는 0 이상의 정수여야 합니다: ${value}`)
   }
 }
 
@@ -105,6 +122,9 @@ export function buy(
   char: BuyerState,
   shopItem: ShopItem,
 ): { goldAfter: number; item: ShopItem } {
+  assertNonNegativeInt(char.gold, 'gold')
+  assertNonNegativeInt(char.invCount, 'invCount')
+  assertNonNegativeInt(shopItem.value, 'value')
   const price = buyPrice(shopItem.value)
   if (char.gold < price) {
     throw new ShopRejectError(
@@ -139,6 +159,9 @@ export function purchase(
   char: BuyerState,
   item: ShopItem,
 ): { goldAfter: number; item: ShopItem } {
+  assertNonNegativeInt(char.gold, 'gold')
+  assertNonNegativeInt(char.invCount, 'invCount')
+  assertNonNegativeInt(item.value, 'value')
   const price = mobBuyPrice(item.value)
   if (char.gold < price) {
     throw new ShopRejectError(
@@ -214,6 +237,10 @@ export function sell(
   item: PawnItem,
   ctx: { rng: CombatRng },
 ): { goldAfter: number; payout: number; lucky: boolean } {
+  assertNonNegativeInt(char.gold, 'gold')
+  assertNonNegativeInt(item.value, 'value')
+  assertNonNegativeInt(item.shotscur, 'shotscur')
+  assertNonNegativeInt(item.shotsmax, 'shotsmax')
   const payout = sellPrice(item.value)
 
   if (payout < 20) {
@@ -287,6 +314,11 @@ export function repair(
   item: RepairItem,
   ctx: { rng: CombatRng },
 ): { goldAfter: number; broke: number; broken: boolean; item: RepairItem | null } {
+  assertNonNegativeInt(char.gold, 'gold')
+  assertNonNegativeInt(char.piety, 'piety')
+  assertNonNegativeInt(item.value, 'value')
+  assertNonNegativeInt(item.shotscur, 'shotscur')
+  assertNonNegativeInt(item.shotsmax, 'shotsmax')
   const cost = repairCost(item.value)
   if (char.gold < cost) {
     throw new ShopRejectError(

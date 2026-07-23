@@ -610,6 +610,64 @@ describe('런타임 repair SUT 골든 교차검증', () => {
   })
 })
 
+/**
+ * 입력 가드 단위 테스트 — object.value·gold·piety·shots 등 경제 입력이 음의 정수·소수·NaN이면
+ * 가격/잔액 산술이 gold 생성·손실 벡터가 되므로(예: 음의 value → 음의 price → gold 증가),
+ * 각 함수 진입점에서 assertNonNegativeInt로 거부한다(moneyService/bankTransactionService와 동형의 self-defense).
+ */
+describe('shopService 입력 가드(음의 정수·소수·NaN 거부)', () => {
+  const expectInvalidInput = (fn: () => unknown): void => {
+    expect(fn).toThrow(ShopRejectError)
+    try {
+      fn()
+    } catch (err) {
+      expect((err as ShopRejectError).reason).toBe('invalid-input')
+    }
+  }
+
+  it('buy: 음의 value를 invalid-input으로 거부한다', () => {
+    expectInvalidInput(() => buy({ gold: 500, invCount: 0 }, { objnum: 1, type: 3, value: -100, shotscur: 0 }))
+  })
+
+  it('buy: 음의 gold를 invalid-input으로 거부한다', () => {
+    expectInvalidInput(() => buy({ gold: -1, invCount: 0 }, { objnum: 1, type: 3, value: 100, shotscur: 0 }))
+  })
+
+  it('buy: 소수 invCount를 invalid-input으로 거부한다(비정수 arm)', () => {
+    expectInvalidInput(() => buy({ gold: 500, invCount: 1.5 }, { objnum: 1, type: 3, value: 100, shotscur: 0 }))
+  })
+
+  it('purchase: 음의 value를 invalid-input으로 거부한다', () => {
+    expectInvalidInput(() => purchase({ gold: 500, invCount: 0 }, { objnum: 1, type: 3, value: -100, shotscur: 0 }))
+  })
+
+  it('purchase: NaN gold를 invalid-input으로 거부한다(비정수 arm)', () => {
+    expectInvalidInput(() => purchase({ gold: Number.NaN, invCount: 0 }, { objnum: 1, type: 3, value: 100, shotscur: 0 }))
+  })
+
+  it('sell: 음의 value를 invalid-input으로 거부한다(rng 미소비)', () => {
+    const item: PawnItem = { value: -100, type: 13, shotscur: 0, shotsmax: 0, onewev: false, hasContents: false }
+    expectInvalidInput(() => sell({ gold: 0 }, item, { rng: seqRng([]) }))
+  })
+
+  it('sell: 음의 shotscur를 invalid-input으로 거부한다', () => {
+    const item: PawnItem = { value: 100, type: 13, shotscur: -1, shotsmax: 0, onewev: false, hasContents: false }
+    expectInvalidInput(() => sell({ gold: 0 }, item, { rng: seqRng([]) }))
+  })
+
+  it('repair: 음의 value로 gold가 증가하지 않고 invalid-input으로 거부한다(gold 생성 벡터 차단)', () => {
+    // repairCost(-40)=trunc(-40/4)=-10이면 gold<cost가 false라 진행하고, 성공 시 gold-cost=110으로
+    // gold가 오히려 증가한다(gold 생성). 가드가 이를 진입점에서 차단해야 한다.
+    const item: RepairItem = { value: -40, shotscur: 1, shotsmax: 80 }
+    expectInvalidInput(() => repair({ gold: 100, piety: 10 }, item, { rng: seqRng([]) }))
+  })
+
+  it('repair: 음의 piety를 invalid-input으로 거부한다', () => {
+    const item: RepairItem = { value: 100, shotscur: 1, shotsmax: 80 }
+    expectInvalidInput(() => repair({ gold: 500, piety: -1 }, item, { rng: seqRng([]) }))
+  })
+})
+
 describe('런타임 pawn SUT 골든 교차검증 (T5.4)', () => {
   const loadFixture = () => {
     const url = new URL('../../../shared/src/oracle/fixtures/pawn.json', import.meta.url)

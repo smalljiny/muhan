@@ -71,7 +71,7 @@ describe('BankItemService (unit, mocked repos)', () => {
     it.each(injectionIds)('objectId가 %s면 throw하고 어떤 repo도 호출하지 않는다', async (_label, id) => {
       const { service, findById, updateById, hydrateHoldings } = makeService()
       await expect(
-        service.bankStore({ objectId: id as unknown as string, bankAccountId: 'bank-1', isContainer: false }),
+        service.bankStore({ objectId: id as unknown as string, bankAccountId: 'bank-1', characterId: 'char-1', isContainer: false }),
       ).rejects.toThrow('objectId')
       expect(findById).not.toHaveBeenCalled()
       expect(updateById).not.toHaveBeenCalled()
@@ -81,8 +81,18 @@ describe('BankItemService (unit, mocked repos)', () => {
     it.each(injectionIds)('bankAccountId가 %s면 throw하고 어떤 repo도 호출하지 않는다', async (_label, id) => {
       const { service, findById, updateById, hydrateHoldings } = makeService()
       await expect(
-        service.bankStore({ objectId: 'obj-1', bankAccountId: id as unknown as string, isContainer: false }),
+        service.bankStore({ objectId: 'obj-1', bankAccountId: id as unknown as string, characterId: 'char-1', isContainer: false }),
       ).rejects.toThrow('bankAccountId')
+      expect(findById).not.toHaveBeenCalled()
+      expect(updateById).not.toHaveBeenCalled()
+      expect(hydrateHoldings).not.toHaveBeenCalled()
+    })
+
+    it.each(injectionIds)('characterId가 %s면 throw하고 어떤 repo도 호출하지 않는다', async (_label, id) => {
+      const { service, findById, updateById, hydrateHoldings } = makeService()
+      await expect(
+        service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', characterId: id as unknown as string, isContainer: false }),
+      ).rejects.toThrow('characterId')
       expect(findById).not.toHaveBeenCalled()
       expect(updateById).not.toHaveBeenCalled()
       expect(hydrateHoldings).not.toHaveBeenCalled()
@@ -94,7 +104,7 @@ describe('BankItemService (unit, mocked repos)', () => {
       const { service, hydrateHoldings, findById, updateById } = makeService()
       hydrateHoldings.mockResolvedValue(holdingsOfLength(BANK_SLOT_LIMIT))
       await expect(
-        service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', isContainer: false }),
+        service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', characterId: 'char-1', isContainer: false }),
       ).rejects.toThrow(BankSlotFullError)
       // slot 거부 시 아이템을 fetch·이동하지 않는다.
       expect(findById).not.toHaveBeenCalled()
@@ -107,7 +117,7 @@ describe('BankItemService (unit, mocked repos)', () => {
       findById.mockResolvedValue(makeObject({ owner: { type: 'character', id: 'char-1' } }))
       updateById.mockResolvedValue(undefined)
 
-      await service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', isContainer: false })
+      await service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', characterId: 'char-1', isContainer: false })
 
       expect(updateById).toHaveBeenCalledWith('obj-1', { owner: { type: 'bank', id: 'bank-1' } })
     })
@@ -118,7 +128,7 @@ describe('BankItemService (unit, mocked repos)', () => {
       const { service, hydrateHoldings, findById, updateById } = makeService()
       hydrateHoldings.mockResolvedValue(holdingsOfLength(0))
       await expect(
-        service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', isContainer: true }),
+        service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', characterId: 'char-1', isContainer: true }),
       ).rejects.toThrow(ContainerNotStorableError)
       expect(findById).not.toHaveBeenCalled()
       expect(updateById).not.toHaveBeenCalled()
@@ -131,7 +141,7 @@ describe('BankItemService (unit, mocked repos)', () => {
       hydrateHoldings.mockResolvedValue(holdingsOfLength(0))
       findById.mockResolvedValue(null)
       await expect(
-        service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', isContainer: false }),
+        service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', characterId: 'char-1', isContainer: false }),
       ).rejects.toThrow(DocumentNotFoundError)
       expect(updateById).not.toHaveBeenCalled()
     })
@@ -141,7 +151,17 @@ describe('BankItemService (unit, mocked repos)', () => {
       hydrateHoldings.mockResolvedValue(holdingsOfLength(0))
       findById.mockResolvedValue(makeObject({ owner: { type: 'bank', id: 'bank-1' } }))
       await expect(
-        service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', isContainer: false }),
+        service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', characterId: 'char-1', isContainer: false }),
+      ).rejects.toThrow(InvalidOwnerError)
+      expect(updateById).not.toHaveBeenCalled()
+    })
+
+    it('다른 캐릭터 소유 아이템은 InvalidOwnerError를 던진다(actor↔item 바인딩, bankWithdraw와 대칭)', async () => {
+      const { service, hydrateHoldings, findById, updateById } = makeService()
+      hydrateHoldings.mockResolvedValue(holdingsOfLength(0))
+      findById.mockResolvedValue(makeObject({ owner: { type: 'character', id: 'char-2' } }))
+      await expect(
+        service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', characterId: 'char-1', isContainer: false }),
       ).rejects.toThrow(InvalidOwnerError)
       expect(updateById).not.toHaveBeenCalled()
     })
@@ -152,7 +172,7 @@ describe('BankItemService (unit, mocked repos)', () => {
       const { service, hydrateHoldings } = makeService()
       hydrateHoldings.mockResolvedValue(holdingsOfLength(BANK_SLOT_LIMIT))
       await expect(
-        service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', isContainer: true }),
+        service.bankStore({ objectId: 'obj-1', bankAccountId: 'bank-1', characterId: 'char-1', isContainer: true }),
       ).rejects.toThrow(BankSlotFullError)
     })
   })

@@ -33,6 +33,13 @@ import type { BankRepository } from '../repo/bankRepository.js'
  *     본 서비스는 slot·OCONTN을 먼저 검사한 뒤 findById한다. 가득 찬 은행에 미소유 오브젝트를
  *     넣으면 오라클은 "그런 물건 없음"을, 본 서비스는 BankSlotFullError를 낸다 — #106이 호출 전
  *     인벤토리에서 오브젝트를 해석하므로 배선 경로에선 관찰되지 않는 양성 재정렬이다.
+ *   - check-then-write 비원자성(TOCTOU): bankStore/bankWithdraw의 소유권·slot 검사와 이어지는
+ *     updateById(owner 재지정)는 원자적이지 않다 — 동시 호출이 검사를 통과한 뒤 서로의 write와
+ *     레이스할 수 있다(같은 아이템 이중 이동, slot 한도 초과 오버슈트). 라이브 배선은 조건부
+ *     findOneAndUpdate(owner를 필터에 넣은 CAS, bankTransactionService의 잔액 가드와 동형)로
+ *     검사-쓰기를 하나의 원자 연산으로 합치거나(#106/atomicity 범위, 새 ObjectRepository 조건부
+ *     갱신 primitive 필요), soft-limit 오버슈트를 수용해야 한다. 단일 프로세스 1Hz 틱이 현재는
+ *     실질적으로 레이스를 완화한다.
  */
 
 /** slot 한도(오라클 shotsmax, A8 §9). 보관 집합 길이가 이 값 이상이면 거부한다. */
@@ -54,7 +61,7 @@ export class ContainerNotStorableError extends Error {
   }
 }
 
-/** 오브젝트가 기대한 소유 상태가 아닐 때 던진다(보관은 character 소유만, 인출은 해당 은행 소유만). */
+/** 오브젝트가 기대한 소유 상태가 아닐 때 던진다(보관은 해당 캐릭터 소유만, 인출은 해당 은행 소유만). */
 export class InvalidOwnerError extends Error {
   constructor(objectId: string, expected: string) {
     super(`오브젝트 소유 상태가 올바르지 않습니다: objects/${objectId} (기대: ${expected})`)
@@ -85,10 +92,16 @@ export class BankItemService {
    * 오라클 순서: 가드 → slot 한도(FIRST) → OCONTN(SECOND) → 소유권 확인 → owner 재지정.
    * slot 한도는 hydrateHoldings 길이로 파생하며, 가득 차면 아이템을 fetch·이동하지 않는다.
    */
-  async bankStore(params: { objectId: string; bankAccountId: string; isContainer: boolean }): Promise<void> {
-    const { objectId, bankAccountId, isContainer } = params
+  async bankStore(params: {
+    objectId: string
+    bankAccountId: string
+    characterId: string
+    isContainer: boolean
+  }): Promise<void> {
+    const { objectId, bankAccountId, characterId, isContainer } = params
     assertDocumentId(objectId, 'objectId')
     assertDocumentId(bankAccountId, 'bankAccountId')
+    assertDocumentId(characterId, 'characterId')
 
     // 1) slot 한도 검사 FIRST(오라클 shotscur >= shotsmax). 파생 카운트 = holdings 길이.
     const holdings = await this.banks.hydrateHoldings(bankAccountId)
@@ -101,13 +114,14 @@ export class BankItemService {
       throw new ContainerNotStorableError(objectId)
     }
 
-    // 3) fetch + 소유권 확인 — character 소유 아이템만 보관 가능(이미 은행/바닥 아이템 불가).
+    // 3) fetch + 소유권 확인 — 보관하는 캐릭터 *자신*의 아이템만 보관 가능(다른 캐릭터·은행·바닥
+    //    아이템 불가). bankWithdraw의 owner.id===bankAccountId 대칭 — actor↔item 바인딩.
     const obj = await this.objects.findById(objectId)
     if (obj === null) {
       throw new DocumentNotFoundError('objects', objectId)
     }
-    if (obj.owner.type !== 'character') {
-      throw new InvalidOwnerError(objectId, 'character 소유')
+    if (obj.owner.type !== 'character' || obj.owner.id !== characterId) {
+      throw new InvalidOwnerError(objectId, `character 소유(${characterId})`)
     }
 
     // 4) owner만 재지정한다(다른 필드 불변).
