@@ -24,6 +24,7 @@ import { seqRng } from '../combat/dice.testutil.js'
 // 주문번호 상수(mtype.h) — 테스트가 비트 위치·분기를 이름으로 참조한다.
 const SVIGOR = 0
 const SHURTS = 1
+const SBLESS = 4
 const SFIREB = 6
 const SICEBL = 14
 const SMENDW = 18
@@ -193,9 +194,9 @@ describe('crtSpell — CastSpellSeam 어댑트', () => {
     expect(creature.mpcur).toBe(27) // 30 - SHURTS.mp(3) 소비(게이트 통과 경로)
   })
 
-  it('비-offensive(치유) 선택 시 "none" 폴백(근접 진행, #85 본체 미구현 경계)', () => {
-    // SVIGOR(healing, self) 단독 보유 → pick SVIGOR → 비-offensive → 'none'. 피해·마나 불변.
-    const creature = makeCreature({ spells: spellsWith(SVIGOR), mpcur: 30 })
+  it('비-치유 비-offensive(SBLESS 버프) 선택 시 "none" 폴백(근접 진행, 자기 hp·마나 불변)', () => {
+    // SBLESS(buff, non-offensive, non-self) → pick → 비-치유 비-offensive → 'none'. 피해·hp·마나 불변.
+    const creature = makeCreature({ spells: spellsWith(SBLESS), mpcur: 30, hpcur: 50, hpmax: 100 })
     const target = makePlayer({ hpCurrent: 50 })
     const { rng } = spyRng([1])
 
@@ -203,6 +204,7 @@ describe('crtSpell — CastSpellSeam 어댑트', () => {
 
     expect(result).toBe('none')
     expect(target.hpCurrent).toBe(50)
+    expect(creature.hpcur).toBe(50) // 자기 hp 불변(치유 아님)
     expect(creature.mpcur).toBe(30) // 비-offensive는 게이트 진입 없이 폴백 → 마나 미소비
   })
 
@@ -337,5 +339,52 @@ describe('crtSpell — createCombatTick 주입 데모(T6.4, combatTick.ts 미변
 
     expect(creature.mpcur).toBe(30) // 시전 없음(마나 미소비)
     expect(player.hpCurrent).toBe(45) // 근접 진행(50-5)
+  })
+})
+
+describe('crtSpell — G8 몬스터 self-target 치유 시전(update.c:681-687 cmnd.num==2)', () => {
+  it('치유(self, SFHEAL 완치) pick 시 자기 hp를 hpmax로 회복하고 "cast"', () => {
+    // SFHEAL(완치, self) 단독 보유 → pick → G7 healing effect(toFull) 재사용 → hpcur=hpmax, 'cast'.
+    // toFull은 회복 굴림이 없어 pick rng(1,1)=1만 소비한다(공격자 target 불변 — self 대상).
+    const creature = makeCreature({ spells: spellsWith(SFHEAL), mpcur: 30, hpcur: 40, hpmax: 100 })
+    const target = makePlayer({ hpCurrent: 50 })
+    const { rng } = spyRng([1])
+
+    const result = crtSpell(creature, target, makeCtx(rng))
+
+    expect(result).toBe('cast')
+    expect(creature.hpcur).toBe(100) // 완치 → hpmax
+    expect(target.hpCurrent).toBe(50) // 공격자 불변(self 대상)
+    expect(creature.mpcur).toBe(30) // self-heal은 마나를 소비하지 않는다(계약 고정 — 오라클 mpcur-= 미이식)
+  })
+
+  it('치유(self, SVIGOR 스칼라) pick 시 자기 hp를 회복하되 hpmax로 clamp하고 "cast"', () => {
+    // SVIGOR(회복, self) → scalar heal. hpcur 50 → +heal, hpmax 100 clamp. class0 → 클래스 굴림 없음.
+    const creature = makeCreature({ spells: spellsWith(SVIGOR), mpcur: 30, hpcur: 50, hpmax: 100, class: 0 })
+    const target = makePlayer({ hpCurrent: 50 })
+    // pick rng(1,1)=1; vigorHeal: max(intBonus,pietyBonus) + rng(1,6). 굴림 넉넉히 공급.
+    const { rng } = spyRng([1, 3])
+
+    const result = crtSpell(creature, target, makeCtx(rng))
+
+    expect(result).toBe('cast')
+    expect(creature.hpcur).toBeGreaterThan(50) // scalar 회복 발생
+    expect(creature.hpcur).toBeLessThanOrEqual(100) // hpmax clamp
+    expect(target.hpCurrent).toBe(50) // 공격자 불변(self 대상)
+  })
+
+  it('치유(self, SMENDW 스칼라) pick 시 hpcur+healed로 회복하고 "cast"(clamp 미도달)', () => {
+    // SMENDW(원기회복, self). hpcur 10, hpmax 100 → 회복분이 clamp 아래라 정확히 hpcur+healed 관찰.
+    const creature = makeCreature({ spells: spellsWith(SMENDW), mpcur: 30, hpcur: 10, hpmax: 100, class: 0 })
+    const target = makePlayer({ hpCurrent: 50 })
+    // pick rng(1,1)=1; mendHeal: dice(2,6,0) → rng 2회. 굴림 공급.
+    const { rng } = spyRng([1, 2, 2])
+
+    const result = crtSpell(creature, target, makeCtx(rng))
+
+    expect(result).toBe('cast')
+    expect(creature.hpcur).toBeGreaterThan(10) // 스칼라 회복
+    expect(creature.hpcur).toBeLessThan(100) // clamp 미도달
+    expect(target.hpCurrent).toBe(50)
   })
 })
