@@ -14,8 +14,28 @@
 export const MPERMT = 0
 /** 무차별 공격형. */
 export const MAGGRE = 6
+/** 투명 탐지(Detect invisibility) — MDINVI(mtype.h:432). aggro 타깃선정 시 PINVIS 플레이어 자격 부여(update.c:589~592). */
+export const MDINVI = 21
+/** 독 특수공격 — MPOISS(mtype.h). 근접 후 독 부여 게이트 rng(1,100)<=15(update.c:387~480). */
+export const MPOISS = 13
+/** 브레스 특수공격 보유 — MBRETH(mtype.h). 브레스 발동 게이트 rng(1,30)<5(update.c:387~480). */
+export const MBRETH = 19
+/** 브레스 타입 비트1 — MBRWP1(mtype.h). MBRWP2와 2비트 조합으로 브레스 4타입 분기(update.c:387~480). */
+export const MBRWP1 = 28
+/** 브레스 타입 비트2 — MBRWP2(mtype.h). MBRWP1과 2비트 조합으로 브레스 4타입 분기(update.c:387~480). */
+export const MBRWP2 = 29
+/** 에너지드레인 특수공격 — MENEDR(mtype.h). 브레스 미발동 시에만 드레인 게이트 rng(1,100)<10(update.c:387~480). */
+export const MENEDR = 30
+/** 질병 특수공격 — MDISEA(mtype.h). 근접 후 질병 부여 게이트 rng(1,100)<=10(update.c:387~480). */
+export const MDISEA = 34
+/** 장비용해 특수공격 — MDISIT(mtype.h). 근접 후 게이트 rng(1,100)<=15(update.c:387~480, 효과는 유예). */
+export const MDISIT = 35
+/** 실명 특수공격 — MBLNDR(mtype.h). 근접 후 실명 부여 게이트 rng(1,100)<=10(update.c:387~480). */
+export const MBLNDR = 45
 /** scavenger(바닥 아이템 회수). */
 export const MSCAVE = 11
+/** 아이템 소지형 — MTRADE(mtype.h:448 "monster will give items"). 사망 시 인벤토리 드롭 억제 게이트(creature.c:311). */
+export const MTRADE = 37
 /** 주문 시전 가능 — MMAGIC(mtype.h:17 `#define MMAGIC 17`, "Can cast spells"). 몬스터 틱 주문 분기 게이트(update.c:348). */
 export const MMAGIC = 17
 /** 무언가 주움(scavenge 성공 표식 — wander-out 제외 조건). */
@@ -46,12 +66,34 @@ export const MSUMMO = 61
 // 같은 F_ISSET(0-index `flags[f/8]&(1<<(f%8))`)로 읽는다 — M-flag와 다른 오프셋 체계일 수 없다.
 // 비트 인덱스가 31을 넘으므로(42·43) 32비트 number bitfield로는 표현 불가 — hex string 표현이 정본.
 // help/pflags 문서 값(PBLIND 43·PFEARS 44)은 raw #define보다 +1이므로 mtype.h를 정본으로 채택한다.
+/** 숨음(hidden) 상태 — PHIDDN(mtype.h:346). aggro 타깃선정 자격 제외(player.c:1327 lowest_piety, 1490 low_piety_alg). */
+export const PHIDDN = 1
+/** 투명(invisibility) 상태 — PINVIS(mtype.h:347). aggro 타깃선정 시 공격자 MDINVI 없으면 자격 제외(player.c:1328). */
+export const PINVIS = 2
+/** DM 투명 — PDMINV(mtype.h:355). aggro 타깃선정 무조건 자격 제외(player.c:1329). */
+export const PDMINV = 10
+/** 소심(wimpy) 도주 모드 — PWIMPY(mtype.h:359). hpcur<=wimpyValue면 도주 결정(update.c:534~538). */
+export const PWIMPY = 14
+/** 중독(poison) 상태 — 주기 피해 상태이상(interval 틱마다 피해). PPOISN(mtype.h `#define PPOISN 16`). */
+export const PPOISN = 16
+/** 질병(disease) 상태 — 주기 피해 상태이상(interval 틱마다 피해). PDISEA(mtype.h `#define PDISEA 41`). */
+export const PDISEA = 41
 /** 실명(blind) 상태 — 명중 임계 +5(command5.c:234). PBLIND(mtype.h:387). */
 export const PBLIND = 42
 /** 공포(fear) 상태 — 명중 임계 +2(command5.c:233). PFEARS(mtype.h:388). */
 export const PFEARS = 43
 /** 혼돈(Chaotic/!Lawful) — PCHAOS(mtype.h:373). 선악 PvP 동의 게이트가 읽음(command5.c:184). */
 export const PCHAOS = 28
+/**
+ * 화염 저항(방어자) — PRFIRE(mtype.h). 화염 브레스 데미지 반감 게이트 — 세팅 시 dice((lv+3)/4,2,0),
+ * 미세팅 시 dice((lv+3)/4,4,0)(update.c:387~480).
+ */
+export const PRFIRE = 30
+/**
+ * 냉기 저항(방어자) — PRCOLD(mtype.h). 냉기 브레스 데미지 반감 게이트 — 세팅 시 dice((lv+3)/4,2,0),
+ * 미세팅 시 dice((lv+3)/4,4,0)(update.c:387~480).
+ */
+export const PRCOLD = 36
 /** 패거리 가입자 — PFAMIL(mtype.h:400). 양측 PFAMIL이면 선악 게이트를 check_war로 게이팅(command5.c:183). */
 export const PFAMIL = 55
 /** 잠력격발 — PUPDMG(mtype.h:404). 초인 다중공격 count 게이트(command5.c:208). */

@@ -1,16 +1,16 @@
 import { computeHpMax, computeMpMax, neededExp, type EffectiveStatContext } from 'shared'
 
 /**
- * 현재 Character 스키마 버전. experience를 required로 도입한 v3가 최신이다.
+ * 현재 Character 스키마 버전. statusEffects(선택 필드)를 도입한 v4가 최신이다.
  * v1 문서(vitals·level 부재)는 backfillCharacterV2가, v2 문서(experience 부재)는
- * backfillCharacterV3가 load 직전 순차 승격한다(합성 체인 V3∘V2). 생성 경로(createCharacter)와
- * 이 상수를 공유해 버전 드리프트를 차단한다.
+ * backfillCharacterV3가, v3 문서는 backfillCharacterV4가 load 직전 순차 승격한다
+ * (합성 체인 V4∘V3∘V2). 생성 경로(createCharacter)와 이 상수를 공유해 버전 드리프트를 차단한다.
  *
- * stepwise 마이그레이션 규약: 각 스텝 함수(V2·V3)의 진입 가드와 출구 스탬프는 자기 리터럴
+ * stepwise 마이그레이션 규약: 각 스텝 함수(V2·V3·V4)의 진입 가드와 출구 스탬프는 자기 리터럴
  * 버전에 매인다(CURRENT 참조 금지). CURRENT가 다음 버전으로 오르면 이전 스텝이 자기 대상
  * 문서를 지나쳐 vitals/level을 silent 클로버하는 회귀를 막는 불변식이다.
  */
-export const CURRENT_CHARACTER_SCHEMA_VERSION = 3
+export const CURRENT_CHARACTER_SCHEMA_VERSION = 4
 
 /**
  * computeHpMax/computeMpMax는 characterClass·level만 판독하지만 EffectiveStatContext는
@@ -87,5 +87,26 @@ export function backfillCharacterV3(raw: Record<string, unknown>): Record<string
     ...raw,
     experience,
     schemaVersion: 3,
+  }
+}
+
+/**
+ * v3 raw 문서를 v4로 승격하는 순수 스텝 헬퍼 — 합성 체인의 세 번째 단계다.
+ *
+ * v4는 statusEffects(poison·disease·blind 등 상태이상 트랙)를 도입했지만 이 필드는 스키마상
+ * 선택(optional)이라 승격 시 시딩하지 않는다. strict parse가 statusEffects 부재를 거부하지
+ * 않으므로 재시딩이 불필요하며, V4는 버전 스탬프만 3→4로 올린다(V2·V3의 필드 시딩과 대조).
+ *
+ * 진입 가드·출구 스탬프는 리터럴 4에 매인다(CURRENT 참조 금지) — CURRENT가 5로 오른 뒤에도
+ * 이 스텝은 v4 문서를 통과시켜(재스탬프 없이) 다음 스텝에 넘겨야 하기 때문이다. schemaVersion>=4
+ * 문서는 그대로 반환한다(passthrough). 원본을 변형하지 않고 스프레드로 새 객체를 반환한다.
+ */
+export function backfillCharacterV4(raw: Record<string, unknown>): Record<string, unknown> {
+  const version = typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 0
+  if (version >= 4) return raw
+
+  return {
+    ...raw,
+    schemaVersion: 4,
   }
 }

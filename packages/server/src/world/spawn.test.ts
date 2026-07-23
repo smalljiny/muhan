@@ -28,6 +28,8 @@ function template(over: Partial<SpawnTemplate & { id: number }> = {}): SpawnTemp
     class: 0,
     intelligence: 0,
     piety: 0,
+    experience: 300,
+    alignment: 250,
     flags: '0000000000000000',
     numwander: 1,
     ...over,
@@ -172,6 +174,27 @@ describe('respawnPermCreatures — 입장 lazy 리스폰', () => {
     })
     expect(room.creatures[0]?.gold).toBe(7)
   })
+
+  // Story 6: 템플릿 경로(fromTemplate)로 스폰된 몬스터도 experience/alignment를 실어야 한다.
+  // fromTemplate 자체 테스트는 자체 Map을 만들어 buildSpawnTemplateIndex를 우회하므로,
+  // 명시 매핑 chokepoint를 통과하는 이 경로가 두 필드를 떨구지 않는지 별도로 고정한다.
+  it('템플릿 경로로 스폰된 몬스터가 experience/alignment를 실어온다(Story 6)', () => {
+    const room = makeRoom({ permMon: [permSlot({ ltime: 0, interval: 100 })] })
+    respawnPermCreatures(room, 200, {
+      templates: idx(),
+      alloc: createInstanceIdAllocator(),
+    })
+    expect(room.creatures[0]?.experience).toBe(300)
+    expect(room.creatures[0]?.alignment).toBe(250)
+  })
+})
+
+describe('buildSpawnTemplateIndex — 명시 매핑 chokepoint', () => {
+  it('experience/alignment를 소스에서 인덱스로 통과시킨다(Story 6, 명시 매핑 누락 방지)', () => {
+    const t = buildSpawnTemplateIndex([template({ experience: 42, alignment: -70 })]).get(123)
+    expect(t?.experience).toBe(42)
+    expect(t?.alignment).toBe(-70)
+  })
 })
 
 describe('createInstanceIdAllocator — D7 방별 monotonic idx', () => {
@@ -238,5 +261,12 @@ describe('loadSpawnTemplates — data/world/creatures.json', () => {
     expect(c25?.ndice).toBe(2)
     expect(c25?.sdice).toBe(2)
     expect(c25?.pdice).toBe(0)
+  })
+
+  it('사망 분배 필드 experience/alignment를 creatures.json에서 담는다(Story 6, 서브셋 드롭 없음)', () => {
+    const templates = loadSpawnTemplates()
+    const c0 = templates.get(0) // 파수꾼: 정본 experience=300, alignment=250
+    expect(c0?.experience).toBe(300)
+    expect(c0?.alignment).toBe(250)
   })
 })

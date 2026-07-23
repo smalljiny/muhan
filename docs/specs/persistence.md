@@ -33,9 +33,11 @@
 | `hpCurrent` | `int().min(0)` | 현재 HP(전투 required, 매 라운드 차감) |
 | `mpCurrent` | `int().min(0)` | 현재 MP(마법 소비 차감) |
 | `level` | `int().min(1)` | 레벨(파생 thaco/hpMax 계산 필수) |
+| `experience` | `int().min(0)` | 누적 경험치(진행 루프 required, level 동렬) |
+| `statusEffects` | `strictObject(...).partial().optional()` | 상태이상 영속 표현(선택) — poison/disease=`{until,interval}`, blind=`{until}`, 절대-틱 만료 |
 | `schemaVersion` | `int()` | |
 
-권위 인벤토리 배열 없음 — `object.owner={type:'character'}` 역참조로 파생. 게임 비밀번호는 담지 않는다(인증은 Firebase 소유). **E5 링크 필드**([`account-character.md`](account-character.md)): `accountId`(소유 계정 필수 FK), `status`(active/deleted soft-delete)·`deletedAt`, 생성 인터뷰 스칼라 `gender`/`weapon`/`alignment`(optional)가 추가돼, 이 표는 E5 이후 5번째 스키마 `account.ts`와 함께 확장됐다. **E6 전투 필드**([`combat.md`](combat.md)): `hpCurrent`/`mpCurrent`/`level` 3종이 전투 resolver의 매-라운드 operand로 required 추가됐다(gender/weapon/alignment의 optional과 달리 required — 전투가 항상 값을 요구). 정의·시딩만 E6 소관이고 변이 의미론(레벨업·재생·exp)은 진행 루프(#81)가 얹는다. `schemaVersion`은 v2로 증분됐고, v1 문서는 load 직전 `backfillCharacterV2`가 `seedVitals`(class·level→`computeHpMax`/`computeMpMax`)로 승격한다(write-back 없는 lazy 마이그레이션·멱등, `level=1` 고정). 신규 문서는 생성 경로(`createCharacter`)에서 만피/만마로 시딩한다.
+권위 인벤토리 배열 없음 — `object.owner={type:'character'}` 역참조로 파생. 게임 비밀번호는 담지 않는다(인증은 Firebase 소유). **E5 링크 필드**([`account-character.md`](account-character.md)): `accountId`(소유 계정 필수 FK), `status`(active/deleted soft-delete)·`deletedAt`, 생성 인터뷰 스칼라 `gender`/`weapon`/`alignment`(optional)가 추가돼, 이 표는 E5 이후 5번째 스키마 `account.ts`와 함께 확장됐다. **E6 전투 필드**([`combat.md`](combat.md)): `hpCurrent`/`mpCurrent`/`level` 3종이 전투 resolver의 매-라운드 operand로 required 추가됐다(gender/weapon/alignment의 optional과 달리 required — 전투가 항상 값을 요구). 정의·시딩만 E6 소관이고 변이 의미론(레벨업·재생·exp)은 진행 루프(#81)가 얹는다. `experience`는 진행 루프(#81)가 level 동렬 required로 추가했고, `statusEffects`는 [combat.md](combat.md) 상태이상 DoT가 선택 필드로 추가했다(미지정=상태이상 없음, gender/weapon 선택 관례 — required면 기존 픽스처 파괴). `schemaVersion`은 v4까지 증분됐고, load 직전 **stepwise 합성 체인**(`backfillCharacterV4∘V3∘V2`)이 구버전 문서를 승격한다: V2가 v1→v2(`seedVitals` class·level→`computeHpMax`/`computeMpMax`, `level=1` 고정), V3가 v2→v3(`experience` level 정합 시딩 `level<=1?0:neededExp(level-1)`), V4가 v3→v4(`schemaVersion` 스탬프만 — statusEffects는 선택 필드라 미시딩). 각 스텝 가드·스탬프는 자기 리터럴 버전에 매인다(CURRENT 참조 금지 — silent 클로버 방지). write-back 없는 lazy 마이그레이션·멱등. 신규 문서는 생성 경로(`createCharacter`)에서 `CURRENT_CHARACTER_SCHEMA_VERSION`(현 4)·만피/만마로 시딩한다.
 
 **`object.ts`** — `objectOwnerSchema`(discriminated union) + `objectSchema`:
 

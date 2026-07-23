@@ -44,15 +44,11 @@ import { mprofic } from './mprofic.js'
  * 스냅샷은 adapt 시점 뷰라 차감이 desync되기 때문이다.
  */
 
-// ── 방 상성 플래그 비트(room.flags number[], hasFlag) — mtype.h:320-323 ────────
-/** 땅 realm 방 — EARTH 강화·WIND 약화. */
-export const REARTH = 19
-/** 바람 realm 방 — WIND 강화·EARTH 약화. */
-export const RWINDR = 20
-/** 불 realm 방 — FIRE 강화·WATER 약화. */
-export const RFIRER = 21
-/** 물 realm 방 — WATER 강화·FIRE 약화. */
-export const RWATER = 22
+// ── 방 상성 플래그 비트(room.flags number[], hasFlag) — world/roomFlags.ts 정본 ─
+// 중복 정의 제거: realm 4종은 world/roomFlags.ts가 소유한다. 여기서는 import 후 배럴 호환을
+// 위해 그대로 재노출한다(magic/index.ts가 이 심볼들을 re-export).
+export { REARTH, RWINDR, RFIRER, RWATER } from '../world/roomFlags.js'
+import { REARTH, RWINDR, RFIRER, RWATER } from '../world/roomFlags.js'
 
 /** bonusType → mprofic 나눗수 K(magic1.c:853-865). 1→10, 2→6, 3→4. */
 const BNS_DIVISOR: Record<number, number> = { 1: 10, 2: 6, 3: 4 }

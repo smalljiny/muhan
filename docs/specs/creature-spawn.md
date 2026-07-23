@@ -35,6 +35,8 @@ E4 월드 상태 엔진의 세 번째 토픽이다. E4-1a(`runtime-foundation.md
 
 라이브 크리처. 정적 스탯(`level`·`hpmax`·`dexterity`·`special`·`flags`)과 라이브 가변 상태(`hpcur`·`mpcur`·`enemies`·`inventory`·타이머)를 담는다. `templateId`는 `null`(embedded) 또는 몹번호. 타이머 필드는 실초 시각으로 도래 기준을 표현한다: `nextActionAt`(다음 행동), `lastRegenAt`(재생 baseline), `lastScavengeAt`·`lastWanderAt`(20초 게이트), `befuddledUntil`·`charmedUntil`(MBEFUD/MCHARM 만료 — 미설정=만료됨=autonomic이 비트 스크럽). `instanceId`는 `${roomId}:c${idx}` 부팅 생성·non-durable.
 
+전투 콘텐츠 필드(불변, 물질화 시점 소스 JSON에서 전이)로 `armor`·`thaco`·`ndice`·`sdice`·`pdice`([combat.md](combat.md) operand)와 마법 read 필드(`realm`·`spells`·`class`·`intelligence`·`piety`)가 있고, [combat.md](combat.md) 사망 분배(`distributeCreatureDeath`)가 읽는 `experience`·`alignment`를 **선택 필드**로 담는다(`befuddledUntil`/`charmedUntil` 선택 관례 — 인라인 리터럴 blast-radius 회피, 소스 JSON은 항상 실값 보유). 물질화(`creatureFactory.ts`)는 두 필드를 소스에서 복사하고, template 스폰 경로는 `buildSpawnTemplateIndex`(`spawn.ts`) 명시 매핑이 두 필드를 전파한다(embedded·template 양 경로 충실).
+
 ### `RoomNode` 스폰 필드 (G3)
 
 `RoomNode`에 라이브 `creatures: CreatureInstance[]`(가변)와 스폰 정의 필드를 추가한다:

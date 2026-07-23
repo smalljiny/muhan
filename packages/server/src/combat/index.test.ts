@@ -48,7 +48,8 @@ describe('combat 배럴', () => {
   })
 
   it('pvp 게이트 표면을 재export한다', () => {
-    expect(typeof combat.checkTargetImmunity).toBe('function')
+    expect(typeof combat.checkTargetImmunityPre).toBe('function')
+    expect(typeof combat.checkTargetImmunityPost).toBe('function')
     expect(typeof combat.checkPvpGate).toBe('function')
   })
 

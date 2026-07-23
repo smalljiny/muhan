@@ -42,6 +42,19 @@ export const characterSchema = z.strictObject({
   alignment: z.int().optional(),
   // 생성 시 고른 주력 무기 — 1~5(도/검/봉/창/궁). proficiency[5] 숙련 배열은 E6로 유예한다.
   weapon: z.int().optional(),
+  // 상태이상 영속 표현(선택). until은 befuddledUntil/charmedUntil과 동일한 절대-틱 만료
+  // 관례다(잔여-틱 아님) — 만료 시점의 절대 틱 값을 저장한다. interval은 주기 피해(poison/
+  // disease)의 틱 간격이다. blind는 시야 차단이라 간격이 없어 until만 갖는다. 각 효과는 strictObject라
+  // 미정의 키를 거부하고, .partial()로 개별 선택, .optional()로 statusEffects 자체를 선택으로 둔다
+  // (.default 금지 — 추론 타입에서 필수가 돼 기존 픽스처를 깬다).
+  statusEffects: z
+    .strictObject({
+      poison: z.strictObject({ until: z.int().min(0), interval: z.int().min(0) }),
+      disease: z.strictObject({ until: z.int().min(0), interval: z.int().min(0) }),
+      blind: z.strictObject({ until: z.int().min(0) }),
+    })
+    .partial()
+    .optional(),
 })
 
 export type Character = z.infer<typeof characterSchema>

@@ -5,6 +5,7 @@ import type { PlayerCombatState } from './playerState.js'
 import type { DamageLedger } from './enmity.js'
 import { accumulateDamage } from './enmity.js'
 import { playerBaseDamage, monsterDamage, hitThreshold, applyPaladinAlignment } from './attackStats.js'
+import { resolveSpecialAttack, type SpecialAttackResult } from './specialAttack.js'
 import {
   HIT_ROLL_MAX_PLAYER,
   HIT_ROLL_MAX_MONSTER,
@@ -13,11 +14,15 @@ import {
   PALADIN,
   INVINCIBLE,
 } from './constants.js'
-import { F_ISSET, PUPDMG, OALCRT, OCURSE } from '../world/hexFlags.js'
+import { F_ISSET, PUPDMG, OALCRT, OCURSE, MBEFUD } from '../world/hexFlags.js'
 
 /**
- * resolveAttack — 명중→피해→크리/불발→적용을 단일 파이프로 통합하고 HP<1 시 death seam을 발화하는
+ * resolveAttack — 명중→피해→크리/불발→적용을 단일 파이프로 통합하고 HP<1이면 died=true를 반환하는(fire-free)
  * 오라클 충실 이식(플레이어 command5.c:207-345 / 몬스터 update.c:373-447, 플랜 G1/G5).
+ *
+ * Story 10(T10.1): death seam 발화는 호출자(initiateAttack/combatTick)가 소유한다 — 근접 라운드가
+ * target death를 end-of-round로 지연해 "막타치면 target 생존"을 재현하려면 resolveAttack이 즉시
+ * 발화하면 안 되기 때문이다. fireDeath·ResolveContext seam은 magic offensiveSpell 공유로 무변경이다.
  *
  * 순수 함수: 전역 상태·Date.now·Math.random 없이 모든 랜덤을 ctx.rng(주입 CombatRng)로만 굴린다.
  * 유일한 in-place 변형은 defender HP 차감(worldGraph 승인 carve-out)·ledger 누적이며 AttackOutcome은
@@ -44,7 +49,10 @@ export interface ResolveContext {
   readonly ledger: DamageLedger
 }
 
-/** 단일 타격 결과(메시지 렌더링 입력). 무기 마모·낙하는 실제 오브젝트 이동 없이 플래그만 표면화한다. */
+/**
+ * 단일 타격 결과(메시지 렌더링 입력). 무기 마모·낙하는 실제 오브젝트 이동 없이 플래그만 표면화한다.
+ * specialAttack은 몬스터 명중 타격일 때만 non-null이다(플레이어·미명중은 null).
+ */
 interface AttackDescriptor {
   readonly hit: boolean
   readonly damage: number
@@ -52,6 +60,11 @@ interface AttackDescriptor {
   readonly fumble: boolean
   readonly durabilityHit: boolean
   readonly weaponDropped: boolean
+  /**
+   * 몬스터 특수공격(update.c:387~480) 결과 마커 — 브레스·에너지드레인·독·질병·실명·장비용해 서술.
+   * 실 status 부여·exp 차감·장비용해 적용은 #99 유예(여기선 마커만 표면화). 플레이어·미명중은 null.
+   */
+  readonly specialAttack: SpecialAttackResult | null
 }
 
 /** 라운드 전체 결과. 필드는 다중공격 타격들의 집계(하나라도 명중/크리/불발)다. */
@@ -61,6 +74,8 @@ export interface AttackOutcome {
   readonly critical: boolean
   readonly fumble: boolean
   readonly died: boolean
+  /** 몬스터 특수공격 마커 — 명중 타격 중 첫 non-null(몬스터 근접은 단타라 사실상 유일). 없으면 null. */
+  readonly specialAttack: SpecialAttackResult | null
   readonly messageInputs: {
     readonly attacks: ReadonlyArray<AttackDescriptor>
   }
@@ -74,14 +89,20 @@ const MISS: AttackDescriptor = {
   fumble: false,
   durabilityHit: false,
   weaponDropped: false,
+  specialAttack: null,
 }
 
-/** 단일 타격의 피해 산출 결과 — 조정된 피해와 상태 플래그(크리/불발·몬스터 단타 공통). */
-interface StrikeDamage {
+/** 크리/불발·몬스터 단타 공통 피해 코어 — resolveCritFumble이 반환하는 형태(특수공격 마커 제외). */
+interface StrikeCore {
   readonly damage: number
   readonly critical: boolean
   readonly fumble: boolean
   readonly weaponDropped: boolean
+}
+
+/** 단일 타격의 피해 산출 결과 — 코어 + 몬스터 특수공격 마커(플레이어 경로는 null). */
+interface StrikeDamage extends StrikeCore {
+  readonly specialAttack: SpecialAttackResult | null
 }
 
 /**
@@ -111,7 +132,7 @@ function modProfic(state: PlayerCombatState): number {
  * `n *= rng(3,6)`. 미크리 & 무기 착용이면 불발 굴림 `rng(1,100)`을 소비하고 `<=(5-p) & !OCURSE`이면
  * n=0·무기 낙하. OCURSE 무기·미착용은 불발하지 않는다.
  */
-function resolveCritFumble(state: PlayerCombatState, n: number, rng: CombatRng): StrikeDamage {
+function resolveCritFumble(state: PlayerCombatState, n: number, rng: CombatRng): StrikeCore {
   const p = modProfic(state)
   const weapon = state.weapon
   const critRoll = rng(1, 100) // || 좌변 — 항상 소비(OALCRT 자동크리에도).
@@ -135,20 +156,51 @@ function resolveCritFumble(state: PlayerCombatState, n: number, rng: CombatRng):
 }
 
 /**
- * 단일 타격의 피해 산출. 플레이어는 base→max(1,n)→PALADIN 보정→크리/불발, 몬스터는 monsterDamage
- * 반환값을 재클램프 없이 그대로 쓴다.
+ * 단일 타격의 피해 산출. 플레이어는 base→max(1,n)→PALADIN 보정→크리/불발, 몬스터는 특수공격 게이트
+ * → breath-replace ?? monsterDamage 순으로 산출한다(재클램프 없음).
+ *
+ * ## 몬스터 특수공격 배선 (update.c:387~480, Story 9)
+ * 명중 직후 특수공격 6종(브레스·에너지드레인·독·질병·실명·장비용해) 게이트를 monsterDamage **전에**
+ * 굴린다 — MBRETH 게이트가 먼저 굴려져야 breath-replace가 성립하기 때문이다. 그 뒤:
+ *   - **breath-replace(`??` lazy)**: 브레스 발동 시 breath 데미지가 normal melee를 **대체**한다. `??`의
+ *     지연 우변이라 monsterDamage는 breath 미발동 시에만 굴려진다. `||` 대신 `??`를 쓰는 이유는 breath
+ *     0 데미지가 monsterDamage로 fall through되면 안 되기 때문이다(double-roll·오데미지 방지).
+ *     T9.1 "명중 직후 additive"처럼 읽히나 오라클은 replace다 — 의식적 divergence(Story 7 "살해자" 선례).
+ *   - **★ MBEFUD fork**: 오라클 `if(MBEFUD) n=n/3`은 breath/else 분기 **밖**이라 breath 데미지에도
+ *     적용된다. monsterDamage는 MBEFUD를 melee path 내부에 이미 적용하므로, breath 발동 시(breathDamage
+ *     !== null)에만 여기서 추가 보정해 breath가 MBEFUD를 우회하지 않게 한다(melee path 이중 적용 없음).
+ *   - **rng 순서 divergence(inert)**: 특수공격 굴림 순서(MBRETH→breath|drain→MPOISS→MDISEA→MBLNDR
+ *     →MDISIT)는 오라클 순서를 정확히 보존하나, monsterDamage(melee)는 오라클(중간)과 달리 `??` 지연으로
+ *     post-status 게이트 **뒤**에 굴려진다. status 게이트가 melee 값과 독립이라 behaviorally inert다.
+ *
+ * ## substrate gap (#99 유예)
+ * PlayerCombatState는 experience 필드가 없어 흡수 상한을 실효 무효화한다 — MAX_SAFE_INTEGER를 넘겨
+ * pre-cap raw drain을 산출하고, 실 exp 대비 상한·차감은 #99 소관이다. status 부여·장비용해 적용도 #99로
+ * 유예하며 여기선 SpecialAttackResult 마커만 표면화한다(AttackOutcome은 새 객체, HP·ledger만 in-place).
  */
 function computeStrike(attacker: Combatant, defender: Combatant, rng: CombatRng): StrikeDamage {
   if (attacker.kind === 'creature') {
-    // 몬스터 경로 — 재클램프 금지(MBEFUD 0 피해 보존).
-    return { damage: monsterDamage(attacker, defender, rng), critical: false, fumble: false, weaponDropped: false }
+    // defender flags(PRCOLD/PRFIRE 저항 판독)는 Combatant 통합 flags 필드로 kind 비대칭을 흡수한다.
+    const special = resolveSpecialAttack(
+      attacker.instance,
+      { flags: defender.flags, experience: Number.MAX_SAFE_INTEGER },
+      { rng },
+    )
+    // breath-replace: breath 미발동 시에만 monsterDamage를 굴린다(?? lazy RHS). 재클램프 금지(MBEFUD 0 보존).
+    let damage = special.breathDamage ?? monsterDamage(attacker, defender, rng)
+    // ★ MBEFUD fork — breath 발동 시에만 추가 /3(melee path는 monsterDamage가 이미 적용).
+    if (special.breathDamage !== null && F_ISSET(attacker.instance.flags, MBEFUD)) {
+      damage = Math.trunc(damage / 3)
+    }
+    return { damage, critical: false, fumble: false, weaponDropped: false, specialAttack: special }
   }
 
+  // 플레이어 경로 — 특수공격 미호출(몬스터 한정, criterion 2). specialAttack=null.
   const { state } = attacker
   let n = playerBaseDamage(attacker, rng)
   n = Math.max(1, n) // command5.c:266 클램프(플레이어 정상타 min-1).
   if (state.class === PALADIN) n = applyPaladinAlignment(n, state.alignment, rng)
-  return resolveCritFumble(state, n, rng)
+  return { ...resolveCritFumble(state, n, rng), specialAttack: null }
 }
 
 /** attacker 식별자 — 플레이어=characterId, 몬스터=instanceId(ledger 키). */
@@ -193,12 +245,15 @@ function performStrike(attacker: Combatant, defender: Combatant, ctx: ResolveCon
     fumble: strike.fumble,
     durabilityHit,
     weaponDropped: strike.weaponDropped,
+    specialAttack: strike.specialAttack,
   }
 }
 
 /**
- * defender 사망 seam을 kind별로 정확히 1회 발화한다(command5.c:341). 근접(여기)·주문(offensiveSpell)이
- * 공유하는 death seam — CastContext가 ResolveContext를 확장하므로 주문 경로도 동일 시그니처로 소비한다.
+ * defender 사망 seam을 kind별로 발화한다(command5.c:341). resolveAttack은 fire-free이므로(Story 10)
+ * 이 함수를 호출자가 소비한다 — 근접은 initiateAttack(오프너 킬)·combatTick(end-of-round·counter 킬),
+ * 주문은 offensiveSpell이 직접 발화한다. CastContext가 ResolveContext를 확장하므로 주문 경로도 동일
+ * 시그니처로 공유한다. seam·시그니처 무변경(magic 공유).
  */
 export function fireDeath(defender: Combatant, ctx: ResolveContext): void {
   if (defender.kind === 'creature') {
@@ -215,12 +270,13 @@ const DEAD_DEFENDER_NOOP: AttackOutcome = {
   critical: false,
   fumble: false,
   died: false,
+  specialAttack: null,
   messageInputs: { attacks: [] },
 }
 
 /**
- * 공격 해석 진입점 — 다중공격 count만큼 타격을 반복하되, defender HP<1이면 death seam 발화 후 break한다
- * (오라클 die() 후 return). 집계 AttackOutcome을 새 객체로 반환한다.
+ * 공격 해석 진입점 — 다중공격 count만큼 타격을 반복하되, defender HP<1이면 died=true를 세우고 break한다
+ * (fire-free — death seam은 호출자가 발화, 오라클 die() 지연 재현). 집계 AttackOutcome을 새 객체로 반환한다.
  *
  * 진입 가드: 이미 사망한(HP<1) defender에 대한 stale/재진입 공격은 no-op한다. 오라클은 die()가 대상을
  * 즉시 free/제거해 재공격이 구조적으로 불가능하나, 이 포트는 사망 제거를 커넥션 계층으로 유예하므로
@@ -241,9 +297,14 @@ export function resolveAttack(attacker: Combatant, defender: Combatant, ctx: Res
 
     // 사망 판정은 오라클처럼 명중 타격 내부에서만 수행한다(빗나감은 HP 불변이라 진입 불가·불발은
     // hit=true라 포함). command5.c:341이 명중 블록 안에 위치.
+    //
+    // ★ Story 10(T10.1): resolveAttack는 fire-free다. HP<1을 감지하면 died=true·break만 하고 death
+    // seam을 발화하지 않는다 — 발화 책임은 호출자(initiateAttack/combatTick)로 이양한다. 근거:
+    // 오라클 update.c:501~530 근접 라운드는 target death를 end-of-round로 지연해야 counter가 target을
+    // 구할 수 있다("막타치면 target 생존"). resolveAttack이 근접 중 즉시 발화하면 이 지연이 불가능하다.
+    // fireDeath·ResolveContext seam은 magic offensiveSpell 공유로 무변경이며, 여기선 호출만 제거한다.
     if (descriptor.hit && combatantHp(defender) < 1) {
       died = true
-      fireDeath(defender, ctx)
       break
     }
   }
@@ -254,6 +315,8 @@ export function resolveAttack(attacker: Combatant, defender: Combatant, ctx: Res
     critical: attacks.some((a) => a.critical),
     fumble: attacks.some((a) => a.fumble),
     died,
+    // 명중 타격 중 첫 non-null 특수공격 마커(몬스터 근접은 count=1이라 사실상 유일, 플레이어는 전부 null).
+    specialAttack: attacks.find((a) => a.specialAttack !== null)?.specialAttack ?? null,
     messageInputs: { attacks },
   }
 }

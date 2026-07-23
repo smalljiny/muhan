@@ -35,7 +35,7 @@
 | **E3** 전송·세션 — 프로토콜(E3-1)·인증세션 FSM(E3-2)·연결 수명주기(E3-3)·자유채팅권한 seam(E3-4)·WS 하드닝(유량 제한·자원 가드) | ✅ 완료 |
 | **E4** 월드 상태 엔진 — 런타임 기반(1Hz 틱)·이동·방·크리처 스폰/AI | ✅ 완료 |
 | **E5** 계정·캐릭터 라이프사이클 (account 1급 모델·생성 인터뷰·진입/재개·soft-delete) | ✅ 완료 |
-| **E6** 게임 규칙 — 파생 스탯(stats-core)·근접 전투(combat)·**진행 루프(progression)** | 🔄 진행 중 (진행 루프 = 현재 PR) |
+| **E6** 게임 규칙 — 파생 스탯(stats-core)·전투(근접 + 특수공격·DoT·사망 분배·전투 AI)·진행 루프(progression) | 🔄 진행 중 (전투 부가 = 현재 PR) |
 | **웹 클라이언트** — 전송 셸(E9-1)·세션 진입(E10-1) | ✅ 부분 |
 | **테스트 인프라** — 골든 fixture 하네스·property 테스트 | ✅ 완료 |
 | **E7** 소셜·채널 · 마법·경제 규칙 엔진 확장 | ⏳ 예정 |
@@ -195,8 +195,8 @@ docker compose down
 | [`movement-rooms.md`](docs/specs/movement-rooms.md) | 방 그래프·`tryMove`·문 상태머신·방=채널 방송·출구 자동 재잠금 |
 | [`creature-spawn.md`](docs/specs/creature-spawn.md) | 크리처 라이브 인스턴스·활성 집합·autonomic AI·스폰 3트리거·사망 라이프사이클 (E4-2) |
 | [`stats-core.md`](docs/specs/stats-core.md) | base+modifier 능력치·파생 스탯(AC·THAC0·소지량·HP/MP 최대치) 순수 계산 |
-| [`combat.md`](docs/specs/combat.md) | `resolveAttack` 단일 근접 전투 파이프·몬스터 라운드·플레이어 반격 (E6a-1) |
-| [`progression.md`](docs/specs/progression.md) | 경험치 곡선·연마 레벨업·능력치 성장·HP/MP 재생·사망 페널티·승급 ← **현재 PR** |
+| [`combat.md`](docs/specs/combat.md) | `resolveAttack` 전투 파이프·몬스터 라운드·플레이어 반격 + 특수공격 6종·상태이상 DoT·사망 exp 분배·전투 AI·#91 라운드순서 (E6a-1/E6a-2) |
+| [`progression.md`](docs/specs/progression.md) | 경험치 곡선·연마 레벨업·능력치 성장·HP/MP 재생·사망 페널티·승급 |
 
 **계정·클라이언트**
 

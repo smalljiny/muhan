@@ -227,9 +227,9 @@ describe('FirebaseSessionAuthAdapter (integration)', () => {
       expect(persisted?.level).toBe(1)
       expect(persisted?.hpCurrent).toBe(seedVitals(2, 1).hpCurrent)
       expect(persisted?.mpCurrent).toBe(seedVitals(2, 1).mpCurrent)
-      // 1레벨 신규는 experience 0으로 시딩하고 최신 스키마 버전(3)으로 스탬프한다.
+      // 1레벨 신규는 experience 0으로 시딩하고 최신 스키마 버전(4)으로 스탬프한다.
       expect(persisted?.experience).toBe(0)
-      expect(persisted?.schemaVersion).toBe(3)
+      expect(persisted?.schemaVersion).toBe(4)
     })
 
     it('gender·weapon·alignment를 선택 필드로 영속한다', async () => {

@@ -27,6 +27,9 @@ const thief: CreatureSource = {
   class: 2,
   intelligence: 18,
   piety: 12,
+  // 사망 분배 읽기 필드(Story 6): experience(킬 경험치)·alignment(정렬, 선/악 축 — 음수 유효).
+  experience: 300,
+  alignment: -50,
 }
 
 describe('fromEmbedded', () => {
@@ -67,6 +70,12 @@ describe('fromEmbedded', () => {
     expect(c.class).toBe(2)
     expect(c.intelligence).toBe(18)
     expect(c.piety).toBe(12)
+  })
+
+  it('사망 분배 읽기 필드 experience/alignment를 소스에서 물질화한다(Story 6, Story 7 입력)', () => {
+    const c = fromEmbedded(thief, 135, 0)
+    expect(c.experience).toBe(300)
+    expect(c.alignment).toBe(-50)
   })
 
   it('realm은 소스에 없어 [0,0,0,0] 상수 기본값으로 설정한다(전 몬스터 realm=0, #85 소관)', () => {
@@ -119,6 +128,9 @@ describe('fromTemplate', () => {
     expect(c?.intelligence).toBe(18)
     expect(c?.piety).toBe(12)
     expect(c?.realm).toEqual([0, 0, 0, 0])
+    // 사망 분배 읽기 필드도 템플릿 소스에서 물질화된다(Story 6).
+    expect(c?.experience).toBe(300)
+    expect(c?.alignment).toBe(-50)
   })
 
   it('알 수 없는 templateId면 undefined를 반환한다', () => {
