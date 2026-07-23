@@ -36,6 +36,9 @@ describe('toPlayerCombatState', () => {
     // 이 픽스처는 PlayerCombatState 어댑트 입력이며 load 경로(backfill)를 거치지 않아 experience는
     // 검증되지 않는다. Character 타입(required) 충족을 위한 최소값 0으로 둔다.
     experience: 0,
+    // v5 spell store 시드(빈 지식 비트마스크·realm [0,0,0,0]) — Character required 필드 충족.
+    spells: new Array<number>(16).fill(0),
+    realm: [0, 0, 0, 0],
     schemaVersion: 2,
     accountId: 'acct-1',
     status: 'active',

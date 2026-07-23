@@ -1,4 +1,21 @@
 import { z } from 'zod'
+import { SPELL_CATALOG } from '../magic/catalog.js'
+
+/**
+ * buffs 엔트리 하나의 형태 — 주문번호별 만료 타이머. until은 statusEffects와 동일한 절대-틱
+ * 만료 관례다(잔여-틱 아님). strictObject라 interval 등 미정의 키를 거부한다 — 버프는 주기 효과가
+ * 아니므로 interval을 갖지 않는다(D2 — statusEffects DoT와 결합 표면 분리).
+ */
+const buffEntrySchema = z.strictObject({ until: z.int().min(0) })
+
+/**
+ * buffs 필드의 키 형태 — 카탈로그 주문번호(0-55)를 키로 하는 strictObject 셰이프를 SPELL_CATALOG에서
+ * 파생한다. 수기 56키 열거 대신 카탈로그를 단일 출처로 삼아 드리프트를 차단한다. .partial()이 각 키를
+ * 선택으로 만들되 strictObject의 미정의 키 거부는 보존되므로, 카탈로그 밖 주문번호 키는 에러가 된다.
+ */
+const buffsShape = Object.fromEntries(
+  SPELL_CATALOG.map((entry) => [String(entry.spellNo), buffEntrySchema]),
+)
 
 /**
  * 캐릭터 영속 문서 — 저장의 단일 출처.
@@ -28,6 +45,20 @@ export const characterSchema = z.strictObject({
   // 값을 요구하므로 required다. v1/v2 문서는 load 직전 backfillCharacterV3가 level 정합값으로
   // 시딩(level<=1이면 0, 아니면 neededExp(level-1))하고, 신규 문서는 생성 경로에서 0으로 시딩한다.
   experience: z.int().min(0),
+  // 주문 지식 비트마스크 — uint8[16]=128비트(A6 §8 spells[16]). 비트 f = 주문번호 f의 습득 여부.
+  // hpCurrent/experience와 동렬의 영속 필수 필드(D1)로, 학습(study/teach)·시전 게이트가 값을
+  // 요구하므로 required다. v4 이하 문서는 load 직전 backfillCharacterV5가 빈 비트마스크(16바이트 0)로
+  // 시딩하고, 신규 문서는 생성 경로에서 동일 시드로 배선한다. 비트 read/write 헬퍼는 후속 Story 소유.
+  spells: z.array(z.int()).length(16),
+  // realm[4] 누적경험치 — 흙/바람/불/물 계열 숙련(mstruct.h:195, A6 §5). spells와 동렬의 영속 필수
+  // 필드(D1)로, 공격 주문 피해 시 성장 write가 값을 요구하므로 required다. backfillCharacterV5가
+  // [0,0,0,0]으로 시딩하고, 신규 문서는 생성 경로에서 동일 시드로 배선한다.
+  realm: z.tuple([z.int(), z.int(), z.int(), z.int()]),
+  // 버프/디버프 만료 영속(선택). 주문번호별 {until} 엔트리로, until은 statusEffects와 동일한 절대-틱
+  // 만료 관례다(interval 없음 — 버프는 주기 효과가 아니다, D2). strictObject라 카탈로그 밖 키·미정의
+  // 키를 거부하고, .partial()로 개별 선택, .optional()로 buffs 자체를 선택으로 둔다(.default 금지 —
+  // 추론 타입에서 필수가 돼 기존 픽스처를 깬다. backfillCharacterV5는 statusEffects 선례대로 무시딩).
+  buffs: z.strictObject(buffsShape).partial().optional(),
   schemaVersion: z.int(),
   // 소유 계정 id(account._id = Firebase UID)로의 필수 FK.
   accountId: z.string().min(1),

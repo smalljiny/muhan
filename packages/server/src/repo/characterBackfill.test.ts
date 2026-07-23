@@ -10,7 +10,9 @@ import {
   backfillCharacterV2,
   backfillCharacterV3,
   backfillCharacterV4,
+  backfillCharacterV5,
   seedVitals,
+  seedSpellStore,
   CURRENT_CHARACTER_SCHEMA_VERSION,
 } from './characterBackfill.js'
 
@@ -54,12 +56,14 @@ describe('backfillCharacterV2', () => {
     expect(result.schemaVersion).toBe(2)
   })
 
-  it('V2 단독 승격 결과는 experience가 없어 아직 parse를 통과하지 못한다 (V3 스텝 필요)', () => {
-    // V2는 v1→v2(vitals)만 담당하고 experience는 V3 스텝 소유다. 합성(V3∘V2)해야 parse를 통과한다.
+  it('V2 단독 승격 결과는 experience·spells가 없어 아직 parse를 통과하지 못한다 (후속 스텝 필요)', () => {
+    // V2는 v1→v2(vitals)만 담당하고 experience는 V3, spells·realm은 V5 스텝 소유다.
+    // 전 체인(V5∘V4∘V3∘V2)을 합성해야 parse를 통과한다.
     const v2Only = backfillCharacterV2(rawV1())
     expect('experience' in v2Only).toBe(false)
     expect(characterSchema.safeParse(v2Only).success).toBe(false)
-    expect(characterSchema.safeParse(backfillCharacterV3(v2Only)).success).toBe(true)
+    const chained = backfillCharacterV5(backfillCharacterV4(backfillCharacterV3(v2Only)))
+    expect(characterSchema.safeParse(chained).success).toBe(true)
   })
 
   it('원본을 변형하지 않고 새 객체를 반환한다 (immutability)', () => {
@@ -180,8 +184,8 @@ function rawV3(overrides: Record<string, unknown> = {}): Record<string, unknown>
 }
 
 describe('backfillCharacterV4', () => {
-  it('CURRENT_CHARACTER_SCHEMA_VERSION은 4이다', () => {
-    expect(CURRENT_CHARACTER_SCHEMA_VERSION).toBe(4)
+  it('CURRENT_CHARACTER_SCHEMA_VERSION은 5이다', () => {
+    expect(CURRENT_CHARACTER_SCHEMA_VERSION).toBe(5)
   })
 
   it('schemaVersion<4 문서를 schemaVersion=4로 승격한다 (버전 스탬프만, statusEffects 미시딩)', () => {
@@ -222,21 +226,112 @@ describe('backfillCharacterV4', () => {
   })
 })
 
-describe('backfill 합성 체인 (V4 ∘ V3 ∘ V2)', () => {
-  it('v1 raw → V2가 vitals(level=1), V3가 experience=0, V4가 schemaVersion=4, parse 통과', () => {
-    const result = backfillCharacterV4(backfillCharacterV3(backfillCharacterV2(rawV1())))
+/** spells·realm 없는 v4 raw 문서(vitals·level·experience 있음, schemaVersion:4). V5 승격 입력 형태. */
+function rawV4(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    _id: 'v4',
+    name: '최신캐릭',
+    class: 3,
+    race: 2,
+    stats: [10, 10, 10, 10, 10],
+    gold: 100,
+    currentRoom: 1,
+    hpCurrent: 54,
+    mpCurrent: 50,
+    level: 1,
+    experience: 0,
+    schemaVersion: 4,
+    accountId: 'acc-1',
+    status: 'active',
+    ...overrides,
+  }
+}
+
+describe('seedSpellStore', () => {
+  it('빈 비트마스크(16바이트 0)와 realm [0,0,0,0]을 시딩한다', () => {
+    expect(seedSpellStore()).toEqual({ spells: new Array<number>(16).fill(0), realm: [0, 0, 0, 0] })
+  })
+})
+
+describe('backfillCharacterV5', () => {
+  it('schemaVersion<5 문서를 spells=빈·realm=[0,0,0,0]·schemaVersion=5로 승격한다', () => {
+    const result = backfillCharacterV5(rawV4())
+    expect(result.spells).toEqual(new Array<number>(16).fill(0))
+    expect(result.realm).toEqual([0, 0, 0, 0])
+    expect(result.schemaVersion).toBe(5)
+    // buffs는 선택 필드라 시딩하지 않는다(V4 statusEffects 선례).
+    expect('buffs' in result).toBe(false)
+  })
+
+  it('승격 시 기존 필드(vitals·level·experience)를 보존한다', () => {
+    const result = backfillCharacterV5(
+      rawV4({ level: 50, hpCurrent: 777, mpCurrent: 333, experience: 12345 }),
+    )
+    expect(result.level).toBe(50)
+    expect(result.hpCurrent).toBe(777)
+    expect(result.mpCurrent).toBe(333)
+    expect(result.experience).toBe(12345)
+    expect(result.schemaVersion).toBe(5)
+  })
+
+  it('schemaVersion>=5 문서는 그대로 반환한다 (passthrough, spells·realm 재시딩 없음)', () => {
+    const v5 = rawV4({
+      schemaVersion: 5,
+      spells: new Array(16).fill(255),
+      realm: [10, 20, 30, 40],
+    })
+    const result = backfillCharacterV5(v5)
+    expect(result).toBe(v5)
+    // 실제 지식·숙련을 빈값으로 클로버하지 않는다.
+    expect(result.spells).toEqual(new Array(16).fill(255))
+    expect(result.realm).toEqual([10, 20, 30, 40])
+  })
+
+  it('schemaVersion이 없는 문서도 v0으로 취급해 승격한다 (누락 버전 방어)', () => {
+    const noVersion = rawV4()
+    delete noVersion.schemaVersion
+    const result = backfillCharacterV5(noVersion)
+    expect(result.schemaVersion).toBe(5)
+    expect(result.spells).toEqual(new Array<number>(16).fill(0))
+  })
+
+  it('원본을 변형하지 않고 새 객체를 반환한다 (immutability)', () => {
+    const raw = rawV4()
+    const result = backfillCharacterV5(raw)
+    expect(result).not.toBe(raw)
+    expect('spells' in raw).toBe(false)
+    expect(raw.schemaVersion).toBe(4)
+  })
+})
+
+describe('backfill 합성 체인 (V5 ∘ V4 ∘ V3 ∘ V2)', () => {
+  it('v1 raw → V2 vitals, V3 experience=0, V4 stamp, V5 spells·realm, parse 통과', () => {
+    const result = backfillCharacterV5(
+      backfillCharacterV4(backfillCharacterV3(backfillCharacterV2(rawV1()))),
+    )
     expect(result.level).toBe(1)
     expect(result.hpCurrent).toBe(computeHpMax(ctx(3, 1)))
     expect(result.experience).toBe(0)
-    expect(result.schemaVersion).toBe(4)
+    expect(result.spells).toEqual(new Array<number>(16).fill(0))
+    expect(result.realm).toEqual([0, 0, 0, 0])
+    expect(result.schemaVersion).toBe(5)
     expect(characterSchema.safeParse(result).success).toBe(true)
   })
 
-  it('v4 문서는 세 스텝 모두 passthrough (재계산 없음)', () => {
-    const v4 = rawV3({ schemaVersion: 4, level: 7, experience: 999 })
-    const result = backfillCharacterV4(backfillCharacterV3(backfillCharacterV2(v4)))
-    expect(result).toBe(v4)
+  it('v5 문서는 네 스텝 모두 passthrough (재계산 없음)', () => {
+    const v5 = rawV4({
+      schemaVersion: 5,
+      level: 7,
+      experience: 999,
+      spells: new Array<number>(16).fill(0),
+      realm: [1, 2, 3, 4],
+    })
+    const result = backfillCharacterV5(
+      backfillCharacterV4(backfillCharacterV3(backfillCharacterV2(v5))),
+    )
+    expect(result).toBe(v5)
     expect(result.level).toBe(7)
     expect(result.experience).toBe(999)
+    expect(result.realm).toEqual([1, 2, 3, 4])
   })
 })
