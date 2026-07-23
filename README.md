@@ -35,10 +35,10 @@
 | **E3** 전송·세션 — 프로토콜(E3-1)·인증세션 FSM(E3-2)·연결 수명주기(E3-3)·자유채팅권한 seam(E3-4)·WS 하드닝(유량 제한·자원 가드) | ✅ 완료 |
 | **E4** 월드 상태 엔진 — 런타임 기반(1Hz 틱)·이동·방·크리처 스폰/AI | ✅ 완료 |
 | **E5** 계정·캐릭터 라이프사이클 (account 1급 모델·생성 인터뷰·진입/재개·soft-delete) | ✅ 완료 |
-| **E6** 게임 규칙 — 파생 스탯(stats-core)·전투(근접 + 특수공격·DoT·사망 분배·전투 AI)·진행 루프(progression) | 🔄 진행 중 (전투 부가 = 현재 PR) |
+| **E6** 게임 규칙 엔진 — 파생 스탯(stats-core)·전투(근접 + 특수공격·DoT·사망 분배·전투 AI)·진행 루프(progression)·마법(magic)·아이템/장비(items)·경제/은행 물품 | 🔄 진행 중 (경제·은행 = 현재 PR, E6 마지막 토픽) |
 | **웹 클라이언트** — 전송 셸(E9-1)·세션 진입(E10-1) | ✅ 부분 |
 | **테스트 인프라** — 골든 fixture 하네스·property 테스트 | ✅ 완료 |
-| **E7** 소셜·채널 · 마법·경제 규칙 엔진 확장 | ⏳ 예정 |
+| **E7** 소셜·채널 확장 | ⏳ 예정 |
 
 ---
 
@@ -68,7 +68,7 @@ muhan/
 ├── data/world/   # port/로 변환된 JSON 월드 데이터 (산출물, 정본)
 ├── legacy/muhan/ # 원본 C 소스·월드·세이브 (읽기 전용 oracle, EUC-KR)
 └── docs/
-    ├── specs/    # 정본 스펙 21종 (아키텍처·영속화·전송/세션·월드/게임규칙·클라이언트·테스트 인프라)
+    ├── specs/    # 정본 스펙 25종 (아키텍처·영속화·전송/세션·월드/게임규칙·경제·클라이언트·테스트 인프라)
     ├── notes/    # 게임 분석 노트 A1–A13
     └── research/ # 아키텍처·스캐폴딩 리서치 보고서
 ```
@@ -197,6 +197,15 @@ docker compose down
 | [`stats-core.md`](docs/specs/stats-core.md) | base+modifier 능력치·파생 스탯(AC·THAC0·소지량·HP/MP 최대치) 순수 계산 |
 | [`combat.md`](docs/specs/combat.md) | `resolveAttack` 전투 파이프·몬스터 라운드·플레이어 반격 + 특수공격 6종·상태이상 DoT·사망 exp 분배·전투 AI·#91 라운드순서 (E6a-1/E6a-2) |
 | [`progression.md`](docs/specs/progression.md) | 경험치 곡선·연마 레벨업·능력치 성장·HP/MP 재생·사망 페널티·승급 |
+| [`magic.md`](docs/specs/magic.md) | 주문 카탈로그 선언 데이터·effect/delivery 분리·CAST 시전 게이트·공격 주문 20종 데미지·몬스터 시전 seam (E6b) |
+| [`items-equipment.md`](docs/specs/items-equipment.md) | object 템플릿 위 착용 게이트(wear/ready/hold)·파생 스탯 투영·rand_enchant·소비 아이템 magic 배달 순수 함수+seam |
+
+**경제·은행**
+
+| 문서 | 내용 |
+|------|------|
+| [`economy.md`](docs/specs/economy.md) | 금화 경제(MONEY 드롭/줍기/양도)·가격 config·상점 buy/purchase·전당포 sell·수리 repair·소지 한도 순수 서비스 (E6d) |
+| [`bank-items.md`](docs/specs/bank-items.md) | 은행 물품 보관/인출 — object.owner 재지정·slot 200·컨테이너 거부 (은행 현금은 save-policy.md) (E6d) |
 
 **계정·클라이언트**
 
