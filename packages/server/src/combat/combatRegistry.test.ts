@@ -21,6 +21,8 @@ function makeState(characterId: string): PlayerCombatState {
     armor: 8,
     thaco: 15,
     dexterity: 16,
+    spells: new Array<number>(16).fill(0),
+    realm: [0, 0, 0, 0],
     flags: '',
     alignment: 0,
     weapon: { ndice: 1, sdice: 6, pdice: 0, adjustment: 0, proficiency: 0 },

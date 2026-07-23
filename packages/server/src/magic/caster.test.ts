@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bonusOf, type CreatureInstance } from 'shared'
+import { bonusOf, emptySpellStore, setKnown, type CreatureInstance } from 'shared'
 import type { PlayerCombatState } from '../combat/playerState.js'
 import { F_SET } from '../world/hexFlags.js'
 import { toCaster } from './caster.js'
@@ -54,6 +54,8 @@ function makePlayerState(overrides: Partial<PlayerCombatState> = {}): PlayerComb
     armor: 12,
     thaco: 15,
     dexterity: 18,
+    spells: emptySpellStore(),
+    realm: [0, 0, 0, 0],
     flags: '',
     alignment: 1,
     weapon: null,
@@ -134,8 +136,14 @@ describe('toCaster(PlayerCombatState)', () => {
     expect(caster.class).toBe(4)
   })
 
-  it('realm을 [0,0,0,0]으로 기본한다(#84 플레이어 spell store 없음 — #85 seam)', () => {
-    const caster = toCaster(makePlayerState())
+  it('realm을 state.realm 실 누적경험치로 이식한다(#85 — 더 이상 [0,0,0,0] 스텁 아님)', () => {
+    const caster = toCaster(makePlayerState({ realm: [11, 22, 33, 44] }))
+    expect(caster.realm).toEqual([11, 22, 33, 44])
+    expect(caster.realm).toHaveLength(4)
+  })
+
+  it('빈 realm 플레이어는 [0,0,0,0]을 그대로 반영한다', () => {
+    const caster = toCaster(makePlayerState({ realm: [0, 0, 0, 0] }))
     expect(caster.realm).toEqual([0, 0, 0, 0])
   })
 
@@ -144,8 +152,15 @@ describe('toCaster(PlayerCombatState)', () => {
     expect(caster.intBonus).toBe(bonusOf(14))
   })
 
-  it('knows는 항상 false를 반환한다(#84 플레이어 spell store 없음 — #85가 실 store로 대체)', () => {
-    const caster = toCaster(makePlayerState())
+  it('knows는 state.spells 비트마스크를 isKnown으로 실판독한다(#85 — 더 이상 false 스텁 아님)', () => {
+    const caster = toCaster(makePlayerState({ spells: setKnown(emptySpellStore(), 6) }))
+    expect(caster.knows(6)).toBe(true)
+    expect(caster.knows(7)).toBe(false)
+    expect(caster.knows(55)).toBe(false)
+  })
+
+  it('빈 spell store 플레이어는 어느 주문도 보유하지 않는다', () => {
+    const caster = toCaster(makePlayerState({ spells: emptySpellStore() }))
     expect(caster.knows(0)).toBe(false)
     expect(caster.knows(55)).toBe(false)
   })

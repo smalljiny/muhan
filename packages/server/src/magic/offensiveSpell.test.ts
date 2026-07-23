@@ -108,6 +108,8 @@ function makePlayerTarget(over: Partial<PlayerCombatState> = {}): PlayerCombatSt
     armor: 0,
     thaco: 10,
     dexterity: 12,
+    spells: new Array<number>(16).fill(0),
+    realm: [0, 0, 0, 0],
     flags: '',
     alignment: 0,
     weapon: null,

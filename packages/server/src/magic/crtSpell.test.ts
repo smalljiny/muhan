@@ -97,6 +97,8 @@ function makePlayer(over: Partial<PlayerCombatState> = {}): PlayerCombatState {
     armor: 70,
     thaco: 10,
     dexterity: 12,
+    spells: new Array<number>(16).fill(0),
+    realm: [0, 0, 0, 0],
     flags: '',
     alignment: 1,
     weapon: { ndice: 1, sdice: 6, pdice: 0, adjustment: 0, proficiency: 0 },

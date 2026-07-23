@@ -80,3 +80,5 @@ export {
   type SpellEntry,
   type OspellEntry,
 } from './magic/catalog.js'
+
+export { emptySpellStore, isKnown, setKnown, SPELL_STORE_BYTES } from './magic/spellStore.js'

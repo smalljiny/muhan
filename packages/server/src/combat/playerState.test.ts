@@ -148,4 +148,18 @@ describe('toPlayerCombatState', () => {
     expect(state.hpCurrent).toBe(32)
     expect(state.nextAttackAt).toBe(5)
   })
+
+  it('Character.spells 비트마스크를 실이식한다(#85 — 빈 스텁 아님)', () => {
+    const known = new Array<number>(16).fill(0)
+    known[0] = 0b1000000 // 비트6(주문번호 6) 세팅
+    const withSpells: Character = { ...character, spells: known }
+    const state = toPlayerCombatState(withSpells, ctx, weapon)
+    expect(state.spells).toEqual(known)
+  })
+
+  it('Character.realm 누적경험치를 실이식한다(#85 — [0,0,0,0] 스텁 아님)', () => {
+    const withRealm: Character = { ...character, realm: [11, 22, 33, 44] }
+    const state = toPlayerCombatState(withRealm, ctx, weapon)
+    expect(state.realm).toEqual([11, 22, 33, 44])
+  })
 })

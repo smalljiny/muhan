@@ -1,0 +1,156 @@
+{
+  "fn": "spellStore",
+  "oracle": {
+    "method": "manual",
+    "source": "mtype.h:570-571 (S_ISSET/S_SET, A6 §8)",
+    "generatedAt": "2026-07-16T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "setBits": [],
+        "queryBit": 0
+      },
+      "expected": false,
+      "note": "빈 store → false"
+    },
+    {
+      "input": {
+        "setBits": [],
+        "queryBit": 127
+      },
+      "expected": false,
+      "note": "빈 store 최고비트 → false"
+    },
+    {
+      "input": {
+        "setBits": [
+          6
+        ],
+        "queryBit": 6
+      },
+      "expected": true,
+      "note": "세팅 비트 자신 → true"
+    },
+    {
+      "input": {
+        "setBits": [
+          6
+        ],
+        "queryBit": 5
+      },
+      "expected": false,
+      "note": "인접 하위 비트 → false"
+    },
+    {
+      "input": {
+        "setBits": [
+          6
+        ],
+        "queryBit": 7
+      },
+      "expected": false,
+      "note": "인접 상위 비트 → false"
+    },
+    {
+      "input": {
+        "setBits": [
+          7
+        ],
+        "queryBit": 7
+      },
+      "expected": true,
+      "note": "바이트0 최상위 비트 → true"
+    },
+    {
+      "input": {
+        "setBits": [
+          8
+        ],
+        "queryBit": 8
+      },
+      "expected": true,
+      "note": "바이트1 최하위 비트 → true"
+    },
+    {
+      "input": {
+        "setBits": [
+          8
+        ],
+        "queryBit": 0
+      },
+      "expected": false,
+      "note": "바이트 경계: 비트8 세팅 시 비트0 → false"
+    },
+    {
+      "input": {
+        "setBits": [
+          55
+        ],
+        "queryBit": 55
+      },
+      "expected": true,
+      "note": "카탈로그 최대 SCHARM=55 → true"
+    },
+    {
+      "input": {
+        "setBits": [
+          55
+        ],
+        "queryBit": 47
+      },
+      "expected": false,
+      "note": "동일 바이트 다른 비트 → false"
+    },
+    {
+      "input": {
+        "setBits": [
+          127
+        ],
+        "queryBit": 127
+      },
+      "expected": true,
+      "note": "128비트 최대 → true"
+    },
+    {
+      "input": {
+        "setBits": [
+          0,
+          6,
+          13,
+          55,
+          127
+        ],
+        "queryBit": 13
+      },
+      "expected": true,
+      "note": "다중 세팅 후 중간 조회 → true"
+    },
+    {
+      "input": {
+        "setBits": [
+          0,
+          6,
+          13,
+          55,
+          127
+        ],
+        "queryBit": 54
+      },
+      "expected": false,
+      "note": "다중 세팅 후 미세팅 조회 → false"
+    },
+    {
+      "input": {
+        "setBits": [
+          6,
+          6
+        ],
+        "queryBit": 6
+      },
+      "expected": true,
+      "note": "idempotent 재세팅 → true"
+    }
+  ]
+}

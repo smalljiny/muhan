@@ -97,8 +97,8 @@ function applyRoomAffinity(bns: number, realm: number, roomFlags: number[]): num
  * ## gated 한정 (오라클 divergence 명시)
  * 오라클은 bns 산술만 `if(how==CAST)`로 게이팅하고 방 상성 블록은 게이트 **밖**이라 아이템 경로에도
  * 상성 약화(-5)를 적용한다(magic1.c:867). 이 포트는 상성까지 gated로 접는다 — gated=false는 #86
- * 아이템-delivery seam이고 #84엔 아이템 caster가 없어 그 -5 edge는 관측 불가하다(caster.ts realm=[0,0,0,0]
- * seam과 동류의 유예). 아이템-경로 상성은 #86이 실 delivery와 함께 정밀화한다.
+ * 아이템-delivery seam이고 #84엔 아이템 caster가 없어 그 -5 edge는 관측 불가하다(#86 유예).
+ * 아이템-경로 상성은 #86이 실 delivery와 함께 정밀화한다.
  */
 export function computeBns(caster: Caster, osp: OspellEntry, ctx: CastContext): number {
   // gated=false(아이템 경로): mprofic·상성 없이 bns=0.
