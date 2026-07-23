@@ -96,6 +96,12 @@ export const PRFIRE = 30
  * 미세팅 시 dice((lv+3)/4,4,0)(update.c:387~480).
  */
 export const PRCOLD = 36
+/**
+ * 대지 저항(방어자) — PSSHLD(mtype.h:383 `#define PSSHLD 38`). earth_shield(지방호) 시전 시 F_SET
+ * (magic7.c:252·286). resistBuff family 4주문 중 SSSHLD 대응 저항 플래그(PRFIRE/PRMAGI/PRCOLD와 동렬,
+ * #85 G5). #84 저항-read 미배선(플레이어 저항 감산 유예) — 상수·투영만 보존한다.
+ */
+export const PSSHLD = 38
 /** 패거리 가입자 — PFAMIL(mtype.h:400). 양측 PFAMIL이면 선악 게이트를 check_war로 게이팅(command5.c:183). */
 export const PFAMIL = 55
 /** 잠력격발 — PUPDMG(mtype.h:404). 초인 다중공격 count 게이트(command5.c:208). */

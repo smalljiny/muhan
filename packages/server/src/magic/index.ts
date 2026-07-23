@@ -31,6 +31,14 @@ export {
 } from './offensiveSpell.js'
 export { crtSpell, selectSpell, isSelfTargetSpell } from './crtSpell.js'
 export {
+  resistBuff,
+  projectResistFlags,
+  registerResistBuffs,
+  RESIST_SPELLS,
+  type BuffEffectRequest,
+  type BuffEffectHandler,
+} from './buffEffects.js'
+export {
   canTeachSpllv,
   study,
   teach,
