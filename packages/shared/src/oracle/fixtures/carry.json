@@ -1,0 +1,96 @@
+{
+  "fn": "carry",
+  "oracle": {
+    "method": "manual",
+    "source": "object.c weight_obj (A8 §8/§13 재귀 무게 합)",
+    "generatedAt": "2026-07-13T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "weight": 10,
+        "weightless": false,
+        "contents": []
+      },
+      "note": "flat (자기 무게만 → 10)",
+      "expected": 10
+    },
+    {
+      "input": {
+        "weight": 10,
+        "weightless": false,
+        "contents": [
+          {
+            "weight": 5,
+            "weightless": false,
+            "contents": [
+              {
+                "weight": 3,
+                "weightless": false,
+                "contents": []
+              }
+            ]
+          }
+        ]
+      },
+      "note": "중첩 non-weightless (10+5+3 → 18)",
+      "expected": 18
+    },
+    {
+      "input": {
+        "weight": 10,
+        "weightless": false,
+        "contents": [
+          {
+            "weight": 5,
+            "weightless": true,
+            "contents": [
+              {
+                "weight": 100,
+                "weightless": false,
+                "contents": []
+              }
+            ]
+          }
+        ]
+      },
+      "note": "OWTLES discriminator — 자식+내용물 전체 제외 (10, 15·115 아님)",
+      "expected": 10
+    },
+    {
+      "input": {
+        "weight": 10,
+        "weightless": false,
+        "contents": [
+          {
+            "weight": 5,
+            "weightless": false,
+            "contents": []
+          },
+          {
+            "weight": 7,
+            "weightless": true,
+            "contents": []
+          },
+          {
+            "weight": 3,
+            "weightless": false,
+            "contents": []
+          }
+        ]
+      },
+      "note": "형제 혼합 — weightless 형제(7)만 제외 (10+5+3 → 18)",
+      "expected": 18
+    },
+    {
+      "input": {
+        "weight": 8,
+        "weightless": true,
+        "contents": []
+      },
+      "note": "최상위 weightless도 자기 무게 계산 (8)",
+      "expected": 8
+    }
+  ]
+}
