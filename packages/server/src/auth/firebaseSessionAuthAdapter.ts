@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto'
 import type { Character, CharacterSummary } from 'shared'
 import type { AccountRepository } from '../repo/accountRepository.js'
 import type { CharacterRepository } from '../repo/characterRepository.js'
-import { seedVitals, CURRENT_CHARACTER_SCHEMA_VERSION } from '../repo/characterBackfill.js'
+import {
+  seedVitals,
+  seedSpellStore,
+  CURRENT_CHARACTER_SCHEMA_VERSION,
+} from '../repo/characterBackfill.js'
 import type {
   AccountIdentity,
   CreateCharacterInput,
@@ -100,6 +104,9 @@ export class FirebaseSessionAuthAdapter implements SessionAuthPort {
       ...seedVitals(dto.class, STARTING_LEVEL),
       // 누적 경험치는 1레벨 신규라 0으로 시딩한다(backfillCharacterV3의 level<=1 시딩과 일치).
       experience: 0,
+      // 빈 spell store(빈 지식 비트마스크·realm [0,0,0,0])를 시딩한다. backfillCharacterV5와 동일
+      // 시드 출처(seedSpellStore)를 공유해 신규·승격 문서의 버전 드리프트를 차단한다.
+      ...seedSpellStore(),
       schemaVersion: CHARACTER_SCHEMA_VERSION,
       accountId,
       status: 'active',

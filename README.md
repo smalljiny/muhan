@@ -17,7 +17,7 @@
 | | 다루는 방식 |
 |---|---|
 | **충실히 이식** (콘텐츠) | 월드 데이터, 게임 규칙(전투 공식·thaco·마법·경제·레벨링), 명령 어휘·한글 의미론, 틱/라운드 타이밍 *의미* |
-| **자유롭게 재설계** (형상) | 디스크 포맷 → MongoDB, `fork()+select` → 이벤트 루프+EventEmitter, `lasttime` → JS 스케줄러, telnet → WebSocket+구조화 JSON, 평문 비번 → argon2id 해시 |
+| **자유롭게 재설계** (형상) | 디스크 포맷 → MongoDB, `fork()+select` → 이벤트 루프+EventEmitter, `lasttime` → JS 스케줄러, telnet → WebSocket+구조화 JSON, 이름+평문 비번 → Firebase Auth 위임+세션 쿠키 |
 
 원본 `legacy/muhan/src`는 이식 *대상*이 아니라 **동작 명세(behavioral oracle)**다 — 코드를 옮기지 않고 게임이 *무엇을 하는지*를 읽어 관용적으로 재구현한다.
 
@@ -35,7 +35,10 @@
 | **E3** 전송·세션 — 프로토콜(E3-1)·인증세션 FSM(E3-2)·연결 수명주기(E3-3)·자유채팅권한 seam(E3-4)·WS 하드닝(유량 제한·자원 가드) | ✅ 완료 |
 | **E4** 월드 상태 엔진 — 런타임 기반(1Hz 틱)·이동·방·크리처 스폰/AI | ✅ 완료 |
 | **E5** 계정·캐릭터 라이프사이클 (account 1급 모델·생성 인터뷰·진입/재개·soft-delete) | ✅ 완료 |
-| **E6** 게임 규칙 엔진 — 파생 스탯(stats-core)·전투(근접 + 특수공격·DoT·사망 분배·전투 AI)·진행 루프(progression)·마법(magic)·아이템/장비(items)·경제/은행 물품 | 🔄 진행 중 (경제·은행 = 현재 PR, E6 마지막 토픽) |
+| **E6** 게임 규칙 엔진 — 파생 스탯(stats-core)·전투(근접 + 특수공격·DoT·사망 분배·전투 AI)·진행 루프(progression)·아이템/장비(items) | ✅ 완료 |
+| **E6b** 마법 — 카탈로그·CAST 시전·공격 effect 20종·몬스터 시전(magic, #84) | ✅ 완료 |
+| **E6b** 마법 지속·성장 — spell store·학습/전수·realm 성장·버프/디버프 타이머·비-offensive effect 36종(magic-progression, #85) | 🔄 현재 PR |
+| **E6d** 경제·은행 — 금화 경제·상점·전당포·수리·소지 한도·은행 물품 보관(economy·bank-items) | 🔄 진행 중 (E6 마지막 토픽) |
 | **웹 클라이언트** — 전송 셸(E9-1)·세션 진입(E10-1) | ✅ 부분 |
 | **테스트 인프라** — 골든 fixture 하네스·property 테스트 | ✅ 완료 |
 | **E7** 소셜·채널 확장 | ⏳ 예정 |
@@ -68,7 +71,7 @@ muhan/
 ├── data/world/   # port/로 변환된 JSON 월드 데이터 (산출물, 정본)
 ├── legacy/muhan/ # 원본 C 소스·월드·세이브 (읽기 전용 oracle, EUC-KR)
 └── docs/
-    ├── specs/    # 정본 스펙 25종 (아키텍처·영속화·전송/세션·월드/게임규칙·경제·클라이언트·테스트 인프라)
+    ├── specs/    # 정본 스펙 26종 (아키텍처·영속화·전송/세션·월드/게임규칙·아이템/마법·경제·클라이언트·테스트 인프라)
     ├── notes/    # 게임 분석 노트 A1–A13
     └── research/ # 아키텍처·스캐폴딩 리서치 보고서
 ```
@@ -197,8 +200,14 @@ docker compose down
 | [`stats-core.md`](docs/specs/stats-core.md) | base+modifier 능력치·파생 스탯(AC·THAC0·소지량·HP/MP 최대치) 순수 계산 |
 | [`combat.md`](docs/specs/combat.md) | `resolveAttack` 전투 파이프·몬스터 라운드·플레이어 반격 + 특수공격 6종·상태이상 DoT·사망 exp 분배·전투 AI·#91 라운드순서 (E6a-1/E6a-2) |
 | [`progression.md`](docs/specs/progression.md) | 경험치 곡선·연마 레벨업·능력치 성장·HP/MP 재생·사망 페널티·승급 |
-| [`magic.md`](docs/specs/magic.md) | 주문 카탈로그 선언 데이터·effect/delivery 분리·CAST 시전 게이트·공격 주문 20종 데미지·몬스터 시전 seam (E6b) |
-| [`items-equipment.md`](docs/specs/items-equipment.md) | object 템플릿 위 착용 게이트(wear/ready/hold)·파생 스탯 투영·rand_enchant·소비 아이템 magic 배달 순수 함수+seam |
+
+**아이템·마법**
+
+| 문서 | 내용 |
+|------|------|
+| [`items-equipment.md`](docs/specs/items-equipment.md) | object 템플릿 위 착용 게이트(wear/ready/hold)·파생 스탯 투영·rand_enchant·소비 아이템 magic 배달 순수 함수 + seam |
+| [`magic.md`](docs/specs/magic.md) | 주문 카탈로그(56+20)·effect/delivery 분리·CAST 시전 게이트·공격 effect 20종·몬스터 시전 seam (E6b-1 #84) |
+| [`magic-progression.md`](docs/specs/magic-progression.md) | 플레이어 spell store(v5)·학습/전수·realm 숙련 성장·버프/디버프 타이머·비-offensive effect 36종·몬스터 self-heal (E6b-2 #85) |
 
 **경제·은행**
 

@@ -80,3 +80,12 @@ export {
   type SpellEntry,
   type OspellEntry,
 } from './magic/catalog.js'
+
+export { emptySpellStore, isKnown, setKnown, SPELL_STORE_BYTES } from './magic/spellStore.js'
+export {
+  NON_CAST_BUFF_DUR,
+  BUFF_DUR_META,
+  DEBUFF_DUR_META,
+  type BuffDurMeta,
+  type DebuffDurMeta,
+} from './magic/buffCatalog.js'

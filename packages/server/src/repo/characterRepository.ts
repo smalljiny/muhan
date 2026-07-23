@@ -6,6 +6,7 @@ import {
   backfillCharacterV2,
   backfillCharacterV3,
   backfillCharacterV4,
+  backfillCharacterV5,
 } from './characterBackfill.js'
 
 const COLLECTION_NAME = 'characters'
@@ -53,15 +54,16 @@ export class CharacterRepository implements IRepository<Character> {
   }
 
   /**
-   * 조회 경로 공통 경계 게이트 — raw 문서를 backfill 합성 체인(V4∘V3∘V2)으로 승격한 뒤 strict parse한다.
-   * V2가 v1→v2(vitals·level), V3가 v2→v3(experience), V4가 v3→v4(버전 스탬프; statusEffects는 선택)를
-   * 순차 담당한다. "backfill은 parse에 선행한다" 불변식(strict parse가 hpCurrent/mpCurrent/level/experience
-   * 없는 구버전 문서를 거부)을 두 load 경로가 공유하는 단일 구조로 강제한다. 신규 조회 쿼리가 backfill을
-   * 누락한 채 구버전 문서를 파싱해 런타임 거부되는 사고를 이 게이트로 차단한다.
+   * 조회 경로 공통 경계 게이트 — raw 문서를 backfill 합성 체인(V5∘V4∘V3∘V2)으로 승격한 뒤 strict parse한다.
+   * V2가 v1→v2(vitals·level), V3가 v2→v3(experience), V4가 v3→v4(버전 스탬프; statusEffects는 선택),
+   * V5가 v4→v5(spells·realm 시딩; buffs는 선택)를 순차 담당한다. "backfill은 parse에 선행한다" 불변식
+   * (strict parse가 hpCurrent/mpCurrent/level/experience/spells/realm 없는 구버전 문서를 거부)을 두 load
+   * 경로가 공유하는 단일 구조로 강제한다. 신규 조회 쿼리가 backfill을 누락한 채 구버전 문서를 파싱해
+   * 런타임 거부되는 사고를 이 게이트로 차단한다.
    */
   private parseCharacterDoc(doc: Record<string, unknown>): Character {
     return characterSchema.parse(
-      backfillCharacterV4(backfillCharacterV3(backfillCharacterV2(doc))),
+      backfillCharacterV5(backfillCharacterV4(backfillCharacterV3(backfillCharacterV2(doc)))),
     )
   }
 

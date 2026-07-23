@@ -1,0 +1,123 @@
+{
+  "fn": "canTeachSpllv",
+  "oracle": {
+    "method": "manual",
+    "source": "magic1.c:212-235 (A6 §8 spllv 전수등급)",
+    "generatedAt": "2026-07-16T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "class": 3,
+        "spllv": 1
+      },
+      "expected": true,
+      "note": "spllv1 CLERIC → 허용"
+    },
+    {
+      "input": {
+        "class": 5,
+        "spllv": 1
+      },
+      "expected": false,
+      "note": "spllv1 MAGE → 거부(class!=CLERIC && <INVINCIBLE)"
+    },
+    {
+      "input": {
+        "class": 10,
+        "spllv": 1
+      },
+      "expected": true,
+      "note": "spllv1 CARETAKER → 허용(>=INVINCIBLE)"
+    },
+    {
+      "input": {
+        "class": 5,
+        "spllv": 2
+      },
+      "expected": true,
+      "note": "spllv2 MAGE → 허용"
+    },
+    {
+      "input": {
+        "class": 3,
+        "spllv": 2
+      },
+      "expected": false,
+      "note": "spllv2 CLERIC → 거부(class!=MAGE && <INVINCIBLE)"
+    },
+    {
+      "input": {
+        "class": 9,
+        "spllv": 2
+      },
+      "expected": true,
+      "note": "spllv2 INVINCIBLE → 허용(>=INVINCIBLE)"
+    },
+    {
+      "input": {
+        "class": 9,
+        "spllv": 3
+      },
+      "expected": true,
+      "note": "spllv3 INVINCIBLE → 허용"
+    },
+    {
+      "input": {
+        "class": 10,
+        "spllv": 3
+      },
+      "expected": true,
+      "note": "spllv3 CARETAKER → 허용(>=INVINCIBLE)"
+    },
+    {
+      "input": {
+        "class": 5,
+        "spllv": 3
+      },
+      "expected": false,
+      "note": "spllv3 MAGE → 거부(<INVINCIBLE)"
+    },
+    {
+      "input": {
+        "class": 10,
+        "spllv": 4
+      },
+      "expected": true,
+      "note": "spllv4 CARETAKER → 허용"
+    },
+    {
+      "input": {
+        "class": 9,
+        "spllv": 4
+      },
+      "expected": false,
+      "note": "spllv4 INVINCIBLE → 거부(<CARETAKER)"
+    },
+    {
+      "input": {
+        "class": 11,
+        "spllv": 5
+      },
+      "expected": true,
+      "note": "spllv5 SUB_DM → 허용"
+    },
+    {
+      "input": {
+        "class": 10,
+        "spllv": 5
+      },
+      "expected": false,
+      "note": "spllv5 CARETAKER → 거부(<SUB_DM) — 전수불가 quirk"
+    },
+    {
+      "input": {
+        "class": 3,
+        "spllv": 0
+      },
+      "expected": true,
+      "note": "범위 밖 spllv=0 → true(매칭 if 없음)"
+    }
+  ]
+}

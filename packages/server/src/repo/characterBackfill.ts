@@ -1,16 +1,17 @@
 import { computeHpMax, computeMpMax, neededExp, type EffectiveStatContext } from 'shared'
 
 /**
- * 현재 Character 스키마 버전. statusEffects(선택 필드)를 도입한 v4가 최신이다.
+ * 현재 Character 스키마 버전. spell store(spells·realm required + buffs 선택)를 도입한 v5가 최신이다.
  * v1 문서(vitals·level 부재)는 backfillCharacterV2가, v2 문서(experience 부재)는
- * backfillCharacterV3가, v3 문서는 backfillCharacterV4가 load 직전 순차 승격한다
- * (합성 체인 V4∘V3∘V2). 생성 경로(createCharacter)와 이 상수를 공유해 버전 드리프트를 차단한다.
+ * backfillCharacterV3가, v3 문서는 backfillCharacterV4가, v4 문서(spells·realm 부재)는
+ * backfillCharacterV5가 load 직전 순차 승격한다(합성 체인 V5∘V4∘V3∘V2). 생성 경로(createCharacter)와
+ * 이 상수를 공유해 버전 드리프트를 차단한다.
  *
- * stepwise 마이그레이션 규약: 각 스텝 함수(V2·V3·V4)의 진입 가드와 출구 스탬프는 자기 리터럴
+ * stepwise 마이그레이션 규약: 각 스텝 함수(V2·V3·V4·V5)의 진입 가드와 출구 스탬프는 자기 리터럴
  * 버전에 매인다(CURRENT 참조 금지). CURRENT가 다음 버전으로 오르면 이전 스텝이 자기 대상
- * 문서를 지나쳐 vitals/level을 silent 클로버하는 회귀를 막는 불변식이다.
+ * 문서를 지나쳐 vitals/level/spells를 silent 클로버하는 회귀를 막는 불변식이다.
  */
-export const CURRENT_CHARACTER_SCHEMA_VERSION = 4
+export const CURRENT_CHARACTER_SCHEMA_VERSION = 5
 
 /**
  * computeHpMax/computeMpMax는 characterClass·level만 판독하지만 EffectiveStatContext는
@@ -39,6 +40,18 @@ export function seedVitals(
 ): { hpCurrent: number; mpCurrent: number } {
   const context = vitalsContext(characterClass, level)
   return { hpCurrent: computeHpMax(context), mpCurrent: computeMpMax(context) }
+}
+
+/**
+ * spell store 시드 — 빈 지식 비트마스크(uint8[16]=128비트, 전 0)와 realm 누적경험치[4]=[0,0,0,0].
+ * 생성 경로(createCharacter)와 v4→v5 backfill이 공유하는 단일 시드 출처(seedVitals 선례) — 신규·승격
+ * 문서가 동일한 빈 store로 출발해 버전 드리프트를 차단한다. buffs는 선택 필드라 시딩하지 않는다.
+ */
+export function seedSpellStore(): {
+  spells: number[]
+  realm: [number, number, number, number]
+} {
+  return { spells: new Array<number>(16).fill(0), realm: [0, 0, 0, 0] }
 }
 
 /**
@@ -108,5 +121,28 @@ export function backfillCharacterV4(raw: Record<string, unknown>): Record<string
   return {
     ...raw,
     schemaVersion: 4,
+  }
+}
+
+/**
+ * v4 raw 문서를 v5로 승격하는 순수 스텝 헬퍼 — 합성 체인의 네 번째 단계다.
+ *
+ * v5는 spell store(spells 비트마스크·realm 누적경험치)를 required로 도입했다. strict parse가
+ * spells/realm 부재를 거부하므로 V2·V3의 필드 시딩과 대칭으로 seedSpellStore()로 빈 store를 시딩한다
+ * (spells=16바이트 0, realm=[0,0,0,0]). buffs는 선택 필드라 시딩하지 않는다(V4 statusEffects 선례).
+ *
+ * 진입 가드·출구 스탬프는 리터럴 5에 매인다(CURRENT 참조 금지) — CURRENT가 6으로 오른 뒤에도
+ * 이 스텝은 v5 문서를 통과시켜(실 지식·숙련을 빈값으로 재시딩하지 않고) 다음 스텝에 넘겨야 하기
+ * 때문이다. schemaVersion>=5 문서는 그대로 반환한다(passthrough). 원본을 변형하지 않고 스프레드로
+ * 새 객체를 반환한다.
+ */
+export function backfillCharacterV5(raw: Record<string, unknown>): Record<string, unknown> {
+  const version = typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 0
+  if (version >= 5) return raw
+
+  return {
+    ...raw,
+    ...seedSpellStore(),
+    schemaVersion: 5,
   }
 }

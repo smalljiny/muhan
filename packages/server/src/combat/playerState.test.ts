@@ -36,6 +36,9 @@ describe('toPlayerCombatState', () => {
     // 이 픽스처는 PlayerCombatState 어댑트 입력이며 load 경로(backfill)를 거치지 않아 experience는
     // 검증되지 않는다. Character 타입(required) 충족을 위한 최소값 0으로 둔다.
     experience: 0,
+    // v5 spell store 시드(빈 지식 비트마스크·realm [0,0,0,0]) — Character required 필드 충족.
+    spells: new Array<number>(16).fill(0),
+    realm: [0, 0, 0, 0],
     schemaVersion: 2,
     accountId: 'acct-1',
     status: 'active',
@@ -144,5 +147,19 @@ describe('toPlayerCombatState', () => {
     state.nextAttackAt = 5
     expect(state.hpCurrent).toBe(32)
     expect(state.nextAttackAt).toBe(5)
+  })
+
+  it('Character.spells 비트마스크를 실이식한다(#85 — 빈 스텁 아님)', () => {
+    const known = new Array<number>(16).fill(0)
+    known[0] = 0b1000000 // 비트6(주문번호 6) 세팅
+    const withSpells: Character = { ...character, spells: known }
+    const state = toPlayerCombatState(withSpells, ctx, weapon)
+    expect(state.spells).toEqual(known)
+  })
+
+  it('Character.realm 누적경험치를 실이식한다(#85 — [0,0,0,0] 스텁 아님)', () => {
+    const withRealm: Character = { ...character, realm: [11, 22, 33, 44] }
+    const state = toPlayerCombatState(withRealm, ctx, weapon)
+    expect(state.realm).toEqual([11, 22, 33, 44])
   })
 })

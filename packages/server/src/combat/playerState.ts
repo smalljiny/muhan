@@ -29,7 +29,7 @@ export type PlayerCombatState = {
    * 유효 지능 — magic 에픽(#84) Caster.intBonus의 소싱 입력(bonusOf로 사전 계산). effectiveStrength가
    * effectiveContext에서 오는 것과 달리 EffectiveStatContext에 intelligence 슬롯이 없어(shared zod
    * 스키마·context 타입 불변 제약) character.stats[3]에서 직접 소싱한다 — #84엔 int-수정 장비가 없어
-   * base==effective이며, #85가 실 effective 합성으로 정밀화한다(realm=[0,0,0,0] seam과 동일 패턴).
+   * base==effective이며, 실 effective 합성(int-수정 장비)이 붙는 시점에 정밀화한다.
    */
   readonly effectiveIntelligence: number
   /** 파생 방어도(computeAc 결과). */
@@ -38,6 +38,16 @@ export type PlayerCombatState = {
   readonly thaco: number
   /** 유효 민첩(effectiveContext.effectiveDexterity). */
   readonly dexterity: number
+  /**
+   * 주문 지식 비트마스크(Character.spells, uint8[16]=128비트). Caster.knows가 isKnown으로 판독한다.
+   * 원작에서 플레이어도 creature 구조체(spells[16])를 가지므로 세션 액터에 그대로 이식한다.
+   */
+  readonly spells: readonly number[]
+  /**
+   * realm[4] 누적경험치(Character.realm) — Caster.realm으로 노출돼 mprofic 숙련 환산에 소비된다.
+   * #85가 실 store를 잇기 전 #84 seam은 [0,0,0,0]이었다 — 이제 캐릭터 영속값을 실이식한다.
+   */
+  readonly realm: readonly number[]
   /**
    * 플레이어 상태 플래그 — creature flags와 동일한 hex string 바이트 배열(원작에서 플레이어도
    * creature 구조체). PBLIND=42·PFEARS=43은 비트 인덱스 >31이라 number bitfield로 표현 불가하므로
@@ -96,6 +106,9 @@ export function toPlayerCombatState(
     armor: computeAc(effectiveContext),
     thaco: computeThaco(effectiveContext),
     dexterity: effectiveContext.effectiveDexterity,
+    // v5 spell store 실이식 — Caster.knows/realm이 스텁([0,0,0,0]·knows=false) 대신 실값을 반영한다.
+    spells: character.spells,
+    realm: character.realm,
     flags: '',
     alignment: character.alignment ?? 0,
     weapon: weaponDamage,

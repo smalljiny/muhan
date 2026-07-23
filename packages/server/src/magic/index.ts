@@ -6,7 +6,7 @@
  * 공격주문 데미지 effect(mprofic·offensiveSpell·registerOffensiveSpells)를 노출한다.
  */
 export { toCaster, type Caster } from './caster.js'
-export { SpellDispatch, NOT_IMPLEMENTED, type NotImplemented, type ResolveResult } from './dispatch.js'
+export { SpellDispatch, type ResolveResult } from './dispatch.js'
 export type { CastContext } from './castContext.js'
 export {
   evaluateGate,
@@ -30,3 +30,44 @@ export {
   type OffensiveSpellHandler,
 } from './offensiveSpell.js'
 export { crtSpell, selectSpell, isSelfTargetSpell } from './crtSpell.js'
+export {
+  resistBuff,
+  projectResistFlags,
+  registerResistBuffs,
+  RESIST_SPELLS,
+  registerTimedBuffs,
+  projectBuffFlags,
+  TIMED_BUFF_SPELLS,
+  type BuffEffectRequest,
+  type BuffEffectHandler,
+} from './buffEffects.js'
+export {
+  registerDebuffs,
+  DEBUFF_SPELLS,
+  type DebuffOutcome,
+  type DebuffEffectRequest,
+  type DebuffEffectHandler,
+} from './debuffEffects.js'
+export {
+  registerInstantEffects,
+  registerCureEffects,
+  INSTANT_SPELLS,
+  type HealOutcome,
+  type InstantOutcome,
+  type InstantEffectRequest,
+  type InstantEffectHandler,
+  type CureEffectHandler,
+} from './instantEffects.js'
+export {
+  canTeachSpllv,
+  study,
+  teach,
+  type SpellBook,
+  type StudyChar,
+  type StudyFailure,
+  type StudyResult,
+  type TeachCaster,
+  type TeachTarget,
+  type TeachFailure,
+  type TeachResult,
+} from './learning.js'

@@ -17,6 +17,9 @@ function validCharacter(): Character {
     mpCurrent: 50,
     level: 1,
     experience: 0,
+    // 지식 비트마스크(uint8[16]=128비트)와 realm 누적경험치[4]. v5에서 required로 도입.
+    spells: new Array<number>(16).fill(0),
+    realm: [0, 0, 0, 0],
     schemaVersion: 1,
     status: 'active',
   }
@@ -232,6 +235,106 @@ describe('characterSchema', () => {
     const result = characterSchema.safeParse({
       ...validCharacter(),
       statusEffects: { poison: { until: 60 } },
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('spells가 없으면 거부한다 (지식 비트마스크 필수 영속 필드)', () => {
+    // D1 발산: hpCurrent/experience와 동렬 — v4 문서는 load 직전 backfillCharacterV5가 승격한다.
+    const doc = validCharacter() as Partial<Character>
+    delete doc.spells
+    expect(characterSchema.safeParse(doc).success).toBe(false)
+  })
+
+  it('spells가 16-length 배열이 아니면 거부한다 (uint8[16]=128비트)', () => {
+    expect(
+      characterSchema.safeParse({ ...validCharacter(), spells: new Array(15).fill(0) }).success,
+    ).toBe(false)
+    expect(
+      characterSchema.safeParse({ ...validCharacter(), spells: new Array(17).fill(0) }).success,
+    ).toBe(false)
+  })
+
+  it('spells 원소가 정수가 아니면 거부한다', () => {
+    const bad = new Array<number>(16).fill(0)
+    bad[0] = 1.5
+    expect(characterSchema.safeParse({ ...validCharacter(), spells: bad }).success).toBe(false)
+  })
+
+  it('spells 원소가 uint8 범위(0–255)를 벗어나면 거부한다 (부호확장 knows 우회 차단)', () => {
+    const neg = new Array<number>(16).fill(0)
+    neg[0] = -1
+    expect(characterSchema.safeParse({ ...validCharacter(), spells: neg }).success).toBe(false)
+    const over = new Array<number>(16).fill(0)
+    over[0] = 256
+    expect(characterSchema.safeParse({ ...validCharacter(), spells: over }).success).toBe(false)
+  })
+
+  it('realm이 없으면 거부한다 (realm 누적경험치 필수 영속 필드)', () => {
+    const doc = validCharacter() as Partial<Character>
+    delete doc.realm
+    expect(characterSchema.safeParse(doc).success).toBe(false)
+  })
+
+  it('realm이 4-length 튜플이 아니면 거부한다', () => {
+    expect(characterSchema.safeParse({ ...validCharacter(), realm: [0, 0, 0] }).success).toBe(false)
+    expect(
+      characterSchema.safeParse({ ...validCharacter(), realm: [0, 0, 0, 0, 0] }).success,
+    ).toBe(false)
+  })
+
+  it('realm 원소가 정수가 아니면 거부한다', () => {
+    expect(
+      characterSchema.safeParse({ ...validCharacter(), realm: [0, 1.5, 0, 0] }).success,
+    ).toBe(false)
+  })
+
+  it('realm 원소가 음수이면 거부한다 (누적경험치는 비음수)', () => {
+    expect(
+      characterSchema.safeParse({ ...validCharacter(), realm: [0, -1, 0, 0] }).success,
+    ).toBe(false)
+  })
+
+  it('buffs를 생략해도 통과한다 (선택 필드 — 기존 픽스처 불변)', () => {
+    const doc = validCharacter() as Partial<Character>
+    expect('buffs' in doc).toBe(false)
+    const result = characterSchema.safeParse(doc)
+    expect(result.success).toBe(true)
+    // .optional()이 .default({})가 아님을 런타임에서 고정한다.
+    if (result.success) expect(result.data.buffs).toBeUndefined()
+  })
+
+  it('주문번호별 {until} 엔트리를 담은 buffs 문서를 통과시킨다 (절대-틱 만료)', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      buffs: { '4': { until: 120 }, '22': { until: 300 } },
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.buffs?.['4']).toEqual({ until: 120 })
+    }
+  })
+
+  it('buffs가 카탈로그 밖 주문번호 키를 담으면 거부한다 (strictObject — 드리프트를 에러로)', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      buffs: { '999': { until: 5 } },
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('buffs 엔트리에 interval을 담으면 거부한다 (strictObject — until만 허용)', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      buffs: { '4': { until: 5, interval: 3 } },
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('buffs 엔트리의 until이 음수이면 거부한다', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      buffs: { '4': { until: -1 } },
     })
     expect(result.success).toBe(false)
   })

@@ -1,4 +1,4 @@
-import { ospellOf, type CreatureInstance } from 'shared'
+import { bonusOf, ospellOf, type CreatureInstance } from 'shared'
 import type { CombatRng } from '../combat/dice.js'
 import type { ResolveContext } from '../combat/resolveAttack.js'
 import type { PlayerCombatState } from '../combat/playerState.js'
@@ -10,6 +10,11 @@ import { toCaster } from './caster.js'
 import { applyCastGate } from './gate.js'
 import { SpellDispatch } from './dispatch.js'
 import { registerOffensiveSpells, type OffensiveSpellHandler } from './offensiveSpell.js'
+import {
+  registerInstantEffects,
+  type HealOutcome,
+  type InstantEffectHandler,
+} from './instantEffects.js'
 import type { CastContext } from './castContext.js'
 
 /**
@@ -29,10 +34,11 @@ import type { CastContext } from './castContext.js'
  * 아는 주문에서 **한 번만** 선택한다. 선택된 주문이 비-offensive여도 재추첨하지 않는다 — 오라클은
  * 한 pick → cast 또는 return(0)이다. selectSpell을 순수 헬퍼로 분리해 이 규칙을 단일 지점에 고정한다.
  *
- * ## 비-offensive 폴백 (#85 유예 경계)
- * offensive 20종만 S5 본체가 있고 비-offensive 36종(치유 포함)은 #85가 채운다. 비-offensive 선택 시
- * 게이트 진입 없이 'none'(근접 진행)으로 접는다 — #84엔 self-target 치유 본체가 없어 실제 시전되지
- * 않는다(forward-compat 구조만 isSelfTargetSpell로 남긴다).
+ * ## 비-offensive 분기 (G8 self-cast 치유 + #85 유예 경계)
+ * offensive 20종은 S5 본체(게이트→데미지)를 탄다. 비-offensive 중 self-target 치유 3종(SVIGOR/SMENDW/
+ * SFHEAL)은 G7 healing effect(Story 10 instantEffects)를 재사용해 자기 hp를 회복하고 'cast'(근접 대체)로
+ * 접는다(update.c:686 cmnd.num==2). 그 외 비-offensive는 게이트 진입 없이 'none'(근접 진행)으로 접는다 —
+ * live delivery/버프 소비는 #106 유예. self-target 판정은 isSelfTargetSpell가 단일 지점에 고정한다.
  */
 
 // ── 주문번호 상수(mtype.h:233-289) ──────────────────────────────────────────
@@ -80,6 +86,28 @@ const offensiveDispatch = new SpellDispatch<OffensiveSpellHandler>()
 registerOffensiveSpells(offensiveDispatch)
 
 /**
+ * 즉발 effect 디스패치 — G7 report 핸들러(Story 10 instantEffects)를 모듈 로드 시 1회 등록한다. G8
+ * 몬스터 self-cast는 이 인스턴스에서 치유(SVIGOR/SMENDW/SFHEAL) 핸들러를 해소해 회복 공식을 재구현하지
+ * 않고 그대로 재사용한다(offensive/buff/debuff dispatch 재사용 금지 — 핸들러 타입 이질성, Story 6 패턴).
+ */
+const instantDispatch = new SpellDispatch<InstantEffectHandler>()
+registerInstantEffects(instantDispatch)
+
+/**
+ * HealOutcome을 시전자 creature에 in-place 적용한다(worldGraph 승인 가변 carve-out — hpcur/mpcur는
+ * 라이브 전투 필드, applyCombatantDamage 선례). toFull=완치(hpcur=hpmax), 스칼라=hpcur+healed를 hpmax로
+ * clamp. self-target 3종(SVIGOR/SMENDW/SFHEAL)은 restoredMana를 내지 않으므로(SRESTO는 self-target 아님)
+ * 마나 회복 분기는 이 경로에서 도달하지 않는다 — hp만 적용한다.
+ */
+function applySelfHeal(creature: CreatureInstance, outcome: HealOutcome): void {
+  if (outcome.toFull) {
+    creature.hpcur = creature.hpmax
+  } else {
+    creature.hpcur = Math.min(creature.hpmax, creature.hpcur + outcome.healed)
+  }
+}
+
+/**
  * tier5 MAGE 전용 여부를 requiredClasses로 매핑한다. tier5 4종이면 [MAGE](비-MAGE·비-INVINCIBLE 차단),
  * 아니면 undefined(클래스 무제한). 게이트는 이 값으로 오라클 per-spell 클래스 제약을 재현한다.
  */
@@ -113,6 +141,37 @@ export function isSelfTargetSpell(spellNo: number): boolean {
 }
 
 /**
+ * castSelfHeal — G8 몬스터 self-target 치유(update.c:686 cmnd.num==2). G7 healing effect(Story 10
+ * instantEffects)를 재사용해 회복량을 산출하고 시전자 자기 hp에 적용한 뒤 'cast'(근접 대체)를 반환한다.
+ *
+ *   - caster: toCaster(creature) — 회복 공식의 level/class/intBonus 입력.
+ *   - pietyBonus: bonusOf(creature.piety) — Caster 6필드 계약이 piety를 노출하지 않아 사전 계산해 전달한다
+ *     (instantEffects InstantEffectRequest.pietyBonus 계약, offensiveSpell.casterId 별도 필드 선례).
+ *   - target: toCombatant(creature) — self 대상 참조. healing 핸들러는 target hp를 읽지 않으므로(회복량은
+ *     caster 파생) 실 회복은 applySelfHeal이 creature에 직접 적용한다.
+ *   - gated: false — self-heal은 마나·클래스 게이트를 태우지 않는다(healing effect 핸들러는 gated를 읽지 않음).
+ */
+function castSelfHeal(
+  creature: CreatureInstance,
+  spellNo: number,
+  ctx: ResolveContext,
+): SpellCastResult {
+  const handler = instantDispatch.resolve(spellNo)
+  // self-target 3종(SVIGOR/SMENDW/SFHEAL)은 전부 REPORT_HANDLERS에 등록(방어적 가드).
+  if (typeof handler !== 'function') return 'none'
+  const castContext: CastContext = { ...ctx, gated: false }
+  const outcome = handler({
+    caster: toCaster(creature),
+    pietyBonus: bonusOf(creature.piety),
+    target: toCombatant(creature),
+    ctx: castContext,
+  })
+  // self-target 3종은 전부 kind:'heal'(seam 즉발이 아님) — 방어적으로 heal만 적용한다.
+  if (outcome.kind === 'heal') applySelfHeal(creature, outcome.heal)
+  return 'cast'
+}
+
+/**
  * crtSpell — MMAGIC 몬스터의 시전 seam. CastSpellSeam(`(caster, target, ctx) => 'cast'|'none'`)을
  * 직접 만족한다. 한 pick → offensive면 게이트 후 시전('cast'), 비-offensive·게이트 실패면 'none'.
  */
@@ -125,10 +184,20 @@ export function crtSpell(
   const spellNo = selectSpell(caster.spells, ctx.rng)
 
   // 2. offensive 판정 — ospellOf가 곧 offensive 게이트다. 카탈로그 offensive 집합 === OSPELL_GRID 집합이
-  //    테스트로 고정돼(catalog.test.ts) ospellOf===undefined는 !offensive와 동치다. 비-offensive(치유 self
-  //    3종 포함)는 여기서 'none'(근접 진행)으로 접힌다 — 본체는 #85 유예, self-target 시전도 #85 소관.
+  //    테스트로 고정돼(catalog.test.ts) ospellOf===undefined는 !offensive와 동치다.
   const osp = ospellOf(spellNo)
-  if (osp === undefined) return 'none'
+  if (osp === undefined) {
+    // 2a. 비-offensive 중 self-target 치유(update.c:686 cmnd.num==2)는 G7 healing effect를 재사용해
+    //     자기 hp를 회복하고 'cast'(근접 대체)로 접는다. 그 외 비-offensive는 기존대로 'none'(근접 진행).
+    //     ⚠️ 오라클 self-heal(magic2.c vigor)의 두 부수효과를 이식하지 않는다 — 근거가 서로 다르다:
+    //       - 마나 소비(mpcur-=2/4/20): 카탈로그에 치유 주문 mana 정본이 없다(offensive tier grid만 mp 보유).
+    //         날조 없이 이식 불가 → 라이브 게이트가 채우는 #106 유예.
+    //       - healer-class 게이트(vigor: class!=CLERIC && !=PALADIN && <INVINCIBLE): class·상수 모두 존재해
+    //         이식은 가능하나 T11.1의 무조건 시전 계약(criterion #1)이 범위를 좁혔다 → 스코프 유예(#108).
+    //         SMENDW/SFHEAL의 게이트는 미대조라 3종 동일 규칙으로 단정하지 않는다(per-spell 확인은 #108).
+    if (isSelfTargetSpell(spellNo)) return castSelfHeal(caster, spellNo, ctx)
+    return 'none'
+  }
 
   // 3. 시전 게이트 — mana → class(tier5 MAGE 전용) → knowledge. 통과 시에만 마나 소비.
   //    실패는 곧 근접 진행('none') — 오라클 offensive_spell CAST 게이트 return(0)과 동치.

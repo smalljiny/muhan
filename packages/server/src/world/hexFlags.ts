@@ -48,6 +48,16 @@ export const MENONL = 22
 export const MUNKIL = 24
 /** 마법 저항(크리처) — MRMAGI(mtype.h:438). offensive_spell 데미지 감산 게이트(magic1.c:1113). */
 export const MRMAGI = 27
+/** 혼동(befuddle) 저항 — MRBEFD(mtype.h:454 "Monster resists stun only"). 혼동술 dur=3 단축(magic3.c:775). */
+export const MRBEFD = 43
+/** 공포(fear) 상태 — MFEARS(mtype.h:458 "Monster is fearful"). fear 시전 시 F_SET(magic8.c:404). */
+export const MFEARS = 47
+/** 침묵(silence) 상태 — MSILNC(mtype.h:459 "Monster has been silenced"). silence 시전 시 F_SET(magic8.c:529). */
+export const MSILNC = 48
+/** 실명(blind) 상태 — MBLIND(mtype.h:460 "Monster is blind"). blind 시전 시 F_SET(magic8.c:276). */
+export const MBLIND = 49
+/** 매혹 불가 — MNOCHA(mtype.h:473 "Monster cannot be charmed"). charm 완전 반탄 조건(magic8.c:751). */
+export const MNOCHA = 62
 /** 선한 유저 공격형(정렬 alg=-1). */
 export const MGAGGR = 39
 /** 악한 유저 공격형(정렬 alg=1). */
@@ -82,6 +92,8 @@ export const PDISEA = 41
 export const PBLIND = 42
 /** 공포(fear) 상태 — 명중 임계 +2(command5.c:233). PFEARS(mtype.h:388). */
 export const PFEARS = 43
+/** 침묵(silence) 상태 — 발화 불가. teach 전수 게이트가 읽음(magic1.c:145). PSILNC(mtype.h:389). */
+export const PSILNC = 44
 /** 혼돈(Chaotic/!Lawful) — PCHAOS(mtype.h:373). 선악 PvP 동의 게이트가 읽음(command5.c:184). */
 export const PCHAOS = 28
 /**
@@ -94,8 +106,37 @@ export const PRFIRE = 30
  * 미세팅 시 dice((lv+3)/4,4,0)(update.c:387~480).
  */
 export const PRCOLD = 36
+/**
+ * 대지 저항(방어자) — PSSHLD(mtype.h:383 `#define PSSHLD 38`). earth_shield(지방호) 시전 시 F_SET
+ * (magic7.c:252·286). resistBuff family 4주문 중 SSSHLD 대응 저항 플래그(PRFIRE/PRMAGI/PRCOLD와 동렬,
+ * #85 G5). #84 저항-read 미배선(플레이어 저항 감산 유예) — 상수·투영만 보존한다.
+ */
+export const PSSHLD = 38
 /** 패거리 가입자 — PFAMIL(mtype.h:400). 양측 PFAMIL이면 선악 게이트를 check_war로 게이팅(command5.c:183). */
 export const PFAMIL = 55
+
+// ── 버프·감지 P-flag 비트(mtype.h #define, Story 9 G7 timed effect) ───────────
+// 원작은 P-flag를 creature flags와 같은 바이트 배열에 F_SET한다(예 bless: F_SET(ply,PBLESS)). 이 포트의
+// Character엔 flags 필드가 없어 타이머는 buffs `{until}`로 영속하고, 활성 버프를 projectBuffFlags가 fresh
+// P-flag hex로 투영한다(resistBuff의 projectResistFlags 계약 승계). 비트값은 mtype.h를 정본으로 전사한다.
+/** 축복(bless) — PBLESS(mtype.h:345 `#define PBLESS 0`). SBLESS 시전 시 F_SET(magic3.c). PINVIS 등과 같은 flags 배열, 플레이어 문맥 비트0. */
+export const PBLESS = 0
+/** 수호(protection) — PPROTE(mtype.h:353 `#define PPROTE 8`). SPROTE 시전 시 F_SET(magic2.c:373). */
+export const PPROTE = 8
+/** 발광(light) — PLIGHT(mtype.h:362 `#define PLIGHT 17`). SLIGHT 시전 시 F_SET(magic2.c:314). */
+export const PLIGHT = 17
+/** 주문 감지(detect magic) — PDMAGI(mtype.h:365 `#define PDMAGI 20`). SDMAGI 시전 시 F_SET(magic4.c). */
+export const PDMAGI = 20
+/** 은둔 감지(detect invisible) — PDINVI(mtype.h:366 `#define PDINVI 21`). SDINVI 시전 시 F_SET(magic4.c). */
+export const PDINVI = 21
+/** 부양(levitation) — PLEVIT(mtype.h:370 `#define PLEVIT 25`). SLEVIT 시전 시 F_SET(magic5.c:509). */
+export const PLEVIT = 25
+/** 비행(flying) — PFLYSP(mtype.h:376 `#define PFLYSP 31`). SFLYSP 시전 시 F_SET(magic5.c). */
+export const PFLYSP = 31
+/** 선악 감지(know alignment) — PKNOWA(mtype.h:378 `#define PKNOWA 33`). SKNOWA 시전 시 F_SET(magic6.c). */
+export const PKNOWA = 33
+/** 수생(breathe water) — PBRWAT(mtype.h:382 `#define PBRWAT 37`). SBRWAT 시전 시 F_SET(magic7.c). */
+export const PBRWAT = 37
 /** 잠력격발 — PUPDMG(mtype.h:404). 초인 다중공격 count 게이트(command5.c:208). */
 export const PUPDMG = 59
 /**
@@ -115,8 +156,14 @@ export const OPERM2 = 9
 export const ONOTAK = 17
 /** 배경 소품(회수 불가). */
 export const OSCENE = 18
+/** 선인 전용 아이템 — OGOODO(mtype.h:488). study 정렬 게이트(alignment<-100이면 연마 실패, magic1.c:305). */
+export const OGOODO = 12
+/** 악인 전용 아이템 — OEVILO(mtype.h:489). study 정렬 게이트(alignment>100이면 연마 실패, magic1.c:305). */
+export const OEVILO = 13
 /** 저주받은 무기 — OCURSE(mtype.h:498). 불발 시 무기 낙하 제외 조건(command5.c:298). */
 export const OCURSE = 22
+/** 클래스 전용 — OCLSEL(mtype.h:507). study 클래스 게이트 기준 비트(OCLSEL+class로 직업 허용 판정, magic1.c:312). */
+export const OCLSEL = 31
 /** 항상 크리티컬 무기 — OALCRT(mtype.h:518). 크리 판정 자동 통과(command5.c:281). */
 export const OALCRT = 42
 

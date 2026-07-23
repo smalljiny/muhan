@@ -150,7 +150,10 @@ PWIMPY/PHIDDN/PINVIS/PDMINV·MAGGRE/MGAGGR/MEAGGR/MDINVI)와 `world/roomFlags.ts
 - `blind`: `{ until }` — 명중 페널티만(주기 피해 아님).
 
 `statusEffects.ts`가 `grantPoison`/`grantDisease`/`grantBlind`(입력 불변, 새 Character 반환)와
-`isPoisonActive`/`isDiseaseActive`/`isBlindActive`(`until >= now`이면 활성)를 제공한다.
+`isPoisonActive`/`isDiseaseActive`/`isBlindActive`(`until >= now`이면 활성)를 제공한다. 대칭 해제
+헬퍼 `clearPoison`/`clearDisease`/`clearBlind`(입력 불변, 해당 필드를 제거한 새 Character 반환 —
+statusEffects 없으면 입력 그대로)는 마법 cure 주문(curepoison/rm_disease/rm_blind)이 소비하며,
+원본 F_CLR에 대응한다([magic-progression.md](magic-progression.md) G7 cure).
 `projectStatusFlags(character, now)`가 활성 명명 필드를 combat flag hex 뷰(PPOISN/PDISEA/PBLIND)로
 투영해, combat이 이미 쓰던 `F_ISSET(flags, PBLIND)` 관용을 무파괴 유지한다 — Character에는 combat
 flags 필드가 없으므로 병합이 아니라 ZERO_FLAGS에서 활성 비트만 세팅한 fresh hex를 반환한다. 이 투영

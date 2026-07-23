@@ -24,3 +24,10 @@ export const RPPOIS = 25
 export const RPMPDR = 26
 /** 플레이어 혼란 방 — RPBEFU bit 27(mtype.h). LT_ATTCK 쿨다운 부여(combat-state 소관, #99 유예). */
 export const RPBEFU = 27
+
+/**
+ * 주문 지속 강화 방 — RPMEXT bit 32(mtype.h:333 "Player magic spell extend"). 버프 시전 시 방 플래그가
+ * 세팅돼 있으면 dur에 RPMEXT 보너스(표준 +800, detect/fly +600)를 가산한다(magic5-8.c
+ * `F_ISSET(ply_ptr->parent_rom, RPMEXT)`). computeBuffDur input.rpmext의 방 판정 소스(#85 G5).
+ */
+export const RPMEXT = 32

@@ -25,6 +25,9 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
     hpCurrent: 55,
     mpCurrent: 40,
     experience: 0,
+    // v5 spell store 시드(빈 지식 비트마스크·realm [0,0,0,0]) — Character required 필드 충족.
+    spells: new Array<number>(16).fill(0),
+    realm: [0, 0, 0, 0],
     schemaVersion: 3,
     accountId: 'acc-1',
     status: 'active',
@@ -227,9 +230,12 @@ describe('FirebaseSessionAuthAdapter (integration)', () => {
       expect(persisted?.level).toBe(1)
       expect(persisted?.hpCurrent).toBe(seedVitals(2, 1).hpCurrent)
       expect(persisted?.mpCurrent).toBe(seedVitals(2, 1).mpCurrent)
-      // 1레벨 신규는 experience 0으로 시딩하고 최신 스키마 버전(4)으로 스탬프한다.
+      // 1레벨 신규는 experience 0으로 시딩하고 최신 스키마 버전(5)으로 스탬프한다.
       expect(persisted?.experience).toBe(0)
-      expect(persisted?.schemaVersion).toBe(4)
+      expect(persisted?.schemaVersion).toBe(5)
+      // 신규 문서는 backfillCharacterV5와 동일 시드값(빈 spells·[0,0,0,0] realm)을 갖는다(버전 드리프트 차단).
+      expect(persisted?.spells).toEqual(new Array<number>(16).fill(0))
+      expect(persisted?.realm).toEqual([0, 0, 0, 0])
     })
 
     it('gender·weapon·alignment를 선택 필드로 영속한다', async () => {

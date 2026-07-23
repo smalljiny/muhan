@@ -24,6 +24,9 @@ function makeChar(overrides: Partial<Character> = {}): Character {
     hpCurrent: 5,
     mpCurrent: 3,
     experience: 100_000,
+    // v5 spell store 시드(빈 지식 비트마스크·realm [0,0,0,0]) — Character required 필드 충족.
+    spells: new Array<number>(16).fill(0),
+    realm: [0, 0, 0, 0],
     schemaVersion: 3,
     accountId: 'acc-1',
     status: 'active',

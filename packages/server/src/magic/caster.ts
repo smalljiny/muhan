@@ -1,4 +1,4 @@
-import { bonusOf, type CreatureInstance } from 'shared'
+import { bonusOf, isKnown, type CreatureInstance } from 'shared'
 import type { PlayerCombatState } from '../combat/playerState.js'
 import { F_ISSET } from '../world/hexFlags.js'
 
@@ -18,7 +18,7 @@ export interface Caster {
   mpCurrent: number
   /** 레벨 — spell_fail L4·mprofic 입력(읽기). */
   readonly level: number
-  /** realm별 숙련(길이 4, 읽기). 플레이어는 #84에 spell store가 없어 [0,0,0,0]. */
+  /** realm별 숙련(길이 4, 읽기) — 플레이어는 캐릭터 영속 realm, 몹은 creature.realm. */
   readonly realm: readonly number[]
   /** 직업 인덱스(읽기). */
   readonly class: number
@@ -39,8 +39,8 @@ export function toCaster(creature: CreatureInstance): Caster
 /**
  * PlayerCombatState를 Caster로 어댑트한다. mpCurrent는 state.mpCurrent에 write-through 바인딩한다.
  *
- * realm=[0,0,0,0]·knows=false는 #84 forward-compat seam이다 — 플레이어 spell store가 아직 없어
- * (#85가 실 store로 대체) 학습 write 경로 없는 기본값을 반환한다.
+ * realm·knows는 #85가 실 spell store(state.realm·state.spells)로 잇는다 — #84의 [0,0,0,0]·false
+ * 스텁을 대체해 학습 지식·realm 숙련이 실제 캐릭터 영속값을 반영한다.
  */
 export function toCaster(player: PlayerCombatState): Caster
 export function toCaster(source: CreatureInstance | PlayerCombatState): Caster {
@@ -72,11 +72,11 @@ export function toCaster(source: CreatureInstance | PlayerCombatState): Caster {
       state.mpCurrent = value
     },
     level: state.level,
-    // #84 seam: 플레이어 spell store 없음 — realm 성장·학습은 #85가 실 store로 대체.
-    realm: [0, 0, 0, 0],
+    // #85: 플레이어 realm 누적경험치 실이식 — mprofic 숙련 환산 입력(더 이상 [0,0,0,0] 스텁 아님).
+    realm: state.realm,
     class: state.class,
     intBonus: bonusOf(state.effectiveIntelligence),
-    // #84 seam: 플레이어는 아직 어느 주문도 보유하지 않는다(#85가 실 판독으로 대체).
-    knows: () => false,
+    // #85: 플레이어 spell store(uint8[16]) 실판독 — S_ISSET 이식(더 이상 false 스텁 아님).
+    knows: (spellNo: number) => isKnown(state.spells, spellNo),
   }
 }

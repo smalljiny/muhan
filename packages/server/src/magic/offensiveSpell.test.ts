@@ -10,7 +10,7 @@ import {
   type OspellEntry,
   type RoomNode,
 } from 'shared'
-import { SpellDispatch, NOT_IMPLEMENTED } from './dispatch.js'
+import { SpellDispatch } from './dispatch.js'
 import { toCombatant } from '../combat/combatant.js'
 import type { PlayerCombatState } from '../combat/playerState.js'
 import type { DamageLedger } from '../combat/enmity.js'
@@ -108,6 +108,8 @@ function makePlayerTarget(over: Partial<PlayerCombatState> = {}): PlayerCombatSt
     armor: 0,
     thaco: 10,
     dexterity: 12,
+    spells: new Array<number>(16).fill(0),
+    realm: [0, 0, 0, 0],
     flags: '',
     alignment: 0,
     weapon: null,
@@ -357,6 +359,84 @@ describe('offensiveSpell — T5.5 데미지 순서 + T5.4 저항', () => {
   })
 })
 
+// ── T4.2 realm 숙련 성장 훅(PvE 한정) ────────────────────────────────────────
+describe('offensiveSpell — T4.2 realm 성장 훅(magic1.c:1128)', () => {
+  it('creature 대상: realmGrowth=MIN(trunc(m*exp/hpmax), exp)', () => {
+    const caster = makeCaster({ realm: [0, 0, 0, 0] })
+    const target = makeCreatureTarget({ hpcur: 30, hpmax: 30, experience: 100 })
+    const osp = makeOsp({ realm: REALM.FIRE, ndice: 2, sdice: 5, pdice: 7 }) // dmg=14
+    const { ctx } = makeCtx([3, 4], { gated: false })
+
+    const out = offensiveSpell(
+      { caster, casterId: 'mob-1', target: toCombatant(target), ctx },
+      osp,
+    )
+    // m=min(30,14)=14 → trunc(14*100/30)=46, min(46,100)=46.
+    expect(out.realmGrowth).toBe(46)
+    // 회귀 가드: 데미지·hp·death는 성장 훅에 영향받지 않는다.
+    expect(out.dmg).toBe(14)
+    expect(target.hpcur).toBe(16)
+  })
+
+  it('오버킬: 성장은 dmg가 아닌 m=min(hpBefore,dmg)을 쓴다', () => {
+    const caster = makeCaster({ realm: [0, 0, 0, 0] })
+    const target = makeCreatureTarget({ hpcur: 5, hpmax: 30, experience: 100 })
+    const osp = makeOsp({ realm: REALM.FIRE, ndice: 2, sdice: 5, pdice: 7 }) // dmg=14 > hp=5
+    const { ctx } = makeCtx([3, 4], { gated: false })
+
+    const out = offensiveSpell({ caster, casterId: 'mob-1', target: toCombatant(target), ctx }, osp)
+    // m=min(5,14)=5 → trunc(5*100/30)=16 (dmg=14였다면 46). m 사용 증명.
+    expect(out.realmGrowth).toBe(16)
+    expect(out.died).toBe(true)
+  })
+
+  it('experience 미설정 몬스터: exp=0 폴백 → 성장 0', () => {
+    const caster = makeCaster({ realm: [0, 0, 0, 0] })
+    const target = makeCreatureTarget({ hpcur: 30, hpmax: 30 }) // experience 미설정
+    const osp = makeOsp({ realm: REALM.FIRE, ndice: 2, sdice: 5, pdice: 7 })
+    const { ctx } = makeCtx([3, 4], { gated: false })
+
+    const out = offensiveSpell({ caster, casterId: 'mob-1', target: toCombatant(target), ctx }, osp)
+    expect(out.realmGrowth).toBe(0)
+  })
+
+  it('PLAYER 대상(PvP): realmGrowth=0(성장 없음)', () => {
+    const caster = makeCaster({ realm: [0, 0, 0, 0] })
+    const target = makePlayerTarget({ hpCurrent: 30 })
+    const osp = makeOsp({ realm: REALM.FIRE, ndice: 2, sdice: 5, pdice: 7 })
+    const { ctx } = makeCtx([3, 4], { gated: false })
+
+    const out = offensiveSpell({ caster, casterId: 'mob-1', target: toCombatant(target), ctx }, osp)
+    expect(out.realmGrowth).toBe(0)
+  })
+
+  it('자기대상(player가 자신에게 시전 — 동일 PLAYER 가드): realmGrowth=0', () => {
+    // 오라클 가드는 crt->type != PLAYER 하나뿐이다. 플레이어 자기대상은 target.kind='player'라
+    // PvP와 동일 가드로 미성장한다(별도 caster-identity 체크 없음).
+    const player = makePlayerTarget({ hpCurrent: 30 })
+    const caster = makeCaster({ realm: [0, 0, 0, 0] })
+    const osp = makeOsp({ realm: REALM.FIRE, ndice: 2, sdice: 5, pdice: 7 })
+    const { ctx } = makeCtx([3, 4], { gated: false })
+
+    const out = offensiveSpell(
+      { caster, casterId: 'char-1', target: toCombatant(player), ctx },
+      osp,
+    )
+    expect(out.realmGrowth).toBe(0)
+  })
+
+  it('이미 사망(hp<1) no-op: realmGrowth=0', () => {
+    const caster = makeCaster({ realm: [0, 0, 0, 0] })
+    const target = makeCreatureTarget({ hpcur: 0, experience: 100 })
+    const osp = makeOsp({ realm: REALM.FIRE, ndice: 2, sdice: 5, pdice: 7 })
+    const { ctx } = makeCtx([3, 4], { gated: false })
+
+    const out = offensiveSpell({ caster, casterId: 'mob-1', target: toCombatant(target), ctx }, osp)
+    expect(out.realmGrowth).toBe(0)
+    expect(out.dmg).toBe(0)
+  })
+})
+
 // ── T5.6 디스패치 등록 ───────────────────────────────────────────────────────
 describe('registerOffensiveSpells — offensive 20종 배선', () => {
   it('offensive 20 주문번호가 전부 핸들러로 해소된다', () => {
@@ -380,11 +460,11 @@ describe('registerOffensiveSpells — offensive 20종 배선', () => {
     expect(target.hpcur).toBe(24)
   })
 
-  it('비-offensive 주문은 NOT_IMPLEMENTED로 남는다(#85 유예)', () => {
+  it('비-offensive 주문은 offensiveSpell 디스패처에서 미등록(undefined)으로 남는다', () => {
     const dispatch = new SpellDispatch<OffensiveSpellHandler>()
     registerOffensiveSpells(dispatch)
-    // SVIGOR(회복)은 비-offensive → 등록 대상 아님.
-    expect(dispatch.resolve(SPELL_NO.SVIGOR)).toBe(NOT_IMPLEMENTED)
+    // SVIGOR(회복)은 비-offensive → registerOffensiveSpells는 등록하지 않는다(effect 모듈 소관).
+    expect(dispatch.resolve(SPELL_NO.SVIGOR)).toBeUndefined()
   })
 })
 

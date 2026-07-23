@@ -1,7 +1,7 @@
 import type { ObjectInstance } from 'shared'
 import { POTION, SCROLL, WAND } from './taxonomy.js'
 import { evaluateGate } from '../magic/gate.js'
-import { NOT_IMPLEMENTED, type SpellDispatch } from '../magic/dispatch.js'
+import type { SpellDispatch } from '../magic/dispatch.js'
 import type { Caster } from '../magic/caster.js'
 
 /**
@@ -42,9 +42,8 @@ export type ConsumeOutcome =
   | { kind: 'depleted' }
   // 담긴 주문 없음(magicpower < 1 → spellNo=-1).
   | { kind: 'no-spell' }
-  // 비-offensive 주문 → NOT_IMPLEMENTED(#85 유예).
-  | { kind: 'deferred'; spellNo: number; context: ConsumeContext }
-  // offensive 미등록 주문 → undefined(핸들러는 magic S5에서 등록).
+  // 미등록 주문 → undefined. dispatch가 family-agnostic이 된 뒤로 offensive·비-offensive를 가리지
+  // 않고 "핸들러 미등록"을 하나로 접는다(effect 핸들러는 magic S5·S7~S10에서 등록).
   | { kind: 'unresolved'; spellNo: number; context: ConsumeContext }
   // 핸들러 resolve 성공 → 배달 가능. 배선 계층이 핸들러를 실행하고 성공(`if(n)`) 시 shotscur를 감소한다.
   // (gate는 gated=false로 무조건 우회하므로 delivered 도달은 resolve 결과만으로 결정된다.)
@@ -96,7 +95,6 @@ export function deliverConsumable(params: DeliverConsumableParams): ConsumeOutco
 
   // ⑥ resolve 분기 — 분류만, effect 실행 안 함.
   const resolved = dispatch.resolve(spellNo)
-  if (resolved === NOT_IMPLEMENTED) return { kind: 'deferred', spellNo, context }
   if (resolved === undefined) return { kind: 'unresolved', spellNo, context }
 
   // 핸들러 resolve 성공 → 배달 가능. shotscur 감소는 배선 계층이 effect 성공(`if(n)`) 시 수행한다.

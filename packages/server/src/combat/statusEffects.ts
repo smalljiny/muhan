@@ -43,8 +43,36 @@ export function grantBlind(character: Character, until: number): Character {
   }
 }
 
+/**
+ * poison 필드를 해제한 새 Character를 반환한다(grant* 대칭, 입력 불변). statusEffects가 없으면 입력을
+ * 그대로 반환한다(cure effect가 상태이상 없는 대상에 걸려도 무해). 얕은 복사본에서 키를 제거해 입력
+ * Character·기존 statusEffects 객체를 변형하지 않는다(Story 10 cure 소비 — curepoison magic2.c:231 F_CLR).
+ */
+export function clearPoison(character: Character): Character {
+  if (character.statusEffects === undefined) return character
+  const next = { ...character.statusEffects }
+  delete next.poison
+  return { ...character, statusEffects: next }
+}
+
+/** disease 필드를 해제한 새 Character를 반환한다(rm_disease magic7.c:583 F_CLR, 입력 불변). */
+export function clearDisease(character: Character): Character {
+  if (character.statusEffects === undefined) return character
+  const next = { ...character.statusEffects }
+  delete next.disease
+  return { ...character, statusEffects: next }
+}
+
+/** blind 필드를 해제한 새 Character를 반환한다(rm_blind magic8.c:134 F_CLR, 입력 불변). */
+export function clearBlind(character: Character): Character {
+  if (character.statusEffects === undefined) return character
+  const next = { ...character.statusEffects }
+  delete next.blind
+  return { ...character, statusEffects: next }
+}
+
 /** 절대-틱 만료 판정 — 효과가 존재하고 until >= now이면 활성. */
-function isActive(effect: { until: number } | undefined, now: number): boolean {
+export function isActive(effect: { until: number } | undefined, now: number): boolean {
   return effect !== undefined && effect.until >= now
 }
 
