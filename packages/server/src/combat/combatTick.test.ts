@@ -263,22 +263,46 @@ describe('createCombatTick — 근접 + 반격', () => {
     expect(playerDeaths).toHaveLength(0) // ★ target death 미발화 — 막타 생존
   })
 
-  it('stale-dead target(HP<1로 진입)은 end-of-round death를 재발화하지 않는다 (exactly-once, #91)', () => {
-    // D2 사망 제거 유예로 이전 틱에 죽은 target이 방·레지스트리에 남아 재진입할 수 있다. 근접은
-    // DEAD_DEFENDER_NOOP로 died=false라 meleeOutcome.died=false → end-of-round 재발화 없음. `meleeOutcome.died`
-    // 대신 `target.hpCurrent<1`로 판정하면 여기서 cross-tick 중복 발화가 재유입되므로 이 케이스가 그 회귀 lock이다.
+  it('stale-dead target(HP<1로 진입)은 반격도·end-of-round death도 하지 않는다 (틱시작 생존 스냅샷, #91)', () => {
+    // D2/#99 사망 제거 유예로 이전 틱에 죽은 target이 방·레지스트리에 잔존해 재진입할 수 있다. 틱 시작 시
+    // 이미 사망(hpCurrent<1)이므로 counter 자격이 없다 — 이번 라운드 근접에 죽는 target(시작 시 생존 →
+    // 반격 유지, test 230/249)과 구분된다. 근접은 DEAD_DEFENDER_NOOP·meleeOutcome.died=false라 end-of-round
+    // 재발화도 없다(`target.hpCurrent<1`로 판정하면 cross-tick 중복 발화가 재유입되므로 이 케이스가 그 lock).
     const player = makePlayer({ characterId: 'p1', hpCurrent: -3, nextAttackAt: 0 }) // 이미 사망 상태로 진입
     const creature = makeCreature({ hpcur: 100, enemies: ['p1'] })
     const room = makeRoom(['p1'])
-    // 근접: DEAD_DEFENDER_NOOP → 굴림 미소비. 죽어가는 target도 last 반격 [20,5,50,50,2] → monster 95.
-    const { deps, registry, playerDeaths, creatureDeaths } = makeDeps([20, 5, 50, 50, 2], { now: 1000 })
+    // seq [] — stale-dead는 근접(NOOP)·counter(스킵) 어느 것도 굴림을 소비하지 않는다. counter가 굴려지면
+    // seqRng([]) throw로 즉시 드러난다(자격 박탈 증명).
+    const { deps, registry, playerDeaths, creatureDeaths, ledger } = makeDeps([], { now: 1000 })
     registry.register(player)
 
     createCombatTick(deps)(creature, room)
 
-    expect(creature.hpcur).toBe(95) // stale-dead target도 반격은 날림(attacker-HP 가드 없음)
-    expect(playerDeaths).toHaveLength(0) // ★ meleeOutcome.died=false → target death 재발화 없음
-    expect(creatureDeaths).toHaveLength(0) // 몬스터 생존
+    expect(creature.hpcur).toBe(100) // stale-dead target은 반격 안 함 — 몬스터 무피해
+    expect(ledger.size).toBe(0) // 데미지·크레딧 없음
+    expect(playerDeaths).toHaveLength(0) // meleeOutcome.died=false → 재발화 없음
+    expect(creatureDeaths).toHaveLength(0)
+    expect(player.nextAttackAt).toBe(0) // 반격 안 함 → 쿨다운 미설정
+  })
+
+  it('stale-dead non-target 플레이어는 반격 자격이 없다 (이번 라운드 근접에 죽는 target과 구분, #91)', () => {
+    const p1 = makePlayer({ characterId: 'p1', hpCurrent: 50, nextAttackAt: 0 }) // target, 시작 시 생존
+    const p2 = makePlayer({ characterId: 'p2', hpCurrent: -4, nextAttackAt: 0 }) // OTHER, stale-dead 진입
+    const creature = makeCreature({ hpcur: 100, armor: 0, enemies: ['p1', 'p2'] })
+    const room = makeRoom(['p1', 'p2'])
+    // 근접 target p1: [15,5] → p1 45. counter 역순: p2(OTHER)는 stale-dead → 스킵(굴림 없음), p1(TARGET)만
+    // 반격 [20,5,50,50,2] → creature 95. p2가 스킵 안 되면 seq 소비가 어긋나 실패한다.
+    const { deps, registry, ledger, creatureDeaths } = makeDeps([15, 5, 20, 5, 50, 50, 2], { now: 1000 })
+    registry.register(p1)
+    registry.register(p2)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(creature.hpcur).toBe(95) // p1만 반격(p2 stale-dead 스킵)
+    expect(ledger.get('p1')).toBe(5)
+    expect(ledger.has('p2')).toBe(false) // ★ stale-dead p2는 몬스터에 데미지·ledger 크레딧 없음
+    expect(p2.nextAttackAt).toBe(0) // 반격 안 함 → 쿨다운 미설정
+    expect(creatureDeaths).toHaveLength(0)
   })
 
   it('stale-dead 몬스터(hpcur<1로 진입)는 counter 준비돼도 fireCreatureDeath 재발화 안 함 (exactly-once, #91)', () => {

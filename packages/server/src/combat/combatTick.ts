@@ -111,6 +111,17 @@ export function createCombatTick(deps: CombatTickDeps): OnCombatTick {
 
     const target = presentEnemies[0]!
 
+    // stale-dead 플레이어 가드 — 틱 시작(근접 전) 생존을 스냅샷해 counter 자격을 스코핑한다. 오라클은
+    // die()가 죽은 플레이어를 즉시 제거해 반격이 구조적으로 불가능하나, 이 포트는 사망 제거를 #99로
+    // 유예하므로 이전 틱 사망(stale-dead) 플레이어가 occupants/registry에 잔존해 반격할 수 있다. counter는
+    // resolveAttack(player→monster)를 굴리는데 DEAD_DEFENDER_NOOP는 defender(몬스터)만 검사하므로,
+    // 죽은 플레이어가 몬스터에 데미지·ledger 크레딧·심지어 킬까지 하는 결함이 생긴다. 틱 시작 생존
+    // 스냅샷으로 이번 라운드 근접에 죽는 target(시작 시 생존 → 반격 유지, attack_crt attacker-HP 가드
+    // 없음)과 stale-dead(시작 시 사망 → 반격 자격 박탈)를 구분한다.
+    const aliveAtStart = new Map<PlayerCombatState, boolean>(
+      presentEnemies.map((p) => [p, p.hpCurrent >= 1]),
+    )
+
     // 이번 틱의 ResolveContext를 조립한다 — deps만 바인딩하고 death seam은 커링하지 않는다(사전
     // 바인딩 금지, resolveAttack.ts:37). resolveAttack이 ctx를 read-only로 취급하므로(유일 변형은
     // 공유 참조 ledger 누적) 틱당 1개 인스턴스를 근접·반격에서 공유한다.
@@ -145,12 +156,15 @@ export function createCombatTick(deps: CombatTickDeps): OnCombatTick {
     }
 
     // counter 역순(update.c:501~530): OTHER enemies(presentEnemies[1..]) 먼저, TARGET(presentEnemies[0])
-    // 마지막. attack_crt엔 attacker-HP 가드가 없으므로 근접에 죽어가는 target도 last에 반격을 날린다
-    // (hpCurrent<1 가드를 두지 않는다). LT_ATTCK 쿨다운(nextAttackAt)만 개별 반격을 게이트한다.
+    // 마지막. attack_crt엔 attacker-HP 가드가 없으므로 근접에 죽어가는 target도 last에 반격을 날린다.
+    // 단, live HP 가드 대신 틱 시작 생존 스냅샷(aliveAtStart)으로 stale-dead만 배제한다 — 이번 라운드
+    // 근접에 죽는 target은 시작 시 생존이라 자격을 유지하고, 이전 틱 사망 잔존자만 걸러진다.
     const counterOrder = [...presentEnemies.slice(1), target]
 
     let monsterDied = false
     for (const player of counterOrder) {
+      // stale-dead(틱 시작 시 이미 사망) 플레이어는 반격 자격 없음 — 오라클 die() 즉시 제거 근사.
+      if (!aliveAtStart.get(player)) continue
       // LT_ATTCK 쿨다운 미도래 → 이 반격만 스킵.
       if (player.nextAttackAt > now) continue
 
