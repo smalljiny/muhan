@@ -49,6 +49,16 @@ export {
   type DebuffEffectHandler,
 } from './debuffEffects.js'
 export {
+  registerInstantEffects,
+  registerCureEffects,
+  INSTANT_SPELLS,
+  type HealOutcome,
+  type InstantOutcome,
+  type InstantEffectRequest,
+  type InstantEffectHandler,
+  type CureEffectHandler,
+} from './instantEffects.js'
+export {
   canTeachSpllv,
   study,
   teach,

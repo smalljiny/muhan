@@ -4,6 +4,9 @@ import {
   grantPoison,
   grantDisease,
   grantBlind,
+  clearPoison,
+  clearDisease,
+  clearBlind,
   isPoisonActive,
   isDiseaseActive,
   isBlindActive,
@@ -158,5 +161,38 @@ describe('projectStatusFlags 투영', () => {
     expect(F_ISSET(hex, PPOISN)).toBe(false)
     expect(F_ISSET(hex, PDISEA)).toBe(false)
     expect(F_ISSET(hex, PBLIND)).toBe(false)
+  })
+})
+
+describe('clear* 해제 헬퍼 (Story 10 cure 소비)', () => {
+  it('clearPoison은 poison만 해제하고 disease/blind는 보존한다', () => {
+    const before = grantBlind(grantDisease(grantPoison(makeCharacter(), 100, 6), 200, 12), 300)
+    const after = clearPoison(before)
+    expect(after.statusEffects).toEqual({ disease: { until: 200, interval: 12 }, blind: { until: 300 } })
+  })
+
+  it('clearDisease는 disease만 해제한다', () => {
+    const before = grantDisease(grantPoison(makeCharacter(), 100, 6), 200, 12)
+    const after = clearDisease(before)
+    expect(after.statusEffects).toEqual({ poison: { until: 100, interval: 6 } })
+  })
+
+  it('clearBlind는 blind만 해제한다', () => {
+    const before = grantBlind(makeCharacter(), 300)
+    const after = clearBlind(before)
+    expect(after.statusEffects).toEqual({})
+  })
+
+  it('clear는 입력 Character·statusEffects를 변형하지 않는다(immutability)', () => {
+    const before = grantPoison(makeCharacter(), 100, 6)
+    clearPoison(before)
+    expect(before.statusEffects?.poison).toEqual({ until: 100, interval: 6 })
+  })
+
+  it('statusEffects가 없으면 clearPoison/clearDisease/clearBlind 모두 입력을 그대로 반환한다(throw 없음)', () => {
+    const before = makeCharacter()
+    expect(clearPoison(before)).toBe(before)
+    expect(clearDisease(before)).toBe(before)
+    expect(clearBlind(before)).toBe(before)
   })
 })
