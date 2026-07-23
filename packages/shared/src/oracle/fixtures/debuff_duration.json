@@ -1,0 +1,61 @@
+{
+  "fn": "computeDebuffDur",
+  "oracle": {
+    "method": "manual",
+    "source": "magic8.c (A6 §7 fear/silence/charm)",
+    "generatedAt": "2026-07-16T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "spellNo": 50,
+        "intBonus": 2,
+        "prmagi": false,
+        "roll": 5
+      },
+      "expected": 950,
+      "note": "fear 600+50+300=950"
+    },
+    {
+      "input": {
+        "spellNo": 54,
+        "intBonus": 5,
+        "prmagi": false,
+        "roll": 30
+      },
+      "expected": 3600,
+      "note": "silence 고정 3600"
+    },
+    {
+      "input": {
+        "spellNo": 55,
+        "intBonus": 1,
+        "prmagi": false,
+        "roll": 10
+      },
+      "expected": 430,
+      "note": "charm 300+100+30=430"
+    },
+    {
+      "input": {
+        "spellNo": 54,
+        "intBonus": 0,
+        "prmagi": true,
+        "roll": 1
+      },
+      "expected": 1800,
+      "note": "PRMAGI 3600→1800"
+    },
+    {
+      "input": {
+        "spellNo": 50,
+        "intBonus": 0,
+        "prmagi": true,
+        "roll": 1
+      },
+      "expected": 305,
+      "note": "PRMAGI 610→305 trunc"
+    }
+  ]
+}

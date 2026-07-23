@@ -44,7 +44,7 @@ export function grantBlind(character: Character, until: number): Character {
 }
 
 /** 절대-틱 만료 판정 — 효과가 존재하고 until >= now이면 활성. */
-function isActive(effect: { until: number } | undefined, now: number): boolean {
+export function isActive(effect: { until: number } | undefined, now: number): boolean {
   return effect !== undefined && effect.until >= now
 }
 

@@ -1,0 +1,131 @@
+{
+  "fn": "computeBuffDur",
+  "oracle": {
+    "method": "manual",
+    "source": "magic2.c:374-385 (A6 §6 표준 버프)",
+    "generatedAt": "2026-07-16T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "level": 10,
+        "casterClass": 4,
+        "gated": true,
+        "rpmext": false,
+        "spellNo": 5,
+        "intBonus": 0
+      },
+      "expected": 1200,
+      "note": "base: MAX(300,1200)=1200"
+    },
+    {
+      "input": {
+        "level": 10,
+        "casterClass": 5,
+        "gated": true,
+        "rpmext": false,
+        "spellNo": 22,
+        "intBonus": 2
+      },
+      "expected": 2400,
+      "note": "B=2 → 2400"
+    },
+    {
+      "input": {
+        "level": 10,
+        "casterClass": 5,
+        "gated": true,
+        "rpmext": false,
+        "spellNo": 22,
+        "intBonus": -2
+      },
+      "expected": 300,
+      "note": "음수 B → 하한 300"
+    },
+    {
+      "input": {
+        "level": 10,
+        "casterClass": 3,
+        "gated": true,
+        "rpmext": false,
+        "spellNo": 5,
+        "intBonus": 0
+      },
+      "expected": 1380,
+      "note": "CLERIC +60*L4=180 → 1380"
+    },
+    {
+      "input": {
+        "level": 10,
+        "casterClass": 5,
+        "gated": true,
+        "rpmext": false,
+        "spellNo": 9,
+        "intBonus": 0
+      },
+      "expected": 1380,
+      "note": "MAGE detect +180 → 1380"
+    },
+    {
+      "input": {
+        "level": 10,
+        "casterClass": 3,
+        "gated": true,
+        "rpmext": false,
+        "spellNo": 9,
+        "intBonus": 0
+      },
+      "expected": 1200,
+      "note": "비-MAGE detect → 1200"
+    },
+    {
+      "input": {
+        "level": 10,
+        "casterClass": 5,
+        "gated": true,
+        "rpmext": true,
+        "spellNo": 22,
+        "intBonus": 0
+      },
+      "expected": 2000,
+      "note": "RPMEXT 800 → 2000"
+    },
+    {
+      "input": {
+        "level": 10,
+        "casterClass": 5,
+        "gated": true,
+        "rpmext": true,
+        "spellNo": 23,
+        "intBonus": 0
+      },
+      "expected": 1800,
+      "note": "fly RPMEXT 600 → 1800"
+    },
+    {
+      "input": {
+        "level": 10,
+        "casterClass": 3,
+        "gated": true,
+        "rpmext": true,
+        "spellNo": 4,
+        "intBonus": 0
+      },
+      "expected": 2180,
+      "note": "CLERIC+RPMEXT → 2180"
+    },
+    {
+      "input": {
+        "spellNo": 5,
+        "intBonus": 5,
+        "level": 60,
+        "casterClass": 3,
+        "gated": false,
+        "rpmext": true
+      },
+      "expected": 1200,
+      "note": "비-CAST 고정 1200"
+    }
+  ]
+}
