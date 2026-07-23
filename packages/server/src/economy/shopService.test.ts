@@ -1,15 +1,17 @@
 import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
-import { buyPrice, mobBuyPrice, approve, goldenFixtureSchema } from 'shared'
+import { buyPrice, mobBuyPrice, repairCost, approve, goldenFixtureSchema } from 'shared'
 import { seqRng } from '../combat/dice.testutil.js'
 import {
   buy,
   purchase,
   sell,
+  repair,
   ShopRejectError,
   type ShopItem,
   type BuyerState,
   type PawnItem,
+  type RepairItem,
   type ShopRejectReason,
 } from './shopService.js'
 
@@ -382,6 +384,231 @@ function dispatchPawn(input: PawnCaseInput): { rejectReason: string | null; payo
     throw err
   }
 }
+
+/**
+ * 아이템 수리 순수 함수 단위 테스트 — repair(A8 §8 RREPAI, command8.c)는 수리비 선차감 후
+ * piety 보정 실패 굴림을 던진다. 실패 시 환불(net 0)+파괴, 성공 시 내구도 복원(shotsmax*mrand(5,9)/10,
+ * 곱 위에서 절삭). RNG 순서: broke(1,100) 먼저, 성공 시에만 durability(5,9). 실패는 굴림 1회, 성공은 2회.
+ */
+describe('shopService.repair', () => {
+  const makeItem = (overrides: Partial<RepairItem> = {}): RepairItem => ({
+    value: 100,
+    shotscur: 0,
+    shotsmax: 80,
+    ...overrides,
+  })
+
+  it('실패: piety=10 broke=15, shotscur<1 → broken, item=null, 환불(goldAfter=gold)', () => {
+    const char = { gold: 500, piety: 10 }
+    const result = repair(char, makeItem({ shotscur: 0 }), { rng: seqRng([15]) })
+    expect(result.broke).toBe(15)
+    expect(result.broken).toBe(true)
+    expect(result.item).toBe(null)
+    expect(result.goldAfter).toBe(500)
+  })
+
+  it('성공: piety=10 broke=16, shotscur<1 → 복원 trunc(80*5/10)=40, goldAfter=gold-cost', () => {
+    const char = { gold: 500, piety: 10 }
+    const result = repair(char, makeItem({ shotscur: 0 }), { rng: seqRng([16, 5]) })
+    expect(result.broke).toBe(16)
+    expect(result.broken).toBe(false)
+    expect(result.item).toEqual({ value: 100, shotscur: 40, shotsmax: 80 })
+    expect(result.goldAfter).toBe(475)
+  })
+
+  it('실패 임계값: piety=10 broke=5, shotscur>0 → broken', () => {
+    const char = { gold: 500, piety: 10 }
+    const result = repair(char, makeItem({ shotscur: 1 }), { rng: seqRng([5]) })
+    expect(result.broke).toBe(5)
+    expect(result.broken).toBe(true)
+    expect(result.item).toBe(null)
+  })
+
+  it('성공 임계값: piety=10 broke=6, shotscur=1(>0, not<1) → 복원 trunc(80*9/10)=72', () => {
+    const char = { gold: 500, piety: 10 }
+    const result = repair(char, makeItem({ shotscur: 1 }), { rng: seqRng([6, 9]) })
+    expect(result.broke).toBe(6)
+    expect(result.broken).toBe(false)
+    expect(result.item?.shotscur).toBe(72)
+  })
+
+  it('bonusOf 통합: piety=0 → bonusOf(0)=-4, brokeRoll=19 → broke=15 → 실패', () => {
+    const char = { gold: 500, piety: 0 }
+    const result = repair(char, makeItem({ shotscur: 0 }), { rng: seqRng([19]) })
+    expect(result.broke).toBe(15)
+    expect(result.broken).toBe(true)
+  })
+
+  it('bonusOf 통합: piety=0 → brokeRoll=20 → broke=16 → 성공', () => {
+    const char = { gold: 500, piety: 0 }
+    const result = repair(char, makeItem({ shotscur: 0 }), { rng: seqRng([20, 5]) })
+    expect(result.broke).toBe(16)
+    expect(result.broken).toBe(false)
+    expect(result.item?.shotscur).toBe(40)
+  })
+
+  it('내구도 trunc 트랩: shotsmax=85 durabilityRoll=7 → trunc(85*7/10)=trunc(59.5)=59', () => {
+    const char = { gold: 500, piety: 10 }
+    const result = repair(char, makeItem({ shotsmax: 85, shotscur: 1 }), { rng: seqRng([50, 7]) })
+    expect(result.item?.shotscur).toBe(59)
+  })
+
+  it('내구도 trunc 트랩: shotsmax=80 roll=5 → 40, roll=9 → 72', () => {
+    const char = { gold: 500, piety: 10 }
+    const r5 = repair(char, makeItem({ shotsmax: 80, shotscur: 1 }), { rng: seqRng([50, 5]) })
+    const r9 = repair(char, makeItem({ shotsmax: 80, shotscur: 1 }), { rng: seqRng([50, 9]) })
+    expect(r5.item?.shotscur).toBe(40)
+    expect(r9.item?.shotscur).toBe(72)
+  })
+
+  it('cost: value=100 → cost 25(goldAfter=gold-25); value=39 → cost 9', () => {
+    const char = { gold: 500, piety: 10 }
+    const r100 = repair(char, makeItem({ value: 100, shotscur: 1 }), { rng: seqRng([50, 5]) })
+    const r39 = repair(char, makeItem({ value: 39, shotscur: 1 }), { rng: seqRng([50, 5]) })
+    expect(repairCost(100)).toBe(25)
+    expect(repairCost(39)).toBe(9)
+    expect(r100.goldAfter).toBe(475)
+    expect(r39.goldAfter).toBe(491)
+  })
+
+  it('gold 게이트: gold==cost 경계는 성공한다(전액 지불, goldAfter=0)', () => {
+    const char = { gold: 25, piety: 10 }
+    const result = repair(char, makeItem({ value: 100, shotscur: 1 }), { rng: seqRng([50, 5]) })
+    expect(result.broken).toBe(false)
+    expect(result.goldAfter).toBe(0)
+  })
+
+  it('gold 게이트: gold==cost-1이면 insufficient-gold로 거부한다', () => {
+    const char = { gold: 24, piety: 10 }
+    expect(() => repair(char, makeItem({ value: 100 }), { rng: seqRng([50, 5]) })).toThrow(
+      ShopRejectError,
+    )
+    try {
+      repair(char, makeItem({ value: 100 }), { rng: seqRng([50, 5]) })
+    } catch (err) {
+      expect((err as ShopRejectError).reason).toBe('insufficient-gold')
+    }
+  })
+
+  it('gold 게이트는 굴림보다 먼저다: 빈 seqRng로도 insufficient-gold만 throw(굴림 미소비)', () => {
+    const char = { gold: 0, piety: 10 }
+    expect(() => repair(char, makeItem({ value: 100 }), { rng: seqRng([]) })).toThrow(
+      ShopRejectError,
+    )
+  })
+
+  it('RNG 소비: 성공은 굴림 2회 소비 — seqRng([broke])만 주면 소진 throw', () => {
+    const char = { gold: 500, piety: 10 }
+    // brokeRoll만 담고 durabilityRoll을 누락 → 성공 경로가 2번째 굴림을 시도하면 소진 throw.
+    expect(() => repair(char, makeItem({ shotscur: 1 }), { rng: seqRng([50]) })).toThrow(
+      /시퀀스 소진/,
+    )
+  })
+
+  it('RNG 소비: 실패는 굴림 1회만 — seqRng([broke])로 소진 없이 완료', () => {
+    const char = { gold: 500, piety: 10 }
+    // broke=15, shotscur<1 → 실패 → durability 미굴림. 1개짜리 seqRng로 소진 throw가 없어야 한다.
+    const result = repair(char, makeItem({ shotscur: 0 }), { rng: seqRng([15]) })
+    expect(result.broken).toBe(true)
+  })
+
+  it('순수성: 실패 경로에서 char·item을 변이하지 않는다(deep-equal 불변)', () => {
+    const char = { gold: 500, piety: 10 }
+    const charSnapshot = { gold: 500, piety: 10 }
+    const item = makeItem({ value: 100, shotscur: 0, shotsmax: 80 })
+    const itemSnapshot = { value: 100, shotscur: 0, shotsmax: 80 }
+    repair(char, item, { rng: seqRng([15]) })
+    expect(char).toEqual(charSnapshot)
+    expect(item).toEqual(itemSnapshot)
+  })
+
+  it('순수성: 성공 경로에서 char·item을 변이하지 않는다(deep-equal 불변)', () => {
+    const char = { gold: 500, piety: 10 }
+    const charSnapshot = { gold: 500, piety: 10 }
+    const item = makeItem({ value: 100, shotscur: 1, shotsmax: 80 })
+    const itemSnapshot = { value: 100, shotscur: 1, shotsmax: 80 }
+    const result = repair(char, item, { rng: seqRng([50, 5]) })
+    expect(char).toEqual(charSnapshot)
+    expect(item).toEqual(itemSnapshot)
+    // 반환 item은 입력과 다른 별개 객체다.
+    expect(result.item).not.toBe(item)
+  })
+})
+
+// T-style 골든 교차검증 — 체크인된 repair.json을 런타임 repair SUT로 디스패치한다. 각 case의 input을
+// seqRng([brokeRoll, durabilityRoll])와 함께 repair에 넘긴다. cost는 실패 시 refund로 관측 불가하므로
+// repairCost(value)로, 성공 시 char.gold-goldAfter(SUT의 실제 청구)로 매핑한다. newShotscur는 파괴 시
+// null. gold는 항상 충분하게 준다(golden은 역학 검증 전용, gold 게이트는 단위 테스트가 커버).
+type RepairCaseInput = {
+  value: number
+  shotscur: number
+  shotsmax: number
+  piety: number
+  brokeRoll: number
+  durabilityRoll: number
+}
+
+function dispatchRepair(input: RepairCaseInput): {
+  broken: boolean
+  cost: number
+  newShotscur: number | null
+} {
+  const char = { gold: 1_000_000, piety: input.piety }
+  const item: RepairItem = {
+    value: input.value,
+    shotscur: input.shotscur,
+    shotsmax: input.shotsmax,
+  }
+  try {
+    const result = repair(char, item, { rng: seqRng([input.brokeRoll, input.durabilityRoll]) })
+    // 성공: SUT의 실제 청구액(gold-goldAfter)으로 cost를 관측한다. 실패: refund로 0이 되므로 nominal.
+    const cost = result.broken ? repairCost(input.value) : char.gold - result.goldAfter
+    return {
+      broken: result.broken,
+      cost,
+      newShotscur: result.item ? result.item.shotscur : null,
+    }
+  } catch (err) {
+    if (err instanceof ShopRejectError) return { broken: true, cost: repairCost(input.value), newShotscur: null }
+    throw err
+  }
+}
+
+describe('런타임 repair SUT 골든 교차검증', () => {
+  const loadFixture = () => {
+    const url = new URL('../../../shared/src/oracle/fixtures/repair.json', import.meta.url)
+    const parsed: unknown = JSON.parse(readFileSync(url, 'utf8'))
+    const result = goldenFixtureSchema.safeParse(parsed)
+    expect(result.success).toBe(true)
+    if (!result.success) throw new Error('repair.json 스키마 실패')
+    return result.data as Parameters<typeof approve>[0]
+  }
+
+  it('goldenFixtureSchema를 통과하고 manual oracle이다', () => {
+    const fixture = loadFixture()
+    expect(fixture.oracle.method).toBe('manual')
+    expect(fixture.cases.length).toBeGreaterThan(0)
+  })
+
+  it('approve가 repair SUT로 전 케이스를 throw 없이 통과한다(파괴·복원·bonusOf·trunc·cost)', () => {
+    const fixture = loadFixture()
+    const sut = (input: unknown) => dispatchRepair(input as RepairCaseInput)
+    expect(() => approve(fixture, sut)).not.toThrow()
+  })
+
+  it('버그 주입 변형(newShotscur+1)에는 approve가 throw한다 (negative control)', () => {
+    const fixture = loadFixture()
+    const buggy = (input: unknown) => {
+      const out = dispatchRepair(input as RepairCaseInput)
+      return {
+        broken: out.broken,
+        cost: out.cost,
+        newShotscur: out.newShotscur === null ? null : out.newShotscur + 1,
+      }
+    }
+    expect(() => approve(fixture, buggy)).toThrow()
+  })
+})
 
 describe('런타임 pawn SUT 골든 교차검증 (T5.4)', () => {
   const loadFixture = () => {

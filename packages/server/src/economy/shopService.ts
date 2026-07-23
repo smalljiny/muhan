@@ -16,7 +16,7 @@
  * 두지 않는다 — G5/G6가 `ctx: { rng }`를 자체 시그니처에 도입한다.
  */
 
-import { buyPrice, mobBuyPrice, sellPrice } from 'shared'
+import { buyPrice, mobBuyPrice, sellPrice, repairCost, bonusOf } from 'shared'
 import type { CombatRng } from '../combat/dice.js'
 
 /**
@@ -244,4 +244,70 @@ export function sell(
   let finalPayout = payout
   if (lucky) finalPayout += payout
   return { goldAfter: char.gold + finalPayout, payout: finalPayout, lucky }
+}
+
+/**
+ * 아이템 수리 게이트가 판독하는 좁은 구조 입력 — 완전한 ObjectInstance가 아니다(D1: object.ts는
+ * 동결). 수리 역학에 필요한 3필드만 좁게 선언한다. adjustment·armor·pdice 등 인챈트 필드는 담지 않는다.
+ */
+export interface RepairItem {
+  readonly value: number
+  readonly shotscur: number
+  readonly shotsmax: number
+}
+
+/**
+ * 아이템을 수리한다(repair, A8 §8 RREPAI, command8.c repair). 수리비를 선차감한 뒤 piety 보정
+ * 실패 굴림을 던진다 — 실패하면 수리비를 환불(net 0)하고 아이템을 파괴하며, 성공하면 내구도를
+ * 복원(shotsmax의 50~90%)한다.
+ *
+ * 역학(오라클 그대로):
+ *   1. cost = repairCost(value)(= trunc(value/4)). char.gold < cost면 insufficient-gold로 거부.
+ *   2. gold -= cost(선차감) 후 broke = rng(1,100) + bonusOf(piety).
+ *   3. 실패 = (broke ≤ 15 && shotscur < 1) || (broke ≤ 5 && shotscur > 0)
+ *        → gold += cost(환불, net 0) + 아이템 파괴(item=null). 성공보다 굴림을 1회만 소비한다.
+ *   4. 성공 = shotscur' = trunc(shotsmax * rng(5,9) / 10). 곱 위에서 절삭한다(hpMax류 그룹핑 트랩:
+ *        `shotsmax * trunc(rng/10)`이 아니다). goldAfter = gold − cost.
+ *
+ * RNG 순서: broke(1,100)를 먼저 굴리고, 성공일 때만 durability(5,9)를 굴린다 — 실패는 굴림 1회,
+ * 성공은 2회다. 순수 함수: char·item을 변이하지 않고 새 결과 객체를 반환한다.
+ *
+ * 유예 범위(이 좁은 타입 밖 — 기록된 결정):
+ *   - 자격 게이트(#106, caller-eligibility): ONOFIX(수리 불가 플래그), "무기·방어구만"
+ *     (type > MISSILE && type != ARMOR), "아직 멀쩡"(shotscur > MAX(3, trunc(shotsmax/10)))은
+ *     item flags/type을 요구하므로 RepairItem 밖이다. 호출자가 repair 호출 전 검사한다.
+ *   - 인챈트 저하(#85/#86, 인챈트 토픽): OENCHA 아이템의 adjustment 강등(mrand(1,50) > piety면
+ *     armor/shotsmax/pdice 감소)은 adjustment·armor·pdice 필드를 건드리므로 D1 좁은 타입 밖이다.
+ *     RNG 위치 제약: 오라클에서 이 mrand(1,50) 굴림은 broke와 durability 굴림 *사이*에 놓인다
+ *     (비인챈트 아이템은 short-circuit되어 현재 2-굴림 SUT가 byte-충실하다). 인챈트가 랜딩하면
+ *     이 굴림을 반드시 broke와 durability 사이에 삽입해야 seqRng 굴림 순서 충실성이 유지된다.
+ */
+export function repair(
+  char: { gold: number; piety: number },
+  item: RepairItem,
+  ctx: { rng: CombatRng },
+): { goldAfter: number; broke: number; broken: boolean; item: RepairItem | null } {
+  const cost = repairCost(item.value)
+  if (char.gold < cost) {
+    throw new ShopRejectError(
+      'insufficient-gold',
+      `gold가 부족합니다: 필요 ${cost}, 보유 ${char.gold}`,
+    )
+  }
+
+  const broke = ctx.rng(1, 100) + bonusOf(char.piety)
+  const broken = (broke <= 15 && item.shotscur < 1) || (broke <= 5 && item.shotscur > 0)
+  if (broken) {
+    // 실패: 선차감한 cost를 환불(net 0)하고 아이템을 파괴한다. durability는 굴리지 않는다.
+    return { goldAfter: char.gold, broke, broken: true, item: null }
+  }
+
+  // 성공: shotsmax * rng(5,9)를 먼저 곱한 뒤 10으로 나눠 절삭한다(곱 위에서 절삭).
+  const durability = Math.trunc((item.shotsmax * ctx.rng(5, 9)) / 10)
+  return {
+    goldAfter: char.gold - cost,
+    broke,
+    broken: false,
+    item: { value: item.value, shotscur: durability, shotsmax: item.shotsmax },
+  }
 }
