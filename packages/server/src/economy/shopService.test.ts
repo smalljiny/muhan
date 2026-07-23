@@ -1,11 +1,16 @@
+import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
-import { buyPrice, mobBuyPrice } from 'shared'
+import { buyPrice, mobBuyPrice, approve, goldenFixtureSchema } from 'shared'
+import { seqRng } from '../combat/dice.testutil.js'
 import {
   buy,
   purchase,
+  sell,
   ShopRejectError,
   type ShopItem,
   type BuyerState,
+  type PawnItem,
+  type ShopRejectReason,
 } from './shopService.js'
 
 /**
@@ -217,5 +222,195 @@ describe('shopService.purchase', () => {
     } catch (err) {
       expect((err as ShopRejectError).reason).toBe('count-limit')
     }
+  })
+})
+
+/**
+ * 전당포 판매 순수 함수 단위 테스트 — sell(A8 §8, command7.c sell)은 거부 매트릭스 5단계 이후
+ * 1/250 이중 지급을 주입 rng로 결정적으로 굴린다. 거부 케이스는 rng를 소비하지 않는다(cascade가
+ * 먼저 종료). 이중 지급은 오라클 pay-twice(`+= sellPrice`)라 lucky payout = 2*sellPrice다.
+ */
+describe('shopService.sell', () => {
+  const makeItem = (overrides: Partial<PawnItem> = {}): PawnItem => ({
+    value: 100,
+    type: 13,
+    shotscur: 0,
+    shotsmax: 0,
+    onewev: false,
+    hasContents: false,
+    ...overrides,
+  })
+
+  // 럭키 아닌 굴림(≠9)을 반환하는 rng. success 케이스는 rng를 정확히 1회 소비한다.
+  const normalRng = { rng: seqRng([1]) }
+  // 빈 시퀀스 — 소비 시 throw한다. 거부 케이스가 rng를 소비하지 않음을 검증하는 데 쓴다.
+  const emptyRng = () => ({ rng: seqRng([]) })
+
+  it('정상 지급: payout=sellPrice(50), lucky=false, goldAfter=gold+50', () => {
+    const char = { gold: 200 }
+    const result = sell(char, makeItem({ value: 100 }), { rng: seqRng([1]) })
+    expect(result.payout).toBe(50)
+    expect(result.lucky).toBe(false)
+    expect(result.goldAfter).toBe(250)
+  })
+
+  it('이중 지급: luckyRoll===9 → payout 100(pay-twice=2*50), lucky=true, goldAfter=gold+100', () => {
+    const char = { gold: 200 }
+    const result = sell(char, makeItem({ value: 100 }), { rng: seqRng([9]) })
+    expect(result.payout).toBe(100)
+    expect(result.lucky).toBe(true)
+    expect(result.goldAfter).toBe(300)
+  })
+
+  it('상한 clamp: value=250000 → payout 100000(비럭키)', () => {
+    const result = sell({ gold: 0 }, makeItem({ value: 250000 }), { rng: seqRng([1]) })
+    expect(result.payout).toBe(100000)
+    expect(result.goldAfter).toBe(100000)
+  })
+
+  it('low-value 경계: value=40 → payout 20 성공', () => {
+    const result = sell({ gold: 0 }, makeItem({ value: 40 }), { rng: seqRng([1]) })
+    expect(result.payout).toBe(20)
+  })
+
+  it('low-value 거부: value=39(payout 19<20) → low-value', () => {
+    expect(() => sell({ gold: 0 }, makeItem({ value: 39 }), normalRng)).toThrow(ShopRejectError)
+    try {
+      sell({ gold: 0 }, makeItem({ value: 39 }), normalRng)
+    } catch (err) {
+      expect((err as ShopRejectError).reason).toBe('low-value')
+    }
+  })
+
+  // reject 사유 단언 헬퍼 — non-throw 시 catch를 건너뛰어 vacuous가 되지 않도록 toThrow 가드를
+  // 먼저 세운 뒤 reason을 검증한다(low-value 테스트 패턴과 동일).
+  const expectReject = (item: PawnItem, reason: ShopRejectReason): void => {
+    expect(() => sell({ gold: 0 }, item, normalRng)).toThrow(ShopRejectError)
+    try {
+      sell({ gold: 0 }, item, normalRng)
+    } catch (err) {
+      expect((err as ShopRejectError).reason).toBe(reason)
+    }
+  }
+
+  it('low-quality 무기 거부: type=0 shotsmax=80 shotscur=10(<=trunc(80/8)=10) → low-quality', () => {
+    expectReject(makeItem({ type: 0, shotsmax: 80, shotscur: 10 }), 'low-quality')
+  })
+
+  it('low-quality 무기 경계: shotscur=11(>10) → 판매 성공 payout 50', () => {
+    const item = makeItem({ type: 0, shotsmax: 80, shotscur: 11 })
+    const result = sell({ gold: 0 }, item, { rng: seqRng([1]) })
+    expect(result.payout).toBe(50)
+  })
+
+  it('low-quality 완드 거부: type=8 shotscur=0(<1) → low-quality', () => {
+    expectReject(makeItem({ type: 8, shotscur: 0 }), 'low-quality')
+  })
+
+  it('low-quality 완드 경계: type=8 shotscur=1 → 판매 성공 payout 50', () => {
+    const item = makeItem({ type: 8, shotscur: 1 })
+    const result = sell({ gold: 0 }, item, { rng: seqRng([1]) })
+    expect(result.payout).toBe(50)
+  })
+
+  it('bound 거부: onewev=true → bound-item', () => {
+    expectReject(makeItem({ onewev: true }), 'bound-item')
+  })
+
+  it('container 거부: hasContents=true → non-empty-container', () => {
+    expectReject(makeItem({ hasContents: true }), 'non-empty-container')
+  })
+
+  it('unsellable 거부: SCROLL(7) → unsellable-type', () => {
+    expectReject(makeItem({ type: 7 }), 'unsellable-type')
+  })
+
+  it('unsellable 거부: POTION(6) → unsellable-type', () => {
+    expectReject(makeItem({ type: 6 }), 'unsellable-type')
+  })
+
+  // cascade 순서 고정 — 여러 게이트를 동시에 어기는 아이템은 오라클 cascade 첫 매칭(bound-item이
+  // container·unsellable보다 먼저)을 낸다. 단일 게이트 케이스만으로는 순서가 고정되지 않는다.
+  it('다중 게이트: onewev=true + type=SCROLL(7) → 먼저 걸리는 bound-item', () => {
+    expectReject(makeItem({ onewev: true, type: 7 }), 'bound-item')
+  })
+
+  // roll-after-reject 불변식: 거부 케이스는 rng를 소비하지 않는다. 빈 seqRng를 넘겨도
+  // ShopRejectError만 나야 한다 — 굴림이 cascade 앞에 잘못 놓이면 "시퀀스 소진"이 대신 난다.
+  it('거부 케이스는 rng를 소비하지 않는다: 빈 seqRng로도 ShopRejectError만 throw', () => {
+    expect(() => sell({ gold: 0 }, makeItem({ value: 39 }), emptyRng())).toThrow(ShopRejectError)
+    expect(() => sell({ gold: 0 }, makeItem({ onewev: true }), emptyRng())).toThrow(ShopRejectError)
+    expect(() => sell({ gold: 0 }, makeItem({ type: 7 }), emptyRng())).toThrow(ShopRejectError)
+  })
+
+  it('입력 아이템은 변이되지 않는다(deep-equal 불변)', () => {
+    const item = makeItem({ value: 100, type: 0, shotsmax: 80, shotscur: 11 })
+    const snapshot = { value: 100, type: 0, shotscur: 11, shotsmax: 80, onewev: false, hasContents: false }
+    sell({ gold: 0 }, item, { rng: seqRng([1]) })
+    expect(item).toEqual(snapshot)
+  })
+})
+
+// T5.4 — 체크인된 pawn.json 골든 fixture를 런타임 sell SUT로 교차검증한다. 각 case의 input을
+// seqRng([luckyRoll])와 함께 sell에 디스패치한다. 거부는 ShopRejectError를 잡아
+// {rejectReason, payout:0}로, 성공은 {rejectReason:null, payout}로 정규화한다(거부는 rng 미소비,
+// 성공은 1회 소비). negative control(버그 주입) 없으면 approval이 vacuous하므로 함께 둔다.
+type PawnCaseInput = {
+  value: number
+  type: number
+  shotscur: number
+  shotsmax: number
+  onewev: boolean
+  hasContents: boolean
+  luckyRoll: number
+}
+
+function dispatchPawn(input: PawnCaseInput): { rejectReason: string | null; payout: number } {
+  const item: PawnItem = {
+    value: input.value,
+    type: input.type,
+    shotscur: input.shotscur,
+    shotsmax: input.shotsmax,
+    onewev: input.onewev,
+    hasContents: input.hasContents,
+  }
+  try {
+    const result = sell({ gold: 0 }, item, { rng: seqRng([input.luckyRoll]) })
+    return { rejectReason: null, payout: result.payout }
+  } catch (err) {
+    if (err instanceof ShopRejectError) return { rejectReason: err.reason, payout: 0 }
+    throw err
+  }
+}
+
+describe('런타임 pawn SUT 골든 교차검증 (T5.4)', () => {
+  const loadFixture = () => {
+    const url = new URL('../../../shared/src/oracle/fixtures/pawn.json', import.meta.url)
+    const parsed: unknown = JSON.parse(readFileSync(url, 'utf8'))
+    const result = goldenFixtureSchema.safeParse(parsed)
+    expect(result.success).toBe(true)
+    if (!result.success) throw new Error('pawn.json 스키마 실패')
+    return result.data as Parameters<typeof approve>[0]
+  }
+
+  it('goldenFixtureSchema를 통과하고 manual oracle이다', () => {
+    const fixture = loadFixture()
+    expect(fixture.oracle.method).toBe('manual')
+    expect(fixture.cases.length).toBeGreaterThan(0)
+  })
+
+  it('approve가 sell SUT로 전 케이스를 throw 없이 통과한다(거부 매트릭스·정상·이중·상한)', () => {
+    const fixture = loadFixture()
+    const sut = (input: unknown) => dispatchPawn(input as PawnCaseInput)
+    expect(() => approve(fixture, sut)).not.toThrow()
+  })
+
+  it('버그 주입 변형(payout+1)에는 approve가 throw한다 (negative control)', () => {
+    const fixture = loadFixture()
+    const buggy = (input: unknown) => {
+      const out = dispatchPawn(input as PawnCaseInput)
+      return { rejectReason: out.rejectReason, payout: out.payout + 1 }
+    }
+    expect(() => approve(fixture, buggy)).toThrow()
   })
 })

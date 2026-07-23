@@ -16,7 +16,8 @@
  * 두지 않는다 — G5/G6가 `ctx: { rng }`를 자체 시그니처에 도입한다.
  */
 
-import { buyPrice, mobBuyPrice } from 'shared'
+import { buyPrice, mobBuyPrice, sellPrice } from 'shared'
+import type { CombatRng } from '../combat/dice.js'
 
 /**
  * 상점 재고/취득 아이템의 좁은 구조 입력 — 완전한 ObjectInstance가 아니다. 캐릭터 인벤토리
@@ -42,6 +43,11 @@ export interface BuyerState {
 export type ShopRejectReason =
   | 'insufficient-gold'
   | 'count-limit'
+  | 'low-value'
+  | 'low-quality'
+  | 'bound-item'
+  | 'non-empty-container'
+  | 'unsellable-type'
 
 /** 상점 거래가 규칙 게이트에 걸려 거부될 때 던진다. reason으로 사유를 구분한다. */
 export class ShopRejectError extends Error {
@@ -147,4 +153,95 @@ export function purchase(
     )
   }
   return { goldAfter: char.gold - price, item: cloneShopItem(item) }
+}
+
+/**
+ * object 타입 코드(A8 §1 taxonomy) — 판매 게이트가 판독하는 상수. 원본 mstruct.h의 오브젝트
+ * 종류 열거. sell의 poorquality·unsellable 판정에만 필요한 항목을 명명 상수로 노출한다.
+ */
+const MISSILE = 4
+const ARMOR = 5
+const POTION = 6
+const SCROLL = 7
+const WAND = 8
+const KEY = 11
+
+/** 저품질 판정 하한 — 충전물(WAND/KEY)이 이 미만이면 방전으로 본다(shotscur < 1). */
+const CHARGE_MIN = 1
+
+/** 1/250 이중 지급 굴림의 당첨 값 — 오라클 `((time(0)+mrand(1,100))%250)==9`의 `==9` 상수. */
+const LUCKY_ROLL = 9
+
+/**
+ * 전당포 판매 게이트가 판독하는 좁은 구조 입력 — 완전한 ObjectInstance가 아니다(D1: object.ts는
+ * 동결이며 shotsmax·flags를 담지 않는다). 판매 규칙에 필요한 필드만 좁게 선언한다.
+ */
+export interface PawnItem {
+  readonly value: number
+  readonly type: number
+  readonly shotscur: number
+  readonly shotsmax: number
+  /** ONEWEV 플래그 — 개인 귀속 아이템(판매 불가). */
+  readonly onewev: boolean
+  /** first_obj 존재 — 비빈 컨테이너면 true(내용물 있는 채로 판매 불가). */
+  readonly hasContents: boolean
+}
+
+/**
+ * 아이템을 전당포에 판매한다(sell, A8 §8, command7.c sell). 판매가는 shared의 sellPrice
+ * (min(trunc(value/2), 100000))를 소비한다 — 공식을 재유도하지 않는다.
+ *
+ * 거부 매트릭스(오라클 cascade 순서 그대로):
+ *   1. payout < 20                             → low-value
+ *        (오라클 `gold < 20`과 동치다: gold=trunc(value/2)라 value<40이면 payout<20이고, 상한
+ *         100000은 절대 20 미만이 아니므로 clamp가 이 경계를 바꾸지 않는다.)
+ *   2. poorquality                             → low-quality
+ *        (type <= MISSILE || type == ARMOR) && shotscur <= trunc(shotsmax/8)  // 마모 장비·투척
+ *        (type == WAND || type == KEY) && shotscur < CHARGE_MIN               // 방전 충전물
+ *   3. onewev(개인 귀속)                          → bound-item
+ *   4. hasContents(비빈 컨테이너)                  → non-empty-container
+ *   5. type == SCROLL || type == POTION         → unsellable-type
+ *
+ * 이중 지급: 다섯 게이트를 모두 통과한 뒤에만 `ctx.rng(1, 250)`를 1회 굴린다 — 거부 케이스는 rng를
+ * 소비하지 않는다(오라클도 lucky를 cascade 최후에 판정). 굴림이 LUCKY_ROLL(9)이면 오라클 pay-twice
+ * (`gold += sellPrice` 두 번)를 그대로 재현해 payout에 sellPrice를 한 번 더 더한다 → lucky payout은
+ * 2*sellPrice다. A8 §10-e에 따라 오라클의 time(0) 벽시계 의존은 버리고 확률 1/250(콘텐츠)만 보존한다.
+ *
+ * 순수 함수: char·item을 변이하지 않고 새 결과 객체를 반환한다. 영속화·인벤토리 제거는 호출자(#106)의 몫.
+ */
+export function sell(
+  char: { gold: number },
+  item: PawnItem,
+  ctx: { rng: CombatRng },
+): { goldAfter: number; payout: number; lucky: boolean } {
+  const payout = sellPrice(item.value)
+
+  if (payout < 20) {
+    throw new ShopRejectError('low-value', `판매가가 너무 낮습니다: ${payout} < 20`)
+  }
+
+  const worn =
+    (item.type <= MISSILE || item.type === ARMOR) &&
+    item.shotscur <= Math.trunc(item.shotsmax / 8)
+  const discharged = (item.type === WAND || item.type === KEY) && item.shotscur < CHARGE_MIN
+  if (worn || discharged) {
+    throw new ShopRejectError('low-quality', '품질이 낮아 매입할 수 없습니다')
+  }
+
+  if (item.onewev) {
+    throw new ShopRejectError('bound-item', '개인 귀속 아이템은 판매할 수 없습니다')
+  }
+
+  if (item.hasContents) {
+    throw new ShopRejectError('non-empty-container', '내용물이 있는 컨테이너는 판매할 수 없습니다')
+  }
+
+  if (item.type === SCROLL || item.type === POTION) {
+    throw new ShopRejectError('unsellable-type', '두루마리·물약은 매입 대상이 아닙니다')
+  }
+
+  const lucky = ctx.rng(1, 250) === LUCKY_ROLL
+  let finalPayout = payout
+  if (lucky) finalPayout += payout
+  return { goldAfter: char.gold + finalPayout, payout: finalPayout, lucky }
 }
