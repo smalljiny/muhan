@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import {
   buildObjectTemplateIndex,
   loadObjectTemplates,
-  type ObjectTemplate,
   type RawObjectTemplate,
 } from './objectTemplate.js'
 

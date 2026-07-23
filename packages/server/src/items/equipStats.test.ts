@@ -131,7 +131,7 @@ describe('projectEquipStats', () => {
 
   it('입력 배열을 변형하지 않는다(immutability)', () => {
     const equipped = [pair({ _id: 'a', slot: 19 }, { armor: 5, adjustment: 3 })]
-    const snapshot = JSON.parse(JSON.stringify(equipped))
+    const snapshot = structuredClone(equipped)
     projectEquipStats(equipped, 10)
     expect(equipped).toEqual(snapshot)
   })
