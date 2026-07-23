@@ -147,6 +147,13 @@ describe('study — 비법서 연마(T3.2)', () => {
     expect(result.ok).toBe(false)
     expect(result.failure).toBe('no-spell')
   })
+
+  it('magicpower-1이 카탈로그 밖이면 no-spell 실패(상한 초과 인덱스 write 차단)', () => {
+    const result = study(baseChar(), baseBook({ magicpower: 1000 }))
+    expect(result.ok).toBe(false)
+    expect(result.failure).toBe('no-spell')
+    expect(result.spells).toEqual(baseChar().spells)
+  })
 })
 
 describe('teach — 주문 전수(T3.3)', () => {

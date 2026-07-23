@@ -119,7 +119,9 @@ export function study(char: StudyChar, book: SpellBook): StudyResult {
   }
 
   // ⑥ magicpower<1이면 담긴 주문이 없어(splno=-1) 세팅 불가 — 음수 인덱스 write 차단(consume.ts 선례).
-  if (book.magicpower < 1) return unchanged('no-spell')
+  //    magicpower-1이 카탈로그 밖이면 setKnown이 spells 배열을 length(16) 밖으로 확장해 스키마
+  //    불변식을 깬다 — teach()의 spellByNo 멤버십 가드를 미러링해 상한도 막는다.
+  if (book.magicpower < 1 || spellByNo(book.magicpower - 1) === undefined) return unchanged('no-spell')
 
   // 통과 — S_SET(magicpower-1)한 새 store 반환.
   return { ok: true, failure: null, spells: setKnown(char.spells, book.magicpower - 1) }
