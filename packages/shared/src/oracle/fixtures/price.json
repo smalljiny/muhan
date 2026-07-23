@@ -1,0 +1,107 @@
+{
+  "fn": "price",
+  "oracle": {
+    "method": "manual",
+    "source": "command7.c:169/258, command8.c:249, command10.c:573 (A8 §8 가격 배수)",
+    "generatedAt": "2026-07-13T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "fn": "buy",
+        "value": 39
+      },
+      "note": "buy value<40 (정가)",
+      "expected": 39
+    },
+    {
+      "input": {
+        "fn": "mobBuy",
+        "value": 39
+      },
+      "note": "mobBuy 하한 위",
+      "expected": 39
+    },
+    {
+      "input": {
+        "fn": "sell",
+        "value": 39
+      },
+      "note": "sell 홀수 truncation (19.5→19)",
+      "expected": 19
+    },
+    {
+      "input": {
+        "fn": "repair",
+        "value": 39
+      },
+      "note": "repair truncation (9.75→9)",
+      "expected": 9
+    },
+    {
+      "input": {
+        "fn": "buy",
+        "value": 100
+      },
+      "note": "buy 중간값",
+      "expected": 100
+    },
+    {
+      "input": {
+        "fn": "mobBuy",
+        "value": 100
+      },
+      "note": "mobBuy 중간값",
+      "expected": 100
+    },
+    {
+      "input": {
+        "fn": "sell",
+        "value": 100
+      },
+      "note": "sell 중간값 (50%)",
+      "expected": 50
+    },
+    {
+      "input": {
+        "fn": "repair",
+        "value": 100
+      },
+      "note": "repair 중간값 (25%)",
+      "expected": 25
+    },
+    {
+      "input": {
+        "fn": "mobBuy",
+        "value": 5
+      },
+      "note": "mobBuy floor 함정 (5→10)",
+      "expected": 10
+    },
+    {
+      "input": {
+        "fn": "mobBuy",
+        "value": 0
+      },
+      "note": "mobBuy floor 함정 (0→10)",
+      "expected": 10
+    },
+    {
+      "input": {
+        "fn": "sell",
+        "value": 200000
+      },
+      "note": "sell 상한 정확히 (100000)",
+      "expected": 100000
+    },
+    {
+      "input": {
+        "fn": "sell",
+        "value": 250000
+      },
+      "note": "sell 상한 초과 clamp (125000→100000)",
+      "expected": 100000
+    }
+  ]
+}
