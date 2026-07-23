@@ -82,6 +82,8 @@ export const PDISEA = 41
 export const PBLIND = 42
 /** 공포(fear) 상태 — 명중 임계 +2(command5.c:233). PFEARS(mtype.h:388). */
 export const PFEARS = 43
+/** 침묵(silence) 상태 — 발화 불가. teach 전수 게이트가 읽음(magic1.c:145). PSILNC(mtype.h:389). */
+export const PSILNC = 44
 /** 혼돈(Chaotic/!Lawful) — PCHAOS(mtype.h:373). 선악 PvP 동의 게이트가 읽음(command5.c:184). */
 export const PCHAOS = 28
 /**
@@ -115,8 +117,14 @@ export const OPERM2 = 9
 export const ONOTAK = 17
 /** 배경 소품(회수 불가). */
 export const OSCENE = 18
+/** 선인 전용 아이템 — OGOODO(mtype.h:488). study 정렬 게이트(alignment<-100이면 연마 실패, magic1.c:305). */
+export const OGOODO = 12
+/** 악인 전용 아이템 — OEVILO(mtype.h:489). study 정렬 게이트(alignment>100이면 연마 실패, magic1.c:305). */
+export const OEVILO = 13
 /** 저주받은 무기 — OCURSE(mtype.h:498). 불발 시 무기 낙하 제외 조건(command5.c:298). */
 export const OCURSE = 22
+/** 클래스 전용 — OCLSEL(mtype.h:507). study 클래스 게이트 기준 비트(OCLSEL+class로 직업 허용 판정, magic1.c:312). */
+export const OCLSEL = 31
 /** 항상 크리티컬 무기 — OALCRT(mtype.h:518). 크리 판정 자동 통과(command5.c:281). */
 export const OALCRT = 42
 

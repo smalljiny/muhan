@@ -30,3 +30,16 @@ export {
   type OffensiveSpellHandler,
 } from './offensiveSpell.js'
 export { crtSpell, selectSpell, isSelfTargetSpell } from './crtSpell.js'
+export {
+  canTeachSpllv,
+  study,
+  teach,
+  type SpellBook,
+  type StudyChar,
+  type StudyFailure,
+  type StudyResult,
+  type TeachCaster,
+  type TeachTarget,
+  type TeachFailure,
+  type TeachResult,
+} from './learning.js'
