@@ -1,0 +1,65 @@
+{
+  "fn": "realmGrowthAmount",
+  "oracle": {
+    "method": "manual",
+    "source": "magic1.c:1122-1130 (A6 §5, ≅ creature.c:287 expdiv)",
+    "generatedAt": "2026-07-16T00:00:00.000Z",
+    "seed": null
+  },
+  "cases": [
+    {
+      "input": {
+        "m": 15,
+        "exp": 100,
+        "hpmax": 30
+      },
+      "expected": 50,
+      "note": "trunc(15*100/30)=50, MIN(50,100)=50"
+    },
+    {
+      "input": {
+        "m": 7,
+        "exp": 10,
+        "hpmax": 30
+      },
+      "expected": 2,
+      "note": "trunc 절삭: trunc(70/30)=2"
+    },
+    {
+      "input": {
+        "m": 60,
+        "exp": 10,
+        "hpmax": 30
+      },
+      "expected": 10,
+      "note": "exp 캡: trunc(600/30)=20 > exp=10 → MIN=10"
+    },
+    {
+      "input": {
+        "m": 5,
+        "exp": 10,
+        "hpmax": 0
+      },
+      "expected": 10,
+      "note": "hpmax=0 → MAX(1,0)=1 → trunc(50/1)=50, MIN(50,10)=10"
+    },
+    {
+      "input": {
+        "m": 15,
+        "exp": 0,
+        "hpmax": 30
+      },
+      "expected": 0,
+      "note": "exp=0 몬스터 → 성장 0"
+    },
+    {
+      "input": {
+        "m": 30,
+        "exp": 40,
+        "hpmax": 30
+      },
+      "expected": 40,
+      "note": "m==hpmax 경계: trunc(1200/30)=40"
+    }
+  ]
+}

@@ -9,6 +9,7 @@ import type { Caster } from './caster.js'
 import type { CastContext } from './castContext.js'
 import type { SpellDispatch } from './dispatch.js'
 import { mprofic } from './mprofic.js'
+import { realmGrowthAmount } from './realmGrowth.js'
 
 /**
  * offensiveSpell — 공격 주문 20종의 데미지 산술·방상성·마법저항·사망 발화 이식(magic1.c:820-1236, offensive_spell).
@@ -53,10 +54,17 @@ import { REARTH, RWINDR, RFIRER, RWATER } from '../world/roomFlags.js'
 /** bonusType → mprofic 나눗수 K(magic1.c:853-865). 1→10, 2→6, 3→4. */
 const BNS_DIVISOR: Record<number, number> = { 1: 10, 2: 6, 3: 4 }
 
-/** 데미지 적용 결과 — 적용 피해(저항 後)와 사망 여부. no-op(이미 사망)은 dmg=0·died=false. */
+/**
+ * 데미지 적용 결과 — 적용 피해(저항 後)·사망 여부·realm 성장량. no-op(이미 사망)은 전부 0/false.
+ *
+ * `realmGrowth`는 이번 피해로 시전자 `realm[osp.realm-1]`이 자라는 양이다(magic1.c:1128, PvE 한정 —
+ * PLAYER 대상은 0). deathDistribution의 exp delta 반환 선례처럼 **성장량만 보고**하고 실 realm write는
+ * #99 라이브 조립(markDirty seam, OpenQ #2)이 소비한다 — offensiveSpell은 caster.realm을 변형하지 않는다.
+ */
 export interface SpellDamageOutcome {
   readonly dmg: number
   readonly died: boolean
+  readonly realmGrowth: number
 }
 
 /** offensiveSpell 요청 — caster(bns 입력)·casterId(ledger 키)·target(Combatant)·ctx. */
@@ -115,7 +123,9 @@ export function computeBns(caster: Caster, osp: OspellEntry, ctx: CastContext): 
  *   2. 저항 감산(creature 대상 + MRMAGI만) — dmg 0까지, 재-clamp 금지(0 데미지 보존)
  *   3. hpBefore 판독; hp<1이면 no-op(재진입 death 재발화 방지, resolveAttack DEAD_DEFENDER_NOOP 선례)
  *   4. m = min(hpBefore, dmg)                              — 오버킬 캡(저항 後·차감 前)
- *   5. ledger 누적 accumulateDamage(casterId, m)           — creature 대상만(magic1.c:1131)
+ *   5. ledger 누적 accumulateDamage(casterId, m) + realm 성장량 — creature 대상만(magic1.c:1122-1131,
+ *      오라클 crt->type != PLAYER 단일 가드). ledger→growth 순서, hp 차감 前. 성장량만 보고
+ *      (caster.realm write 없음 — #99 seam). 기존 데미지·ledger·death 순서 불변.
  *   6. hp -= dmg (원본 ref in-place)
  *   7. hp<1이면 death seam 정확히 1회(auto-hit — 다중공격·hit 굴림 없음, #82 seam 재사용)
  */
@@ -136,15 +146,21 @@ function applySpellDamage(
     dmg -= Math.trunc((dmg * 2 * Math.min(50, inst.piety + inst.intelligence)) / 100)
   }
 
-  // 3. no-op 가드 — 이미 사망(hp<1)한 대상엔 차감·death·ledger 없이 반환.
+  // 3. no-op 가드 — 이미 사망(hp<1)한 대상엔 차감·death·ledger·성장 없이 반환.
   const hpBefore = combatantHp(target)
-  if (hpBefore < 1) return { dmg: 0, died: false }
+  if (hpBefore < 1) return { dmg: 0, died: false, realmGrowth: 0 }
 
   // 4. 오버킬 캡(저항 後, 차감 前).
   const m = Math.min(hpBefore, dmg)
 
-  // 5. ledger 누적 — creature 대상만.
-  if (target.kind === 'creature') accumulateDamage(ctx.ledger, casterId, m)
+  // 5. ledger 누적 + realm 성장량 — creature 대상만(오라클 crt->type != PLAYER 단일 가드). ledger→growth
+  // 순서 유지. PLAYER 대상(PvP·자기대상)은 이 블록을 건너뛰어 성장 0. experience는 선택 필드 → ?? 0
+  // (deathDistribution 선례). 성장량만 보고 — caster.realm 실 write는 #99 seam.
+  let realmGrowth = 0
+  if (target.kind === 'creature') {
+    accumulateDamage(ctx.ledger, casterId, m)
+    realmGrowth = realmGrowthAmount(m, target.instance.experience ?? 0, target.instance.hpmax)
+  }
 
   // 6. hp 차감(원본 ref).
   applyCombatantDamage(target, dmg)
@@ -153,12 +169,13 @@ function applySpellDamage(
   const died = hpBefore - dmg < 1
   if (died) fireDeath(target, ctx)
 
-  return { dmg, died }
+  return { dmg, died, realmGrowth }
 }
 
 /**
  * offensiveSpell — bns 계산 → 데미지 적용. 공격 주문 20종 공통 effect(osp가 tier·realm·주사위를 담는다).
- * casterId는 caster가 creature면 instanceId, player면 characterId(ledger 키). realm 성장(addrealm)은 #85 소관 미이식.
+ * casterId는 caster가 creature면 instanceId, player면 characterId(ledger 키). realm 성장(addrealm)은
+ * outcome.realmGrowth로 보고한다(PvE 한정, magic1.c:1128) — 실 realm write는 #99 seam.
  */
 export function offensiveSpell(req: OffensiveSpellRequest, osp: OspellEntry): SpellDamageOutcome {
   const bns = computeBns(req.caster, osp, req.ctx)
