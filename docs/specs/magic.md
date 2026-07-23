@@ -87,15 +87,15 @@ Caster { mpCurrent, level, realm[], class, intBonus, knows(spellNo) }
 ```
 
 - `mpCurrent`만 가변이다. `toCaster`가 get/set을 라이브 소스(`creature.mpcur` / `state.mpCurrent`)에 **write-through 바인딩**해, 게이트의 마나 소비가 실 MP를 감소시킨다(스냅샷이면 소비가 유실). worldGraph 승인 가변 carve-out과 동류다.
-- 플레이어는 #84에 spell store가 없어 `realm=[0,0,0,0]`·`knows=false` forward-compat seam을 반환한다(#85가 실 store로 대체). `intBonus`는 `bonusOf(intelligence)` 사전 계산값이다.
+- 플레이어는 #84 단독으로는 spell store가 없어 `realm=[0,0,0,0]`·`knows=false` forward-compat seam을 반환했다. **#85(magic-progression)가 이 stub을 실 플레이어 spell store로 대체**해 knowledge 게이트·realm 숙련을 라이브화한다(→ [magic-progression.md](magic-progression.md)). `intBonus`는 `bonusOf(intelligence)` 사전 계산값이다.
 
 ### 디스패치
 
 `SpellDispatch<H>`는 주문번호 → 핸들러 O(1) 조회다. 입력 키는 주문번호이며, 한글 주문명 → 번호 해소는 command router 소관(범위 밖)이다. 분기는 카탈로그(`spellByNo(n).offensive`)를 데이터 원천으로 소비한다(하드코딩 20/36 금지):
 
 - **offensive 20** → 등록 가능한 핸들러 슬롯.
-- **비-offensive 36** → `NOT_IMPLEMENTED` 심볼 마커(#85 유예).
-- `register`는 카탈로그 밖·비-offensive 주문을 throw로 거부한다 — 등록 슬롯은 offensive 20종뿐이다.
+- **비-offensive 36** → #84 단계에서는 `NOT_IMPLEMENTED` 심볼 마커였고, **#85(magic-progression)가 실 핸들러로 대체**한다(buff/debuff/instant 디스패치, → [magic-progression.md](magic-progression.md)).
+- `register`는 카탈로그 밖 주문을 throw로 거부한다. offensive 디스패처는 offensive 20종만 등록하고, 비-offensive effect 디스패치는 #85가 별도 디스패처로 소유한다.
 
 핸들러 형태 `H`는 제네릭으로 열어 소비자(offensiveSpell·crtSpell)가 결정한다.
 
@@ -149,7 +149,7 @@ offensive effect는 **명중 굴림을 하지 않는다**(주문은 auto-hit). �
 MMAGIC 몬스터의 시전 seam으로, combat `CastSpellSeam` 시그니처 `(caster, target, ctx) => 'cast'|'none'`를 직접 만족해 `createCombatTick`의 `castSpell` 의존에 주입된다. 반환값은 오라클 라운드 재현이다 — `'cast'`=이번 라운드 근접을 주문이 대체(`doMelee=false`), `'none'`=주문 미발동으로 근접 진행.
 
 1. **한 pick**(`selectSpell`): 아는 주문을 비트 순서로 최대 10개 수집해 `rng(1, knowctr)`로 **한 번만** 선택한다(재추첨 금지). 빈 경우 SHURTS(1) 폴백(rng 미호출). spells 비트폭은 128비트(16바이트)다.
-2. **offensive 판정**: `ospellOf(spellNo)`가 곧 offensive 게이트다. 비-offensive(self-target 치유 3종 포함)면 `'none'`으로 접힌다 — 본체는 #85 유예, self-target 시전도 #85 소관(`isSelfTargetSpell` 구조만 forward-compat로 남긴다).
+2. **offensive 판정**: `ospellOf(spellNo)`가 곧 offensive 게이트다. 비-offensive면 `'none'`으로 접힌다. 단 **self-target 치유 3종(SVIGOR/SMENDW/SFHEAL)은 #85(magic-progression)가 실구현**해 자기 대상(num=2)으로 G7 healing effect를 재사용하고 `'cast'`로 접는다(→ [magic-progression.md](magic-progression.md)). #84 단계에서는 `isSelfTargetSpell` 구조만 forward-compat로 남겼다.
 3. **시전 게이트**: `applyCastGate`(mana → class → knowledge). tier5 공격주문 4종(SICEBL·STHUND·SEQUAK·SFLFIL)은 `requiredClasses=[MAGE]`를 실어 비-MAGE·비-INVINCIBLE 몬스터(88종이 오탑재)를 차단한다("도술사만 쓸 수 있는 마법", magic1.c:900). 게이트 실패는 곧 `'none'`(오라클 `return 0`과 동치).
 4. **offensive 시전**: 통과 시 디스패처로 핸들러를 해소하고 `gated=true`로 호출한 뒤 `'cast'` 반환.
 
@@ -159,11 +159,11 @@ combat `createCombatTick`의 `castSpell?` 의존에 `crtSpell`을 주입한다. 
 
 ## 제약사항 / 범위 밖
 
-- **비-offensive effect 본체**(치유·해독·버프·감지·이동·디버프·유틸 36주문) → **#85**. 카탈로그 엔트리(메타데이터)는 존재하되 함수 본체는 유예.
-- **지속효과 타이머**(protection/bless/invisibility/fear/silence/charm dur) → #85.
-- **realm 숙련 성장 write**(`addrealm`) → #85. #84는 `mprofic` 읽기만.
-- **저항 버프 effect**(resist_fire/cold/magic 등 플래그를 *켜는* 주문) → #85. #84는 대상 기존 MRMAGI 플래그에 대한 감산만.
-- **학습·전수**(study/teach, `spells[16]` 획득·`spllv` 전수등급) → #85. #84는 knowledge 게이트 읽기(`S_ISSET`)만.
+- **비-offensive effect 본체**(치유·해독·버프·감지·이동·디버프·유틸 36주문) → **#85 완료**([magic-progression.md](magic-progression.md)). #84는 카탈로그 엔트리(메타데이터)만 확정했다.
+- **지속효과 타이머**(protection/bless/invisibility/fear/silence/charm dur) → **#85 완료**(절대-틱 `until` polling 모델).
+- **realm 숙련 성장 write**(`addrealm`) → **#85 완료**(PvE 한정 순수 함수). #84는 `mprofic` 읽기만.
+- **저항 버프 effect**(resist_fire/cold/magic 등 플래그를 *켜는* 주문) → **#85 완료**. #84는 대상 기존 MRMAGI 플래그에 대한 감산만.
+- **학습·전수**(study/teach, `spells[16]` 획득·`spllv` 전수등급) → **#85 완료**. #84는 knowledge 게이트 읽기(`S_ISSET`)만.
 - **scroll/potion/wand 아이템 delivery** → **#86**. #84는 `gated` 추상 인터페이스만 정의.
 - **라이브 플레이어 `cast`/`read`/`drink`/`zap` 명령 라우팅** → 별도 command dispatcher 토픽. #84는 순수 seam만 제공.
 - **MMAGIO proficiency 기반 시전 확률** → 미이식.
@@ -179,4 +179,5 @@ combat `createCombatTick`의 `castSpell?` 의존에 `crtSpell`을 주입한다. 
 
 - oracle: `docs/notes/game-analysis-20260625/a6-magic.md`(§1~4·§10), `legacy/muhan/src/magic1.c`(offensive_spell)·`magic8.c`(spell_fail)·`update.c:654`(crt_spell)·`global.c:571-659`(spllist·ospell)
 - 의존 스펙: [combat.md](combat.md)(`CastSpellSeam`·death seam·`CreatureInstance` operand) · [stats-core.md](stats-core.md)(파생 스탯·`bonusOf`) · [progression.md](progression.md)(MP 재생 — #84는 소비만) · [golden-fixture-harness.md](golden-fixture-harness.md)(오라클 fixture 규약)
-- 후속: #85(E6b-2 마법 지속·성장) · #86(E6d-1 아이템 delivery) · #99(combat production boot 배선) · #100(전사계 spell_fail 배선)
+- 확장 계층: [magic-progression.md](magic-progression.md)(E6b-2 #85 — spell store·학습·성장·타이머·비-offensive effect·몬스터 self-heal)
+- 후속: #86(E6d-1 아이템 delivery) · #99(combat production boot 배선) · #100(전사계 spell_fail 배선) · #106(라이브 command 라우팅) · #108(self-heal healer-class 게이트)
