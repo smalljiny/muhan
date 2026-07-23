@@ -193,8 +193,8 @@ export function crtSpell(
     //       - 마나 소비(mpcur-=2/4/20): 카탈로그에 치유 주문 mana 정본이 없다(offensive tier grid만 mp 보유).
     //         날조 없이 이식 불가 → 라이브 게이트가 채우는 #106 유예.
     //       - healer-class 게이트(vigor: class!=CLERIC && !=PALADIN && <INVINCIBLE): class·상수 모두 존재해
-    //         이식은 가능하나 T11.1의 무조건 시전 계약(criterion #1)이 범위를 좁혔다 → 스코프 유예(후속 이슈).
-    //         SMENDW/SFHEAL의 게이트는 미대조라 3종 동일 규칙으로 단정하지 않는다(per-spell 확인은 후속).
+    //         이식은 가능하나 T11.1의 무조건 시전 계약(criterion #1)이 범위를 좁혔다 → 스코프 유예(#108).
+    //         SMENDW/SFHEAL의 게이트는 미대조라 3종 동일 규칙으로 단정하지 않는다(per-spell 확인은 #108).
     if (isSelfTargetSpell(spellNo)) return castSelfHeal(caster, spellNo, ctx)
     return 'none'
   }
