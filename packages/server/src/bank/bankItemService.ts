@@ -25,6 +25,14 @@ import type { BankRepository } from '../repo/bankRepository.js'
  * (`{$ne:...}` 등)을 차단한다.
  *
  * #106 caller-wiring으로 유예된 검증(기록된 결정):
+ *   - tenant 인증(bankAccount.owner===characterId) 미검증: 이 서비스는 아이템이 해당 은행/캐릭터
+ *     소유인지는 보지만, 넘어온 bankAccountId가 characterId *본인의* 계좌인지는 검증하지 않는다
+ *     — bankAccount.owner를 소비하지 않는다. 따라서 caller가 타인의 bankAccountId를 주입/재생하면
+ *     타 계좌 아이템을 인출할 수 있다. 이는 이미-머지된 `bankTransactionService`(deposit/withdraw가
+ *     `_id`+gold 조건만 필터하고 bankAccount.owner를 검사하지 않음)와 **동일한 표준 아키텍처**다 —
+ *     인증은 인증된 actor/계좌를 공급하는 #106 live-routing 계층에 할당돼 있다(spec Non-goals·D3).
+ *     end-state로 서비스 계층 tenant-auth를 둘 경우 두 은행 서비스 + spec을 함께 고치는 별도
+ *     하드닝 결정이며(#106 또는 전용 이슈), #87 seam에 단독 도입하면 두 서비스 자세가 분열한다.
  *   - 재지정 *대상* 존재 확인 미포함: bankStore는 목적지 bankAccount 존재를, bankWithdraw는
  *     목적지 character 존재를 검증하지 않는다(존재하지 않는 id로 재지정하면 오브젝트가 고아가 될
  *     수 있다). #106이 인증된 actor의 계좌/캐릭터 id를 공급하므로 seam 범위에선 유예한다 —
