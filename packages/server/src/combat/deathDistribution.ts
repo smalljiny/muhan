@@ -25,10 +25,16 @@ import { F_ISSET, MTRADE } from '../world/hexFlags.js'
  *     각 기여자에 loop-invariant로 동일 적용한다.
  *  3. contributor 정의: `enemies` 멤버 AND `ledger.get(id) > 0`. 이 집합이 awards와 groupkill 카운트를
  *     둘 다 구동한다. 순서는 **enemies 배열 순서**(오라클 first_enm 순회 충실 — ledger Map 순서 아님).
- *  4. ★ plan divergence: alignment 페널티는 **기여자마다**(오라클 루프 내부). 플랜 T7.2 "살해자"는
- *     오라클과 충돌하므로 오라클(behavioral truth, CLAUDE.md 포팅 원칙)로 이식한다. exp 0 기여자도
- *     award·alignmentDelta를 받는다(early-skip 금지 — 오라클은 player 발견 시 매 iteration 적용).
- *     alignment 클램프 ±1000은 라이브 누적 시점(#99) 소유 — 이 resolver는 delta만 반환(무클램프).
+ *  4. ★ 이중 divergence: (a) alignment 페널티를 **기여자마다** 적용한다(오라클 루프 내부). 플랜 T7.2
+ *     "살해자"는 오라클과 충돌하므로 오라클(behavioral truth, CLAUDE.md 포팅 원칙)로 이식한다.
+ *     (b) **기여자 축 divergence(오라클 대비 축소)**: 오라클 루프 게이트는 `find_who(ep->enemy)`
+ *     (플레이어 present/해소 여부, 데미지 무관)라, present인 0-데미지 적(빗나간 오프너가 resolveAttack
+ *     전 registerEnemy로 등록한 경우 등)도 exp(절삭 0)·alignment 페널티·groupkill 카운트를 받는다.
+ *     이 포트는 기여자를 `damage > 0`으로 좁혀(#3) 그런 적을 셋 다에서 제외한다 — awards·groupkill·
+ *     alignment가 present 축이 아닌 damage 축으로 게이팅된다. 여기서 "exp 0 기여자"는 damage>0이나
+ *     절삭 0인 경우만 가리키며, 진짜 0-데미지 present 적은 제외된다. 라이브 조립(#99)이 기여자 축을
+ *     present 기준으로 재검토할지 결정한다(이 resolver는 반환만). alignment 클램프 ±1000도 #99 소유
+ *     (delta만 반환, 무클램프).
  *  5. levels 루프 미이식: 오라클 A 블록(creature.c:278~285, `levels`·첫 `expdiv=exp/levels`)은
  *     B 블록이 덮어쓰는 사장 코드 → 이식하지 않는다.
  *  6. MTRADE 게이트는 인벤토리만, 골드는 무게이트: MTRADE면 인벤토리 드롭 없음(creature.c:311). 골드
