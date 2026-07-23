@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { buyPrice } from 'shared'
+import { buyPrice, mobBuyPrice } from 'shared'
 import {
   buy,
+  purchase,
   ShopRejectError,
   type ShopItem,
   type BuyerState,
@@ -105,6 +106,114 @@ describe('shopService.buy', () => {
     expect(() => buy(char, item)).toThrow(ShopRejectError)
     try {
       buy(char, item)
+    } catch (err) {
+      expect((err as ShopRejectError).reason).toBe('count-limit')
+    }
+  })
+})
+
+/**
+ * 몹 상점 취득 순수 함수 단위 테스트 — purchase(A8 §8 MPURIT)는 mobBuyPrice(max(10,value))로
+ * 게이트하고, get/give/purchase 개수 상한 150을 pre-purchase strict `>`로 검사한다. buy와 달리
+ * 가격 하한(floor 10)이 있어, 저가 아이템은 value보다 비싼 최소 10냥을 요구한다.
+ */
+describe('shopService.purchase', () => {
+  const makeItem = (overrides: Partial<ShopItem> = {}): ShopItem => ({
+    objnum: 42,
+    type: 3,
+    value: 100,
+    shotscur: 0,
+    ...overrides,
+  })
+
+  it('정상: goldAfter=gold-price, 아이템 클론을 반환한다', () => {
+    const char: BuyerState = { gold: 500, invCount: 5 }
+    const item = makeItem({ value: 100 })
+    const result = purchase(char, item)
+    expect(mobBuyPrice(item.value)).toBe(100)
+    expect(result.goldAfter).toBe(400)
+    expect(result.item).toEqual({ objnum: 42, type: 3, value: 100, shotscur: 0 })
+  })
+
+  it('클론은 입력과 다른 별개 객체다(원본 참조 아님)', () => {
+    const char: BuyerState = { gold: 500, invCount: 0 }
+    const item = makeItem()
+    const result = purchase(char, item)
+    expect(result.item).not.toBe(item)
+    expect(result.item).toEqual(item)
+  })
+
+  it('무한 재고: 입력 템플릿 아이템은 변이되지 않는다(deep-equal 불변)', () => {
+    const char: BuyerState = { gold: 999, invCount: 0 }
+    const item = makeItem({ objnum: 7, type: 2, value: 250, shotscur: 3 })
+    const snapshot = { objnum: 7, type: 2, value: 250, shotscur: 3 }
+    purchase(char, item)
+    expect(item).toEqual(snapshot)
+  })
+
+  it('클론은 소유자 필드가 없는 순수 디스크립터다(넓은 입력의 여분 필드 제거)', () => {
+    const char: BuyerState = { gold: 500, invCount: 0 }
+    const wide = { objnum: 5, type: 1, value: 50, shotscur: 0, _id: 'x', owner: 'c1' }
+    const { item: clone } = purchase(char, wide)
+    expect(clone).toEqual({ objnum: 5, type: 1, value: 50, shotscur: 0 })
+    expect('_id' in clone).toBe(false)
+    expect('owner' in clone).toBe(false)
+  })
+
+  it('가격 하한: value=5여도 price=mobBuyPrice=10이다(max(10,value))', () => {
+    expect(mobBuyPrice(5)).toBe(10)
+  })
+
+  it('하한 경계: value=5, gold=9면 price 10에 못 미쳐 insufficient-gold로 거부한다', () => {
+    const char: BuyerState = { gold: 9, invCount: 0 }
+    const item = makeItem({ value: 5 })
+    expect(() => purchase(char, item)).toThrow(ShopRejectError)
+    try {
+      purchase(char, item)
+    } catch (err) {
+      expect((err as ShopRejectError).reason).toBe('insufficient-gold')
+    }
+  })
+
+  it('하한 경계: value=5, gold=10이면 price 10 전액 지불로 성공, goldAfter=0', () => {
+    const char: BuyerState = { gold: 10, invCount: 0 }
+    const item = makeItem({ value: 5 })
+    const result = purchase(char, item)
+    expect(result.goldAfter).toBe(0)
+    expect(result.item).toEqual({ objnum: 42, type: 3, value: 5, shotscur: 0 })
+  })
+
+  it('gold<price: insufficient-gold로 거부한다', () => {
+    const char: BuyerState = { gold: 99, invCount: 0 }
+    const item = makeItem({ value: 100 })
+    expect(() => purchase(char, item)).toThrow(ShopRejectError)
+    try {
+      purchase(char, item)
+    } catch (err) {
+      expect((err as ShopRejectError).reason).toBe('insufficient-gold')
+    }
+  })
+
+  it('count 경계: invCount=149면 성공한다(pre-purchase 149 ≤ 150)', () => {
+    const char: BuyerState = { gold: 500, invCount: 149 }
+    const item = makeItem({ value: 100 })
+    const result = purchase(char, item)
+    expect(result.goldAfter).toBe(400)
+  })
+
+  it('count 경계: invCount=150이면 성공한다(오라클 strict > — 150 보유자 취득 가능, 151에서 종료)', () => {
+    const char: BuyerState = { gold: 500, invCount: 150 }
+    const item = makeItem({ value: 100 })
+    const result = purchase(char, item)
+    expect(result.goldAfter).toBe(400)
+  })
+
+  it('count 경계: invCount=151이면 count-limit으로 거부한다(pre-purchase 151 > 150)', () => {
+    const char: BuyerState = { gold: 500, invCount: 151 }
+    const item = makeItem({ value: 100 })
+    expect(() => purchase(char, item)).toThrow(ShopRejectError)
+    try {
+      purchase(char, item)
     } catch (err) {
       expect((err as ShopRejectError).reason).toBe('count-limit')
     }

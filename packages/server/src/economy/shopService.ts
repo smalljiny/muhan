@@ -16,7 +16,7 @@
  * 두지 않는다 — G5/G6가 `ctx: { rng }`를 자체 시그니처에 도입한다.
  */
 
-import { buyPrice } from 'shared'
+import { buyPrice, mobBuyPrice } from 'shared'
 
 /**
  * 상점 재고/취득 아이템의 좁은 구조 입력 — 완전한 ObjectInstance가 아니다. 캐릭터 인벤토리
@@ -62,6 +62,27 @@ export class ShopRejectError extends Error {
 const BUY_COUNT_LIMIT = 200
 
 /**
+ * get/give/purchase 개수 상한 — A8 §8/§13. 몹 상점 취득(purchase)은 buy(200)와 다른 150 상한을
+ * 쓴다. buy와 동일하게 취득 *전* invCount를 strict `>`로 검사한다 — 정확히 150 보유자는 취득에
+ * 성공하고 151에서 종료한다. plan G7 canCarry의 `get/give/purchase > 150` 기준과 동일 경계다.
+ */
+const PURCHASE_COUNT_LIMIT = 150
+
+/**
+ * ShopItem 클론 — 좁은 필드를 명시적으로 선택해 새 객체를 만든다(spread 아님). 호출자가 넓은
+ * 인스턴스를 넘겨도 _id·owner 같은 여분 필드가 새 나가지 않고 항상 소유자 없는 디스크립터가
+ * 보장된다. buy·purchase가 공유한다(복제·무소진 규칙의 단일 구현).
+ */
+function cloneShopItem(item: ShopItem): ShopItem {
+  return {
+    objnum: item.objnum,
+    type: item.type,
+    value: item.value,
+    shotscur: item.shotscur,
+  }
+}
+
+/**
  * 상점 아이템을 구매한다(buy, A8 §8 RSHOPP). 상점은 복제·무소진이므로 재고 원본을 변이하지 않고
  * 소유자 없는 클론 디스크립터를 반환한다(_id·owner 배선은 #106의 몫). 오라클이 클론 직후 수행하는
  * 영구 플래그 해제(OPERM2/OPERMT/OTEMPP)는 ShopItem이 플래그를 담지 않으므로 완전 인스턴스
@@ -91,11 +112,39 @@ export function buy(
       `인벤토리 개수 상한(${BUY_COUNT_LIMIT})을 초과합니다: 현재 ${char.invCount}`,
     )
   }
-  const item: ShopItem = {
-    objnum: shopItem.objnum,
-    type: shopItem.type,
-    value: shopItem.value,
-    shotscur: shopItem.shotscur,
+  return { goldAfter: char.gold - price, item: cloneShopItem(shopItem) }
+}
+
+/**
+ * 몹 상점에서 아이템을 취득한다(purchase, A8 §8 MPURIT). 몹은 템플릿을 무한 복제하므로 재고 원본을
+ * 변이하지 않고 소유자 없는 클론 디스크립터를 반환한다(_id·owner 배선은 #106의 몫). 어느 템플릿을
+ * 클론할지 — 몹의 carry[]에서 itemRef→템플릿 해석 — 는 호출자(#106)의 책임이다. purchase는 이미
+ * 해석된 템플릿 아이템을 파라미터로 받는다(몹 AI·carry[] 인덱싱 없음).
+ *
+ * 게이트: gold < mobBuyPrice(value)(= max(10, value))면 insufficient-gold로 거부한다 — 저가
+ * 아이템도 최소 10냥을 요구한다(A8 §8: MAX(10, value*1)). 개수는 취득 *전* invCount가 150을
+ * 넘으면(invCount > 150) count-limit으로 거부한다 — buy와 동일한 pre-purchase strict `>` 경계이며,
+ * 정확히 150 보유자는 성공한다(부분 결과 없음). 성공 시 goldAfter = gold − price.
+ *
+ * 클론은 buy와 동일하게 좁은 필드를 명시적으로 선택해 구성한다(spread 아님) — 넓은 인스턴스를 넘겨도
+ * _id·owner 같은 여분 필드가 새 나가지 않고 항상 소유자 없는 디스크립터가 보장된다.
+ */
+export function purchase(
+  char: BuyerState,
+  item: ShopItem,
+): { goldAfter: number; item: ShopItem } {
+  const price = mobBuyPrice(item.value)
+  if (char.gold < price) {
+    throw new ShopRejectError(
+      'insufficient-gold',
+      `gold가 부족합니다: 필요 ${price}, 보유 ${char.gold}`,
+    )
   }
-  return { goldAfter: char.gold - price, item }
+  if (char.invCount > PURCHASE_COUNT_LIMIT) {
+    throw new ShopRejectError(
+      'count-limit',
+      `인벤토리 개수 상한(${PURCHASE_COUNT_LIMIT})을 초과합니다: 현재 ${char.invCount}`,
+    )
+  }
+  return { goldAfter: char.gold - price, item: cloneShopItem(item) }
 }
