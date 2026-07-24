@@ -6,6 +6,7 @@ import type {
   SessionAuthPort,
 } from '../../auth/sessionAuthPort.js'
 import { OwnershipError } from '../../auth/sessionAuthPort.js'
+import type { LiveCharacter } from '../../world/liveCharacterRegistry.js'
 
 /**
  * 세션 FSM — 원작 `io->fn` 함수 포인터 상태머신을 대체하는 연결 상태 머신.
@@ -139,6 +140,41 @@ export interface SessionContext {
   // 죽은 연결을 감지해 부수효과 없이 bail한다(좀비 registry 바인딩·형제 세션 evict·유령 idle 타이머 방지). 셸은
   // `() => ctx.closed`로, 테스트는 제어 가능한 함수로 배선한다. required(optional 금지)라 주입 누락 시 컴파일에서 걸린다.
   readonly isClosed: () => boolean
+  /**
+   * 라이브 월드 진입 seam(Story 4) — 캐릭터를 로드해 저장된 방에 배치하고 방 요약을 파생한다.
+   *
+   * **atomic single optional**(all-or-nothing): 세 콜백을 하나의 옵셔널 객체로 묶는다. 개별 옵셔널 3개면
+   * 일부만 주입된 half-wired 상태(예: place는 있고 roomSummary는 없음)가 표현 가능해지지만, 이 코드베이스는
+   * seam을 required-with-noop이나 번들로 묶어 miswiring을 구조적으로 잡는다 — 하나의 옵셔널 객체는
+   * 전부-or-전무라 그 어긋남이 불가능하다. 미주입(undefined)은 T4.5의 정상 상태다: 라이브 월드 의존이
+   * 배선되지 않은 환경(핸드셰이크 전 어댑터·기존 테스트)에서는 hydrate/place/world:room을 통째로 건너뛰어
+   * 기존 동작을 그대로 보존한다. 셸(buildSession)이 주입된 liveCharacterEntry+월드 그래프로 배선하고,
+   * 테스트는 스파이 객체로 배선한다.
+   *
+   * 책임 분리(D-G):
+   *  - `hydrate`는 **부수효과 없는 비동기 로드**(D-G 2)다. 레지스트리 등록·occupants 변경을 하지 않고
+   *    `LiveCharacter`만 조립해 돌려준다 — 그래서 hydrate 뒤 isClosed 가드에서 bail해도 롤백할 상태가 없다.
+   *  - `place`는 동기·멱등(D-G 1)이다. 재연결(resumed)·재-배치는 이미 점유 중이면 no-op이라, 옛 세션 종결이
+   *    새 배치를 지우는 레이스에서 register→place 순서로 place가 이긴다(enterCommand가 순서를 소유).
+   *  - `roomSummary`는 world:room emit용 방 요약을 `live.character.currentRoom`과 **독립적으로**(place 실행
+   *    여부와 무관하게) 월드 그래프에서 파생한다 — resumed에서 place가 no-op이어도 위치 통지가 나가야 한다(D-C).
+   *    미해소 방이면 undefined를 돌려 world:room을 생략한다.
+   */
+  readonly liveWorld?: SessionLiveWorld
+}
+
+/**
+ * `SessionContext.liveWorld`의 구조적 형태 — 라이브 월드 진입 seam의 3콜백 계약.
+ *
+ * 소비자(FSM)가 이 계약을 소유한다(DIP — 인터페이스는 사용처가 정의). 셸측 배선(liveWorldBinding.ts의
+ * `buildSessionLiveWorld`)이 이 타입을 `import type`으로 참조해 구현한다. 타입 전용 import는 런타임에
+ * 완전히 소거되므로 3층 경계(FSM이 셸 모듈을 런타임 의존하지 않음)를 깨지 않는다. 각 콜백 의미(D-G/D-C)는
+ * `SessionContext.liveWorld` 필드 주석 참조.
+ */
+export interface SessionLiveWorld {
+  hydrate(characterId: string): Promise<LiveCharacter>
+  place(live: LiveCharacter): void
+  roomSummary(roomId: number): { roomId: number; exits: string[] } | undefined
 }
 
 /**
@@ -439,14 +475,34 @@ function sessionStateError(message: string): ServerEvent {
  * (등록 상태 확정 후 이벤트). outcome이 'resumed'(link-dead 재연결 rebind)면 session:resumed를,
  * 'entered'(신규 등록)면 session:entered를 발화한다. create 완주 경로도 이 함수를 공유하며 신규
  * 캐릭터는 link-dead일 수 없어 항상 'entered'다.
+ *
+ * 라이브 배치(Story 4): `live`가 주어지면(호출부에서 hydrate로 로드) `enterWorld` **직후** place한다 —
+ * register→place 순서를 이 함수가 소유해, caller가 순서를 어겨 옛 세션 종결(register가 트리거)이 새 배치를
+ * 지우는 레이스를 만들 수 없게 한다(D-G 3). place는 멱등이라 resumed·재-배치에서 no-op이다(D-G 1). world:room은
+ * place 실행 여부와 독립적으로 `live.character.currentRoom`으로 roomSummary를 조회해 발화하므로, place가 no-op된
+ * resumed에서도 위치 통지가 나간다. entered·resumed **양쪽 모두** world:room을 발화한다 — 재연결 클라도 command
+ * 상태에 진입해 자기 위치가 필요하기 때문이다(D-C, 완료 기준은 진입 시점만 요구하나 resumed도 의도적으로 포함).
  */
-function enterCommand(session: SessionContext, characterId: string): ConnectionState {
+function enterCommand(
+  session: SessionContext,
+  characterId: string,
+  live?: LiveCharacter,
+): ConnectionState {
   const outcome = session.enterWorld(characterId)
+  // live는 session.liveWorld가 주입됐을 때만 채워진다(caller 상관). 두 조건을 명시 검사해 room 블록과
+  // 가드 스타일을 맞추고, `?.`의 fails-quiet(주입 어긋나면 배치를 조용히 건너뜀) 대신 명시 분기를 쓴다.
+  if (live !== undefined && session.liveWorld !== undefined) session.liveWorld.place(live)
   session.emit(
     outcome === 'resumed'
       ? { type: 'session:resumed', characterId }
       : { type: 'session:entered', characterId },
   )
+  if (live !== undefined && session.liveWorld !== undefined) {
+    const summary = session.liveWorld.roomSummary(live.character.currentRoom)
+    if (summary !== undefined) {
+      session.emit({ type: 'world:room', roomId: summary.roomId, exits: summary.exits })
+    }
+  }
   return ConnectionState.command
 }
 
@@ -520,10 +576,16 @@ const characterSelectHandler: StateHandler = {
       throw error
     }
 
+    // 라이브 캐릭터를 로드한다(hydrate) — assertOwnership을 통과해 소유가 증명된 **뒤**에만 로드하고
+    // (소유 미증명 캐릭터 로드 금지), isClosed 가드 **전**에 둔다. hydrate는 부수효과가 없어(D-G 2) 아래
+    // 가드에서 bail해도 롤백할 상태가 없다 — 로드했으나 미배치인 채 버려질 뿐이다. liveWorld 미주입이면 skip(T4.5).
+    const live = session.liveWorld ? await session.liveWorld.hydrate(decision.characterId) : undefined
+
     // close-race 가드: 포트 await 도중 소켓이 닫혔으면 월드 등록·command 상태 대입 없이 현재 상태로 bail한다
     // (좀비 바인딩·형제 세션 evict 방지). 현재 상태 반환이라 applyTransition이 no-op이 돼 상태 대입도 일어나지 않는다.
+    // hydrate가 부수효과 없어(D-G 2) 배치 없이 로드만 된 엔트리는 여기서 그냥 버려진다(정리 불필요).
     if (session.isClosed()) return ConnectionState.characterSelect
-    return enterCommand(session, decision.characterId)
+    return enterCommand(session, decision.characterId, live)
   },
 }
 
@@ -561,11 +623,14 @@ const createHandler: StateHandler = {
     }
 
     const summary = await session.sessionAuth.createCharacter(session.account.accountId, decision.dto)
+    // 생성 성공 후 라이브 캐릭터를 로드한다(hydrate) — createCharacter 완료(소유 확정) 뒤, isClosed 가드 전.
+    // characterSelect 경로와 동일한 순서·근거(부수효과 없는 로드, D-G 2). liveWorld 미주입이면 skip(T4.5).
+    const live = session.liveWorld ? await session.liveWorld.hydrate(summary.characterId) : undefined
     // close-race 가드: createCharacter await 도중 소켓이 닫혔으면 command 진입 없이 bail한다(캐릭터는 이미
     // 생성됐으나 죽은 연결을 등록하지 않는다 — 재접속 후 그 캐릭터를 선택하면 정상 진입한다). 현재 상태(create)
     // 반환이라 applyTransition no-op으로 상태 대입도 건너뛴다.
     if (session.isClosed()) return ConnectionState.create
-    return enterCommand(session, summary.characterId)
+    return enterCommand(session, summary.characterId, live)
   },
   onExit(ctx) {
     ctx.createProgress = null

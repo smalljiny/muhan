@@ -23,6 +23,7 @@ import type { ChannelPort } from './channelPort.js'
 import { createNoopChannelAdapter } from './noopChannelAdapter.js'
 import type { PermissionPort } from './permissionPort.js'
 import { createPermissivePermissionAdapter } from './permissivePermissionAdapter.js'
+import { buildSessionLiveWorld, type LiveWorldBinding } from './liveWorldBinding.js'
 import { createSessionRegistry, type SessionRegistry } from './sessionRegistry.js'
 import { createResolveDisconnect } from './resolveDisconnect.js'
 import { createSessionLifecycle, type SessionLifecycle } from './sessionLifecycle.js'
@@ -146,6 +147,11 @@ export function createSafeSend(log: FastifyBaseLogger): (socket: WebSocket, even
  * `enterWorld`도 같은 방식으로 `lifecycle.enterWorld`를 이 ctx·account에 바인딩한 주입 콜백이다 — FSM은
  * characterId만 넘겨 등록/재연결하고, 셸이 registry 조작을 감춘다(3층 경계). account는 위에서 1회 narrow한
  * 값을 캡처해 재확인 없이 쓴다.
+ *
+ * `liveWorld`(Story 4)는 라이브 월드 진입 seam이다 — 주입된 `LiveWorldBinding`(진입 코어+월드 그래프)이
+ * 있을 때만 조립하고, 미주입이면 undefined로 둬 FSM이 hydrate/place/world:room을 통째로 건너뛰게 한다(T4.5,
+ * 기존 동작 보존). lifecyclePort·channelPort 관례처럼 배선 시점에 주입되며, 실 boot 결선은 tryMove 프로덕션
+ * 결선(movement/command 에픽)과 같은 dormant 경계를 따른다.
  */
 function buildSession(
   ctx: ConnectionContext,
@@ -154,6 +160,7 @@ function buildSession(
   deadline: Deadline,
   lifecycle: SessionLifecycle,
   send: (socket: WebSocket, event: ServerEvent) => void,
+  liveWorld?: LiveWorldBinding,
 ): SessionContext {
   if (ctx.account === null) {
     throw new Error('세션 불변식 위반: 인증 게이트를 통과했으나 account가 없다')
@@ -169,6 +176,8 @@ function buildSession(
     // close-race 가드 seam — FSM이 포트 await 재개 후 이 콜백으로 죽은 연결을 감지해 등록·상태 대입을 건너뛴다.
     // 'close' 핸들러가 ctx.closed를 세운다(frameTail 큐와 별개 리스너라 프레임 직렬화로는 못 막는 경로).
     isClosed: () => ctx.closed,
+    // 주입된 라이브 월드 의존이 있을 때만 진입 seam을 조립한다. 미주입이면 undefined(T4.5).
+    liveWorld: liveWorld === undefined ? undefined : buildSessionLiveWorld(liveWorld),
   }
 }
 
@@ -284,6 +293,7 @@ export function registerWebsocket(
   lifecyclePort: SessionLifecyclePort = createNoopSessionLifecycleAdapter(app.log),
   channelPort: ChannelPort = createNoopChannelAdapter(app.log),
   permissionPort: PermissionPort = createPermissivePermissionAdapter(),
+  liveWorld?: LiveWorldBinding,
 ): void {
   const connections = new Map<WebSocket, ConnectionContext>()
 
@@ -483,7 +493,7 @@ export function registerWebsocket(
                 ctx.ready = true
                 await enterInitialState(
                   ctx,
-                  buildSession(ctx, sessionAuth, socket, deadline, lifecycle, safeSend),
+                  buildSession(ctx, sessionAuth, socket, deadline, lifecycle, safeSend, liveWorld),
                 )
                 break
               case 'error':
@@ -515,7 +525,7 @@ export function registerWebsocket(
                   // 공유 상태(state·createProgress) 동시 변이가 없다.
                   await handleSessionFrame(
                     ctx,
-                    buildSession(ctx, sessionAuth, socket, deadline, lifecycle, safeSend),
+                    buildSession(ctx, sessionAuth, socket, deadline, lifecycle, safeSend, liveWorld),
                     parsed,
                   )
                 }

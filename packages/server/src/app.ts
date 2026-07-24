@@ -6,6 +6,7 @@ import type { SessionAuthPort } from './auth/sessionAuthPort.js'
 import { InMemorySessionAuthAdapter } from './auth/inMemorySessionAuthAdapter.js'
 import { registerDevLoginRoute } from './auth/devLoginRoute.js'
 import type { SessionLifecyclePort } from './ws/sessionLifecyclePort.js'
+import type { LiveWorldBinding } from './ws/liveWorldBinding.js'
 
 /**
  * Fastify 앱 인스턴스를 구성한다 (listen 하지 않음).
@@ -30,6 +31,10 @@ import type { SessionLifecyclePort } from './ws/sessionLifecyclePort.js'
  * `deps.devLoginSeedCookie`는 dev 전용 로그인 라우트(`GET /dev/login`)의 게이트다. 값이 주어질 때만
  * 라우트를 마운트해 `__session=<값>` 쿠키를 발급한다(Story 4, G1 서버측). 미주입(프로덕션)이면 라우트가
  * 존재하지 않아 dev 쿠키 발급 표면이 없다. 부팅(index.ts)이 DEV_LOGIN_ENABLED가 true일 때만 주입한다.
+ *
+ * `deps.liveWorld`는 월드 진입 seam(Story 4)의 라이브 의존(진입 코어+월드 그래프)이다. 주입 시 세션이
+ * 캐릭터를 로드해 저장된 방에 배치하고 world:room을 발화한다. 미주입이면 registerWebsocket이 undefined를
+ * 그대로 넘겨 진입 seam을 통째로 건너뛴다(T4.5, 기존 동작 보존) — lifecyclePort 관례 미러.
  */
 export function buildApp(deps?: {
   pingDb?: () => Promise<boolean>
@@ -37,6 +42,7 @@ export function buildApp(deps?: {
   sessionAuth?: SessionAuthPort
   lifecyclePort?: SessionLifecyclePort
   devLoginSeedCookie?: string
+  liveWorld?: LiveWorldBinding
 }): FastifyInstance {
   // logger를 활성화해 부팅/에러 경로 진단(index.ts의 listen 실패 처리)이 실제로 출력되게 한다.
   // https를 넘기면 Fastify가 https.Server를 만든다(TLS-ready pass-through). Fastify 타입 오버로드가
@@ -68,7 +74,9 @@ export function buildApp(deps?: {
   // 평문 GET이라 upgrade 대상이 아니고, 이 앱에 `/game` 외 WS upgrade 대상이 없어 순서로 인한 영향이 없다.
   // lifecyclePort는 미주입 시 registerWebsocket이 no-op 어댑터를 기본으로 세운다(3-arg 기본값). undefined를
   // 그대로 넘겨도 기본 파라미터가 발동하므로 분기 없이 sessionAuth와 같은 패턴으로 전달한다.
-  registerWebsocket(app, sessionAuth, deps?.lifecyclePort)
+  // liveWorld는 미주입 시 undefined를 그대로 넘긴다 — registerWebsocket이 진입 seam을 건너뛴다(T4.5).
+  // channelPort·permissionPort는 registerWebsocket 기본값에 위임하므로 undefined로 통과시킨다.
+  registerWebsocket(app, sessionAuth, deps?.lifecyclePort, undefined, undefined, deps?.liveWorld)
 
   return app
 }
