@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { freeTextPayloadSchema } from './payloads.js'
+import { freeTextPayloadSchema, CHAT_TEXT_MAX, CHAT_TARGET_MAX } from './payloads.js'
 import { characterSummarySchema, promptKindSchema, promptOptionSchema } from './session.js'
 
 /**
@@ -24,6 +24,10 @@ export const errorCodeSchema = z.enum([
   'forbidden',
   // rate_limited = 인바운드 프레임이 연결·계정 속도 상한을 초과해 파싱 전 drop됐다(1회 경고 통지).
   'rate_limited',
+  // rule_rejected = 게임 규칙에 의한 거부(잠긴 문·막힌 길). forbidden(RBAC 자격 없음)·bad_payload(형식
+  // 위반)·session_state(현재 단계에서 불허)·internal(서버 오류)와 구분한다 — 형식·권한·단계는 옳으나
+  // 게임 세계의 규칙이 명령을 막은 경우다(D-D).
+  'rule_rejected',
 ])
 
 /**
@@ -78,6 +82,23 @@ export const serverEventSchema = z.discriminatedUnion('type', [
   z.strictObject({
     type: z.literal('session:resumed'),
     characterId: z.string().min(1),
+  }),
+  // 방 통지 — 이동/입장 성공 시 본인에게 1회 발화하는 최소 방 통지(현재 방 id + 출구 이름 목록).
+  // 주변 점유자·아이템·설명은 싣지 않는다 — 최소 방 상태만 전달하고 나머지는 후속 에픽이 확장한다(D-C).
+  z.strictObject({
+    type: z.literal('world:room'),
+    roomId: z.int().min(0),
+    exits: z.array(z.string()),
+  }),
+  // 채팅 발화 통지 — ChannelDeliveryContext와 1:1 매핑(speaker→speakerCharacterId로 평탄화). 인바운드
+  // chat:message와 이름을 달리해(said vs message) 방향을 판별한다(D-E). channel은 채널 전달 컨텍스트와 동일
+  // 열거, text·target 상한은 인바운드 chat 명령과 같은 값을 아웃바운드에도 적용한다.
+  z.strictObject({
+    type: z.literal('chat:said'),
+    channel: z.enum(['say', 'yell', 'broadcast', 'emote']),
+    speakerCharacterId: z.string().min(1),
+    text: z.string().min(1).max(CHAT_TEXT_MAX),
+    target: z.string().min(1).max(CHAT_TARGET_MAX).optional(),
   }),
 ])
 
