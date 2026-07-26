@@ -7,6 +7,7 @@ import { InMemorySessionAuthAdapter } from './auth/inMemorySessionAuthAdapter.js
 import { registerDevLoginRoute } from './auth/devLoginRoute.js'
 import type { SessionLifecyclePort } from './ws/sessionLifecyclePort.js'
 import type { LiveWorldBinding } from './ws/liveWorldBinding.js'
+import type { LiveWorldWiringBundle } from './ws/liveWorldWiring.js'
 
 /**
  * Fastify 앱 인스턴스를 구성한다 (listen 하지 않음).
@@ -35,6 +36,10 @@ import type { LiveWorldBinding } from './ws/liveWorldBinding.js'
  * `deps.liveWorld`는 월드 진입 seam(Story 4)의 라이브 의존(진입 코어+월드 그래프)이다. 주입 시 세션이
  * 캐릭터를 로드해 저장된 방에 배치하고 world:room을 발화한다. 미주입이면 registerWebsocket이 undefined를
  * 그대로 넘겨 진입 seam을 통째로 건너뛴다(T4.5, 기존 동작 보존) — lifecyclePort 관례 미러.
+ *
+ * `deps.liveWorldDeps`는 라이브 월드 의존 묶음(Story 7)이다. 주입 시 registerWebsocket이 이 원재료로
+ * 진입 seam·이동(world:move)·세션 수명 어댑터·방 채널 어댑터를 파생해 채팅이 실제 방으로 전파된다.
+ * 명시 lifecyclePort·channelPort가 함께 주어지면 그 명시 포트가 묶음 파생보다 우선한다(explicit > bundle).
  */
 export function buildApp(deps?: {
   pingDb?: () => Promise<boolean>
@@ -43,6 +48,7 @@ export function buildApp(deps?: {
   lifecyclePort?: SessionLifecyclePort
   devLoginSeedCookie?: string
   liveWorld?: LiveWorldBinding
+  liveWorldDeps?: LiveWorldWiringBundle
 }): FastifyInstance {
   // logger를 활성화해 부팅/에러 경로 진단(index.ts의 listen 실패 처리)이 실제로 출력되게 한다.
   // https를 넘기면 Fastify가 https.Server를 만든다(TLS-ready pass-through). Fastify 타입 오버로드가
@@ -76,7 +82,16 @@ export function buildApp(deps?: {
   // 그대로 넘겨도 기본 파라미터가 발동하므로 분기 없이 sessionAuth와 같은 패턴으로 전달한다.
   // liveWorld는 미주입 시 undefined를 그대로 넘긴다 — registerWebsocket이 진입 seam을 건너뛴다(T4.5).
   // channelPort·permissionPort는 registerWebsocket 기본값에 위임하므로 undefined로 통과시킨다.
-  registerWebsocket(app, sessionAuth, deps?.lifecyclePort, undefined, undefined, deps?.liveWorld)
+  // liveWorldDeps(Story 7)를 넘기면 registerWebsocket이 채널·수명·이동·진입 seam을 묶음에서 파생한다.
+  registerWebsocket(
+    app,
+    sessionAuth,
+    deps?.lifecyclePort,
+    undefined,
+    undefined,
+    deps?.liveWorld,
+    deps?.liveWorldDeps,
+  )
 
   return app
 }
