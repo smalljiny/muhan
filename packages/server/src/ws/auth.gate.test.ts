@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type { WebSocket } from 'ws'
+import { PROTOCOL_VERSION } from 'shared'
 import { resetConfigForTests } from '../config/env.js'
 import { SEED_ACCOUNT_ID } from '../auth/seedSessionAuth.testutil.js'
 import {
@@ -130,7 +131,7 @@ describe('WS 인증 게이트 (preValidation)', () => {
       await waitForOpen(client)
       const hello = await helloReceived
 
-      expect(hello).toMatchObject({ type: 'system:hello', protocolVersion: 1 })
+      expect(hello).toMatchObject({ type: 'system:hello', protocolVersion: PROTOCOL_VERSION })
     })
 
     it('무효 쿠키면 실 클라이언트가 401 unexpected-response를 받고 열리지 않는다', async () => {

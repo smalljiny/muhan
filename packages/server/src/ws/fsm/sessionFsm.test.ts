@@ -1,11 +1,16 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { ServerEvent } from 'shared'
+import type { Character, RoomNode, ServerEvent } from 'shared'
 import { promptKindSchema } from 'shared'
 import {
   createSeededAuthAdapter,
   SEED_ACCOUNT_ID,
   SEED_CHARACTER_ID,
 } from '../../auth/seedSessionAuth.testutil.js'
+import {
+  createLiveCharacterRegistry,
+  type LiveCharacter,
+} from '../../world/liveCharacterRegistry.js'
+import { createLiveCharacterEntry } from '../../world/liveCharacterEntry.js'
 import {
   ConnectionState,
   SELECT_CHARACTER_PROMPT_ID,
@@ -1352,5 +1357,309 @@ describe('delete 와이어 계약 보존 (T8.5 — 신규 메시지 타입 없�
     for (const e of events) {
       expect(allowed.has(e.type)).toBe(true)
     }
+  })
+})
+
+// ── Story 4: 월드 진입 seam(liveWorld) — hydrate→enterWorld→place→world:room ──────
+
+/** liveWorld 테스트용 Character 문서(currentRoom 지정). liveCharacterEntry.test.ts 픽스처 미러. */
+function makeLiveCharacter(id: string, currentRoom: number): Character {
+  return {
+    _id: id,
+    name: '무한전사',
+    class: 1,
+    race: 1,
+    stats: [16, 18, 12, 10, 14],
+    gold: 100,
+    currentRoom,
+    hpCurrent: 42,
+    mpCurrent: 15,
+    level: 5,
+    experience: 0,
+    spells: new Array<number>(16).fill(0),
+    realm: [0, 0, 0, 0],
+    schemaVersion: 2,
+    accountId: SEED_ACCOUNT_ID,
+    status: 'active',
+    alignment: 1,
+  }
+}
+
+/** occupants Set을 가진 최소 RoomNode(liveCharacterEntry.test.ts 픽스처 미러). */
+function makeRoomNode(roomId: number, exitNames: string[] = []): RoomNode {
+  return {
+    roomId,
+    name: `방-${roomId}`,
+    shortDesc: '',
+    longDesc: '',
+    exits: exitNames.map((name) => ({
+      name,
+      targetRoomId: roomId + 1,
+      flags: [],
+      key: 0,
+      ltime: 0,
+      interval: 60,
+    })),
+    items: [],
+    flags: [],
+    occupants: new Set<string>(),
+    creatures: [],
+    permMon: [],
+    random: [],
+    traffic: 0,
+  }
+}
+
+describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', () => {
+  it('배치(entry): enterWorld→place→session:entered→world:room 순서로 발화하고 place는 1회, world:room은 exit 이름을 싣는다', async () => {
+    const R = 501
+    const live: LiveCharacter = { character: makeLiveCharacter(SEED_CHARACTER_ID, R) }
+    const order: string[] = []
+    const events: ServerEvent[] = []
+    const place = vi.fn(() => void order.push('place'))
+    const hydrate = vi.fn(() => Promise.resolve(live))
+    const roomSummary = vi.fn((roomId: number) => ({ roomId, exits: ['북', '남'] }))
+    const enterWorld = vi.fn((): 'entered' | 'resumed' => {
+      order.push('enterWorld')
+      return 'entered'
+    })
+    const session: SessionContext = {
+      account: { accountId: SEED_ACCOUNT_ID },
+      sessionAuth: createSeededAuthAdapter(),
+      emit: (e) => {
+        events.push(e)
+        order.push(`emit:${e.type}`)
+      },
+      rearmDeadline: vi.fn(),
+      clearDeadline: vi.fn(),
+      enterWorld,
+      isClosed: () => false,
+      liveWorld: { hydrate, place, roomSummary },
+    }
+
+    const next = await stateHandlers[ConnectionState.characterSelect].handleInput(makeCtx(), session, {
+      type: 'session:selectCharacter',
+      characterId: SEED_CHARACTER_ID,
+    })
+
+    expect(next).toBe(ConnectionState.command)
+    expect(hydrate).toHaveBeenCalledWith(SEED_CHARACTER_ID)
+    expect(place).toHaveBeenCalledTimes(1)
+    // 순서 불변식: register(enterWorld) → place → session:entered → world:room.
+    expect(order).toEqual(['enterWorld', 'place', 'emit:session:entered', 'emit:world:room'])
+    const roomEvents = events.filter((e) => e.type === 'world:room')
+    expect(roomEvents).toHaveLength(1)
+    expect(roomEvents[0]).toEqual({ type: 'world:room', roomId: R, exits: ['북', '남'] })
+  })
+
+  it('D-G 3 순서 불변식: 옛 세션 종결(eviction)이 occupants·registry를 지워도 이후 place가 재배치해 최종적으로 방에 있다', async () => {
+    // 실 createLiveCharacterEntry + 실 registry + 실 RoomNode(Set occupants)로 재-배치를 관측한다.
+    const R = 777
+    const room = makeRoomNode(R, ['북'])
+    const rooms = new Map<number, RoomNode>([[R, room]])
+    const character = makeLiveCharacter(SEED_CHARACTER_ID, R)
+    const registry = createLiveCharacterRegistry()
+    const findById = vi.fn(() => Promise.resolve(character))
+    const onRoomEntered = vi.fn()
+    const onRoomLeft = vi.fn()
+    const entry = createLiveCharacterEntry({
+      characterRepo: { findById },
+      liveRegistry: registry,
+      resolveRoom: (id) => rooms.get(id),
+      onRoomEntered,
+      onRoomLeft,
+      logger: { warn: vi.fn() },
+    })
+
+    // 옛 세션이 이미 캐릭터를 방에 배치해 둔 상태(registry+occupants 점유).
+    entry.place({ character })
+    expect(room.occupants.has(SEED_CHARACTER_ID)).toBe(true)
+    // 사전 배치 카운트를 지워, 이번 재로그인 흐름의 hook 호출만 관측한다.
+    onRoomEntered.mockClear()
+    onRoomLeft.mockClear()
+
+    const events: ServerEvent[] = []
+    // enterWorld 스파이가 옛 세션 종결(Story 6 teardown)을 실제로 enact한다 —
+    // release가 occupants·registry에서 캐릭터를 제거한다. 그 뒤 enterCommand의 place가 재배치해야 한다.
+    const enterWorld = vi.fn((): 'entered' | 'resumed' => {
+      entry.release(SEED_CHARACTER_ID)
+      return 'entered'
+    })
+    const session: SessionContext = {
+      account: { accountId: SEED_ACCOUNT_ID },
+      sessionAuth: createSeededAuthAdapter(),
+      emit: (e) => void events.push(e),
+      rearmDeadline: vi.fn(),
+      clearDeadline: vi.fn(),
+      enterWorld,
+      isClosed: () => false,
+      liveWorld: {
+        hydrate: (id) => entry.hydrate(id),
+        place: (l) => entry.place(l),
+        roomSummary: (roomId) => {
+          const r = rooms.get(roomId)
+          return r === undefined ? undefined : { roomId: r.roomId, exits: r.exits.map((e) => e.name) }
+        },
+      },
+    }
+
+    await stateHandlers[ConnectionState.characterSelect].handleInput(makeCtx(), session, {
+      type: 'session:selectCharacter',
+      characterId: SEED_CHARACTER_ID,
+    })
+
+    // 최종 상태: 캐릭터가 방에 있다(place가 eviction을 이겼다 — register→place 순서).
+    expect(room.occupants.has(SEED_CHARACTER_ID)).toBe(true)
+    expect(registry.has(SEED_CHARACTER_ID)).toBe(true)
+    // eviction이 실제로 일어났다(non-vacuous): release가 onRoomLeft를 1회 호출했다.
+    expect(onRoomLeft).toHaveBeenCalledTimes(1)
+    // 이후 place가 재배치했다: onRoomEntered가 1회 호출됐다.
+    expect(onRoomEntered).toHaveBeenCalledTimes(1)
+    // D-G 1: hydrate가 등록된 엔트리를 재로드 없이 반환(findById 미호출).
+    expect(findById).toHaveBeenCalledTimes(0)
+    expect(events.some((e) => e.type === 'session:entered')).toBe(true)
+    expect(events.some((e) => e.type === 'world:room')).toBe(true)
+  })
+
+  it('재연결(resumed): 재로드·재배치 없이 world:room을 발화하고 currentRoom을 보존한다', async () => {
+    const R = 888
+    const room = makeRoomNode(R, ['동', '서'])
+    const rooms = new Map<number, RoomNode>([[R, room]])
+    const character = makeLiveCharacter(SEED_CHARACTER_ID, R)
+    const registry = createLiveCharacterRegistry()
+    const findById = vi.fn(() => Promise.resolve(character))
+    const onRoomEntered = vi.fn()
+    const entry = createLiveCharacterEntry({
+      characterRepo: { findById },
+      liveRegistry: registry,
+      resolveRoom: (id) => rooms.get(id),
+      onRoomEntered,
+      onRoomLeft: vi.fn(),
+      logger: { warn: vi.fn() },
+    })
+
+    // 이미 등록·배치된 상태(link-dead 세션의 라이브 엔트리 잔존).
+    entry.place({ character })
+    onRoomEntered.mockClear()
+
+    const events: ServerEvent[] = []
+    const enterWorld = vi.fn((): 'entered' | 'resumed' => 'resumed') // rebind — eviction 없음
+    const session: SessionContext = {
+      account: { accountId: SEED_ACCOUNT_ID },
+      sessionAuth: createSeededAuthAdapter(),
+      emit: (e) => void events.push(e),
+      rearmDeadline: vi.fn(),
+      clearDeadline: vi.fn(),
+      enterWorld,
+      isClosed: () => false,
+      liveWorld: {
+        hydrate: (id) => entry.hydrate(id),
+        place: (l) => entry.place(l),
+        roomSummary: (roomId) => {
+          const r = rooms.get(roomId)
+          return r === undefined ? undefined : { roomId: r.roomId, exits: r.exits.map((e) => e.name) }
+        },
+      },
+    }
+
+    await stateHandlers[ConnectionState.characterSelect].handleInput(makeCtx(), session, {
+      type: 'session:selectCharacter',
+      characterId: SEED_CHARACTER_ID,
+    })
+
+    // D-G 1: 재접속은 재로드하지 않는다(findById 0회).
+    expect(findById).toHaveBeenCalledTimes(0)
+    // place는 멱등 no-op: occupants 중복 추가·onRoomEntered 재호출 없음.
+    expect(room.occupants.size).toBe(1)
+    expect(onRoomEntered).not.toHaveBeenCalled()
+    // currentRoom은 라이브 값으로 보존된다(디스크 문서로 덮어쓰지 않음).
+    expect(registry.get(SEED_CHARACTER_ID)?.character.currentRoom).toBe(R)
+    // resumed + world:room이 여전히 발화된다(재연결 클라도 위치가 필요 — D-C).
+    expect(events.some((e) => e.type === 'session:resumed')).toBe(true)
+    expect(events.some((e) => e.type === 'world:room')).toBe(true)
+  })
+
+  it('close-race: hydrate await 뒤 isClosed면 enterWorld·place 없이 bail한다(hydrate는 부수효과 없음)', async () => {
+    const R = 999
+    const live: LiveCharacter = { character: makeLiveCharacter(SEED_CHARACTER_ID, R) }
+    const events: ServerEvent[] = []
+    const hydrate = vi.fn(() => Promise.resolve(live))
+    const place = vi.fn()
+    const enterWorld = vi.fn((): 'entered' | 'resumed' => 'entered')
+    const session: SessionContext = {
+      account: { accountId: SEED_ACCOUNT_ID },
+      sessionAuth: createSeededAuthAdapter(),
+      emit: (e) => void events.push(e),
+      rearmDeadline: vi.fn(),
+      clearDeadline: vi.fn(),
+      enterWorld,
+      isClosed: () => true, // hydrate await 도중 소켓이 닫혔다.
+      liveWorld: { hydrate, place, roomSummary: vi.fn() },
+    }
+
+    const next = await stateHandlers[ConnectionState.characterSelect].handleInput(makeCtx(), session, {
+      type: 'session:selectCharacter',
+      characterId: SEED_CHARACTER_ID,
+    })
+
+    expect(next).toBe(ConnectionState.characterSelect)
+    // hydrate는 가드 이전에 호출된다(부수효과 없어 롤백 불필요).
+    expect(hydrate).toHaveBeenCalledTimes(1)
+    // 가드가 등록·배치를 막는다.
+    expect(enterWorld).not.toHaveBeenCalled()
+    expect(place).not.toHaveBeenCalled()
+    expect(events).toEqual([])
+  })
+
+  it('create 완주 경로도 hydrate→place→world:room을 배선한다(양 진입점 대칭)', async () => {
+    const R = 601
+    const created: LiveCharacter = { character: makeLiveCharacter('char-1', R) }
+    const events: ServerEvent[] = []
+    const place = vi.fn()
+    const hydrate = vi.fn(() => Promise.resolve(created))
+    const session: SessionContext = {
+      account: { accountId: SEED_ACCOUNT_ID },
+      sessionAuth: createSeededAuthAdapter(),
+      emit: (e) => void events.push(e),
+      rearmDeadline: vi.fn(),
+      clearDeadline: vi.fn(),
+      enterWorld: vi.fn((): 'entered' | 'resumed' => 'entered'),
+      isClosed: () => false,
+      liveWorld: { hydrate, place, roomSummary: (roomId) => ({ roomId, exits: ['북'] }) },
+    }
+    const ctx: FsmContext = {
+      state: ConnectionState.create,
+      createProgress: { step: 'confirm', collected: FULL_COLLECTED },
+      deleteProgress: null,
+    }
+
+    const next = await stateHandlers[ConnectionState.create].handleInput(ctx, session, {
+      type: 'session:reply',
+      promptId: CREATE_PROMPT_IDS.confirm,
+      value: CREATE_CONFIRM_VALUE,
+    })
+
+    expect(next).toBe(ConnectionState.command)
+    // 시드 어댑터(fresh)의 첫 생성 캐릭터 id로 hydrate한다.
+    expect(hydrate).toHaveBeenCalledWith('char-1')
+    expect(place).toHaveBeenCalledTimes(1)
+    expect(events).toEqual([
+      { type: 'session:entered', characterId: 'char-1' },
+      { type: 'world:room', roomId: R, exits: ['북'] },
+    ])
+  })
+
+  it('liveWorld 미주입(absent): hydrate/place 없이 기존 동작대로 entered만 발화한다(T4.5)', async () => {
+    const { session, events, enterWorld } = makeSession() // liveWorld 없음
+
+    const next = await stateHandlers[ConnectionState.characterSelect].handleInput(makeCtx(), session, {
+      type: 'session:selectCharacter',
+      characterId: SEED_CHARACTER_ID,
+    })
+
+    expect(next).toBe(ConnectionState.command)
+    expect(enterWorld).toHaveBeenCalledWith(SEED_CHARACTER_ID)
+    // world:room 없음 — 기존과 동일하게 session:entered만.
+    expect(events).toEqual([{ type: 'session:entered', characterId: SEED_CHARACTER_ID }])
   })
 })

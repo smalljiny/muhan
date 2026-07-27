@@ -23,6 +23,12 @@ import type { ChannelPort } from './channelPort.js'
 import { createNoopChannelAdapter } from './noopChannelAdapter.js'
 import type { PermissionPort } from './permissionPort.js'
 import { createPermissivePermissionAdapter } from './permissivePermissionAdapter.js'
+import { buildSessionLiveWorld, type LiveWorldBinding } from './liveWorldBinding.js'
+import {
+  createLiveWorldWiring,
+  assembleRoomChannelPort,
+  type LiveWorldWiringBundle,
+} from './liveWorldWiring.js'
 import { createSessionRegistry, type SessionRegistry } from './sessionRegistry.js'
 import { createResolveDisconnect } from './resolveDisconnect.js'
 import { createSessionLifecycle, type SessionLifecycle } from './sessionLifecycle.js'
@@ -146,6 +152,11 @@ export function createSafeSend(log: FastifyBaseLogger): (socket: WebSocket, even
  * `enterWorld`도 같은 방식으로 `lifecycle.enterWorld`를 이 ctx·account에 바인딩한 주입 콜백이다 — FSM은
  * characterId만 넘겨 등록/재연결하고, 셸이 registry 조작을 감춘다(3층 경계). account는 위에서 1회 narrow한
  * 값을 캡처해 재확인 없이 쓴다.
+ *
+ * `liveWorld`(Story 4)는 라이브 월드 진입 seam이다 — 주입된 `LiveWorldBinding`(진입 코어+월드 그래프)이
+ * 있을 때만 조립하고, 미주입이면 undefined로 둬 FSM이 hydrate/place/world:room을 통째로 건너뛰게 한다(T4.5,
+ * 기존 동작 보존). lifecyclePort·channelPort 관례처럼 배선 시점에 주입되며, 실 boot 결선은 tryMove 프로덕션
+ * 결선(movement/command 에픽)과 같은 dormant 경계를 따른다.
  */
 function buildSession(
   ctx: ConnectionContext,
@@ -154,6 +165,7 @@ function buildSession(
   deadline: Deadline,
   lifecycle: SessionLifecycle,
   send: (socket: WebSocket, event: ServerEvent) => void,
+  liveWorld?: LiveWorldBinding,
 ): SessionContext {
   if (ctx.account === null) {
     throw new Error('세션 불변식 위반: 인증 게이트를 통과했으나 account가 없다')
@@ -169,6 +181,8 @@ function buildSession(
     // close-race 가드 seam — FSM이 포트 await 재개 후 이 콜백으로 죽은 연결을 감지해 등록·상태 대입을 건너뛴다.
     // 'close' 핸들러가 ctx.closed를 세운다(frameTail 큐와 별개 리스너라 프레임 직렬화로는 못 막는 경로).
     isClosed: () => ctx.closed,
+    // 주입된 라이브 월드 의존이 있을 때만 진입 seam을 조립한다. 미주입이면 undefined(T4.5).
+    liveWorld: liveWorld === undefined ? undefined : buildSessionLiveWorld(liveWorld),
   }
 }
 
@@ -277,13 +291,22 @@ export function gameAuthPreValidation(
  * `permissionPort`는 검증된 명령을 어느 actor가 실행할 자격이 있는지 판정하는 포트다. 미주입 시 항상
  * allow하는 permissive 어댑터를 기본으로 세운다 — 실 RBAC 어댑터는 E5에서 이 자리에 주입한다(channelPort
  * 관례 미러). dispatch가 payload 검증 성공 후·핸들러 전에 이 포트로 권한을 검사한다.
+ *
+ * `liveWorldDeps`(Story 7)는 라이브 월드 의존 묶음이다 — 주입 시 `createLiveWorldWiring`이 진입 seam·이동
+ * seam·세션 수명 어댑터·방 해소자를 파생한다. 파생 결과로 (a) `channelPort`를 실 방 채널 어댑터로,
+ * (b) `lifecyclePort`를 라이브 세션 수명 어댑터로, (c) `liveWorld`(진입 바인딩)를, (d) `world:move` 배선을
+ * 세운다. 포트 우선순위는 **explicit-param > bundle-derived > default-noop**이다 — 명시 인자(테스트 스파이 등)가
+ * 주어지면 묶음 파생이 덮지 않는다. transport 결합(sendTo)은 `assembleRoomChannelPort`에 격리하고, registry·
+ * connections·safeSend를 그 조립 지점에서만 캡처한다(순수 팩토리는 transport 미접촉).
  */
 export function registerWebsocket(
   app: FastifyInstance,
   sessionAuth: SessionAuthPort,
-  lifecyclePort: SessionLifecyclePort = createNoopSessionLifecycleAdapter(app.log),
-  channelPort: ChannelPort = createNoopChannelAdapter(app.log),
+  lifecyclePort?: SessionLifecyclePort,
+  channelPort?: ChannelPort,
   permissionPort: PermissionPort = createPermissivePermissionAdapter(),
+  liveWorld?: LiveWorldBinding,
+  liveWorldDeps?: LiveWorldWiringBundle,
 ): void {
   const connections = new Map<WebSocket, ConnectionContext>()
 
@@ -291,14 +314,41 @@ export function registerWebsocket(
   // OPEN 가드·backpressure(1013)·전송오류(codeless close) 처리를 공유한다.
   const safeSend = createSafeSend(app.log)
 
-  // 명령 레지스트리는 무상태 핸들러의 배선표라 연결 간 공유 안전하다 — channelPort를 클로저 주입해 1회 조립한다.
-  const commandRegistry = createCommandRegistry(channelPort)
-  app.decorate('wsConnections', connections)
-  app.decorate('wsLifecyclePort', lifecyclePort)
-
-  // 세션 레지스트리·종결 seam·수명주기 조율기를 registerWebsocket 1회에 인스턴스화해 연결 간 공유한다
-  // (per-connection이 아니다 — 재연결이 이전 소켓의 바인딩을 찾으려면 하나의 색인이어야 한다).
+  // 세션 레지스트리를 명령 레지스트리 조립 위로 hoist한다(Story 7) — 방 채널 어댑터의 sendTo가 이 색인을
+  // 캡처해 멤버 소켓을 역참조하므로, createCommandRegistry가 채널 포트를 받기 전에 존재해야 한다. per-connection이
+  // 아니라 registerWebsocket 1회 인스턴스다(재연결이 이전 소켓의 바인딩을 찾으려면 하나의 색인이어야 한다).
   const registry = createSessionRegistry()
+
+  // 라이브 월드 의존 묶음이 주입되면 순수 팩토리로 진입·이동·수명 seam과 방 해소자를 파생한다(미주입이면 undefined).
+  const wiring = liveWorldDeps === undefined ? undefined : createLiveWorldWiring(liveWorldDeps)
+
+  // 채널 포트 우선순위(explicit > bundle-derived > noop). 묶음 파생 채널은 transport 결합 sendTo가 필요하므로
+  // assembleRoomChannelPort에 registry·connections·safeSend를 넘겨 이 지점에서만 조립한다(순수 팩토리 밖 격리).
+  const effectiveChannelPort =
+    channelPort ??
+    (wiring === undefined
+      ? createNoopChannelAdapter(app.log)
+      : assembleRoomChannelPort<WebSocket>({
+          resolveRoom: wiring.resolveRoom,
+          registry,
+          resolveSocket: (connection) => socketForContext(connections, connection),
+          safeSend,
+        }))
+
+  // 수명 포트 우선순위(explicit > bundle-derived > noop). 명시 포트(테스트 스파이)가 묶음 파생 라이브 어댑터를 덮지 않는다.
+  const effectiveLifecyclePort =
+    lifecyclePort ?? wiring?.lifecyclePort ?? createNoopSessionLifecycleAdapter(app.log)
+
+  // 진입 seam 우선순위(explicit binding > bundle-derived binding). 명시 liveWorld(T4.5 seam)가 있으면 그대로 쓴다.
+  const effectiveLiveWorld = liveWorld ?? wiring?.liveWorldBinding
+
+  // 명령 레지스트리는 무상태 핸들러의 배선표라 연결 간 공유 안전하다 — 채널 포트·(묶음 파생) moveDeps를 클로저
+  // 주입해 1회 조립한다. moveDeps가 있으면 world:move가 등록되고, 없으면 미등록(unknown_type)으로 남는다.
+  const commandRegistry = createCommandRegistry(effectiveChannelPort, wiring?.moveDeps)
+  app.decorate('wsConnections', connections)
+  app.decorate('wsLifecyclePort', effectiveLifecyclePort)
+
+  // 종결 seam·수명주기 조율기는 위에서 hoist한 registry를 공유한다.
   app.decorate('wsSessionRegistry', registry)
 
   // 등록된 바인딩의 단일 종결 함수. teardown은 종결 대상 바인딩의 ctx로 소켓을 역참조해 transport를 정리하고
@@ -306,7 +356,7 @@ export function registerWebsocket(
   // 소켓을 못 찾으면(이미 drop된 grace 경로) no-op으로 스킵한다(포트 호출은 resolveDisconnect가 이미 완료).
   const resolveDisconnect = createResolveDisconnect({
     registry,
-    port: lifecyclePort,
+    port: effectiveLifecyclePort,
     teardown: (binding) => {
       const sock = socketForContext(connections, binding.connection)
       if (sock === undefined) return
@@ -483,7 +533,7 @@ export function registerWebsocket(
                 ctx.ready = true
                 await enterInitialState(
                   ctx,
-                  buildSession(ctx, sessionAuth, socket, deadline, lifecycle, safeSend),
+                  buildSession(ctx, sessionAuth, socket, deadline, lifecycle, safeSend, effectiveLiveWorld),
                 )
                 break
               case 'error':
@@ -515,7 +565,7 @@ export function registerWebsocket(
                   // 공유 상태(state·createProgress) 동시 변이가 없다.
                   await handleSessionFrame(
                     ctx,
-                    buildSession(ctx, sessionAuth, socket, deadline, lifecycle, safeSend),
+                    buildSession(ctx, sessionAuth, socket, deadline, lifecycle, safeSend, effectiveLiveWorld),
                     parsed,
                   )
                 }

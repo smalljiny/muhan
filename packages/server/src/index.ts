@@ -17,6 +17,8 @@ import { WorldClock, type WorldTickLogger } from './world/worldClock.js'
 import { createGameTime } from './world/gameTime.js'
 import { createCheckExitsSlot } from './world/checkExits.js'
 import { createWorldRuntime } from './world/worldRuntime.js'
+import { createLiveCharacterRegistry } from './world/liveCharacterRegistry.js'
+import type { LiveWorldWiringBundle } from './ws/liveWorldWiring.js'
 
 // 부팅 엔트리 — env 검증(fail-fast) → DB 연결(fail-fast) → 앱 구성 → SaveEngine 배선 → listen.
 // 커버리지에서 제외(배선 코드). PORT는 getConfig().PORT 단일 출처를 쓴다(인라인 파싱 소거).
@@ -57,6 +59,49 @@ async function boot(): Promise<void> {
   // 정본 방 번들을 인메모리 그래프로 로드한다(부팅 스코프에 보관). 템플릿·리스폰은 E4 범위.
   const worldGraph = loadWorldGraph()
 
+  // 라이브 캐릭터 레지스트리·게임시각을 만든다 — 라이브 월드 의존 묶음(Story 7)의 원재료다. 레지스트리는
+  // 단일 인스턴스로 진입 코어·이동·수명 어댑터·발화자 방 해소자가 공유한다(#3).
+  const liveRegistry = createLiveCharacterRegistry()
+  const gameTime = createGameTime()
+
+  // 순환 회피(#순서): 라이브 월드 묶음이 saveEngine·worldRuntime를 참조해야 해서 이 둘을 buildApp 전에 const로
+  // 조립한다. 두 인스턴스가 의존하는 app.log는 buildApp이 세우지만, 위임 클로저(saveLogger·worldTickLogger·묶음
+  // logger)는 호출 시점(save flush·틱·orphan 폴백, 모두 listen 이후)에만 app.log를 읽으므로 buildApp 전 조립이
+  // 안전하다 — 로거를 지연 위임하고 인스턴스는 const로 앞당긴다. 슬롯 register·start·shutdown 순서는 불변이다.
+  // console 금지 — SaveLogger를 app.log.error에 위임하는 어댑터로 구성한다.
+  const saveLogger: SaveLogger = {
+    error: (context, message) => app.log.error(context, message),
+  }
+  const saveEngine = new SaveEngine(characters, bank, world, saveLogger)
+
+  // 1Hz 중앙 월드 틱. worldClock·worldRuntime를 buildApp 전에 조립한다(묶음 원재료). now 도메인 단일 출처로
+  // worldClock.currentTick()을 훅 now에 주입한다 — onRoomEntered activate/respawn now가 creatureTick tickSec와
+  // 동일 도메인이어야 재생 소급이 성립한다. onRoomEntered/onRoomLeft 훅은 이제 라이브 월드 묶음이 이동(tryMove)·
+  // 세션 진입/퇴장에 결선해 활성화된다(Story 7 — 이전 dormant 경계 해소). invasion 슬롯은 실 invasionRng 미주입
+  // 시 register 대상에서 제외된다(adversarial 결정 — 기본 stub의 고정 방 누적 회피).
+  // console 금지 — 슬롯 실패 격리 logger를 app.log.error에 위임한다.
+  const worldTickLogger: WorldTickLogger = {
+    error: (context, message) => app.log.error(context, message),
+  }
+  const worldClock = new WorldClock({ logger: worldTickLogger })
+  const worldRuntime = createWorldRuntime(worldGraph, { now: () => worldClock.currentTick() })
+
+  // 라이브 월드 의존 묶음 — buildApp/registerWebsocket이 진입·이동(world:move)·세션 수명·방 채널 어댑터를
+  // 파생한다. markDirty는 SaveEngine 메서드라 this 바인딩을 유지하도록 화살표로 감싼다. currentHour·
+  // onRoomEntered·onRoomLeft는 this-free 클로저(gameTime·worldRuntime 팩토리 산출물)라 직접 전달한다.
+  // logger는 app.log를 호출 시점에 지연 조회한다(위 로거 위임 관례 미러). onRoomEntered/onRoomLeft를
+  // worldRuntime 훅에 위임해 이동·세션 진입/퇴장이 동일 활성 집합을 갱신하게 한다.
+  const liveWorldDeps: LiveWorldWiringBundle = {
+    worldGraph,
+    liveRegistry,
+    characterRepo: characters,
+    markDirty: (collection, id, snapshot) => saveEngine.markDirty(collection, id, snapshot),
+    currentHour: gameTime.currentHour,
+    onRoomEntered: worldRuntime.onRoomEntered,
+    onRoomLeft: worldRuntime.onRoomLeft,
+    logger: { warn: (context, message) => app.log.warn(context, message) },
+  }
+
   // ping을 /health의 진실 원천으로 주입한다. 세션 인증 어댑터는 플래그로 분기한다:
   // - DEV_LOGIN_ENABLED true(dev): dev 시드 어댑터 + /dev/login 라우트를 배선한다(기존 동작 불변).
   // - false(프로덕션): 실 FirebaseSessionAuthAdapter를 조립해 주입한다. firebase-admin 기반 verifier를
@@ -68,40 +113,16 @@ async function boot(): Promise<void> {
   const app = buildApp({
     pingDb: () => pingDb(conn.db),
     ...sessionAuthDeps,
+    liveWorldDeps,
   })
   app.log.info(`world graph loaded: ${worldGraph.size} rooms`)
 
-  // console 금지 — SaveLogger를 fastify app.log.error에 위임하는 어댑터로 구성한다.
-  const saveLogger: SaveLogger = {
-    error: (context, message) => app.log.error(context, message),
-  }
-  const saveEngine = new SaveEngine(characters, bank, world, saveLogger)
+  // 저장 스케줄러·월드 틱을 기동한다(구성은 buildApp 전에 끝났고, 여기서는 슬롯 등록·start만 수행한다). 게임시각
+  // 진행(150초마다 Time++)·출구 자동 재잠금(매 틱)·크리처 tick·스폰 슬롯을 등록한 뒤 start한다.
   saveEngine.start()
-
-  // 1Hz 중앙 월드 틱. 게임시각 진행(150초마다 Time++)과 출구 자동 재잠금/재닫힘(매 틱) 슬롯을
-  // 등록한 뒤 start한다. 두 슬롯은 WS 명령 배선 없이 WorldClock만으로 자족 동작한다(게임시각 소스·
-  // check_exits 스윕).
-  // console 금지 — 슬롯 실패 격리 logger를 app.log.error에 위임한다.
-  const worldTickLogger: WorldTickLogger = {
-    error: (context, message) => app.log.error(context, message),
-  }
-  const worldClock = new WorldClock({ logger: worldTickLogger })
-  const gameTime = createGameTime()
   worldClock.register(gameTime.slot)
   worldClock.register(createCheckExitsSlot(worldGraph))
-
-  // 크리처 tick·스폰 슬롯을 컴포지션 팩토리로 조립해 register한다. now 도메인 단일 출처로
-  // worldClock.currentTick()을 훅 now에 주입한다 — onRoomEntered activate/respawn now가 creatureTick
-  // tickSec와 동일 도메인이어야 재생 소급이 성립한다.
-  // onRoomEntered/onRoomLeft 훅은 runtime에 구성돼 있으나 프로덕션에서 tryMove를 부르는 실 caller가
-  // 아직 없어 dormant다(movement/command 에픽이 tryMove를 프로덕션 결선할 때 활성화). 그 전까지 활성
-  // 집합은 비어 creatureTick·randomSpawn은 no-op이다.
-  // invasion 슬롯은 **실 invasionRng 미주입 시 register 대상에서 제외**된다(adversarial 결정) — 기본
-  // 결정적 stub은 고정 방에 무한 누적하고 E4-2는 전투 정리가 없어, 실 rng(E8-2, 범위 분산) 배선
-  // 전까지 boot를 inert하게 둔다. runtime.slots는 creatureTick·randomSpawn만 담는다.
-  const worldRuntime = createWorldRuntime(worldGraph, { now: () => worldClock.currentTick() })
   for (const slot of worldRuntime.slots) worldClock.register(slot)
-
   worldClock.start()
 
   // graceful shutdown — SaveEngine.shutdown()으로 잔여 dirty를 flush·drain한 뒤 DB 연결을 닫는다.

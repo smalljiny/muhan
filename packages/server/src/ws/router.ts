@@ -1,7 +1,9 @@
-import { clientCommandSchema, type ClientCommand, type ErrorCode, type ServerEvent } from 'shared'
+import { clientCommandSchema, type ClientCommand, type ServerEvent } from 'shared'
 import { echoHandler } from './handlers/echo.js'
 import { createChatHandler } from './handlers/chat.js'
+import { createMoveHandler, type MoveHandlerDeps } from './handlers/move.js'
 import { readStringField } from './frame.js'
+import { makeErrorEvent } from './serverEvent.js'
 import type { ActorContext } from './actorContext.js'
 import type { ChannelPort } from './channelPort.js'
 import type { PermissionPort } from './permissionPort.js'
@@ -20,7 +22,8 @@ export type CommandHandler = (command: ClientCommand, actor: ActorContext) => Se
 export type HandlerRegistry = Map<string, CommandHandler>
 
 /**
- * 기본 명령 레지스트리를 만든다 — 무인증 `debug:echo`와 자유채팅 `chat:message`·`chat:emote`를 배선한다.
+ * 기본 명령 레지스트리를 만든다 — 무인증 `debug:echo`와 자유채팅 `chat:message`·`chat:emote`를 배선하고,
+ * `moveDeps`가 주어지면 `world:move`도 배선한다.
  *
  * plain object가 아닌 `Map`을 쓰는 것이 load-bearing이다: `registry.get('__proto__')`는
  * prototype 속성에 도달하지 않고 undefined를 반환해 allowlist 우회를 원천 차단한다.
@@ -29,18 +32,30 @@ export type HandlerRegistry = Map<string, CommandHandler>
  * 필수 파라미터로 받는다(기본 어댑터 소유·주입은 registerWebsocket 책임). 같은 핸들러 인스턴스를
  * chat:message·chat:emote 두 type에 공유 배선한다(핸들러가 내부에서 type을 narrow한다).
  *
+ * `moveDeps`는 선택 파라미터다 — 라이브 레지스트리·이동 seam·markDirty가 배선된 환경(실 서버)에서만
+ * 주입되며, 주어지면 `world:move`를 move 핸들러로 등록한다. 미주입이면 world:move는 미등록으로 남아
+ * dispatch가 unknown_type을 반환한다(방 배치·영속 seam이 아직 없는 컨텍스트에서의 기본 동작). 이 조건부
+ * 배선으로 기존 무-moveDeps 호출부(라우터 순수 단위 테스트 등)의 동작이 변하지 않는다.
+ *
  * 레지스트리는 의도적으로 `clientCommandSchema`보다 좁은 런타임 디스패치 집합이다. `system:ready`는
  * 스키마에 있으나 핸드셰이크(handleHandshakeFrame)가 `pass` 이전에 소비하므로 여기 등록하지 않는다.
  * 주의: `clientCommandSchema`에 없는 type의 핸들러를 등록하면 safeParse가 그 discriminator를 매칭하지
  * 못해 해당 명령이 영구히 bad_payload로 떨어진다 — 신규 핸들러는 반드시 스키마에도 variant를 추가한다.
  */
-export function createCommandRegistry(channelPort: ChannelPort): HandlerRegistry {
+export function createCommandRegistry(
+  channelPort: ChannelPort,
+  moveDeps?: MoveHandlerDeps,
+): HandlerRegistry {
   const chatHandler = createChatHandler(channelPort)
-  return new Map<string, CommandHandler>([
+  const registry = new Map<string, CommandHandler>([
     ['debug:echo', echoHandler],
     ['chat:message', chatHandler],
     ['chat:emote', chatHandler],
   ])
+  if (moveDeps !== undefined) {
+    registry.set('world:move', createMoveHandler(moveDeps))
+  }
+  return registry
 }
 
 /**
@@ -53,20 +68,6 @@ export function createCommandRegistry(channelPort: ChannelPort): HandlerRegistry
 export type DispatchResult =
   { outcome: 'handled'; event?: ServerEvent } | { outcome: 'rejected'; event: ServerEvent }
 
-/** 라우터가 낼 수 있는 오류 코드 — 핸드셰이크 전용 `handshake_required`를 뺀 shared enum의 부분집합. */
-type RouterErrorCode = Exclude<ErrorCode, 'handshake_required'>
-
-/** 오류 이벤트를 만든다. `correlationId`는 값이 있을 때만 키를 포함한다(undefined 키 금지). */
-function errorEvent(
-  code: RouterErrorCode,
-  message: string,
-  correlationId: string | undefined,
-): ServerEvent {
-  if (correlationId !== undefined) {
-    return { type: 'error', code, message, correlationId }
-  }
-  return { type: 'error', code, message }
-}
 
 /**
  * 핸드셰이크를 통과한 프레임을 레지스트리로 O(1) 디스패치한다(순수 함수 — 부수효과 없음).
@@ -101,7 +102,7 @@ export function dispatch(
   if (type === undefined) {
     return {
       outcome: 'rejected',
-      event: errorEvent('unknown_type', '알 수 없는 명령 type이다', undefined),
+      event: makeErrorEvent('unknown_type', '알 수 없는 명령 type이다', undefined),
     }
   }
 
@@ -109,7 +110,7 @@ export function dispatch(
   if (handler === undefined) {
     return {
       outcome: 'rejected',
-      event: errorEvent('unknown_type', `등록되지 않은 명령 type이다: ${type}`, undefined),
+      event: makeErrorEvent('unknown_type', `등록되지 않은 명령 type이다: ${type}`, undefined),
     }
   }
 
@@ -121,7 +122,7 @@ export function dispatch(
   if (!parseResult.success) {
     return {
       outcome: 'rejected',
-      event: errorEvent('bad_payload', '명령 payload 형식이 올바르지 않다', correlationId),
+      event: makeErrorEvent('bad_payload', '명령 payload 형식이 올바르지 않다', correlationId),
     }
   }
 
@@ -138,7 +139,7 @@ export function dispatch(
     if (!permission.check(parseResult.data, actor)) {
       return {
         outcome: 'rejected',
-        event: errorEvent('forbidden', '이 명령을 실행할 권한이 없다', correlationId),
+        event: makeErrorEvent('forbidden', '이 명령을 실행할 권한이 없다', correlationId),
       }
     }
     return { outcome: 'handled', event: handler(parseResult.data, actor) }
@@ -146,7 +147,7 @@ export function dispatch(
     // permission.check·handler 예외를 이벤트로 격리한다. 원인은 클라이언트에 노출하지 않는다.
     return {
       outcome: 'rejected',
-      event: errorEvent('internal', '명령 처리 중 서버 오류가 발생했다', correlationId),
+      event: makeErrorEvent('internal', '명령 처리 중 서버 오류가 발생했다', correlationId),
     }
   }
 }

@@ -1,6 +1,6 @@
 # 자유채팅·권한 seam (E3-4)
 
-> 명령 디스패치 경로에 actor-context를 threading하고, 자유 텍스트 채팅을 `ChannelPort`로, 권한 판정을 `PermissionPort`로 핸드오프하는 seam+skeleton의 정본. 실 전파·자원 소비·RBAC는 no-op/permissive 어댑터 뒤 E4/E5/E7 어댑터 교체로 붙는다.
+> 명령 디스패치 경로에 actor-context를 threading하고, 자유 텍스트 채팅을 `ChannelPort`로, 권한 판정을 `PermissionPort`로 핸드오프하는 seam+skeleton의 정본. 방 단위 실 전파는 라이브 월드 foundation이 `ChannelPort`에 실 어댑터를 주입해 붙었고, 전역 전파(#37)·자원 소비·RBAC(E5)는 여전히 어댑터 교체 대기다.
 
 ## 개요
 
@@ -46,7 +46,7 @@ interface ChannelPort {
 }
 ```
 
-동기 시그니처는 `sessionLifecyclePort`·`sessionAuthPort` seam 관례 미러다 — no-op stub이라 Promise를 반환하지 않고, E4/E7 실 브로드캐스트 어댑터는 DB·fan-out I/O로 async가 필요하므로 그 시점에 `Promise<void>` 반환으로 확장한다.
+동기 시그니처는 `sessionLifecyclePort`·`sessionAuthPort` seam 관례 미러다. 실 방 채널 어댑터도 인메모리 occupants 순회 + 소켓 send만 하므로 동기를 유지한다 — DB·전역 fan-out I/O가 들어오는 시점(#37)에 `Promise<void>` 반환으로 확장한다.
 
 **선언적 채널 메타데이터 테이블** `CHANNEL_METADATA` — channel → `{ audience, cost, gate }`. E3는 어느 항목도 강제하지 않는다(선언만). `audience`·`cost`(HP·일일한도 = 자원 비용·전파)는 ChannelPort 소유(강제 E4/E7), `gate`(레벨/클래스 실행 자격)는 PermissionPort 개념 영역(강제 E5). `broadcast.gate.minLevel=20`은 spec §3.4의 "잡담 레벨20↑"를 선언으로 고정한 값이며, 핸들러는 이 테이블을 **참조하지 않고** 무조건 deliver한다(미강제).
 
@@ -110,9 +110,10 @@ registerWebsocket(
 ## 제약사항
 
 - **게이트·비용 실 enforcement 없음** — 잡담 HP 차감, 레벨 20 체크, 일일 방송 한도 카운터. 캐릭터 상태(E4)·카운터 영속(E4/E5) 의존. E3는 `CHANNEL_METADATA` 선언 메타만.
-- **실 채널 브로드캐스트·전파 없음** — 방=채널 delivery, 외쳐 1홉 인접 전파, 전서버 방송, 구독 필터. → **E4(#34)/E7(#37)**. `ChannelPort`는 no-op 로깅만.
+- **전파는 방 단위까지만** — 방=채널 delivery는 라이브 월드 foundation이 실 어댑터를 주입해 동작한다([`live-world-foundation.md`](live-world-foundation.md)). 외쳐 1홉 인접 전파·전서버 방송·구독 필터는 여전히 없다 → **E7(#37)**. 현재 `broadcast`·`yell`은 명령이 수락되지만 발화자의 방에만 전달된다.
 - **실 RBAC 역할·정책 없음** — 클래스 0~12 실 판정, `*` 관리 명령 게이트, 직업 한정 스킬. → **E5(#35)**. `PermissionPort`는 항상 allow.
-- **live 캐릭터 상태 조회 없음** — actor의 `class`·`level`·`flags` 실 값. E3엔 미채움(optional). → **E4(#34)**.
+- **live 캐릭터 상태 조회 없음** — actor의 `class`·`level`·`flags` 실 값. actor는 신원(accountId·characterId)만 싣고 게임 상태는 라이브 캐릭터 레지스트리 조회로 얻는 것이 확정된 형태다 — 이 optional 필드들의 충전 여부는 실제 소비처가 생기는 후속 규칙 토픽이 결정한다.
 - **자유 텍스트 필드 값 검증 유예** — `chat:emote`의 40개 별칭 allowlist 값 검증은 E7(채널 어댑터). 프로토콜은 non-empty + 길이 상한만 강제. 채널 전파 대상 필드(`text`·`emote`·`target`)에 프로토콜 계층 길이 상한(DoS floor)을 두되, 값은 E4/E7가 채널별로 더 좁힐 수 있다.
-- **broadcast fail-open 교차-에픽 시퀀싱 제약** (load-bearing) — E3 기본 주입은 noop 채널 + permissive 권한 둘 다 no-op이라 안전하다. 그러나 E4/E7가 실 broadcast fan-out 어댑터를 `ChannelPort`에 붙일 때 E5 실 `PermissionPort`가 아직 permissive면 임의 인증 actor가 전역 broadcast 가능(fail-open)이다. E4/E7는 반드시 (a) E5 실 PermissionPort를 함께 주입하거나 (b) 그 시점에 기본을 fail-closed로 전환해야 한다.
+- **broadcast fail-open 시퀀싱 제약** (load-bearing, 현재 부분 노출) — 실 방 채널 어댑터가 주입된 지금도 `PermissionPort`는 permissive이고 `CHANNEL_METADATA.broadcast.gate.minLevel = 20`은 여전히 미강제다. 다만 fan-out 범위가 발화자의 방으로 한정돼 있어 노출은 방 단위에 머문다. **전역 broadcast fan-out을 붙이는 시점(#37)에는 반드시** (a) 실 `PermissionPort`를 함께 주입하거나 (b) 기본을 fail-closed로 전환해야 한다 — 그러지 않으면 임의 인증 actor가 전서버 방송을 하게 된다.
+- **`chat:emote.target` 값 미검증** — `target`은 실재 캐릭터인지 확인되지 않은 자유 문자열이며 그대로 fan-out된다. 타인 이름을 넣어 표시상 사칭이 가능하다(권한 상승은 없음). 별칭 allowlist와 함께 채널 어댑터 토픽(#37)에서 좁힌다.
 - **나머지 소셜 자유텍스트 명령** — 그룹말·패거리말·표현(자유 이모트 `:이름이 <문장>`)·귓속말·환호. 같은 seam으로 후속 토픽. (감정표현(action)은 이번 `chat:emote`로 포함 — 이름 유사한 별개 명령.)

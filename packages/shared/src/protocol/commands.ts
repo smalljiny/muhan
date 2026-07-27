@@ -1,17 +1,13 @@
 import { z } from 'zod'
-import { freeTextPayloadSchema } from './payloads.js'
+import { freeTextPayloadSchema, CHAT_TEXT_MAX, CHAT_TARGET_MAX } from './payloads.js'
 
 /**
- * 채팅 자유 텍스트 필드의 프로토콜 계층 상한(문자 수). 프레임 상한(MAX_FRAME_BYTES=64KB)은 프레임
- * 전체를 막지만 개별 필드는 막지 않으므로, 채널이 수신자에게 전파되는 채팅 payload는 필드 단위로도
- * 상한을 둔다(입력 검증 규칙 — 모든 외부 입력 검증). E3의 no-op 어댑터에는 전파가 없어 오늘의 blast
- * radius는 프레임 하나지만, E4/E7가 실 broadcast·영속화 어댑터를 ChannelPort 뒤에 붙이면 크기×수신자
- * 증폭 벡터가 된다 — 그 전에 프로토콜 계약에 상한을 못박는다. 값은 DoS 방어 floor이며, E4/E7가
- * 채널별 정책으로 더 좁힐 수 있다(자유채팅 라인은 이 상한 안에서 충분하다).
+ * 감정표현 별칭(emote)의 상한 — 인바운드 chat:emote 전용이라 아웃바운드와 공유하지 않고 여기 둔다.
+ * text·target 상한은 아웃바운드 chat:said와 공유하므로 payloads.ts(CHAT_TEXT_MAX·CHAT_TARGET_MAX)에
+ * 단일 출처를 둔다. 프레임 상한(MAX_FRAME_BYTES)은 프레임 전체만 막으므로 전파 대상 필드는 필드 단위
+ * 상한을 둔다(DoS 방어 floor).
  */
-const CHAT_TEXT_MAX = 512
 const CHAT_EMOTE_MAX = 64
-const CHAT_TARGET_MAX = 64
 
 /**
  * client→server 명령 봉투 — 판별 유니온의 단일 출처.
@@ -64,6 +60,14 @@ export const clientCommandSchema = z.discriminatedUnion('type', [
     emote: z.string().min(1).max(CHAT_EMOTE_MAX),
     target: z.string().min(1).max(CHAT_TARGET_MAX).optional(),
     text: z.string().min(1).max(CHAT_TEXT_MAX).optional(),
+    id: z.string().optional(),
+  }),
+  // 이동 명령 — direction은 방 그래프 출구 이름과 정확 일치할 문자열이다(방 데이터의 출구 이름을 그대로 지목).
+  // 상한 32는 입력 위생(방 그래프 어떤 출구 이름도 이 안에 든다 — 초과 입력은 형식 위반으로 조기 차단).
+  // mode(단축키·방향 별칭) 해소는 클라 책임이다 — 서버는 해소된 최종 direction 문자열만 받는다(D-B). id는 상관 키.
+  z.strictObject({
+    type: z.literal('world:move'),
+    direction: z.string().min(1).max(32),
     id: z.string().optional(),
   }),
 ])

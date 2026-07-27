@@ -17,6 +17,10 @@ describe('errorCodeSchema', () => {
     expect(errorCodeSchema.safeParse('rate_limited').success).toBe(true)
   })
 
+  it('rule_rejected 코드를 통과시킨다 (게임 규칙 거부 — 잠긴 문·막힌 길)', () => {
+    expect(errorCodeSchema.safeParse('rule_rejected').success).toBe(true)
+  })
+
   it('알 수 없는 코드를 거부한다', () => {
     expect(errorCodeSchema.safeParse('teapot').success).toBe(false)
   })
@@ -258,6 +262,156 @@ describe('serverEventSchema (server→client 봉투)', () => {
       expect(
         serverEventSchema.safeParse({ type: 'session:resumed', characterId: 'char-1', extra: 1 })
           .success,
+      ).toBe(false)
+    })
+  })
+
+  describe('world:room', () => {
+    it('roomId 0 + 빈 exits 배열이 있으면 통과한다', () => {
+      const parsed = serverEventSchema.safeParse({ type: 'world:room', roomId: 0, exits: [] })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'world:room') {
+        expect(parsed.data.roomId).toBe(0)
+        expect(parsed.data.exits).toEqual([])
+      }
+    })
+
+    it('roomId + exits 이름 목록이 있으면 통과한다', () => {
+      const parsed = serverEventSchema.safeParse({
+        type: 'world:room',
+        roomId: 5,
+        exits: ['북', '남'],
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'world:room') {
+        expect(parsed.data.roomId).toBe(5)
+        expect(parsed.data.exits).toEqual(['북', '남'])
+      }
+    })
+
+    it('roomId가 음수이면 거부한다', () => {
+      expect(
+        serverEventSchema.safeParse({ type: 'world:room', roomId: -1, exits: [] }).success,
+      ).toBe(false)
+    })
+
+    it('roomId가 정수가 아니면 거부한다 (z.int 경계)', () => {
+      expect(
+        serverEventSchema.safeParse({ type: 'world:room', roomId: 1.5, exits: [] }).success,
+      ).toBe(false)
+    })
+
+    it('알 수 없는 키를 거부한다 (strict)', () => {
+      expect(
+        serverEventSchema.safeParse({ type: 'world:room', roomId: 0, exits: [], extra: 1 }).success,
+      ).toBe(false)
+    })
+  })
+
+  describe('chat:said', () => {
+    it('모든 필드가 있으면 통과한다', () => {
+      const parsed = serverEventSchema.safeParse({
+        type: 'chat:said',
+        channel: 'say',
+        speakerCharacterId: 'char-1',
+        text: '안녕',
+        target: 'char-2',
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'chat:said') {
+        expect(parsed.data.channel).toBe('say')
+        expect(parsed.data.speakerCharacterId).toBe('char-1')
+        expect(parsed.data.text).toBe('안녕')
+        expect(parsed.data.target).toBe('char-2')
+      }
+    })
+
+    it('target 없이도 통과한다', () => {
+      const parsed = serverEventSchema.safeParse({
+        type: 'chat:said',
+        channel: 'emote',
+        speakerCharacterId: 'char-1',
+        text: '웃는다',
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'chat:said') {
+        expect(parsed.data.target).toBeUndefined()
+      }
+    })
+
+    it('text가 빈 문자열이면 거부한다', () => {
+      expect(
+        serverEventSchema.safeParse({
+          type: 'chat:said',
+          channel: 'say',
+          speakerCharacterId: 'char-1',
+          text: '',
+        }).success,
+      ).toBe(false)
+    })
+
+    it('speakerCharacterId가 빈 문자열이면 거부한다', () => {
+      expect(
+        serverEventSchema.safeParse({
+          type: 'chat:said',
+          channel: 'say',
+          speakerCharacterId: '',
+          text: '안녕',
+        }).success,
+      ).toBe(false)
+    })
+
+    it('channel 미허용값을 거부한다', () => {
+      expect(
+        serverEventSchema.safeParse({
+          type: 'chat:said',
+          channel: 'gtalk',
+          speakerCharacterId: 'char-1',
+          text: '안녕',
+        }).success,
+      ).toBe(false)
+    })
+
+    it('text가 상한(512)을 넘으면 거부하고 경계값(512)은 통과한다 (전파 대상 DoS floor)', () => {
+      expect(
+        serverEventSchema.safeParse({
+          type: 'chat:said',
+          channel: 'say',
+          speakerCharacterId: 'char-1',
+          text: 'ㄱ'.repeat(513),
+        }).success,
+      ).toBe(false)
+      expect(
+        serverEventSchema.safeParse({
+          type: 'chat:said',
+          channel: 'say',
+          speakerCharacterId: 'char-1',
+          text: 'ㄱ'.repeat(512),
+        }).success,
+      ).toBe(true)
+    })
+
+    it('target이 상한(64)을 넘으면 거부한다', () => {
+      expect(
+        serverEventSchema.safeParse({
+          type: 'chat:said',
+          channel: 'say',
+          speakerCharacterId: 'char-1',
+          text: '안녕',
+          target: 'ㄱ'.repeat(65),
+        }).success,
+      ).toBe(false)
+    })
+
+    it('알 수 없는 키를 거부한다 (strict)', () => {
+      expect(
+        serverEventSchema.safeParse({
+          type: 'chat:said',
+          channel: 'say',
+          speakerCharacterId: 'char-1',
+          text: '안녕',
+          extra: true,
+        }).success,
       ).toBe(false)
     })
   })

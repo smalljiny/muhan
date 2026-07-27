@@ -132,7 +132,7 @@ describe('WS transport', () => {
     const ws = await injectAuthedWS(app)
     const hello = await waitForMessage(ws)
 
-    expect(hello).toMatchObject({ type: 'system:hello', protocolVersion: 1 })
+    expect(hello).toMatchObject({ type: 'system:hello', protocolVersion: PROTOCOL_VERSION })
 
     ws.terminate()
     await app.close()
@@ -162,9 +162,9 @@ describe('WS transport', () => {
 
     const ws = await injectAuthedWS(app)
     const hello = await waitForMessage(ws)
-    expect(hello).toMatchObject({ type: 'system:hello', protocolVersion: 1 })
+    expect(hello).toMatchObject({ type: 'system:hello', protocolVersion: PROTOCOL_VERSION })
 
-    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
+    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: PROTOCOL_VERSION }))
     await waitFor(() => [...app.wsConnections.values()][0]?.ready === true)
 
     expect([...app.wsConnections.values()][0]?.ready).toBe(true)
@@ -203,12 +203,12 @@ describe('WS transport', () => {
     // accept가 characterList+prompt 2프레임을 동기 발화하므로 유실 없는 리더로 소비한다(Lock A/B).
     const reader = createMessageReader(ws)
     await reader.next() // system:hello
-    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
+    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: PROTOCOL_VERSION }))
     await reader.next() // session:characterList
     await reader.next() // session:prompt
     await waitFor(() => [...app.wsConnections.values()][0]?.ready === true)
 
-    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
+    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: PROTOCOL_VERSION }))
     const event = await reader.next()
 
     expect(event).toMatchObject({ type: 'error' })
@@ -226,7 +226,7 @@ describe('WS transport', () => {
     const reader = createMessageReader(ws)
     await reader.next() // system:hello
 
-    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
+    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: PROTOCOL_VERSION }))
     const list = await reader.next()
     const prompt = await reader.next()
 
@@ -268,7 +268,7 @@ describe('WS transport', () => {
     const ws = await injectAuthedWS(app)
     const reader = createMessageReader(ws)
     await reader.next() // system:hello
-    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
+    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: PROTOCOL_VERSION }))
     await reader.next() // characterList
     await reader.next() // prompt
 
@@ -310,7 +310,7 @@ describe('WS transport', () => {
     const ws = await injectAuthedWS(app)
     const reader = createMessageReader(ws)
     await reader.next() // system:hello
-    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
+    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: PROTOCOL_VERSION }))
     await reader.next() // characterList
     await reader.next() // prompt(selectCharacter)
     ws.send(JSON.stringify({ type: 'session:reply', promptId: SELECT_CHARACTER_PROMPT_ID, value: CREATE_SENTINEL }))
@@ -335,7 +335,7 @@ describe('WS transport', () => {
     const ws = await injectAuthedWS(app)
     const reader = createMessageReader(ws)
     await reader.next() // system:hello
-    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: 1 }))
+    ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: PROTOCOL_VERSION }))
     await reader.next() // characterList
     await reader.next() // prompt(selectCharacter)
     ws.send(JSON.stringify({ type: 'session:reply', promptId: SELECT_CHARACTER_PROMPT_ID, value: CREATE_SENTINEL }))

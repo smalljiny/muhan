@@ -276,6 +276,51 @@ describe('clientCommandSchema (client→server 봉투)', () => {
     })
   })
 
+  describe('world:move', () => {
+    it('direction이 있으면 통과한다 (id 생략)', () => {
+      const parsed = clientCommandSchema.safeParse({ type: 'world:move', direction: '북' })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'world:move') {
+        expect(parsed.data.direction).toBe('북')
+        expect(parsed.data.id).toBeUndefined()
+      }
+    })
+
+    it('direction + id가 있으면 통과한다', () => {
+      const parsed = clientCommandSchema.safeParse({
+        type: 'world:move',
+        direction: '남',
+        id: 'c5',
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'world:move') {
+        expect(parsed.data.id).toBe('c5')
+      }
+    })
+
+    it('direction이 빈 문자열이면 거부한다', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'world:move', direction: '' }).success,
+      ).toBe(false)
+    })
+
+    it('direction이 상한(32)을 넘으면 거부한다 (입력 위생)', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'world:move', direction: 'ㄱ'.repeat(33) }).success,
+      ).toBe(false)
+      // 상한 이내는 통과한다(경계값).
+      expect(
+        clientCommandSchema.safeParse({ type: 'world:move', direction: 'ㄱ'.repeat(32) }).success,
+      ).toBe(true)
+    })
+
+    it('알 수 없는 키를 거부한다 (strict)', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'world:move', direction: '북', extra: true }).success,
+      ).toBe(false)
+    })
+  })
+
   it('event 전용 type(system:hello)을 거부한다', () => {
     expect(
       clientCommandSchema.safeParse({ type: 'system:hello', protocolVersion: 1 }).success,

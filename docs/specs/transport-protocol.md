@@ -20,7 +20,7 @@
 
 `shared`의 기존 `schema/`(영속·도메인)와 **별개 모듈**이다 — 프로토콜은 와이어 메시지 계약, `schema/`는 저장 도메인 모델이다. 모든 TS 타입은 `z.infer`로만 파생하며 병렬 수기 타입을 두지 않는다. `index.ts` 배럴이 스키마·타입·`PROTOCOL_VERSION`을 함께 재노출하고, `shared/src/index.ts`가 이를 `export *`로 상위 노출한다. DOM 전역(`Event`·`Command`)과 충돌하지 않도록 파생 타입은 `ClientCommand`·`ServerEvent`로 한정 명명한다.
 
-**`version.ts`** — `PROTOCOL_VERSION = 1`. 계약이 하위 비호환으로 바뀔 때마다 1씩 단조 증가시키는 정수(semver 미채택 — 와이어 호환성만 판단하면 되므로 정수 동등 비교가 단순). 핸드셰이크가 이 값을 실어 client·server가 같은 계약 세대를 쓰는지 대조한다.
+**`version.ts`** — `PROTOCOL_VERSION = 2`. 계약이 하위 비호환으로 바뀔 때마다 1씩 단조 증가시키는 정수(semver 미채택 — 와이어 호환성만 판단하면 되므로 정수 동등 비교가 단순). 핸드셰이크가 이 값을 실어 client·server가 같은 계약 세대를 쓰는지 대조한다.
 
 **`payloads.ts`** — 명령 인자 패턴 building block 4종. 무한 명령 어휘가 인자 구조상 수렴하는 4패턴을 독립 `z.strictObject`로 못박아 command 봉투가 재사용한다. 다단 대화(prompt/response) payload는 T2 경계라 여기 두지 않는다.
 
@@ -47,6 +47,7 @@
 - `{ type: 'session:selectCharacter', characterId: string(min 1), id?: string }` — 캐릭터 선택(T2). `characterId`로 입장할 캐릭터를 지목한다.
 - `{ type: 'chat:message', channel: 'say'|'yell'|'broadcast', text: string(min 1, max 512), id?: string }` — 자유채팅(E3-4). `channel`로 전파 범위를 판별하고 `text`는 발화 내용. 채널 전파 대상 필드라 프레임 상한과 별개로 필드 단위 길이 상한을 둔다(DoS floor).
 - `{ type: 'chat:emote', emote: string(min 1, max 64), target?: string(min 1, max 64), text?: string(min 1, max 512), id?: string }` — 감정표현(E3-4, A2 감정표현 action). `emote`가 주 콘텐츠(별칭, 값 검증은 채널 어댑터/E7), `target`은 대상 캐릭터, `text`는 선택적 부가 메시지. `freeTextPayloadSchema.shape`를 spread하지 않는다(그 shape의 text는 필수라 optional 의도와 충돌). 검증된 채팅 명령은 `ChannelPort`로 핸드오프된다([`freechat-permission-seam.md`](freechat-permission-seam.md)).
+- `{ type: 'world:move', direction: string(min 1, max 32), id?: string }` — 이동. `direction`은 방 그래프 출구 **이름**과 정확 일치할 문자열이며, 상한 32는 입력 위생이다(어떤 출구 이름도 이 안에 든다). 방향 별칭·단축키 해소는 클라 책임이라 서버는 해소된 최종 문자열만 받고 `resolveExit` mode를 `directional`로 고정한다 — flee/sneak/named를 와이어에 노출하지 않는다. `targetOrdinalPayloadSchema`를 재사용하지 않는 이유가 이것이다. 정본 [`live-world-foundation.md`](live-world-foundation.md).
 
 **`events.ts`** — `serverEventSchema = z.discriminatedUnion('type', [...])` + `errorCodeSchema`.
 
@@ -57,6 +58,8 @@
 - `{ type: 'session:prompt', promptId: string(min 1), kind: PromptKind, options?: PromptOption[] }` — 세션 prompt 제시(T2). `promptId`로 질문을 식별, `kind`로 단계(`selectCharacter`/`createField`)를, `options`로 선택지를 싣는다.
 - `{ type: 'session:characterList', characters: CharacterSummary[] }` — 캐릭터 선택 화면이 실을 와이어 전용 요약 배열(T2).
 - `{ type: 'session:entered', characterId: string(min 1) }` — 지목한 캐릭터로 월드 입장 확정 통지(T2).
+- `{ type: 'world:room', roomId: int(min 0), exits: string[] }` — 최소 방 통지. 입장·이동 성공 시 본인에게 1회 발화한다. `exits`는 출구 **이름** 목록(인덱스가 아니다 — `world:move.direction`과 같은 어휘). 주변 점유자·아이템·방 설명은 싣지 않으며 상세 월드뷰는 후속 에픽이 확장한다. 정본 [`live-world-foundation.md`](live-world-foundation.md).
+- `{ type: 'chat:said', channel: 'say'|'yell'|'broadcast'|'emote', speakerCharacterId: string(min 1), text: string(min 1, max 512), target?: string(min 1, max 64) }` — 채널 fan-out 수신측 통지. `ChannelDeliveryContext`와 1:1 매핑(발화자를 `speakerCharacterId`로 평탄화)이며, 인바운드 `chat:message`와 이름을 달리해(said vs message) 방향을 판별한다. 길이 상한은 인바운드 chat 명령과 동일 값을 아웃바운드에도 적용한다.
 
 `errorCodeSchema = z.enum(['handshake_required', 'unknown_type', 'bad_payload', 'internal', 'unauthorized', 'session_state', 'forbidden', 'rate_limited'])` — `handshake_required`(핸드셰이크 전 명령 수신), `unknown_type`(미지 discriminator), `bad_payload`(payload 형식 위반), `internal`(핸들러/처리 중 서버 내부 오류), `unauthorized`(소유하지 않은 캐릭터 지목 등 **미인증** 세션의 인가 실패, T2), `session_state`(현재 세션 단계에서 허용되지 않는 명령, T2), `forbidden`(**인증됐으나** RBAC 권한 부족으로 거부, E3-4), `rate_limited`(인바운드 프레임이 연결·계정 속도 상한을 초과해 `JSON.parse` 전에 drop됨, #64 — 연속 폐기 구간의 첫 폐기에만 1회 통지, 정본 [`ws-rate-limit.md`](ws-rate-limit.md)). `unauthorized`(신원 없음, 재인증 유도)와 `forbidden`(신원 있으나 자격 없음, 권한 없음 안내)은 client-visible 의미가 다르다. WS upgrade **전** 게이트의 거부(`401 unauthenticated`·`403 forbidden_origin`)는 프로토콜 error 이벤트가 아니라 HTTP 응답이며 이 열거에 없다(auth-session.md 참조).
 
@@ -172,5 +175,5 @@ E3 하드닝(#54)이 자원 한도 3필드(`WS_MAX_CONNECTIONS`·`WS_MAX_CONNECT
 - **`debug:echo`는 무권한 노출** — 진단·파이프라인 검증 전용이다. 프로덕션 빌드 제거/플래그 게이트 여부는 후속 하드닝에서 재검토한다.
 - **`WS_HEARTBEAT_PONG_TIMEOUT_MS`는 미소비 예약 seam** — 현재 단일 인터벌 모델의 유효 per-pong 마감은 `PING_INTERVAL`이다. 이 필드를 낮춰도 종료 타이밍은 바뀌지 않는다.
 - **TLS는 TLS-ready pass-through만** — `buildApp`이 `https` 서버 옵션을 Fastify로 pass-through해 `wss`를 지원한다. dev는 평문 loopback `ws`. 프로덕션 TLS 종단 지점(Fastify https vs 리버스 프록시)과 하트비트 인터벌 확정값(프록시 idle timeout 75% 규칙)은 배포/인프라 토픽에서 재조정한다.
-- **`protocolVersion` bump 정책 미확정** — 형식은 정수 `1`로 확정. *언제* 올리는가(호환 불가 변경 기준·문서화)는 프로토콜이 커질 때 별도로 정한다.
-- **브로드캐스트·한글 자유 텍스트 파서 없음** — 단일 소켓 왕복만 다룬다. E3-4가 자유채팅 입력을 `ChannelPort`로 핸드오프하는 seam을 얹었으나([`freechat-permission-seam.md`](freechat-permission-seam.md)) 실 전파는 여전히 없다(no-op 어댑터). EventEmitter 토픽·구독 필터·방=채널은 월드 상태 엔진/소셜 에픽(E4/E7), 동사-후치 자유 텍스트 파서는 자유 모드 UI 토픽(구조화 명령은 클라가 이미 분리 전송), 조사 i18n 렌더·클라이언트 UI는 프론트엔드 토픽이다.
+- **`protocolVersion` bump 정책 미확정** — 형식은 단조 증가 정수로 확정(현재 `2` — 라이브 월드 foundation의 `world:move`·`world:room`·`chat:said` 신설에서 1→2). *언제* 올리는가(호환 불가 변경 기준·문서화)는 프로토콜이 커질 때 별도로 정한다.
+- **한글 자유 텍스트 파서 없음** — E3-4가 자유채팅 입력을 `ChannelPort`로 핸드오프하는 seam을 얹었고([`freechat-permission-seam.md`](freechat-permission-seam.md)) 라이브 월드 foundation이 실 방 채널 어댑터를 결선해 같은 방 전파는 동작한다([`live-world-foundation.md`](live-world-foundation.md)). 전서버 방송·외쳐 1홉 인접 전파·구독 필터는 소셜 에픽(#37), 동사-후치 자유 텍스트 파서는 자유 모드 UI 토픽(구조화 명령은 클라가 이미 분리 전송), 조사 i18n 렌더·클라이언트 UI는 프론트엔드 토픽이다.
