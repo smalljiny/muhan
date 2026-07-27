@@ -13,7 +13,7 @@ E3-1([`transport-protocol.md`](./transport-protocol.md))은 transport-only WS(�
 - **disconnect 수렴 seam** — grace 만료·idle timeout·중복 로그인 evict가 모두 단일 종결 함수 `resolveDisconnect`를 거쳐 **lifecycle 포트**를 정확히 한 번 호출한다(A12 §1.4 "disconnect가 save 수렴점" 의미 보존).
 - **idle timeout** — `command` 상태 무활동 종료 창(A12 §1.6, 최후의 세이브 안전망).
 
-이 계층은 **seam·skeleton**이다. 실제 캐릭터 저장과 라이브 월드 캐릭터 인스턴스화는 없다 — 저장할 라이브 월드 캐릭터 객체 자체가 아직 없으므로, 수렴 *의미*는 `SessionLifecyclePort` DIP seam으로 보존하고 실 영속화는 no-op(로깅) 어댑터로 위임한다.
+이 계층 자체는 **seam·skeleton**이다 — 수렴 *의미*를 `SessionLifecyclePort` DIP seam으로 보존하고 어떤 상태를 저장할지는 어댑터에 위임한다. 라이브 캐릭터 상태원이 세워진 뒤([`live-world-foundation.md`](live-world-foundation.md)) 프로덕션 부트가 실 어댑터를 주입해 종료 시 마지막 방이 실제로 영속화되며, 라이브 의존이 미주입된 구성에서는 no-op(로깅) 어댑터가 그대로 기본이다.
 
 ## 구조 / 스키마
 
@@ -75,11 +75,11 @@ interface SessionLifecyclePort {
 | 항목 | 결정 |
 |------|------|
 | 입력 | 최소 3필드(accountId·characterId·reason). world snapshot 핸들 미노출 |
-| 동기/비동기 | 동기 `void` — no-op/로깅 어댑터는 I/O 없음 |
+| 동기/비동기 | 동기 `void` — 어댑터는 인메모리 변이·`markDirty`(동기 side registry 기록)만 하고 실 DB write는 저장 스케줄러의 비동기 flush가 소유한다 |
 | 실패 정책 | 포트 throw는 `resolveDisconnect`가 catch·로깅·**삼킴** — teardown은 저장 실패와 무관하게 진행 |
 | 순서 | 레지스트리 제거(선) → 포트 호출 → transport 정리·소켓 close |
 
-기본 어댑터는 `createNoopSessionLifecycleAdapter(logger)` — 종결 사실만 구조 로깅하고 즉시 반환한다. 실 저장 어댑터는 라이브 월드 캐릭터가 존재하는 후속 에픽(E4/E5)이 이 자리에 주입한다.
+기본 어댑터는 `createNoopSessionLifecycleAdapter(logger)` — 종결 사실만 구조 로깅하고 즉시 반환한다. 프로덕션 부트는 라이브 월드 의존 묶음이 주입될 때 실 어댑터(`liveSessionLifecycleAdapter.ts`)를 파생해 이 자리를 대체한다: 종료 시점 방을 `markDirty`한 뒤(dirty-before-release) 라이브 엔트리·방 점유를 해제한다. 정본 [`live-world-foundation.md`](live-world-foundation.md).
 
 ## 동작
 
@@ -183,9 +183,9 @@ grace·idle 창은 env로 튜닝하며 스키마는 `z.coerce.number().int().min
 
 ## 제약사항
 
-- **저장 미수행** — `SessionLifecyclePort`는 seam이고 배선은 no-op(로깅) 어댑터뿐이다. 실제 캐릭터 저장은 라이브 월드 캐릭터가 존재하는 후속 에픽(E4/E5)이 실 어댑터를 주입한다. 포트 시그니처(async 반환·world snapshot 핸들·write-ahead)도 그 시점에 확장한다.
-- **월드측 link-dead 동작은 범위 밖** — 세션 계층 rebind만 한다. link-dead 캐릭터가 방에 남는지·피격 가능한지·전투가 지속되는지는 월드 인스턴스화 에픽(E4)이 결정한다.
-- **놓친 이벤트 리플레이 없음** — rebind는 `command` 복원 + `session:resumed`까지다. 단절 중 놓친 이벤트(방 설명·전투 로그) 재전송은 월드 상태 소관(E4).
+- **저장 범위는 방 위치까지** — 실 어댑터가 종료 시 영속화하는 것은 `currentRoom`이며, HP/MP/인벤 등 나머지 라이브 필드의 저장은 그 필드를 실제로 변이하는 후속 규칙 배선 토픽이 함께 얹는다. 포트 시그니처(async 반환·world snapshot 핸들·write-ahead) 확장도 필요 시점에 한다.
+- **월드측 link-dead 동작은 범위 밖** — 세션 계층 rebind만 한다. link-dead 캐릭터는 grace 동안 라이브 레지스트리와 방 점유에 그대로 남으며(종결 시점에만 해제), 피격 가능한지·전투가 지속되는지는 후속 규칙 토픽이 결정한다.
+- **놓친 이벤트 리플레이 없음** — rebind는 `command` 복원 + `session:resumed` + 현재 위치 `world:room`까지다. 단절 중 놓친 이벤트(채팅·전투 로그) 재전송은 없다.
 - **명시적 logout 없음** — 원작 무한에 quit 명령이 없어 이 계층에도 없다. 향후 추가 시 별도 reason으로 `resolveDisconnect`에 매핑한다.
 - **연결 정원·상한·backpressure 없음** — 레지스트리는 중복/정원 정책이 소비할 seam을 제공할 뿐, 동시 접속 상한·계정별 연결 상한·rate limiting·아웃바운드 backpressure는 별도 하드닝 토픽(#54) 소관이다.
 - **서버 graceful shutdown 수렴은 런타임 기반 토픽 소관** — 서버 주도 종료 시 전체 live 바인딩을 `resolveDisconnect(reason:'shutdown')`로 즉시 수렴하는 오케스트레이션은 [`runtime-foundation.md`](./runtime-foundation.md)(shutdown 수렴, #56 해소)이 소유한다. 본 계층은 그 수렴이 소비하는 seam만 제공한다 — `DisconnectReason`의 `'shutdown'` 값, `SessionRegistry.listBindings` 스냅샷, 그리고 서버 주도 종료 플래그가 set이면 close 핸들러가 `markLinkDead`(grace)를 건너뛰는 판정. close 핸들러의 서버 주도 종료 구분은 §동작 "close 판정" 표의 "서버 주도 종료" 행과 동일 원리다(플래그 가드로 link-dead 진입 차단).

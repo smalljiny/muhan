@@ -128,7 +128,7 @@ gate 1(출구 존재)과 `XNOSEE` 이름 탐색 제외는 `tryMove`가 담당한
 
 ### 방 채널 어댑터 (`roomChannelAdapter.ts`)
 
-`createRoomChannelAdapter(deps)`는 `ChannelPort` 실 구현을 반환한다(생성자 주입 — `resolveRoom`·`sendTo`). `deliver(ctx)`는 발화자의 현재 방을 조회해 `occupants` 전 멤버에게 동기 fan-out한다. 방 미해석 시 조용히 no-op한다(배치 seam 미완 방어). `occupants`는 읽기만 한다. 가시성 필터(어둠·투명)와 발화자 자신 제외는 송신 시점 seam(`sendTo`)의 소관이며, 어댑터는 방 멤버십에 따른 fan-out 대상 집합만 결정한다. `deliver`는 동기(`void`) 시그니처를 유지한다(`channelPort.ts` 계약).
+`createRoomChannelAdapter(deps)`는 `ChannelPort` 실 구현을 반환한다(생성자 주입 — `resolveRoom`·`sendTo`). `deliver(ctx)`는 발화자의 현재 방을 조회해 `occupants` 전 멤버에게 동기 fan-out한다. 방 미해석 시 조용히 no-op한다(미배치 actor 방어). `occupants`는 읽기만 한다. 가시성 필터(어둠·투명)와 발화자 자신 제외는 송신 시점 seam(`sendTo`)의 소관이며, 어댑터는 방 멤버십에 따른 fan-out 대상 집합만 결정한다. `deliver`는 동기(`void`) 시그니처를 유지한다(`channelPort.ts` 계약).
 
 ### 월드클럭 배선
 
@@ -139,8 +139,7 @@ gate 1(출구 존재)과 `XNOSEE` 이름 탐색 제외는 `tryMove`가 담당한
 - **강제 게이트 6종만 실 거부** — 출구 존재+`XNOSEE`·dangling·`XLOCKD`·`XCLOSD`·시간·정원. 나머지 15종(진영·레벨·전투·경비 등)은 순서-유지 pass-through stub이며 입력 에픽(E4-2/E5/E6/E7) 대기다.
 - **정원 게이트 근사** — 전 점유자 카운트로 판정한다(가시 플레이어 필터 `PINVIS`는 E5 입력). 투명 플레이어가 있으면 원본보다 빨리 만원 판정될 수 있다.
 - **문 명령·인벤토리·picklock 미배선** — 전이 함수·`keyMatch` predicate만 제공한다. 플레이어 WS 명령(openexit/lock 등)·열쇠 오브젝트 실 조회·picklock(도둑 클래스·쿨다운·dex)은 호출자 seam(명령/인벤토리 에픽·E5).
-- **actor 방 배치 미완** — `tryMove`의 `MoveActor.currentRoomId`는 후속 방 배치 에픽이 서버 세션 상태에서 채운다. 클라 메시지에서 직접 역직렬화하지 않는 것이 seam 계약이다. `resolveExit`의 `mode`·`selector`도 WS 명령 경계에서 런타임 검증(Zod)이 필요하다.
-- **채널 기본 어댑터 교체 유예** — 실 어댑터는 주입 가능한 구현으로 제공만 하고, `plugin.ts`의 no-op 기본 어댑터 교체는 런타임 방 배치(초기 occupancy) seam이 붙는 시점으로 유예한다.
+- **이동 leave/join 방송 미결선** — `broadcastLeave`/`broadcastJoin`은 프로덕션 배선에서 no-op이다. 방 채팅 전파는 채널 포트가 소유하고, 이동 통지(누가 들어왔다/나갔다)는 후속 토픽 몫이다.
 - **라이브 상태만 — write-back 없음** — 방 점유자·문 상태는 인메모리 라이브 상태다. 영속화(write-back)는 seam이며 재부팅 시 문 상태는 기본값(`ltime=0`·`interval=60`)으로 복귀한다.
 - **좌표 없음** — 서버는 그래프+방향 힌트만 권위다. automap 좌표 합성·렌더는 클라 파생(E11).
 - **flag 52 latent bug 미재현** — A4 §8이 경고한 `F_ISSET(ext, 52)` 경계 밖 접근(비트 52는 4바이트 출구 flags 범위 밖 → ltime 침범)은 어떤 게이트·flee 로직도 읽지 않는다.
@@ -151,4 +150,5 @@ gate 1(출구 존재)과 `XNOSEE` 이름 탐색 제외는 `tryMove`가 담당한
 - ADR: [`architecture.md`](./architecture.md) (D1 런타임·틱, D2 월드 상태 영속화, D3 방=채널)
 - 콘텐츠 출처: `docs/notes/game-analysis-20260625/a4-movement-rooms.md` (A4 — 이동·방·출구 의미론)
 - 기존 seam: `packages/server/src/ws/channelPort.ts`(`ChannelPort`), `packages/shared/src/schema/roomState.ts`(영속 스키마)
+- 라이브 결선: [`live-world-foundation.md`](./live-world-foundation.md) — `tryMove`·`occupants`·방 채널 어댑터의 프로덕션 caller(방 배치·`world:move`·실 `ChannelPort`)
 - 이슈: #69 (E4-1b 이동·방), 부모 #34 (E4 월드 상태 엔진). 후속: #68 (E4-2 스폰·AI — 방 채널·점유자 소비), #71 (E8-2 property 테스트 — RNG 시드 규약)
