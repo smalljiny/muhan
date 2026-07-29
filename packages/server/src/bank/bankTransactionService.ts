@@ -33,13 +33,24 @@ import { DocumentNotFoundError } from '../repo/types.js'
  * 크레딧은 character.gold에 상한을 부과하지 않는다 — 상한 정책이 확정되면 이 seam에
  * 대칭 가드를 추가한다.
  *
- * 쓰기 경로 조정 계약(후속 caller-wiring 토픽 필수): 이 서비스는 gold를 Mongo 트랜잭션으로
- * 직접 쓴다. 같은 characters·bankAccounts 문서가 SaveEngine의 write-behind 경로(markDirty→
- * 주기 flush)로도 흘러가면, 트랜잭션 커밋 이후 도착한 stale 스냅샷 flush가 gold를 되돌릴 수
- * 있다(무성 revert/손실). 현재는 gold를 dirty로 마킹하는 caller가 없어 도달 불가하지만, 게임플레이
- * 호출처를 배선할 때 두 경로를 조정해야 한다 — (a) 트랜잭션 전후로 두 키를 SaveEngine에서
- * evict/quiesce하고 커밋 후 최신 스냅샷으로 재-mark하거나, (b) gold 변이를 write-behind 밖에
- * 두어 단일 authoritative 경로로 유지한다. 조정 없이 gold 엔티티를 두 경로로 흘리지 않는다.
+ * 쓰기 경로 조정 계약(이슈 #43 — blocking): 이 서비스는 gold를 Mongo 트랜잭션으로 직접 쓴다.
+ * 같은 characters·bankAccounts 문서가 SaveEngine의 write-behind 경로(markDirty→주기 flush)로도
+ * 흘러가면, 트랜잭션 커밋 이후 도착한 stale 스냅샷 flush가 gold를 되돌릴 수 있다(무성 revert/손실).
+ *
+ * **gold는 이제 write-behind 경로에 진입했다.** `progress:train` 명령이 배선되면서 라이브 세션의
+ * 연마가 `insufficient-gold` 게이트로 비용을 검사하고 차감하며, 그 결과가 characters 전체 문서
+ * 스냅샷(gold 포함)으로 markDirty에 실린다. 이동·세션 종료 flush도 같은 전체 문서를 싣는다. 즉
+ * "gold를 dirty로 마킹하는 caller가 없다"는 이전 전제는 더 이상 참이 아니다.
+ *
+ * 충돌 자체는 아직 미도달이다 — 반대편인 은행 직접 write는 여전히 dormant다(`clientCommandSchema`에
+ * 은행 명령 variant가 없고, 이 서비스의 non-test caller가 0건이다). 한쪽만 무장된 상태다.
+ *
+ * **blocking 계약: #43(evict/quiesce 또는 gold write-behind 배제)을 해소하기 전에는 은행 명령을
+ * 배선하지 않는다.** 배선하는 순간 커밋된 입출금이 다음 이동·연마·종료 flush에 무성 revert된다.
+ *
+ * 해소 방향(둘 중 하나를 택한다): (a) 트랜잭션 전후로 두 키를 SaveEngine에서 evict/quiesce하고
+ * 커밋 후 최신 스냅샷으로 재-mark하거나, (b) gold 변이를 write-behind 밖에 두어 단일 authoritative
+ * 경로로 유지한다. 조정 없이 gold 엔티티를 두 경로로 흘리지 않는다.
  */
 
 // 불변식 6(은행 gold 상한 3억)의 단일 출처는 shared의 MAX_BANK_GOLD다 — 스키마 `.max()`와
