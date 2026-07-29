@@ -248,9 +248,11 @@ describe('createCommandRegistry — world:move 조건부 등록', () => {
     const source = makeRoom(100, [makeExit('동', 200)], ['me'])
     const { deps } = makeTryMoveDeps([source, dest])
     const registry = createCommandRegistry(testChannelPort, {
-      liveRegistry: { get: vi.fn(() => makeLive(100)) },
-      tryMoveDeps: deps,
-      markDirty: vi.fn(),
+      move: {
+        liveRegistry: { get: vi.fn(() => makeLive(100)) },
+        tryMoveDeps: deps,
+        markDirty: vi.fn(),
+      },
     })
 
     const result = dispatch(registry, { type: 'world:move', direction: '동' }, actor, testPermission)

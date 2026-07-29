@@ -342,9 +342,12 @@ export function registerWebsocket(
   // 진입 seam 우선순위(explicit binding > bundle-derived binding). 명시 liveWorld(T4.5 seam)가 있으면 그대로 쓴다.
   const effectiveLiveWorld = liveWorld ?? wiring?.liveWorldBinding
 
-  // 명령 레지스트리는 무상태 핸들러의 배선표라 연결 간 공유 안전하다 — 채널 포트·(묶음 파생) moveDeps를 클로저
-  // 주입해 1회 조립한다. moveDeps가 있으면 world:move가 등록되고, 없으면 미등록(unknown_type)으로 남는다.
-  const commandRegistry = createCommandRegistry(effectiveChannelPort, wiring?.moveDeps)
+  // 명령 레지스트리는 무상태 핸들러의 배선표라 연결 간 공유 안전하다 — 채널 포트·(묶음 파생) 명령 deps 번들을
+  // 클로저 주입해 1회 조립한다. 번들의 move 필드가 있으면 world:move가 등록되고, 없으면 미등록(unknown_type)이다.
+  const commandRegistry = createCommandRegistry(
+    effectiveChannelPort,
+    wiring === undefined ? undefined : { move: wiring.moveDeps },
+  )
   app.decorate('wsConnections', connections)
   app.decorate('wsLifecyclePort', effectiveLifecyclePort)
 

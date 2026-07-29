@@ -158,7 +158,7 @@ describe('createCommandRegistry with wiring.moveDeps (#4 world:move 등록)', ()
     const wiring = createLiveWorldWiring(bundle)
     const noop = createNoopChannelAdapter({ info: vi.fn() })
 
-    const registry = createCommandRegistry(noop, wiring.moveDeps)
+    const registry = createCommandRegistry(noop, { move: wiring.moveDeps })
 
     expect(registry.has('world:move')).toBe(true)
   })
