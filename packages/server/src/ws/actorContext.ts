@@ -18,7 +18,16 @@ export interface ActorContext {
   readonly characterId: string
   readonly class?: number
   readonly level?: number
-  readonly flags?: readonly string[]
+  /**
+   * 플레이어 P-flag — 이 포트의 정본 표현은 **hex 문자열**이며 `F_ISSET(hex, bit)`로 판독한다
+   * (`world/hexFlags.ts`). 원작에서 플레이어도 creature 구조체라 flags는 온디스크로 8바이트 배열이고,
+   * 이 포트는 그것을 16자 hex 문자열로 표현한다 — PBLIND=42·PFEARS=43·PSILNC=44가 비트 인덱스 >31이라
+   * number bitfield로는 담을 수 없다.
+   *
+   * 방 flags(`number[]`, `door.ts`의 `hasFlag`가 소비)와는 별개 표현이니 혼동하지 않는다. 배열 타입을
+   * 남겨 두면 후속 배선이 배열을 채우는 함정이 되므로 미배선 상태에서 타입만 먼저 바로잡는다.
+   */
+  readonly flags?: string
 }
 
 /**
