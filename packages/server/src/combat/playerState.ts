@@ -51,7 +51,11 @@ export type PlayerCombatState = {
   /**
    * 플레이어 상태 플래그 — creature flags와 동일한 hex string 바이트 배열(원작에서 플레이어도
    * creature 구조체). PBLIND=42·PFEARS=43은 비트 인덱스 >31이라 number bitfield로 표현 불가하므로
-   * hex string이 정본이다. F_ISSET(flags, bit)로 판정하며 신선한 플레이어는 빈 hex(상태 플래그 없음).
+   * hex string이 정본이다. F_ISSET(flags, bit)로 판정한다.
+   *
+   * **조립 시점 스냅샷**이다 — 호출부가 `composeCharacterFlags(character, now)`로 합성한 hex를 그대로
+   * 싣는다. readonly를 유지해 라운드 중 in-place mutation 경로를 두지 않는다(만료로 비트가 내려가야
+   * 하면 재조립이 정본 경로다). 상태 플래그가 없는 플레이어는 빈 hex 또는 all-zero hex다.
    */
   readonly flags: string
   /** 성향(PALADIN 정렬 보정에 Story 5가 소비). */
@@ -86,12 +90,19 @@ export type WeaponDamage = DiceSpec & {
  * armor/thaco는 반드시 computeAc/computeThaco로 파생한다(재구현 금지 — stats-core 소비).
  * base 필드는 character에서, dexterity/effectiveStrength는 effectiveContext에서, 무기는 weaponDamage에서
  * 취한다(미착용이면 null 전달). alignment는 character.alignment를 그대로 싣고(v6 required — 부재 문서는
- * backfillCharacterV6 소관), flags는 빈 hex(상태 플래그 없음), nextAttackAt은 초기값 0. 새 객체를 반환한다.
+ * backfillCharacterV6 소관), flags는 주입값을 그대로, nextAttackAt은 초기값 0. 새 객체를 반환한다.
+ *
+ * @param flags P-flag hex 스냅샷. **호출부(배선 계층)가 `composeCharacterFlags(character, now)`를 계산해
+ *   주입한다** — 이 헬퍼는 hex를 인자로만 받고 합성하지 않는다. 두 가지 이유다. ① `now` 의존성을 조립
+ *   헬퍼 밖에 두면 헬퍼가 시간에 무관한 순수 매핑으로 남는다(debuffEffects가 절대 시각이 아니라 상대
+ *   dur만 보고하는 선례와 동형이다). ② 의존 방향 규약 — `character/flags.ts` JSDoc이 정본이다.
+ *   상태 플래그가 없으면 빈 hex(`''`)를 넘긴다.
  */
 export function toPlayerCombatState(
   character: Character,
   effectiveContext: EffectiveStatContext,
   weaponDamage: WeaponDamage | null,
+  flags: string,
 ): PlayerCombatState {
   return {
     characterId: character._id,
@@ -109,7 +120,7 @@ export function toPlayerCombatState(
     // v5 spell store 실이식 — Caster.knows/realm이 스텁([0,0,0,0]·knows=false) 대신 실값을 반영한다.
     spells: character.spells,
     realm: character.realm,
-    flags: '',
+    flags,
     // alignment는 v6에서 required로 승격됐다 — 부재 문서는 load 직전 backfillCharacterV6가 0으로
     // 시딩하므로 여기서 ?? 폴백을 두지 않는다(죽은 분기 제거, 폴백 출처를 backfill 한 곳으로 고정).
     alignment: character.alignment,

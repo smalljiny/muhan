@@ -17,10 +17,15 @@ import { projectResistFlags, projectBuffFlags } from '../magic/buffEffects.js'
  * 돌려주므로 무효화 규칙이 곧 재계산과 같아진다. 조기 최적화를 피해 매 호출 재산출한다.
  *
  * ## 의존 방향 — 배선 계층만 소비한다 (순환 의존 부재)
- * `character/`는 `combat/`·`magic/`을 소비하는 상위 배선 계층이고, 역방향 간선은 없다. 확인:
- * `grep -rn "character/flags" packages/server/src/combat packages/server/src/magic` → 0건. 이 방향을
- * 유지한다 — combat/magic이 composeCharacterFlags를 부르기 시작하면 순환이 생기므로, 투영이 필요한
- * 하위 모듈은 각자의 project*Flags를 직접 쓴다.
+ * **이 모듈이 규약의 정본이다** — `combat/`·`magic/` 프로덕션 소스는 `character/flags.js`를 import하지
+ * 않는다. `character/`가 두 모듈을 소비하는 상위 배선 계층이므로 역방향 간선은 곧 순환이다. 투영이
+ * 필요한 하위 모듈은 각자의 `project*Flags`를 직접 쓰고, 조립 헬퍼(`toPlayerCombatState`)는 합성 hex를
+ * **인자로만** 받는다.
+ *
+ * 확인(import 문만 매칭): `grep -rn "from '.*character/flags" packages/server/src/combat
+ * packages/server/src/magic --include='*.ts'` → 프로덕션 소스 0건. 테스트 파일은 이 제약 밖이라
+ * 매칭될 수 있다 — 테스트는 런타임 모듈 그래프에 들어가지 않아 순환을 만들지 않는다. 매칭 건수를
+ * 여기 적지 않는 이유는, 테스트가 하나 늘 때마다 문서가 거짓이 되기 때문이다(불변식만 진술한다).
  *
  * ## 비트 소유권 파티션 (스펙 §3.1)
  * 각 비트의 생산자는 정확히 하나다. 세 소유 집합은 서로소이며, 아래 표에 없는 비트는 어떤 입력에서도
