@@ -18,6 +18,14 @@ const buffsShape = Object.fromEntries(
 )
 
 /**
+ * 간격 없는 만료-only 상태이상 엔트리 — blind·silence·fear 공용. 셋 다 주기 피해가 아니라
+ * 시야 차단·발화 불가·공포라 interval을 갖지 않는다. buffEntrySchema와 셰이프가 같지만 D2 결정
+ * (buffs와 statusEffects의 결합 표면 분리)에 따라 상수를 공유하지 않는다 — 두 계약은 독립적으로
+ * 진화할 수 있다.
+ */
+const untilOnlyEffectSchema = z.strictObject({ until: z.int().min(0) })
+
+/**
  * 캐릭터 영속 문서 — 저장의 단일 출처.
  *
  * accountId로 소유 계정(account 문서)을 역참조한다(다대일 FK). 자격증명·권한 인벤토리
@@ -78,11 +86,16 @@ export const characterSchema = z.strictObject({
   // disease)의 틱 간격이다. blind는 시야 차단이라 간격이 없어 until만 갖는다. 각 효과는 strictObject라
   // 미정의 키를 거부하고, .partial()로 개별 선택, .optional()로 statusEffects 자체를 선택으로 둔다
   // (.default 금지 — 추론 타입에서 필수가 돼 기존 픽스처를 깬다).
+  // silence·fear도 오라클에서 둘 다 dur를 보유하므로(silence는 CAST=3600 고정, fear는 표준 디버프
+  // 공식) {until}이 정확한 표현이다. blind와 마찬가지로 주기 피해가 아니라 간격이 없어 interval을
+  // 갖지 않는다(blind 선례).
   statusEffects: z
     .strictObject({
       poison: z.strictObject({ until: z.int().min(0), interval: z.int().min(0) }),
       disease: z.strictObject({ until: z.int().min(0), interval: z.int().min(0) }),
-      blind: z.strictObject({ until: z.int().min(0) }),
+      blind: untilOnlyEffectSchema,
+      silence: untilOnlyEffectSchema,
+      fear: untilOnlyEffectSchema,
     })
     .partial()
     .optional(),

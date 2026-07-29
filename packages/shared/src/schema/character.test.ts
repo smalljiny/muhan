@@ -239,6 +239,55 @@ describe('characterSchema', () => {
     expect(result.success).toBe(false)
   })
 
+  it('silence·fear를 담은 statusEffects 문서를 통과시킨다 (절대-틱 만료, until만)', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      statusEffects: { silence: { until: 100 }, fear: { until: 100 } },
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.statusEffects?.silence).toEqual({ until: 100 })
+      expect(result.data.statusEffects?.fear).toEqual({ until: 100 })
+    }
+  })
+
+  // 두 신규 효과는 계약이 동일하다(개별 선택 + until-only strictObject) — 키별 복제 대신
+  // 테이블로 고정한다(debuffEffects.test.ts의 fear/silence it.each 선례).
+  it.each(['silence', 'fear'] as const)(
+    '%s는 개별 선택이며 until만 갖는다 (음수·부재·미정의 키 거부)',
+    (key) => {
+      const parse = (effect: unknown): boolean =>
+        characterSchema.safeParse({ ...validCharacter(), statusEffects: { [key]: effect } }).success
+      expect(parse({ until: 100 })).toBe(true)
+      expect(parse({ until: -1 })).toBe(false)
+      expect(parse({})).toBe(false)
+      // strictObject 보존 — blind 선례대로 간격을 갖지 않는다.
+      expect(parse({ until: 100, interval: 6 })).toBe(false)
+    },
+  )
+
+  it('silence·fear를 생략한 기존 v5 형태 문서의 parse 결과가 불변이다 (회귀)', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      statusEffects: {
+        poison: { until: 120, interval: 6 },
+        disease: { until: 300, interval: 12 },
+        blind: { until: 50 },
+      },
+    })
+    expect(result.success).toBe(true)
+    // 전체 객체 동등성 — silence·fear 키가 주입되지 않고 기존 3필드가 그대로임을 고정한다.
+    // toEqual은 undefined 값 프로퍼티를 무시하므로 `silence: undefined` 주입을 놓친다 —
+    // toStrictEqual이라야 키 미주입(.default 오도입 포함)을 실제로 강제한다.
+    if (result.success) {
+      expect(result.data.statusEffects).toStrictEqual({
+        poison: { until: 120, interval: 6 },
+        disease: { until: 300, interval: 12 },
+        blind: { until: 50 },
+      })
+    }
+  })
+
   it('spells가 없으면 거부한다 (지식 비트마스크 필수 영속 필드)', () => {
     // D1 발산: hpCurrent/experience와 동렬 — v4 문서는 load 직전 backfillCharacterV5가 승격한다.
     const doc = validCharacter() as Partial<Character>
