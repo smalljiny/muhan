@@ -1,6 +1,10 @@
 import type { Character, RoomNode, ServerEvent } from 'shared'
 import { createLiveCharacterEntry, type EntryLogger } from '../world/liveCharacterEntry.js'
 import type { LiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
+import {
+  createMarkCharacterDirty,
+  type MarkCharacterDirty,
+} from '../world/markCharacterDirty.js'
 import { defaultFleeRng, type MoveActor, type TryMoveDeps } from '../world/tryMove.js'
 import type { MoveHandlerDeps } from './handlers/move.js'
 import { createRoomChannelAdapter } from './roomChannelAdapter.js'
@@ -54,10 +58,15 @@ export interface LiveWorldWiringBundle {
 export interface LiveWorldWiring {
   /** 세션 진입 seam(hydrate/place/roomSummary 파생용 진입 코어 + roomId 해소자). */
   readonly liveWorldBinding: LiveWorldBinding
-  /** world:move 배선용 이동 의존(라이브 레지스트리·tryMove seam·markDirty). */
+  /** world:move 배선용 이동 의존(라이브 레지스트리·tryMove seam·markCharacterDirty). */
   readonly moveDeps: MoveHandlerDeps
-  /** 세션 종료 수명 어댑터(markDirty → release). liveWorldBinding.entry.release와 같은 인스턴스를 배후에 둔다. */
+  /** 세션 종료 수명 어댑터(markCharacterDirty → release). liveWorldBinding.entry.release와 같은 인스턴스를 배후에 둔다. */
   readonly lifecyclePort: SessionLifecyclePort
+  /**
+   * characters 전체 문서 스냅샷 seam(bundle.markDirty를 1회 감싼 단일 인스턴스). moveDeps·lifecyclePort가
+   * 같은 인스턴스를 공유하며, 후속 라이브 호출처(train 등)도 이것을 소비한다.
+   */
+  readonly markCharacterDirty: MarkCharacterDirty
   /** 발화자(characterId) 현재 방 해소자 — 방 채널 어댑터가 fan-out 대상 방을 얻는 데 쓴다. */
   readonly resolveRoom: (characterId: string) => RoomNode | undefined
 }
@@ -71,6 +80,9 @@ export interface LiveWorldWiring {
  */
 export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldWiring {
   const resolveRoomById = (roomId: number): RoomNode | undefined => bundle.worldGraph.get(roomId)
+
+  // characters 스냅샷 seam — 1회 생성해 moveDeps·lifecyclePort가 같은 인스턴스를 공유한다(계약 단일화).
+  const markCharacterDirty = createMarkCharacterDirty(bundle.markDirty)
 
   // 진입 코어 — 단일 인스턴스로 생성해 liveWorldBinding·lifecyclePort가 공유한다(#3).
   const entry = createLiveCharacterEntry({
@@ -99,14 +111,14 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
   const moveDeps: MoveHandlerDeps = {
     liveRegistry: bundle.liveRegistry,
     tryMoveDeps,
-    markDirty: bundle.markDirty,
+    markCharacterDirty,
   }
 
   // 세션 종료 수명 어댑터 — release는 진입 코어의 것을 그대로 주입해 같은 레지스트리/방을 정리한다(#3).
   const lifecyclePort = createLiveSessionLifecycleAdapter({
     liveRegistry: bundle.liveRegistry,
     release: (characterId) => entry.release(characterId),
-    markDirty: bundle.markDirty,
+    markCharacterDirty,
   })
 
   // 발화자 방 해소자(by-character): registry로 라이브 엔트리를 찾고 currentRoom(단일 출처)으로 방을 얻는다.
@@ -116,7 +128,7 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     return bundle.worldGraph.get(live.character.currentRoom)
   }
 
-  return { liveWorldBinding, moveDeps, lifecyclePort, resolveRoom }
+  return { liveWorldBinding, moveDeps, lifecyclePort, resolveRoom, markCharacterDirty }
 }
 
 /** assembleRoomChannelPort 의존 seam — 발화자 방 해소자 + 세션 색인 + 소켓 해소자 + 안전 전송. */

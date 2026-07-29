@@ -81,9 +81,14 @@ describe('registerWebsocket 라이브 월드 묶음 결선', () => {
     const app = buildApp({ liveWorldDeps: h.bundle })
     await app.ready()
 
-    // 라이브 어댑터는 종료 시 최종 방을 markDirty한 뒤 release한다(no-op 어댑터라면 markDirty가 없다).
+    // 라이브 어댑터는 종료 시 최종 방을 담은 전체 문서를 markDirty한 뒤 release한다
+    // (no-op 어댑터라면 markDirty가 없다).
     app.wsLifecyclePort.onSessionEnd({ accountId: 'acct-1', characterId: 'char-1', reason: 'shutdown' })
-    expect(h.markDirty).toHaveBeenCalledWith('characters', 'char-1', { currentRoom: 1 })
+    expect(h.markDirty).toHaveBeenCalledWith(
+      'characters',
+      'char-1',
+      expect.objectContaining({ currentRoom: 1 }),
+    )
 
     await app.close()
   })

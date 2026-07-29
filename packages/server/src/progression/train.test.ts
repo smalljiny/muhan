@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { neededExp, type Character } from 'shared'
 import { setFlag } from '../world/door.js'
+import { createMarkCharacterDirty } from '../world/markCharacterDirty.js'
 import { train, RTRAIN } from './train.js'
 
 /**
@@ -57,14 +58,14 @@ describe('train — location gate', () => {
   it('RTRAIN 미설정 방 → not-training-room 거부', () => {
     const char = makeChar({ class: 1 })
     const room = { flags: roomFlags() } // 아무 비트도 없음
-    const result = train(char, room, { markDirty: vi.fn() })
+    const result = train(char, room, { markCharacterDirty: vi.fn() })
     expect(result).toEqual({ ok: false, reason: 'not-training-room' })
   })
 
   it('CARETAKER(10) → caretaker-forbidden (훈련방이어도 거부)', () => {
     const char = makeChar({ class: 10, level: 127 })
     const room = { flags: trainingRoomForClass(10) }
-    const result = train(char, room, { markDirty: vi.fn() })
+    const result = train(char, room, { markCharacterDirty: vi.fn() })
     expect(result).toEqual({ ok: false, reason: 'caretaker-forbidden' })
   })
 
@@ -72,7 +73,7 @@ describe('train — location gate', () => {
     // class2 → idx=1 → bit0=1,bit1=0,bit2=0 → room bit6 set, bit5·4 clear.
     const room = { flags: roomFlags(RTRAIN, 6) }
     const char = makeChar({ class: 2, level: 1, experience: 0, gold: 0 })
-    const result = train(char, room, { markDirty: vi.fn() })
+    const result = train(char, room, { markCharacterDirty: vi.fn() })
     // location 통과(class-mismatch 아님). exp/gold gate에서 걸리므로 not-training/class-mismatch가 아니어야.
     expect(result).not.toEqual({ ok: false, reason: 'class-mismatch' })
     expect(result).not.toEqual({ ok: false, reason: 'not-training-room' })
@@ -83,7 +84,7 @@ describe('train — location gate', () => {
     // 정본(역순)에서는 i=0→bit6=0 !== bit[0]=1 → fail.
     const room = { flags: roomFlags(RTRAIN, 4) }
     const char = makeChar({ class: 2, level: 1, experience: 0, gold: 0 })
-    const result = train(char, room, { markDirty: vi.fn() })
+    const result = train(char, room, { markCharacterDirty: vi.fn() })
     expect(result).toEqual({ ok: false, reason: 'class-mismatch' })
   })
 
@@ -91,7 +92,7 @@ describe('train — location gate', () => {
     // class9 → class>8 → class-bit 서브매칭 면제. base RTRAIN만 필요.
     const room = { flags: roomFlags(RTRAIN) } // class 비트 전혀 없음
     const char = makeChar({ class: 9, level: 1, experience: 0, gold: 0 })
-    const result = train(char, room, { markDirty: vi.fn() })
+    const result = train(char, room, { markCharacterDirty: vi.fn() })
     expect(result).not.toEqual({ ok: false, reason: 'class-mismatch' })
     expect(result).not.toEqual({ ok: false, reason: 'not-training-room' })
   })
@@ -99,7 +100,7 @@ describe('train — location gate', () => {
   it('무적(class9): base RTRAIN 없으면 not-training-room', () => {
     const room = { flags: roomFlags(6, 5, 4) } // base bit3 없음
     const char = makeChar({ class: 9, level: 1 })
-    const result = train(char, room, { markDirty: vi.fn() })
+    const result = train(char, room, { markCharacterDirty: vi.fn() })
     expect(result).toEqual({ ok: false, reason: 'not-training-room' })
   })
 })
@@ -109,10 +110,10 @@ describe('train — exp·gold gate', () => {
     const room = { flags: trainingRoomForClass(1) }
     // level 2: expneeded=neededExp(2) 큼. experience=0 < expneeded. gold 충분.
     const char = makeChar({ class: 1, level: 2, experience: 0, gold: 1_000_000_000 })
-    const markDirty = vi.fn()
-    const result = train(char, room, { markDirty })
+    const markCharacterDirty = vi.fn()
+    const result = train(char, room, { markCharacterDirty })
     expect(result).toEqual({ ok: false, reason: 'insufficient-exp' })
-    expect(markDirty).not.toHaveBeenCalled()
+    expect(markCharacterDirty).not.toHaveBeenCalled()
   })
 
   it('gold 부족 → insufficient-gold, level·gold 불변', () => {
@@ -122,10 +123,10 @@ describe('train — exp·gold gate', () => {
     const goldNeeded = Math.trunc(expNeeded / 20)
     // location·exp 통과(experience 충분), gold만 부족.
     const char = makeChar({ class: 1, level, experience: expNeeded, gold: goldNeeded - 1 })
-    const markDirty = vi.fn()
-    const result = train(char, room, { markDirty })
+    const markCharacterDirty = vi.fn()
+    const result = train(char, room, { markCharacterDirty })
     expect(result).toEqual({ ok: false, reason: 'insufficient-gold' })
-    expect(markDirty).not.toHaveBeenCalled()
+    expect(markCharacterDirty).not.toHaveBeenCalled()
   })
 
   it('L≥128 gold clamp: goldneeded=trunc(neededExp(127)/20)(5M), unclamped(9.5M) 아님', () => {
@@ -138,8 +139,8 @@ describe('train — exp·gold gate', () => {
     expect(Math.trunc(neededExp(128) / 20)).toBe(9_500_000) // unclamped 값(대조 앵커)
     const room = { flags: roomFlags(RTRAIN) } // 무적은 class-bit 서브매칭 면제 → base RTRAIN만
     const char = makeChar({ class: 9, level: 128, experience: neededExp(128), gold: clampGold })
-    const markDirty = vi.fn()
-    const result = train(char, room, { markDirty })
+    const markCharacterDirty = vi.fn()
+    const result = train(char, room, { markCharacterDirty })
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.prestige).toBe('caretaker') // L127+ 무적 → 초인 전이(prestige 우선)
@@ -156,9 +157,9 @@ describe('train — 3게이트 통과 + 배치', () => {
     const goldNeeded = Math.trunc(expNeeded / 20)
     // 정확히 1레벨분 exp: experience == neededExp(2), 다음 임계(neededExp(3))에는 못 미침.
     const char = makeChar({ class: 1, level, experience: expNeeded, gold: goldNeeded })
-    const markDirty = vi.fn()
+    const markCharacterDirty = vi.fn()
     const before = structuredClone(char)
-    const result = train(char, room, { markDirty })
+    const result = train(char, room, { markCharacterDirty })
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('unreachable')
     expect(result.prestige).toBe('none')
@@ -168,7 +169,7 @@ describe('train — 3게이트 통과 + 배치', () => {
     expect(result.character.gold).toBe(goldNeeded - goldNeeded)
     // 입력 무변이.
     expect(char).toEqual(before)
-    expect(markDirty).toHaveBeenCalledTimes(1)
+    expect(markCharacterDirty).toHaveBeenCalledTimes(1)
   })
 
   it('배치 다중 레벨: 여러 레벨분 exp면 여러 레벨 상승', () => {
@@ -178,7 +179,7 @@ describe('train — 3게이트 통과 + 배치', () => {
     const bigExp = neededExp(5)
     const bigGold = 1_000_000_000
     const char = makeChar({ class: 1, level: startLevel, experience: bigExp, gold: bigGold })
-    const result = train(char, room, { markDirty: vi.fn() })
+    const result = train(char, room, { markCharacterDirty: vi.fn() })
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('unreachable')
     // experience는 불변 임계. expneeded(newLevel) > experience가 되면 정지.
@@ -197,7 +198,7 @@ describe('train — 3게이트 통과 + 배치', () => {
       experience: 200_000_000, // 충분히 큰 exp
       gold: 1_000_000_000,
     })
-    const result = train(char, room, { markDirty: vi.fn() })
+    const result = train(char, room, { markCharacterDirty: vi.fn() })
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('unreachable')
     expect(result.prestige).toBe('none')
@@ -218,8 +219,8 @@ describe('train — prestige 우선 분기', () => {
       experience: expNeeded,
       gold: goldNeeded + 500,
     })
-    const markDirty = vi.fn()
-    const result = train(char, room, { markDirty })
+    const markCharacterDirty = vi.fn()
+    const result = train(char, room, { markCharacterDirty })
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('unreachable')
     expect(result.prestige).toBe('invincible')
@@ -228,7 +229,7 @@ describe('train — prestige 우선 분기', () => {
     expect(result.character.level).toBe(1)
     expect(result.character.experience).toBe(0)
     expect(result.character.gold).toBe(500) // goldNeeded 차감
-    expect(markDirty).toHaveBeenCalledTimes(1)
+    expect(markCharacterDirty).toHaveBeenCalledTimes(1)
   })
 
   it('무적 L127+ → caretaker 전이(prestige 우선)', () => {
@@ -242,7 +243,7 @@ describe('train — prestige 우선 분기', () => {
       experience: expNeeded,
       gold: goldNeeded + 100,
     })
-    const result = train(char, room, { markDirty: vi.fn() })
+    const result = train(char, room, { markCharacterDirty: vi.fn() })
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('unreachable')
     expect(result.prestige).toBe('caretaker')
@@ -252,8 +253,8 @@ describe('train — prestige 우선 분기', () => {
   })
 })
 
-describe('train — markDirty 스냅샷 계약', () => {
-  it('성공 시 markDirty가 스냅샷(라이브 아님)으로 1회 호출', () => {
+describe('train — markCharacterDirty 스냅샷 계약', () => {
+  it('성공 시 원시 seam에 characters 전체 문서 스냅샷(라이브 아님)이 1회 도달한다', () => {
     const room = { flags: trainingRoomForClass(1) }
     const level = 2
     const expNeeded = neededExp(level)
@@ -263,7 +264,9 @@ describe('train — markDirty 스냅샷 계약', () => {
     const markDirty = vi.fn((_collection: string, _id: string, snapshot: unknown) => {
       captured = snapshot
     })
-    const result = train(char, room, { markDirty })
+    // 실 헬퍼를 끼워 원시 seam에 도달한 스냅샷을 관찰한다 — distinct화 책임은 헬퍼가 소유하므로
+    // 여기서 vi.fn()만 쓰면 반환 character와 같은 참조가 넘어와 아래 별칭 단언이 무의미해진다.
+    const result = train(char, room, { markCharacterDirty: createMarkCharacterDirty(markDirty) })
     expect(markDirty).toHaveBeenCalledWith('characters', 'char-1', expect.anything())
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error('unreachable')
@@ -272,5 +275,8 @@ describe('train — markDirty 스냅샷 계약', () => {
     // 반환 character를 이후 변이해도 스냅샷은 영향 없어야(distinct 참조).
     ;(result.character as { gold: number }).gold = 999_999
     expect(snap.gold).toBe(snapshotGoldBefore)
+    // 부분 스냅샷이 아니라 전체 문서다 — 배열 필드도 별개 참조로 실린다.
+    expect(snap).toMatchObject({ _id: 'char-1', level: level + 1 })
+    expect(snap.stats).not.toBe(result.character.stats)
   })
 })

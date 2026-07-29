@@ -101,17 +101,33 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
     expect(wiring.liveWorldBinding.resolveRoom(9999)).toBeUndefined()
   })
 
-  it('moveDeps는 묶음의 liveRegistry·markDirty를 그대로 쓰고 tryMoveDeps를 파생한다', () => {
+  it('moveDeps는 묶음의 liveRegistry를 그대로 쓰고 tryMoveDeps를 파생한다', () => {
     const worldGraph = new Map<number, RoomNode>([[3, makeRoom(3)]])
     const h = makeBundle(worldGraph)
 
     const wiring = createLiveWorldWiring(h.bundle)
 
     expect(wiring.moveDeps.liveRegistry).toBe(h.liveRegistry)
-    expect(wiring.moveDeps.markDirty).toBe(h.markDirty)
     expect(wiring.moveDeps.tryMoveDeps.resolveRoom(3)).toBe(worldGraph.get(3))
     expect(wiring.moveDeps.tryMoveDeps.currentHour()).toBe(12)
     expect(wiring.moveDeps.tryMoveDeps.rng).toBe(defaultFleeRng)
+  })
+
+  it('markCharacterDirty는 1회 생성돼 moveDeps와 같은 인스턴스이고 묶음 markDirty로 위임한다', () => {
+    const worldGraph = new Map<number, RoomNode>([[3, makeRoom(3)]])
+    const h = makeBundle(worldGraph)
+
+    const wiring = createLiveWorldWiring(h.bundle)
+
+    // 노출 필드와 moveDeps가 같은 인스턴스여야 한다(계약 단일화 — 호출처마다 재생성하지 않는다).
+    expect(wiring.moveDeps.markCharacterDirty).toBe(wiring.markCharacterDirty)
+    // 위임 확인: 헬퍼 호출이 원시 seam에 'characters' + 전체 문서 스냅샷으로 도달한다.
+    wiring.markCharacterDirty('char-1', makeCharacter('char-1', 3))
+    expect(h.markDirty).toHaveBeenCalledWith(
+      'characters',
+      'char-1',
+      expect.objectContaining({ _id: 'char-1', currentRoom: 3, level: 7 }),
+    )
   })
 
   it('lifecyclePort·entry는 같은 레지스트리/방을 배후에 둔다(#3 — place 후 onSessionEnd가 정리)', () => {
@@ -135,7 +151,11 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
     })
     expect(room.occupants.has('char-1')).toBe(false)
     expect(h.liveRegistry.has('char-1')).toBe(false)
-    expect(h.markDirty).toHaveBeenCalledWith('characters', 'char-1', { currentRoom: 4 })
+    expect(h.markDirty).toHaveBeenCalledWith(
+      'characters',
+      'char-1',
+      expect.objectContaining({ currentRoom: 4 }),
+    )
   })
 
   it('resolveRoom(by-character)은 registry→currentRoom→worldGraph로 발화자 방을 해소한다', () => {
