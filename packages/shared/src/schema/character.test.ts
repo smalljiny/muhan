@@ -117,11 +117,25 @@ describe('characterSchema', () => {
     expect(result.success).toBe(true)
   })
 
-  it('gender·weapon·alignment는 선택 필드다 (생략해도 통과 — 기존 픽스처 불변)', () => {
+  it('gender·weapon은 선택 필드다 (생략해도 통과 — 기존 픽스처 불변)', () => {
     const doc = validCharacter() as Partial<Character>
     expect('gender' in doc).toBe(false)
+    expect('weapon' in doc).toBe(false)
     const result = characterSchema.safeParse(doc)
     expect(result.success).toBe(true)
+  })
+
+  it('alignment가 없으면 거부한다 (required 승격 — 학습 게이트·전투가 값을 요구)', () => {
+    // 픽스처는 alignment: 1을 담으므로, 제거해야 required 승격이 드러난다.
+    const doc = validCharacter() as Partial<Character>
+    delete doc.alignment
+    expect(characterSchema.safeParse(doc).success).toBe(false)
+  })
+
+  it('alignment=0(중립 sentinel)을 통과시킨다 (backfillCharacterV6 시드값)', () => {
+    const result = characterSchema.safeParse({ ...validCharacter(), alignment: 0 })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.alignment).toBe(0)
   })
 
   it('gender·weapon·alignment 정수를 담은 문서를 통과시킨다 (생성 선택 저장)', () => {

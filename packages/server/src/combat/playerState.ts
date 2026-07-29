@@ -85,8 +85,8 @@ export type WeaponDamage = DiceSpec & {
  *
  * armor/thaco는 반드시 computeAc/computeThaco로 파생한다(재구현 금지 — stats-core 소비).
  * base 필드는 character에서, dexterity/effectiveStrength는 effectiveContext에서, 무기는 weaponDamage에서
- * 취한다(미착용이면 null 전달). alignment는 character.alignment ?? 0, flags는 빈 hex(상태 플래그 없음),
- * nextAttackAt은 초기값 0. 새 객체를 반환한다.
+ * 취한다(미착용이면 null 전달). alignment는 character.alignment를 그대로 싣고(v6 required — 부재 문서는
+ * backfillCharacterV6 소관), flags는 빈 hex(상태 플래그 없음), nextAttackAt은 초기값 0. 새 객체를 반환한다.
  */
 export function toPlayerCombatState(
   character: Character,
@@ -110,7 +110,9 @@ export function toPlayerCombatState(
     spells: character.spells,
     realm: character.realm,
     flags: '',
-    alignment: character.alignment ?? 0,
+    // alignment는 v6에서 required로 승격됐다 — 부재 문서는 load 직전 backfillCharacterV6가 0으로
+    // 시딩하므로 여기서 ?? 폴백을 두지 않는다(죽은 분기 제거, 폴백 출처를 backfill 한 곳으로 고정).
+    alignment: character.alignment,
     weapon: weaponDamage,
     nextAttackAt: 0,
   }

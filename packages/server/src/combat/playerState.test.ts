@@ -83,15 +83,14 @@ describe('toPlayerCombatState', () => {
     expect(state.level).toBe(9)
   })
 
-  it('alignment를 character.alignment로 채운다', () => {
-    const state = toPlayerCombatState(character, ctx, weapon)
-    expect(state.alignment).toBe(1)
-  })
-
-  it('alignment 미설정이면 0으로 기본한다', () => {
-    const noAlign: Character = { ...character, alignment: undefined }
-    const state = toPlayerCombatState(noAlign, ctx, weapon)
-    expect(state.alignment).toBe(0)
+  it('alignment 실값을 그대로 이식한다 (v6 required — 폴백은 backfillCharacterV6 소관)', () => {
+    // v6에서 alignment가 required가 돼 undefined 케이스는 타입상 불가하다. 부재 문서의 0 시딩은
+    // load 경로의 backfillCharacterV6가 소유하므로, 여기서는 실값 이식만 단언한다.
+    expect(toPlayerCombatState(character, ctx, weapon).alignment).toBe(1)
+    const evil: Character = { ...character, alignment: 2 }
+    expect(toPlayerCombatState(evil, ctx, weapon).alignment).toBe(2)
+    const neutral: Character = { ...character, alignment: 0 }
+    expect(toPlayerCombatState(neutral, ctx, weapon).alignment).toBe(0)
   })
 
   it('flags를 빈 hex로 기본한다(creature flags와 동일 표현)', () => {

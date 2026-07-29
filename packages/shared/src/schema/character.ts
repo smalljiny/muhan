@@ -43,7 +43,7 @@ export const characterSchema = z.strictObject({
   gold: z.int().min(0),
   // 현재 방 번호(자연키). data/world 방 로드 경로 번호와 동일 체계.
   currentRoom: z.int().min(0),
-  // 전투 필수 영속 필드 3종. gender/weapon/alignment는 .optional()이지만(생성 인터뷰 선택),
+  // 전투 필수 영속 필드 3종. gender/weapon은 .optional()이지만(생성 인터뷰 선택),
   // 이 3필드는 전투 resolver가 매 라운드 값을 요구하므로 required다(D3 발산). v1 문서는
   // load 직전 backfillCharacterV2가 승격하고, 신규 문서는 생성 경로에서 시딩한다.
   hpCurrent: z.int().min(0),
@@ -77,8 +77,13 @@ export const characterSchema = z.strictObject({
   // 생성 인터뷰(create_ply)가 고른 성별 — 1=남/2=여. 최소 스칼라 저장(선택; .default 아님 —
   // default는 추론 타입에서 필수가 돼 기존 픽스처를 깨므로 deletedAt처럼 .optional로 둔다).
   gender: z.int().optional(),
-  // 생성 시 고른 성향 — 1=선/2=악(단일 스칼라). -1000..+1000 성향 시스템은 E6로 유예한다.
-  alignment: z.int().optional(),
+  // 생성 시 고른 성향 — 1=선/2=악(단일 스칼라). gender·weapon과 달리 required다(D3 발산): 학습
+  // 게이트(study의 OGOODO/OEVILO 판정)와 전투 상태(PlayerCombatState.alignment)가 매 판정마다 값을
+  // 요구하므로 부재를 허용하면 소비 지점마다 폴백이 흩어진다. 0은 현 1|2 체계 밖의 중립 sentinel로,
+  // E6에서 -1000..+1000 성향 시스템으로 확장할 때 그대로 중립값이 된다(값 재해석 불필요).
+  // alignment 없는 v5 이하 문서는 load 직전 backfillCharacterV6가 0으로 시딩하고, 신규 문서는
+  // 생성 경로에서 인터뷰 선택값을 저장한다.
+  alignment: z.int(),
   // 생성 시 고른 주력 무기 — 1~5(도/검/봉/창/궁). proficiency[5] 숙련 배열은 E6로 유예한다.
   weapon: z.int().optional(),
   // 상태이상 영속 표현(선택). until은 befuddledUntil/charmedUntil과 동일한 절대-틱 만료
