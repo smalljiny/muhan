@@ -138,6 +138,15 @@ describe('characterSchema', () => {
     if (result.success) expect(result.data.alignment).toBe(0)
   })
 
+  it('alignment 값역 [0,2] 밖을 거부한다 (저장 계층이 마지막 방어선)', () => {
+    // 상류 검증(sessionFsm의 refine 1|2)을 우회하는 write 경로가 생겨도 스키마가 막는다.
+    // E6(#123)이 -1000..+1000으로 넓힐 때 이 상한을 함께 갱신한다.
+    for (const bad of [-1, 3, 500]) {
+      expect(characterSchema.safeParse({ ...validCharacter(), alignment: bad }).success).toBe(false)
+    }
+    expect(characterSchema.safeParse({ ...validCharacter(), alignment: 1.5 }).success).toBe(false)
+  })
+
   it('gender·weapon·alignment 정수를 담은 문서를 통과시킨다 (생성 선택 저장)', () => {
     const result = characterSchema.safeParse({
       ...validCharacter(),

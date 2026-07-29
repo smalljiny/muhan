@@ -354,9 +354,16 @@ describe('backfillCharacterV6', () => {
   })
 
   it('alignment가 null인 문서도 0으로 시딩한다 (Mongo null 저장 방어)', () => {
-    // typeof 가드라야 null을 걸러낸다 — `=== undefined` 가드면 null이 그대로 흘러 z.int() parse가 깨진다.
+    // `=== undefined` 가드면 null이 그대로 흘러 z.int() parse가 깨진다.
     const result = backfillCharacterV6(rawV5({ alignment: null }))
     expect(result.alignment).toBe(0)
+  })
+
+  it('alignment가 NaN·소수인 손상 문서도 0으로 재시딩한다 (Number.isInteger 가드)', () => {
+    // typeof 가드였다면 둘 다 'number'라 그대로 보존되고, z.int() parse가 hard throw해 그 캐릭터가
+    // 영구 로드 불가가 된다(자가 치유 없음).
+    expect(backfillCharacterV6(rawV5({ alignment: Number.NaN })).alignment).toBe(0)
+    expect(backfillCharacterV6(rawV5({ alignment: 1.5 })).alignment).toBe(0)
   })
 
   it('승격 시 기존 필드(vitals·level·experience·spells·realm)를 보존한다', () => {

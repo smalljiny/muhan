@@ -83,7 +83,11 @@ export const characterSchema = z.strictObject({
   // E6에서 -1000..+1000 성향 시스템으로 확장할 때 그대로 중립값이 된다(값 재해석 불필요).
   // alignment 없는 v5 이하 문서는 load 직전 backfillCharacterV6가 0으로 시딩하고, 신규 문서는
   // 생성 경로에서 인터뷰 선택값을 저장한다.
-  alignment: z.int(),
+  // 값역은 [0,2]로 좁힌다 — 저장 계층이 이 불변식의 마지막 방어선이다. 현재 생성 경로가
+  // sessionFsm의 refine(1|2)으로 상류 검증하지만, 그 경로를 우회하는 write(관리 도구·마이그레이션
+  // 스크립트)가 생기면 스키마만이 범위를 강제한다. E6 성향 시스템(#123)이 -1000..+1000으로
+  // 넓힐 때 이 상한을 함께 갱신한다.
+  alignment: z.int().min(0).max(2),
   // 생성 시 고른 주력 무기 — 1~5(도/검/봉/창/궁). proficiency[5] 숙련 배열은 E6로 유예한다.
   weapon: z.int().optional(),
   // 상태이상 영속 표현(선택). until은 befuddledUntil/charmedUntil과 동일한 절대-틱 만료

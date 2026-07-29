@@ -110,7 +110,9 @@ export class FirebaseSessionAuthAdapter implements SessionAuthPort {
       schemaVersion: CHARACTER_SCHEMA_VERSION,
       accountId,
       status: 'active',
-      // 생성 인터뷰가 고른 선택 스칼라(선택 필드로 영속).
+      // gender·weapon은 생성 인터뷰가 고른 선택 스칼라. alignment는 v6에서 required로 승격됐다
+      // (부재 문서의 sentinel 0 시딩은 backfillCharacterV6 소관) — 여기서 `?? undefined` 같은
+      // 선택 필드 관용을 도입하면 insert 경로의 characterSchema.parse가 throw한다.
       gender: dto.gender,
       weapon: dto.weapon,
       alignment: dto.alignment,

@@ -172,7 +172,11 @@ export function backfillCharacterV6(raw: Record<string, unknown>): Record<string
 
   return {
     ...raw,
-    ...(typeof raw.alignment === 'number' ? {} : { alignment: 0 }),
+    // Number.isInteger는 typeof보다 좁다 — null·undefined뿐 아니라 NaN·1.5도 "값이 아님"으로 보고
+    // 재시딩한다. typeof만 쓰면 손상 문서의 NaN이 그대로 보존돼 z.int() parse에서 hard throw하고
+    // 그 캐릭터가 영구히 로드 불가가 된다(자가 치유 없음). 값역 위반(예 5)은 시딩 대상이 아니라
+    // parse 에러로 드러나야 하므로 여기서 범위는 보지 않는다.
+    ...(Number.isInteger(raw.alignment) ? {} : { alignment: 0 }),
     schemaVersion: 6,
   }
 }

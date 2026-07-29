@@ -88,6 +88,9 @@ export function selectAggroTarget(
     if (F_ISSET(p.flags, PDMINV)) return false
     if (alg === 0) return true // MAGGRE — alignment/레벨 필터 없음.
     if (levelTier(p.level) < attackerTier) return false // alg 변종 레벨 게이트(단일 eligible set).
+    // known divergence — 현 alignment 값역 [0,2](생성 1|2 + backfill sentinel 0)에서는 두 조건이
+    // 항상 참이라 MGAGGR·MEAGGR 몹이 아무도 선공하지 않는다. 오라클 임계값을 보존해 E6 성향
+    // 시스템(-1000..+1000, #123)에서 코드 변경 없이 발화하게 둔다(magic/learning.ts 주석 참조).
     if (alg === -1 && p.alignment < 100) return false // MGAGGR: 선인(alignment>=100)만.
     if (alg === 1 && p.alignment > -100) return false // MEAGGR: 악인(alignment<=-100)만.
     return true

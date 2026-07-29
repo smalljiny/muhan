@@ -219,6 +219,9 @@ export function F_CLR(hex: string, bit: number): string {
  * 결과 폭을 결정해 긴 쪽의 고바이트가 절단된다(예 PBLIND 42·PFEARS 43·PSILNC 44는 전부 byte5라
  * 4자 피연산자와 OR하면 통째로 소실). `byteAt`이 범위 밖을 0으로 돌려주므로 짧은 입력은 자연히
  * 0바이트로 취급된다.
+ *
+ * 반대 방향은 절단한다 — 입력이 16자를 넘으면 byte 8 이후는 무시된다. P/M/O-flag는 전부 `char flags[8]`
+ * (mstruct.h)이라 실 데이터가 이 경계를 넘지 않는다.
  */
 export function orFlags(a: string, b: string): string {
   let out = ''

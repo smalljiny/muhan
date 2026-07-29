@@ -36,7 +36,21 @@ import { projectResistFlags, projectBuffFlags } from '../magic/buffEffects.js'
  * | `projectStatusFlags` | `statusEffects` | PPOISN(16)·PDISEA(41)·PBLIND(42)·PFEARS(43)·PSILNC(44) |
  * | `projectResistFlags` | `buffs`(저항 4주문) | PRFIRE(30)·PRMAGI(32)·PRCOLD(36)·PSSHLD(38) |
  * | `projectBuffFlags` | `buffs`(타이머 10주문) | PBLESS(0)·PINVIS(2)·PPROTE(8)·PLIGHT(17)·PDMAGI(20)·PDINVI(21)·PLEVIT(25)·PFLYSP(31)·PKNOWA(33)·PBRWAT(37) |
- * | (미소유 — 범위 밖) | — | PHIDDN(1)·PDMINV(10)·PWIMPY(14)·PCHAOS(28)·PFAMIL(55)·PUPDMG(59) |
+ * | (미소유 — 영속 경로 부재) | 없음 | PHIDDN(1)·PDMINV(10)·PWIMPY(14)·PCHAOS(28)·PFAMIL(55)·PUPDMG(59) |
+ *
+ * ### ⚠ 마지막 행은 "아직 안 함"이 아니라 **구조적으로 봉쇄**된 상태다
+ * 이 모듈은 raw `flags` hex 영속 필드를 두지 않는 것을 규약으로 삼는다(위 참조). 그런데 마지막 행의
+ * 비트들은 `statusEffects`·`buffs` 어디에서도 파생되지 않는 **비-타이머 성격 플래그**라, 현 아키텍처에
+ * 영속 경로 자체가 없다. 즉 `composeCharacterFlags`는 이 비트들을 **영원히 0으로 반환한다**.
+ *
+ * 그럼에도 소비자는 이미 존재한다 — `combat/pvp.ts`의 `checkPvpGate`가 `F_ISSET(attacker.flags, PCHAOS)`와
+ * `F_ISSET(..., PFAMIL)`을 읽는다. 따라서 후속 배선 토픽이 이 표를 "flags의 완전한 출처"로 읽고
+ * `PlayerCombatState.flags`에 합성 hex를 **유일 출처로** 배선하면, PCHAOS 미세팅으로 선악 PvP 동의
+ * 게이트가 영구 거부되고 PFAMIL 미세팅으로 패거리 전쟁 판정(`checkWarResult`)이 한 번도 호출되지 않는다.
+ * 지금은 `flags: ''`라 동작이 같아 회귀로 드러나지 않는다는 점이 이 함정의 핵심이다.
+ *
+ * 이 비트들의 영속 표현(전용 명명 필드 vs raw hex 필드 예외)은 별도 결정이며 본 토픽 범위 밖이다 —
+ * 배선 전에 먼저 정해야 한다.
  *
  * PFEARS(43)·PSILNC(44)의 생산자는 `projectStatusFlags` 단독이다 — `magic/buffEffects.ts`의
  * `TIMED_BUFF_META`에 SFEARS/SSILNC를 추가하지 않는다(추가하면 두 투영이 같은 비트를 생산해 이중

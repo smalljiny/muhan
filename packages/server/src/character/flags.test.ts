@@ -67,7 +67,7 @@ function makeCharacter(over: Partial<Character> = {}): Character {
     experience: 0,
     spells: new Array<number>(16).fill(0),
     realm: [0, 0, 0, 0],
-    schemaVersion: 5,
+    schemaVersion: 6,
     accountId: 'a-1',
     status: 'active',
     alignment: 1,
