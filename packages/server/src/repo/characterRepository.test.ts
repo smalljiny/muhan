@@ -32,6 +32,7 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
     // 계정 링크 FK(Story 1로 필수화)와 soft-delete 상태 기본값.
     accountId: 'acc-1',
     status: 'active',
+    alignment: 1,
     ...overrides,
   }
 }

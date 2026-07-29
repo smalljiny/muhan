@@ -79,6 +79,7 @@ function makeCharacter(over: Partial<Character> = {}): Character {
     schemaVersion: 5,
     accountId: 'a-1',
     status: 'active',
+    alignment: 1,
     ...over,
   }
 }

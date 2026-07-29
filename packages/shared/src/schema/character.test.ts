@@ -22,6 +22,7 @@ function validCharacter(): Character {
     realm: [0, 0, 0, 0],
     schemaVersion: 1,
     status: 'active',
+    alignment: 1,
   }
 }
 
