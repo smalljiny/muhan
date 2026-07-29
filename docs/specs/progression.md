@@ -50,7 +50,23 @@ backfill 시딩은 level 정합: `level<=1 ? 0 : neededExp(level-1)`(그 레벨 
 2. **exp 게이트** — `experience ≥ neededExp(level)`.
 3. **gold 게이트** — `gold ≥ goldToTrain(level)`. `goldToTrain(level) = trunc(neededExp(min(level, 127)) / 20)` — `level<128`은 `trunc(neededExp(level)/20)`, **`level≥128`은 `trunc(neededExp(127)/20)=5,000,000`으로 clamp**(오라클 command7.c:595-596). exp 게이트의 expNeeded는 clamp 없이 선형 확장하므로 별개다.
 
-세 게이트 통과 시: **prestige 우선 분기**(train 진입 시 1회 평가) — 승급 대상이면 gold 차감 후 전이하고 종료(배치 루프 스킵). 아니면 **배치 do-while 루프**: gold 차감 → `upLevel` → 다음 임계 재계산, `neededExp≤experience && goldToTrain≤gold`인 동안 반복. 일반직(`class<9`)은 정확히 `level===100`에서 정지(다음 연마에서 무적 승급); 무적(`class 9`)은 exp/gold 소진까지 상승. train은 exp를 깎지 않는다 — 레벨만 오르고 임계가 올라가 결국 종료한다. 성공 시 새 Character를 반환하고 최종 스냅샷을 markDirty로 1회 기록(입력 무변이).
+세 게이트 통과 시: **prestige 우선 분기**(train 진입 시 1회 평가) — 승급 대상이면 gold 차감 후 전이하고 종료(배치 루프 스킵). 아니면 **배치 do-while 루프**: gold 차감 → `upLevel` → 다음 임계 재계산, `neededExp≤experience && goldToTrain≤gold`인 동안 반복. 일반직(`class<9`)은 정확히 `level===100`에서 정지(다음 연마에서 무적 승급); 무적(`class 9`)은 exp/gold 소진까지 상승. train은 exp를 깎지 않는다 — 레벨만 오르고 임계가 올라가 결국 종료한다. 성공 시 새 Character를 반환하고 최종 스냅샷을 `markCharacterDirty`로 1회 기록(입력 무변이).
+
+#### 라이브 배선 (`progress:train`)
+
+`progress:train{id?}` 명령이 이 규칙을 라이브 세션에 연결한다(디스패처 패턴 확립 사례 — 후속 규칙 명령이 그대로 복제한다). 핸들러(`ws/handlers/train.ts`)는 게임 규칙 판정을 일절 하지 않고 라이브 상태 조회·방 해소·결과 사상만 한다:
+
+1. `liveRegistry.get(actor.characterId)` 미등록 → `error{internal}`(배선 격리)
+2. `resolveRoom(actor.characterId)` 미해소 → `error{internal}`. 방 위치의 단일 출처가 `character.currentRoom`이므로 by-character 해소자를 쓴다
+3. `train(live.character, room, { markCharacterDirty })` — 3게이트·승급·배치 루프를 규칙 모듈이 단독 소유
+4. 거부 → `error{rule_rejected, message}`. 5개 사유를 한국어 message로 사상하며 `Record<reason, string>`이 누락을 컴파일에서 막는다. `id`가 있으면 `correlationId` 반향
+5. 성공 → `liveRegistry.register({ character: result.character })`로 라이브 엔트리를 **교체**한 뒤 `progress:trained` 반환
+
+`train()`이 새 `Character`를 반환하고 `LiveCharacter.character`가 `readonly`라 in-place 갱신(`world:move` 방식)이 불가능해 엔트리를 통째로 교체한다. 이는 **턴 밖으로 `LiveCharacter` 참조를 보유하는 코드가 0건**이라는 불변식 위에 선다(현재 모든 소비자가 매 호출마다 `liveRegistry.get`으로 재조회한다). `register`가 순수 Map 교체라는 사실만으로는 근거가 부족하다. 회귀 테스트는 **디스패치 경로 위의 캐시만** 잡으므로(같은 명령 2회 디스패치), 후속 토픽이 `ConnectionContext`나 세션 바인딩에 `LiveCharacter`를 캐시하려면 이 불변식을 먼저 다시 판단한다 — 깨지면 결과 필드 in-place 복사로 전환해야 한다.
+
+**권한 정책은 기본 allow다.** `permissionPort`에 명령별 정책을 두지 않는다 — 연마 게이트는 `train()`의 3게이트가 단독 소유하므로 권한 레이어에 중복 게이트를 두면 두 레이어가 분기하고 거부 코드도 `rule_rejected`/`forbidden`으로 갈린다. 클래스·레벨·방 플래그 기반 실 RBAC는 E5 실 어댑터 소관이다.
+
+핸들러는 동기 `CommandHandler` 계약을 유지한다 — train은 DB 조회가 불필요하다(라이브 레지스트리·방 그래프만 사용). 와이어 계약은 [`transport-protocol.md`](transport-protocol.md)가 정본이다.
 
 ### 능력치 성장 vs 최대치 재계산 (분리)
 
@@ -92,8 +108,9 @@ WorldClock `register`에 `intervalSec:5` 슬롯 1개(`createRegenSlot`). 정상 
 - **RHEALR `interval/=3` 케이던스 가속 미구현** — 진폭(+100)만 재현. WorldClock 슬롯의 `intervalSec`는 정수·전 플레이어 공유 상수라 방별 서브-5초 케이던스를 표현할 수 없다. per-player/per-room 스케줄러 도입 후속 토픽으로 이월.
 - **오라클 상태 guard 미구현** — 재생의 `RPHARM`/질병/독(`!ill && !PPOISN`), 연마의 `PBLIND`/`PUPDMG`, 사망의 독/질병 해제(`PPOISN`/`PDISEA`)는 characterSchema에 상태 플래그 필드가 없어 통째 생략한다(DoT는 #83 소관). 상태 플래그가 스키마에 붙는 후속 토픽에서 함께 이식한다.
 - **오라클 대비 의도된 발산**: 정상 레벨업 `hpCurrent` 미상승(원본 `%4` 풀회복 비재현, 재생이 채움); 사망 시 `down_level` 미호출·레벨 유지(오라클은 down_level 호출, A7 §11 재해석); 무적 리셋이 `level=1`에서 종료(원본 fall-through +1 비재현).
-- **seam 미배선** — train·regen·death는 라이브 command/tick 디스패처에 아직 배선되지 않았다(regen provider는 dormant). cross-topic 접합면 X1(death seam 발화·배선)·X2(level 변경 후 라이브 투영 refresh·초인 4d4+4 주사위)·X3(hpCurrent/mpCurrent 이중 홈 sync)은 #82 combat-resolve 표면 확정(rebase) 시점의 조정점으로 남긴다.
-- **write-path 조정(deferred)** — train·regen은 full Character 스냅샷을 markDirty한다. dirtyTracker가 키당 full 스냅샷 last-write-wins 교체라, bank 직접 write·#82 이중 홈 같은 out-of-band DB write를 이후 flush가 무성 revert할 수 있다(특히 regen은 반복 writer). field-ownership/versioning 병합 계약은 caller-wiring 토픽(#43) 소관이며, seam 미배선인 현재는 도달 불가하다.
+- **regen·death는 여전히 미배선** — train은 `progress:train`으로 라이브 배선됐으나, regen provider는 dormant고(`createRegenSlot` 부트 미등록) death seam도 미발화다. cross-topic 접합면 X1(death seam 발화·배선)·X2(level 변경 후 라이브 투영 refresh·초인 4d4+4 주사위)·X3(hpCurrent/mpCurrent 이중 홈 sync)은 #82 combat-resolve 표면 확정(rebase) 시점의 조정점으로 남긴다.
+- **write-path 조정 — gold가 write-behind에 진입했다** — train·regen은 full Character 스냅샷을 markDirty한다. dirtyTracker가 키당 full 스냅샷 last-write-wins 교체라, bank 직접 write·#82 이중 홈 같은 out-of-band DB write를 이후 flush가 무성 revert할 수 있다(특히 regen은 반복 writer). train 배선으로 **연마 비용 차감이 write-behind로 흐르기 시작**했으므로 이제 한쪽은 무장된 상태다 — 충돌 상대인 은행 직접 write가 dormant라 아직 도달 불가하며, 은행 명령 배선은 #43 해소까지 blocking이다([`save-policy.md`](save-policy.md) §제약사항).
+- **재접속 re-hydrate revert** — link-dead 후 재접속이 DB를 다시 읽어 아직 flush되지 않은 진행도(레벨·gold)를 무성 revert할 수 있다(pre-existing, [#124](https://github.com/smalljiny/muhan/issues/124)).
 - **범위 밖**: DoT(독/질병)·PvP 사망 특수·사망 exp 분배(→#83), gold 소싱(→#87), 마법 데미지(→#84/#85), 직업전환(`chg_class_main`), 전투 데미지(→#82).
 
 ## 관련 문서

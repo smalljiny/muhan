@@ -39,7 +39,7 @@ interface LiveCharacter {
 
 ### 프로토콜 표면
 
-`PROTOCOL_VERSION`은 **1 → 2**로 bump한다(하위 비호환 계약 변경). 신규 variant 3종은 [`transport-protocol.md`](transport-protocol.md)가 정본이며 요약은 다음과 같다.
+이 계층이 도입한 variant 3종은 [`transport-protocol.md`](transport-protocol.md)가 정본이며(`PROTOCOL_VERSION` 현재값도 그쪽이 단일 출처다 — 이 계층은 1 → 2 bump를 소유했다) 요약은 다음과 같다.
 
 | 방향 | variant | 형태 |
 |---|---|---|
@@ -76,7 +76,7 @@ FSM(`sessionFsm.ts`)은 레지스트리·월드 그래프를 직접 만지지 �
 1. `liveRegistry.get(actor.characterId)` — 미등록이면 `error{internal}`(배선 격리). `currentRoom`은 **오직 레지스트리에서** 읽고 actor에서 읽지 않는다(actor에는 방 필드가 없다).
 2. `MoveActor{characterId, currentRoomId}` 조립 → `tryMove(deps, actor, direction, 'directional')`.
 3. 거부 → `error{rule_rejected, reason}`(`id`가 있으면 correlationId 반향). `tryMove`가 어떤 mutation·방송보다 먼저 bail하므로 거부 경로에서 라이브 상태와 markDirty는 불변이다.
-4. 성공 → `live.character.currentRoom`을 도착 방으로 in-place 갱신하고 그 값을 `markDirty('characters', id, {currentRoom})`로 write-behind한 뒤 `world:room{roomId, exits}` 반환. `exits`는 출구 **이름** 목록이다(인덱스가 아니다).
+4. 성공 → `live.character.currentRoom`을 도착 방으로 in-place 갱신하고 `markCharacterDirty(id, live.character)`로 **전체 문서 스냅샷**을 write-behind한 뒤 `world:room{roomId, exits}` 반환. `exits`는 출구 **이름** 목록이다(인덱스가 아니다). 부분 스냅샷 `{currentRoom}`을 넘기지 않는 이유는 [`save-policy.md`](save-policy.md)의 `characters` 전체 문서 계약을 참조한다.
 
 점유자 재배치·leave/join 방송·leave/enter 훅은 전부 `tryMove`가 소유한다 — 핸들러는 occupants Set을 건드리지 않는다.
 
@@ -92,7 +92,7 @@ fan-out 대상 결정은 `createRoomChannelAdapter`(발화자 현재 방의 occu
 
 세션 종결 시 두 단계를 **이 순서로** 처리한다.
 
-1. `markDirty('characters', id, {currentRoom})` — 종료 시점 방을 스냅샷.
+1. `markCharacterDirty(id, live.character)` — 종료 시점 캐릭터를 전체 문서로 스냅샷.
 2. 진입 코어의 `release` — `occupants.delete` → `onRoomLeft` → 레지스트리 제거.
 
 **dirty-before-release가 순서 계약이다.** release가 엔트리를 제거하면 `currentRoom`을 더 이상 읽을 수 없다. `release` 내부의 `occupants.delete` → `onRoomLeft` 순서도 계약이며(leave-hook은 빈 방을 전제로 비활성화한다) `tryMove`의 순서를 미러한다.
@@ -105,18 +105,20 @@ fan-out 대상 결정은 `createRoomChannelAdapter`(발화자 현재 방의 occu
 
 ### 조립 (부트 → 팩토리)
 
-부트(`index.ts`)는 원재료 묶음(월드 그래프·레지스트리·characterRepo·markDirty·currentHour·방 진입/퇴장 훅·logger)만 조립해 넘기고, `createLiveWorldWiring`이 진입 바인딩·이동 의존·수명 포트·방 해소자를 파생한다. 부트는 커버리지 제외 배선 코드이므로 파생 로직을 테스트 가능한 순수 팩토리로 뽑고 부트에는 묶음 전달만 남긴다.
+부트(`index.ts`)는 원재료 묶음(월드 그래프·레지스트리·characterRepo·markDirty·currentHour·방 진입/퇴장 훅·logger)만 조립해 넘기고, `createLiveWorldWiring`이 진입 바인딩·이동 의존(`moveDeps`)·연마 의존(`trainDeps`)·수명 포트·방 해소자(`resolveRoom`)·`markCharacterDirty` seam을 파생한다. 부트는 커버리지 제외 배선 코드이므로 파생 로직을 테스트 가능한 순수 팩토리로 뽑고 부트에는 묶음 전달만 남긴다. 규칙 명령이 늘어도 **원재료는 늘지 않는다** — 팩토리가 기존 묶음에서 명령별 deps를 파생하므로 부트 계약은 불변이다(train 배선이 이를 실증했다).
+
+`markCharacterDirty`는 원시 `bundle.markDirty`를 1회 감싼 **단일 인스턴스**로, `moveDeps`·`lifecyclePort`·`trainDeps`가 같은 참조를 공유한다(`characters` 스냅샷 계약의 단일화 — [`save-policy.md`](save-policy.md)). `resolveRoom`은 `characterId → 레지스트리 엔트리 → currentRoom → 방` 경로의 by-character 해소자이며, 소비자가 방 채널 조립에 더해 `trainDeps`까지 둘로 늘었다(방 그래프 직접 조회 `roomId → 방`은 별개 해소자다).
 
 **단일 공유 불변식**: 진입 코어와 레지스트리는 hydrate/place·이동·종료 release·발화자 방 해소가 **동일 인스턴스**를 배후에 둬야 상태가 분기하지 않는다. 팩토리가 진입 코어를 1회 생성해 네 소비자에 같은 참조를 전달한다.
 
-명시 `lifecyclePort`·`channelPort`가 함께 주어지면 묶음 파생보다 우선한다(explicit > bundle). 묶음 미주입이면 이동(`world:move`)이 라우터에 등록되지 않아 `unknown_type`으로 남고, 진입 seam도 통째로 생략된다.
+명시 `lifecyclePort`·`channelPort`가 함께 주어지면 묶음 파생보다 우선한다(explicit > bundle). 묶음 미주입이면 라이브 상태 seam을 요구하는 게임 명령(`world:move`·`progress:train`)이 라우터에 등록되지 않아 `unknown_type`으로 남고, 진입 seam도 통째로 생략된다(조건부 등록 번들 `GameCommandDeps`는 [`transport-protocol.md`](transport-protocol.md)가 정본).
 
 부트는 `onRoomEntered`/`onRoomLeft`를 월드 런타임 훅에 위임해 이동과 세션 진입/퇴장이 **동일 활성 집합**을 갱신하게 한다 — 이전까지 dormant였던 활성 집합 경계가 여기서 해소된다.
 
 ## 제약사항
 
 - **이동 leave/join 방송 미결선** — `tryMove`의 `broadcastLeave`/`broadcastJoin`은 no-op으로 채운다. 방 채팅 전파는 채널 포트가 소유하고, 이동 통지(누가 들어왔다/나갔다)는 후속 토픽 몫이다.
-- **동작 배선 필드는 `currentRoom` 하나** — HP/MP/spells/realm/인벤은 로드되나 dormant다. 규칙 명령(train·attack·cast·study·teach) 배선은 이 foundation 위에 얹는 후속 토픽이 소유한다.
+- **규칙 명령은 `train` 하나만 배선됨** — 이 foundation 위에 `progress:train`이 얹혔다(디스패처 패턴 확립 + 레벨·경험치·gold·능력치 변이). 나머지 규칙 명령은 여전히 미배선이며 선행 결손이 배선이 아닌 신규 구현을 요구한다: `teach`(#119)·`study`(#120)·`attack`(#121)·`cast`(#122). 인벤·장비는 로드되나 dormant다.
 - **`world:room`은 최소 통지** — 주변 점유자·아이템·방 설명을 싣지 않는다. 상세 월드뷰 이벤트는 프론트엔드 월드뷰 에픽이 소비 시점에 확정한다.
 - **스폰 정책 미완결** — orphan `currentRoom`은 `DEFAULT_START_ROOM = 1` 단일 폴백으로만 방어한다. 레벨·종족·소속별 시작지 정책은 별도다.
 - **가시성 필터 없음** — 방 채널 fan-out은 occupants 전 멤버 대상이며 발화자 자신도 제외하지 않는다. PINVIS·어둠·투명 필터는 E5 소관이다.

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import type { Character, RoomNode } from 'shared'
 import { createLiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
 import { createLiveCharacterEntry } from '../world/liveCharacterEntry.js'
+import { createMarkCharacterDirty } from '../world/markCharacterDirty.js'
 import { createLiveSessionLifecycleAdapter } from './liveSessionLifecycleAdapter.js'
 import type { DisconnectReason } from './sessionRegistry.js'
 
@@ -9,7 +10,8 @@ import type { DisconnectReason } from './sessionRegistry.js'
  * liveSessionLifecycleAdapter — 세션 종결 시 방 점유 해제 + 라이브 엔트리 제거 + 최종 currentRoom 영속화.
  *
  * 실 레지스트리 + 실 createLiveCharacterEntry(Story 3 release 코어) + 실 RoomNode(Set occupants)를 써
- * release가 occupants/registry를 진짜로 변이하도록 구성한다. markDirty만 spy로 관찰한다.
+ * release가 occupants/registry를 진짜로 변이하도록 구성한다. 어댑터에는 실 markCharacterDirty 헬퍼를
+ * 끼우고 그 하위의 원시 markDirty seam만 spy로 관찰한다 — 어댑터가 흘린 스냅샷의 실제 형태를 본다.
  * 네 가지 DisconnectReason은 동일하게 처리되어야 한다(reason 미분기, T6.4).
  */
 function makeCharacter(id: string, currentRoom: number): Character {
@@ -100,7 +102,7 @@ describe('createLiveSessionLifecycleAdapter', () => {
       const adapter = createLiveSessionLifecycleAdapter({
         liveRegistry: fx.registry,
         release: (id) => fx.entry.release(id),
-        markDirty,
+        markCharacterDirty: createMarkCharacterDirty(markDirty),
       })
 
       adapter.onSessionEnd({ accountId: 'acct-1', characterId: 'char-1', reason })
@@ -129,14 +131,24 @@ describe('createLiveSessionLifecycleAdapter', () => {
     const adapter = createLiveSessionLifecycleAdapter({
       liveRegistry: fx.registry,
       release: (id) => fx.entry.release(id),
-      markDirty,
+      markCharacterDirty: createMarkCharacterDirty(markDirty),
     })
 
     adapter.onSessionEnd({ accountId: 'acct-1', characterId: 'char-1', reason: 'graceExpired' })
 
     // END-TIME 방 B로 기록해야 한다 — 로드 시점 방 A로 캐싱했다면 실패한다.
-    expect(markDirty).toHaveBeenCalledWith('characters', 'char-1', { currentRoom: ROOM_B })
-    expect(markDirty).not.toHaveBeenCalledWith('characters', 'char-1', { currentRoom: ROOM_A })
+    // 스냅샷이 전체 문서라 exact 매칭 대신 objectContaining으로 대조한다. not 단언도 objectContaining으로
+    // 두어야 A≠B keystone이 vacuous해지지 않는다(exact 매칭이면 전체 문서 앞에서 항상 참이 된다).
+    expect(markDirty).toHaveBeenCalledWith(
+      'characters',
+      'char-1',
+      expect.objectContaining({ currentRoom: ROOM_B }),
+    )
+    expect(markDirty).not.toHaveBeenCalledWith(
+      'characters',
+      'char-1',
+      expect.objectContaining({ currentRoom: ROOM_A }),
+    )
   })
 
   it('dirty-before-release 순서: markDirty 호출 시점에 엔트리가 아직 존재한다', async () => {
@@ -153,13 +165,14 @@ describe('createLiveSessionLifecycleAdapter', () => {
     const adapter = createLiveSessionLifecycleAdapter({
       liveRegistry: fx.registry,
       release: (id) => fx.entry.release(id),
-      markDirty,
+      markCharacterDirty: createMarkCharacterDirty(markDirty),
     })
 
     adapter.onSessionEnd({ accountId: 'acct-1', characterId: 'char-1', reason: 'idleTimeout' })
 
     expect(hasAtMarkTime).toBe(true) // mark 시점 엔트리 존재 → release보다 선행
-    expect(snapshotAtMarkTime).toEqual({ currentRoom: 7 }) // release 이후였다면 읽을 수 없다
+    // release 이후였다면 엔트리가 사라져 방을 읽을 수 없다. 스냅샷은 전체 문서라 subset으로 대조한다.
+    expect(snapshotAtMarkTime).toMatchObject({ _id: 'char-1', currentRoom: 7 })
     expect(fx.registry.has('char-1')).toBe(false) // release는 mark 이후에 실행됐다
   })
 
@@ -172,7 +185,7 @@ describe('createLiveSessionLifecycleAdapter', () => {
     const adapter = createLiveSessionLifecycleAdapter({
       liveRegistry: fx.registry,
       release: (id) => fx.entry.release(id),
-      markDirty,
+      markCharacterDirty: createMarkCharacterDirty(markDirty),
     })
 
     expect(() =>

@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import { WebSocket } from 'ws'
-import { PROTOCOL_VERSION, type Character, type RoomNode, type ServerEvent } from 'shared'
+import { PROTOCOL_VERSION, neededExp, type Character, type RoomNode, type ServerEvent } from 'shared'
 import { buildApp } from '../app.js'
+import { goldToTrain } from '../progression/train.js'
+import { trainingFlagsForClass } from '../progression/train.testutil.js'
 import { resetConfigForTests } from '../config/env.js'
 import { InMemorySessionAuthAdapter } from '../auth/inMemorySessionAuthAdapter.js'
 import { createLiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
@@ -37,10 +39,25 @@ const ACCOUNT_A = 'e2e-account-a'
 const ACCOUNT_B = 'e2e-account-b'
 const CHAR_A = 'e2e-char-a'
 const CHAR_B = 'e2e-char-b'
+// 연마 시나리오 전용 3번째 세션. 기존 이동·채팅 시나리오는 A·B만 관측하므로(occupants·updates.get(A/B))
+// 이 시드는 그 케이스들에 inert하다 — 훈련방 플래그를 시작 방에 얹어 이동 게이트를 흔들지 않기 위해
+// 별도 방·별도 캐릭터로 분리한다.
+const COOKIE_C = 'e2e-cookie-c'
+const ACCOUNT_C = 'e2e-account-c'
+const CHAR_C = 'e2e-char-c'
 
 // ── 월드 그래프 방 ID ────────────────────────────────────────────────────────
 const ROOM_START = 1 // 두 캐릭터의 시작 방(char A 출발지, char B 상주지)
 const ROOM_DEST = 2 // char A 이동 도착 방
+const ROOM_TRAIN = 3 // char C 상주 훈련방(class 4 수련장 플래그)
+
+/** 캐릭터 class — 문서 픽스처·세션 시드·훈련방 flag 파생이 모두 이 상수를 쓴다(동기화 강제). */
+const CHAR_CLASS = 4
+
+/** char C의 연마 전 레벨. 정확히 1레벨분 exp·gold를 실어 결정적으로 1레벨만 오르게 한다. */
+const TRAIN_LEVEL = 7
+const TRAIN_EXP = neededExp(TRAIN_LEVEL)
+const TRAIN_GOLD = goldToTrain(TRAIN_LEVEL)
 
 /** 시작 방에서 유효 출구 '동'으로 도착 방을 잇는 pass-move 픽스처(all-zero flags — 게이트 건틀릿 통과). */
 const EXIT_EAST = '동'
@@ -53,7 +70,7 @@ function makeCharacter(id: string, accountId: string, currentRoom: number): Char
   return {
     _id: id,
     name: '테스토스',
-    class: 4,
+    class: CHAR_CLASS,
     race: 1,
     stats: [16, 18, 12, 10, 14],
     gold: 100,
@@ -87,6 +104,11 @@ function makeRoom(roomId: number, exits: RoomNode['exits']): RoomNode {
     random: [],
     traffic: 0,
   }
+}
+
+/** 지정 class의 훈련방 — flags 규칙(base RTRAIN + class-bit 역순)은 train.testutil이 소유한다. */
+function makeTrainingRoom(roomId: number, cls: number): RoomNode {
+  return { ...makeRoom(roomId, []), flags: trainingFlagsForClass(cls) }
 }
 
 /** name·targetRoomId만 지정한 all-zero flags 출구(bits 없음 = 모든 게이트 통과). */
@@ -126,6 +148,7 @@ interface LiveWorldHarness {
   app: FastifyInstance
   roomStart: RoomNode
   roomDest: RoomNode
+  roomTrain: RoomNode
   characterRepo: FakeCharacterRepo
   saveEngine: SaveEngine
 }
@@ -146,14 +169,25 @@ function buildHarness(): LiveWorldHarness {
   const roomStart = makeRoom(ROOM_START, [makeExit(EXIT_EAST, ROOM_DEST)])
   // 도착 방은 back-exit이 없다 — 이 스위트는 start→dest 단방향 이동만 exercise한다.
   const roomDest = makeRoom(ROOM_DEST, [])
+  // 훈련방은 시작 방과 분리한다 — 시작 방 flags는 기존 이동 시나리오의 tryMove 게이트 건틀릿 입력이라
+  // RTRAIN 비트를 얹으면 무관한 케이스를 흔든다.
+  const roomTrain = makeTrainingRoom(ROOM_TRAIN, CHAR_CLASS)
   const worldGraph = new Map<number, RoomNode>([
     [ROOM_START, roomStart],
     [ROOM_DEST, roomDest],
+    [ROOM_TRAIN, roomTrain],
   ])
 
   const characterRepo = makeCharacterRepo([
     makeCharacter(CHAR_A, ACCOUNT_A, ROOM_START),
     makeCharacter(CHAR_B, ACCOUNT_B, ROOM_START),
+    // char C는 훈련방에 상주하며 정확히 1레벨분 exp·gold를 갖는다(연마 시나리오 전용).
+    {
+      ...makeCharacter(CHAR_C, ACCOUNT_C, ROOM_TRAIN),
+      level: TRAIN_LEVEL,
+      experience: TRAIN_EXP,
+      gold: TRAIN_GOLD,
+    },
   ])
 
   // SaveEngine — CC#4 패턴 미러(FakeClock + 즉시 backoff). start() 후 markDirty는 app 흐름에서 일어나고
@@ -182,15 +216,18 @@ function buildHarness(): LiveWorldHarness {
   }
 
   const sessionAuth = new InMemorySessionAuthAdapter({
-    cookieToAccount: { [COOKIE_A]: ACCOUNT_A, [COOKIE_B]: ACCOUNT_B },
+    cookieToAccount: { [COOKIE_A]: ACCOUNT_A, [COOKIE_B]: ACCOUNT_B, [COOKIE_C]: ACCOUNT_C },
     characters: {
-      [ACCOUNT_A]: [{ characterId: CHAR_A, name: '무한전사', class: 4, race: 1, level: 7 }],
-      [ACCOUNT_B]: [{ characterId: CHAR_B, name: '무한도적', class: 4, race: 1, level: 7 }],
+      [ACCOUNT_A]: [{ characterId: CHAR_A, name: '무한전사', class: CHAR_CLASS, race: 1, level: 7 }],
+      [ACCOUNT_B]: [{ characterId: CHAR_B, name: '무한도적', class: CHAR_CLASS, race: 1, level: 7 }],
+      [ACCOUNT_C]: [
+        { characterId: CHAR_C, name: '무한수련생', class: CHAR_CLASS, race: 1, level: 7 },
+      ],
     },
   })
 
   const app = buildApp({ sessionAuth, liveWorldDeps: bundle })
-  return { app, roomStart, roomDest, characterRepo, saveEngine }
+  return { app, roomStart, roomDest, roomTrain, characterRepo, saveEngine }
 }
 
 /**
@@ -343,6 +380,55 @@ describe('라이브 월드 end-to-end (실 소켓 2세션)', () => {
     // markDirty에서만 온다(종료 lifecycle 경로가 실제 구동됐음 증명, constraint #2).
     expect(h.characterRepo.updates.get(CHAR_A)).toMatchObject({ currentRoom: ROOM_DEST })
     expect(h.characterRepo.updates.get(CHAR_B)).toMatchObject({ currentRoom: ROOM_START })
+  })
+
+  it('훈련방에서 progress:train으로 레벨업하고 상승한 level·차감된 gold가 전체 문서로 저장된다', async () => {
+    const h = buildHarness()
+    const url = await startTracked(h.app)
+
+    // ── 1) 입장 — char C가 훈련방에 진입한다. ─────────────────────────────────────────
+    const clientC = trackedClient(url, COOKIE_C)
+    const c = await enterWorld(clientC, CHAR_C)
+    expect(c.entered).toMatchObject({ type: 'session:entered', characterId: CHAR_C })
+    expect(c.room).toMatchObject({ type: 'world:room', roomId: ROOM_TRAIN })
+    await waitFor(() => h.roomTrain.occupants.has(CHAR_C))
+
+    // ── 2) 연마 — progress:train이 progress:trained로 되돌아온다(상태 이벤트, 상관 키 없음). ──
+    clientC.send(JSON.stringify({ type: 'progress:train', id: 't1' }))
+    const trained = await c.reader.next()
+    expect(trained).toMatchObject({
+      type: 'progress:trained',
+      level: TRAIN_LEVEL + 1,
+      levelsGained: 1,
+      gold: 0,
+      prestige: 'none',
+    })
+    expect(trained).not.toHaveProperty('correlationId')
+
+    // ── 3) 종료 저장 — 수렴 후 강제 flush로 write-behind 스냅샷을 fake repo에 도달시킨다. ──
+    h.app.wsShutdown.markShuttingDown()
+    h.app.wsShutdown.converge()
+    await h.saveEngine.shutdown()
+
+    // 상승한 level·차감된 gold가 저장된다(load-time 값 7/TRAIN_GOLD가 아니다).
+    const saved = h.characterRepo.updates.get(CHAR_C)
+    expect(saved).toMatchObject({ level: TRAIN_LEVEL + 1, gold: 0, currentRoom: ROOM_TRAIN })
+    // 부분 패치가 아니라 characters 전체 문서 스냅샷이다(LWW write-loss 봉쇄 계약) — 연마와 무관한
+    // 필드까지 함께 실린다. 단 두 필드는 설계상 제외된다: `_id`는 SaveEngine.stripImmutableId가 벗기고
+    // (Mongo immutable-`_id`), `status`는 markCharacterDirty가 뺀다(라이브가 소유하지 않는 권한 필드).
+    expect(saved).toMatchObject({
+      name: '테스토스',
+      accountId: ACCOUNT_C,
+      class: CHAR_CLASS,
+      race: 1,
+      experience: TRAIN_EXP,
+      schemaVersion: 2,
+    })
+    expect(saved?.stats).toHaveLength(5)
+    expect(saved?.spells).toHaveLength(16)
+    expect(saved?.realm).toHaveLength(4)
+    expect(saved).not.toHaveProperty('_id')
+    expect(saved).not.toHaveProperty('status')
   })
 
   it('이동 후 재접속 시 라이브 상태(도착 방)를 보존하고 재로드하지 않는다', async () => {

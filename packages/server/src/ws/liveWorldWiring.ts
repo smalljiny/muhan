@@ -1,8 +1,13 @@
 import type { Character, RoomNode, ServerEvent } from 'shared'
 import { createLiveCharacterEntry, type EntryLogger } from '../world/liveCharacterEntry.js'
 import type { LiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
+import {
+  createMarkCharacterDirty,
+  type MarkCharacterDirty,
+} from '../world/markCharacterDirty.js'
 import { defaultFleeRng, type MoveActor, type TryMoveDeps } from '../world/tryMove.js'
 import type { MoveHandlerDeps } from './handlers/move.js'
+import type { TrainHandlerDeps } from './handlers/train.js'
 import { createRoomChannelAdapter } from './roomChannelAdapter.js'
 import { createLiveSessionLifecycleAdapter } from './liveSessionLifecycleAdapter.js'
 import type { LiveWorldBinding } from './liveWorldBinding.js'
@@ -13,7 +18,7 @@ import type { ConnectionContext } from './connection.js'
 
 /**
  * 라이브 월드 조립 팩토리(Story 7) — index.ts가 넘기는 라이브 월드 의존 묶음을 진입 seam(liveWorldBinding)·
- * 이동 seam(moveDeps)·세션 수명 어댑터(lifecyclePort)·방 해소자(resolveRoom)로 파생한다.
+ * 이동 seam(moveDeps)·연마 seam(trainDeps)·세션 수명 어댑터(lifecyclePort)·방 해소자(resolveRoom)로 파생한다.
  *
  * index.ts boot는 커버리지 제외 배선 코드라, 이 파생 로직을 테스트 가능한 순수 팩토리로 추출하고 index.ts는
  * 묶음 조립·전달만 남긴다(worldRuntime.ts 관례 미러). 팩토리는 transport(소켓·safeSend)를 만지지 않아
@@ -54,10 +59,20 @@ export interface LiveWorldWiringBundle {
 export interface LiveWorldWiring {
   /** 세션 진입 seam(hydrate/place/roomSummary 파생용 진입 코어 + roomId 해소자). */
   readonly liveWorldBinding: LiveWorldBinding
-  /** world:move 배선용 이동 의존(라이브 레지스트리·tryMove seam·markDirty). */
+  /** world:move 배선용 이동 의존(라이브 레지스트리·tryMove seam·markCharacterDirty). */
   readonly moveDeps: MoveHandlerDeps
-  /** 세션 종료 수명 어댑터(markDirty → release). liveWorldBinding.entry.release와 같은 인스턴스를 배후에 둔다. */
+  /**
+   * progress:train 배선용 연마 의존(라이브 레지스트리·by-character 방 해소자·markCharacterDirty).
+   * 신규 원재료 없이 기존 seam 셋의 조합이다 — 묶음(LiveWorldWiringBundle)은 변하지 않는다.
+   */
+  readonly trainDeps: TrainHandlerDeps
+  /** 세션 종료 수명 어댑터(markCharacterDirty → release). liveWorldBinding.entry.release와 같은 인스턴스를 배후에 둔다. */
   readonly lifecyclePort: SessionLifecyclePort
+  /**
+   * characters 전체 문서 스냅샷 seam(bundle.markDirty를 1회 감싼 단일 인스턴스). moveDeps·lifecyclePort가
+   * 같은 인스턴스를 공유하며, 후속 라이브 호출처(train 등)도 이것을 소비한다.
+   */
+  readonly markCharacterDirty: MarkCharacterDirty
   /** 발화자(characterId) 현재 방 해소자 — 방 채널 어댑터가 fan-out 대상 방을 얻는 데 쓴다. */
   readonly resolveRoom: (characterId: string) => RoomNode | undefined
 }
@@ -71,6 +86,9 @@ export interface LiveWorldWiring {
  */
 export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldWiring {
   const resolveRoomById = (roomId: number): RoomNode | undefined => bundle.worldGraph.get(roomId)
+
+  // characters 스냅샷 seam — 1회 생성해 moveDeps·lifecyclePort가 같은 인스턴스를 공유한다(계약 단일화).
+  const markCharacterDirty = createMarkCharacterDirty(bundle.markDirty)
 
   // 진입 코어 — 단일 인스턴스로 생성해 liveWorldBinding·lifecyclePort가 공유한다(#3).
   const entry = createLiveCharacterEntry({
@@ -99,14 +117,14 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
   const moveDeps: MoveHandlerDeps = {
     liveRegistry: bundle.liveRegistry,
     tryMoveDeps,
-    markDirty: bundle.markDirty,
+    markCharacterDirty,
   }
 
   // 세션 종료 수명 어댑터 — release는 진입 코어의 것을 그대로 주입해 같은 레지스트리/방을 정리한다(#3).
   const lifecyclePort = createLiveSessionLifecycleAdapter({
     liveRegistry: bundle.liveRegistry,
     release: (characterId) => entry.release(characterId),
-    markDirty: bundle.markDirty,
+    markCharacterDirty,
   })
 
   // 발화자 방 해소자(by-character): registry로 라이브 엔트리를 찾고 currentRoom(단일 출처)으로 방을 얻는다.
@@ -116,7 +134,15 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     return bundle.worldGraph.get(live.character.currentRoom)
   }
 
-  return { liveWorldBinding, moveDeps, lifecyclePort, resolveRoom }
+  // 연마 의존 — 신규 원재료 없이 기존 세 seam의 조합이다(레지스트리·by-character 방 해소자·스냅샷 헬퍼).
+  // moveDeps와 달리 by-roomId 해소자가 아니라 위의 by-character resolveRoom을 쓰므로 그 선언 뒤에 둔다.
+  const trainDeps: TrainHandlerDeps = {
+    liveRegistry: bundle.liveRegistry,
+    resolveRoom,
+    markCharacterDirty,
+  }
+
+  return { liveWorldBinding, moveDeps, trainDeps, lifecyclePort, resolveRoom, markCharacterDirty }
 }
 
 /** assembleRoomChannelPort 의존 seam — 발화자 방 해소자 + 세션 색인 + 소켓 해소자 + 안전 전송. */

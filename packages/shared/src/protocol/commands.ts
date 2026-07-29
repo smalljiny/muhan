@@ -70,6 +70,14 @@ export const clientCommandSchema = z.discriminatedUnion('type', [
     direction: z.string().min(1).max(32),
     id: z.string().optional(),
   }),
+  // 연마 명령 — 인자가 없다. 훈련방 여부·클래스 일치·exp·gold 게이트는 전부 서버(progression/train)가
+  // 소유하므로 클라는 의도만 보낸다(대상·수량 같은 인자 표면을 두지 않아 입력 위생 부담이 0이다).
+  // id는 상관 키(선택) — 성공 통지 progress:trained는 상태 이벤트라 상관 키를 싣지 않고, 거부 시
+  // error 이벤트가 이 id를 correlationId로 반향한다.
+  z.strictObject({
+    type: z.literal('progress:train'),
+    id: z.string().optional(),
+  }),
 ])
 
 export type ClientCommand = z.infer<typeof clientCommandSchema>

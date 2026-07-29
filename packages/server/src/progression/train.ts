@@ -7,6 +7,7 @@ import {
   type Character,
 } from 'shared'
 import { hasFlag } from '../world/door.js'
+import type { MarkCharacterDirty } from '../world/markCharacterDirty.js'
 
 /**
  * progression/train — `연마` 명령 핸들러. 3게이트 판정(location→exp→gold) → prestige 우선
@@ -14,20 +15,24 @@ import { hasFlag } from '../world/door.js'
  *
  * 원본 `command7.c:530-650`(train 명령)의 progression 소관을 이식한다. shared 순수 함수
  * (neededExp·upLevel·classifyPrestige·invinciblePrestige·caretakerPrestige)를 소비하고, room
- * flag는 `hasFlag`(F_ISSET 이식), 영속화는 `markDirty` seam을 주입 소비한다. class·level·
+ * flag는 `hasFlag`(F_ISSET 이식), 영속화는 `markCharacterDirty` seam을 주입 소비한다. class·level·
  * experience·vitals 전이는 shared가 소유하고, train은 3게이트·gold 차감·배치 시퀀싱만 소유한다.
  *
  * ## immutability
- * 입력 char/room을 변형하지 않는다. 성공 시 새 Character를 반환하고, markDirty에는 그 시점
- * 스냅샷(distinct 참조)을 넘긴다(dirtyTracker 계약).
+ * 입력 char/room을 변형하지 않는다. 성공 시 새 Character를 반환하고, 같은 값을
+ * `markCharacterDirty`에 넘긴다 — 스냅샷 distinct화는 그 헬퍼가 단독으로 소유한다.
  *
  * ## gold 쓰기경로 조정 — named deferred dependency (미해결)
  * train은 성공 시 최종 Character 스냅샷(gold 포함)을 markDirty로 write-behind에 흘린다. 같은
  * characters 문서가 bank 트랜잭션 경로(bankTransactionService)로도 gold를 직접 쓰면, 커밋 이후
  * 도착한 train 스냅샷 flush가 gold를 되돌릴 수 있다(무성 revert). 이는 bankTransactionService
- * 상단 "쓰기 경로 조정 계약"과 동형 문제(X1/X2/X3 조정 패턴)이며, 이 스토리에서는 해결하지
- * 않는다 — train은 seam 소비자이고 라이브 command dispatcher 미배선이라 두 경로 충돌에 도달
- * 불가하다. 게임플레이 호출처 배선 토픽에서 두 경로를 조정한다.
+ * 상단 "쓰기 경로 조정 계약"과 동형 문제(X1/X2/X3 조정 패턴)이며, 여전히 해결되지 않았다.
+ *
+ * 현 상태: train은 이제 라이브 command dispatcher에 배선돼 있다(`progress:train` →
+ * `ws/handlers/train.ts`) — 즉 이 경로의 gold 쓰기는 실제로 일어난다. 충돌 자체가 아직 도달
+ * 불가한 이유는 **반대편이 dormant**하기 때문이다: 은행 명령은 `clientCommandSchema`에 variant가
+ * 없고 `bankTransactionService`의 non-test caller가 0건이라, 두 경로가 동시에 같은 문서의 gold를
+ * 쓰는 상황이 아직 성립하지 않는다. 은행 명령을 배선하는 토픽에서 두 경로를 조정한다.
  */
 
 /**
@@ -48,9 +53,6 @@ const NORMAL_LEVEL_CAP = 100
 /** exp 레벨 배열 크기(mtype.h MAXALVL=128). goldneeded clamp 경계. */
 const MAXALVL = 128
 
-/** 영속화 대상 컬렉션명. */
-const CHARACTERS_COLLECTION = 'characters'
-
 /**
  * 연마 gold 비용을 반환한다 — `trunc(neededExp(min(level, MAXALVL-1)) / 20)`.
  *
@@ -58,8 +60,12 @@ const CHARACTERS_COLLECTION = 'characters'
  * `level>=MAXALVL(128)`이면 `(needed_exp[MAXALVL-2]/10)/2`(=trunc(neededExp(127)/20)=5,000,000)로
  * clamp한다. `min(level, 127)`로 두 분기를 합성한다 — level≥128은 127로 눌러 clamp 값을 얻는다.
  * exp 게이트의 expNeeded(neededExp(level))는 clamp 없이 선형 확장하므로 별개다.
+ *
+ * export하는 이유: 테스트가 `Math.trunc(neededExp(level)/20)`으로 임계를 재유도하면 같은 값의 출처가
+ * 둘이 되어 드리프트하고(특히 L≥128 clamp 분기는 재유도본이 통째로 빠뜨린다), 게이트 경계 픽스처가
+ * 조용히 어긋난다. 소비자는 이 함수를 호출한다(같은 파일 RTRAIN export가 선례).
  */
-function goldToTrain(level: number): number {
+export function goldToTrain(level: number): number {
   return Math.trunc(neededExp(Math.min(level, MAXALVL - 1)) / 20)
 }
 
@@ -81,9 +87,14 @@ export type TrainResult =
       prestige: 'invincible' | 'caretaker' | 'none'
     }
 
-/** train이 소비하는 영속화 seam. 성공 경로에서만 스냅샷을 1회 전달한다. */
+/**
+ * train이 소비하는 영속화 seam. 성공 경로에서만 전체 Character를 1회 전달한다.
+ *
+ * 원시 markDirty(`snapshot: unknown`)가 아니라 타입 좁힌 `markCharacterDirty`를 요구한다 — 원시 seam을
+ * 쓰면 characters 스냅샷 계약(전체 문서)이 타입으로 강제되지 않는다.
+ */
 export type TrainDeps = {
-  markDirty: (collection: string, id: string, snapshot: unknown) => void
+  markCharacterDirty: MarkCharacterDirty
 }
 
 /**
@@ -163,8 +174,8 @@ export function train(char: Character, room: { flags: number[] }, deps: TrainDep
 }
 
 /**
- * 성공 결과를 조립한다 — markDirty에 스냅샷(distinct 참조)을 1회 기록하고 Result를 반환한다.
- * 반환 character와 스냅샷을 분리해, 반환값 이후 변이가 스냅샷에 전파되지 않게 한다(dirtyTracker 계약).
+ * 성공 결과를 조립한다 — markCharacterDirty로 전체 Character를 1회 기록하고 Result를 반환한다.
+ * 반환 character와 스냅샷의 분리(distinct 참조)는 markCharacterDirty가 소유하므로 여기서 복사하지 않는다.
  */
 function finalize(
   character: Character,
@@ -172,6 +183,6 @@ function finalize(
   prestige: 'invincible' | 'caretaker' | 'none',
   deps: TrainDeps,
 ): TrainResult {
-  deps.markDirty(CHARACTERS_COLLECTION, character._id, { ...character })
+  deps.markCharacterDirty(character._id, character)
   return { ok: true, character, levelsGained, prestige }
 }

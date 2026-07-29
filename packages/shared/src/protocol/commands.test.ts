@@ -321,6 +321,34 @@ describe('clientCommandSchema (client→server 봉투)', () => {
     })
   })
 
+  describe('progress:train', () => {
+    it('id 없이도 통과한다 (인자 없는 명령)', () => {
+      const parsed = clientCommandSchema.safeParse({ type: 'progress:train' })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'progress:train') {
+        expect(parsed.data.id).toBeUndefined()
+      }
+    })
+
+    it('id가 있으면 통과하고 상관 키를 보존한다', () => {
+      const parsed = clientCommandSchema.safeParse({ type: 'progress:train', id: 't1' })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'progress:train') {
+        expect(parsed.data.id).toBe('t1')
+      }
+    })
+
+    it('알 수 없는 키를 거부한다 (strict)', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'progress:train', extra: true }).success,
+      ).toBe(false)
+    })
+
+    it('id가 문자열이 아니면 거부한다', () => {
+      expect(clientCommandSchema.safeParse({ type: 'progress:train', id: 42 }).success).toBe(false)
+    })
+  })
+
   it('event 전용 type(system:hello)을 거부한다', () => {
     expect(
       clientCommandSchema.safeParse({ type: 'system:hello', protocolVersion: 1 }).success,

@@ -51,6 +51,20 @@ BankTransactionService (bank/, index.ts와 독립 조립)
 - `evict(collection, id)` — 단일 키만 제거(없으면 no-op). `saveNow`가 즉시 write 직전에 호출해 stale mark를 제거한다.
 - 스냅샷 타입은 컬렉션별 문서 형태가 달라 `unknown`으로 받고 **참조 그대로 보관**(복제 안 함)한다. 호출 계약: 라이브 도메인 객체 참조가 아니라 **그 시점의 스냅샷**을 넘긴다(라이브 참조는 coalescing을 무의미화).
 
+#### `characters` 전체 문서 스냅샷 계약
+
+**`characters` 컬렉션의 모든 `markDirty` 호출은 전체 문서 스냅샷을 넘긴다.** LWW는 병합이 아니라 **교체**이므로, 호출처마다 서로 다른 부분 스냅샷을 넣으면 나중 mark가 앞선 mark의 필드를 통째로 밀어낸다 — 연마로 오른 레벨·경험치·차감된 gold가 뒤이은 `{currentRoom}` mark 하나에 flush 주기(기본 120초) 동안 통째로 소실된다. 모든 호출처가 같은 전체 문서 형태를 넣으면 coalescing이 손실 없이 성립한다.
+
+계약을 관례가 아니라 **구조로 강제한다** — `markCharacterDirty(id: string, character: Character)`(`world/markCharacterDirty.ts`)가 유일한 라이브 진입점이고, `{currentRoom: …}` 같은 부분 리터럴은 `Character`가 아니므로 컴파일에서 거부된다. 현재 소비자는 세 라이브 경로(move 핸들러·세션 lifecycle 어댑터·`TrainDeps`)다.
+
+- **강제 범위(과대 주장 금지)** — 하위 원시 seam `SaveEngine.markDirty(collection, id, snapshot: unknown)`은 여전히 열려 있고 `progression/regen.ts`가 그것을 직접 소비한다(라이브 호출부 0건이라 dormant). 계약은 "이 헬퍼를 경유하는 코드"에서만 타입으로 강제된다. `characters` 쓰기를 추가할 때는 이 헬퍼를 경유한다.
+- **복사 깊이** — 스냅샷은 참조 그대로 보관되므로 별칭이 남으면 flush가 mark 시점이 아닌 drain 시점 상태를 쓴다. 스냅샷은 flush 주기가 아니라 **변이 시점마다**(이동·연마·세션 종료 각 1회) 뜨므로 재귀 복제는 비용이 과하다 — **변이 가능한 컨테이너까지만** 끊는다: top-level 얕은 spread + 배열 필드(`stats`·`spells`·`realm`, 원소가 number라 1단으로 충분) + 객체 필드(`buffs`·`statusEffects`는 컨테이너 **및 각 엔트리 객체** — 엔트리가 만료 타이머라 in-place 갱신될 수 있다). `deletedAt`(Date)은 참조 그대로 둔다(라이브가 in-place 변이하지 않는다).
+- **`status`는 싣지 않는다** — 스냅샷 형태는 `Omit<Character, 'status'>`다. `status`는 soft-delete 경로(`characterRepository.softDelete`)가 단독 소유하는 권한 필드인데, 라이브 스냅샷이 실으면 스키마 default `'active'`가 LWW에서 **무덤을 되살린다**(형제 세션이 삭제한 캐릭터를 뒤이은 이동·종료 flush가 `$set {status:'active'}`로 복구해 `findByAccount`의 `status:{$ne:'deleted'}` 필터를 다시 통과시킨다). 이 계약이 봉쇄하려는 write-loss의 정확한 역방향이라 키를 제외하며, `characterRepository`의 `status.removeDefault()` 방어와 같은 편에 선다. 짝인 `deletedAt`은 제외하지 않는다 — 라이브 객체에 없으면 키가 `$set`에 실리지 않아 저장 값이 보존되므로 되돌림이 불가능하다. 제외 규칙의 대상은 "라이브가 소유하지 않으면서 **실리면 권한 경로의 write를 되돌리는** 필드"이고, 현재 유일한 원소가 `status`다.
+- **optional 키 형태 보존** — 스냅샷은 `updateById` patch로 `$set`에 실리므로 원본에 없는 키를 `undefined`로 만들면 문서 형태가 바뀐다. `buffs`·`statusEffects`는 값이 있을 때만 대입하고, 엔트리 값이 `undefined`인 키도 만들지 않는다.
+- **함께 실리는 필드 주의** — 부분 스냅샷과 달리 `schemaVersion`도 매 flush마다 `$set`된다. 라이브 캐릭터는 load 시 backfill로 최신 버전으로 승격돼 있으므로 첫 flush가 구버전 저장 문서를 영구 승격시킨다(migration-on-save).
+
+`SaveEngine`은 이미 전체 문서 스냅샷을 상정한다 — `stripImmutableId`가 `_id`를 벗겨 `$set` immutable-`_id` 에러를 막는다. `roomStates`는 원래 전체 스냅샷 계약이라 무영향이다.
+
 ### SaveScheduler
 
 주입된 `SchedulerClock`(`setInterval`/`clearInterval` seam)으로 주기 flush를 구동한다(기본 `DEFAULT_INTERVAL_MS`=120초). `SchedulerClock`·`IntervalHandle`·`defaultClock` 정의는 `util/clock.ts`가 단일 출처이며 saveScheduler는 이를 import한다(heartbeat·WorldClock과 동일 seam 공유). clock seam으로 테스트는 FakeClock을 주입해 tick을 수동 구동한다.
@@ -101,8 +115,9 @@ bounded 큐 + 비동기 워커가 Mongo write를 게임 틱과 분리해 drain�
 
 ## 제약사항
 
-- **세이브 호출처는 후속 에픽** — 레벨업·거래(E6), 로그아웃(E3/E5), 이동(E4)의 실제 `markDirty`/`saveNow` 호출은 이 토픽에 없다. API와 연결 seam만 전달하고 각 컴포넌트를 테스트로 격리 구동한다(통합 경로 부재는 설계된 경계).
-- **은행↔세이브 엔진 쓰기 경로 조정은 caller-wiring 시 필수** — `BankTransactionService`는 gold를 트랜잭션으로 직접 쓰고, `SaveEngine`은 같은 컬렉션을 write-behind로 쓴다. 두 경로 사이에 공유 per-key 조정점이 없어, gold 엔티티를 두 경로로 흘리면 트랜잭션 커밋 후 도착한 stale flush가 결과를 되돌릴 수 있다. 현재는 gold를 dirty로 마킹하는 caller가 없어 도달 불가하나, 배선 시 (a) 트랜잭션 전후 두 키를 SaveEngine에서 evict/quiesce 후 재-mark하거나 (b) gold 변이를 write-behind 밖에 두어 단일 authoritative 경로로 유지해야 한다([smalljiny/muhan#43](https://github.com/smalljiny/muhan/issues/43), 코드 계약은 `bankTransactionService.ts` 도크스트링).
+- **세이브 호출처는 일부만 배선됨** — 라이브 이동·연마·세션 종료가 `markCharacterDirty`를 경유해 실제로 dirty를 마킹한다. 나머지(거래·전투 등 E6 잔여)의 `markDirty`/`saveNow` 호출은 각 배선 토픽 소관이다.
+- **은행 명령 배선은 #43 해소까지 blocking** — `BankTransactionService`는 gold를 트랜잭션으로 직접 쓰고, `SaveEngine`은 같은 컬렉션을 write-behind로 쓴다. 두 경로 사이에 공유 per-key 조정점이 없어, gold 엔티티를 두 경로로 흘리면 트랜잭션 커밋 후 도착한 stale flush가 결과를 되돌릴 수 있다. **`progress:train` 배선으로 gold가 write-behind 경로에 진입했다**(연마 비용 차감이 전체 문서 스냅샷에 실린다) — 즉 한쪽은 이미 무장됐다. 충돌 상대인 은행 직접 write는 아직 dormant라(`clientCommandSchema`에 은행 명령 없음, `BankTransactionService` non-test caller 0건) 충돌은 현재 도달 불가하다. 따라서 계약을 고정한다: **#43을 해소하기 전에는 은행 명령을 배선하지 않는다.** 해소 방향은 (a) 트랜잭션 전후 두 키를 SaveEngine에서 evict/quiesce 후 재-mark하거나 (b) gold 변이를 write-behind 밖에 두어 단일 authoritative 경로로 유지하는 것이다([smalljiny/muhan#43](https://github.com/smalljiny/muhan/issues/43), 코드 계약은 `bankTransactionService.ts` 도크스트링).
+- **재접속 re-hydrate가 pending 스냅샷을 무시한다** — link-dead 후 재접속 시 DB에서 캐릭터를 다시 읽는데, 아직 flush되지 않은 dirty 스냅샷이 있으면 그 진행도(레벨·gold·위치)가 무성 revert된다. write-behind-only 정책과 재로드 금지 계약의 상호작용에서 오는 pre-existing 레이스이며, 해소 방향이 모두 save 계층 아키텍처 결정의 재판단을 요구한다([smalljiny/muhan#124](https://github.com/smalljiny/muhan/issues/124)).
 - **`character.gold` 상한 미부과** — 은행 gold는 3억 상한(불변식 6)이지만 출금 크레딧은 `character.gold`에 상한을 두지 않는다. 원작 오라클의 소지 gold 상한 여부를 재확인 후 확정되면 이 seam에 대칭 가드를 추가한다(persistence.md §제약사항 미결 연동).
 - **flush 트리거는 interval-only** — 시간 간격만 사용하고 dirty 건수 임계 기반 병행 트리거는 두지 않는다. 기본 120초로 시작하며 정확값은 후속 부하 테스트로 확정.
 - **Durable WAL 없음** — write-behind 경로는 수용된 손실 창을 가진다(돈은 트랜잭션으로 손실 없음). 동기 write-ahead log는 만들지 않는다.

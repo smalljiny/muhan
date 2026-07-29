@@ -3,6 +3,7 @@ import type { Character, ExitEdge, RoomNode } from 'shared'
 import { setFlag, XLOCKD } from '../../world/door.js'
 import { defaultFleeRng, type TryMoveDeps } from '../../world/tryMove.js'
 import type { LiveCharacter } from '../../world/liveCharacterRegistry.js'
+import { createMarkCharacterDirty } from '../../world/markCharacterDirty.js'
 import type { ActorContext } from '../actorContext.js'
 import { createMoveHandler } from './move.js'
 import { dispatch, createCommandRegistry } from '../router.js'
@@ -36,10 +37,31 @@ function makeRoom(roomId: number, exits: ExitEdge[], occupantIds: string[] = [])
   }
 }
 
-// 라이브 캐릭터 — 핸들러는 character.currentRoom만 읽고 in-place 갱신한다. 나머지 필드는 dormant라
-// 최소 shape를 cast로 구성한다(server character 픽스처 관례).
+// 라이브 캐릭터 — 핸들러는 character.currentRoom만 읽고 in-place 갱신하지만, markCharacterDirty가
+// 전체 Character 문서를 스냅샷하므로 픽스처도 전체 문서로 채운다(부분 cast는 스냅샷 경로에서 깨진다).
+function makeCharacter(currentRoom: number): Character {
+  return {
+    _id: 'me',
+    name: '무한전사',
+    class: 4,
+    race: 1,
+    stats: [16, 18, 12, 10, 14],
+    gold: 100,
+    currentRoom,
+    hpCurrent: 42,
+    mpCurrent: 15,
+    level: 7,
+    experience: 0,
+    spells: new Array<number>(16).fill(0),
+    realm: [0, 0, 0, 0],
+    schemaVersion: 5,
+    accountId: 'acc-1',
+    status: 'active',
+  }
+}
+
 function makeLive(currentRoom: number): LiveCharacter {
-  return { character: { currentRoom } as Character }
+  return { character: makeCharacter(currentRoom) }
 }
 
 // tryMoveDeps 조립기 — 방 Map + vi.fn seam. resolveRoom을 spy로 둬 "tryMove 미호출"을 간접 검증한다
@@ -76,7 +98,7 @@ describe('createMoveHandler', () => {
       const handler = createMoveHandler({
         liveRegistry: { get: vi.fn(() => live) },
         tryMoveDeps: deps,
-        markDirty,
+        markCharacterDirty: createMarkCharacterDirty(markDirty),
       })
 
       const event = handler({ type: 'world:move', direction: '동' }, actor)
@@ -97,7 +119,7 @@ describe('createMoveHandler', () => {
       const handler = createMoveHandler({
         liveRegistry: { get: vi.fn(() => makeLive(100)) },
         tryMoveDeps: deps,
-        markDirty: vi.fn(),
+        markCharacterDirty: vi.fn(),
       })
 
       handler({ type: 'world:move', direction: '동' }, actor)
@@ -110,7 +132,7 @@ describe('createMoveHandler', () => {
   })
 
   describe('거부 (막힌 방향/잠긴 문)', () => {
-    it('rule_rejected 이벤트를 내고 점유자·live.currentRoom 불변, markDirty 미호출', () => {
+    it('rule_rejected 이벤트를 내고 점유자·live.currentRoom 불변, markCharacterDirty 미호출', () => {
       const dest = makeRoom(200, [])
       const source = makeRoom(100, [makeExit('동', 200, [XLOCKD])], ['me'])
       const { deps } = makeTryMoveDeps([source, dest])
@@ -119,7 +141,7 @@ describe('createMoveHandler', () => {
       const handler = createMoveHandler({
         liveRegistry: { get: vi.fn(() => live) },
         tryMoveDeps: deps,
-        markDirty,
+        markCharacterDirty: createMarkCharacterDirty(markDirty),
       })
 
       const event = handler({ type: 'world:move', direction: '동' }, actor)
@@ -137,7 +159,7 @@ describe('createMoveHandler', () => {
       const handler = createMoveHandler({
         liveRegistry: { get: vi.fn(() => makeLive(100)) },
         tryMoveDeps: deps,
-        markDirty: vi.fn(),
+        markCharacterDirty: vi.fn(),
       })
 
       const event = handler({ type: 'world:move', direction: '동', id: 'm1' }, actor)
@@ -147,7 +169,7 @@ describe('createMoveHandler', () => {
   })
 
   describe('성공 시 dirty 마킹 (A≠B, non-vacuous)', () => {
-    it("markDirty를 ('characters', characterId, { currentRoom: B })로 1회 호출한다 — snapshot이 도착 방", () => {
+    it("markCharacterDirty를 ('characters', characterId, 전체 문서)로 1회 호출한다 — snapshot이 도착 방", () => {
       const dest = makeRoom(200, [makeExit('서', 100)])
       const source = makeRoom(100, [makeExit('동', 200)], ['me'])
       expect(source.roomId).not.toBe(dest.roomId) // A≠B 명시 — snapshot이 A가 아닌 B임을 증명하려면 필수
@@ -156,25 +178,33 @@ describe('createMoveHandler', () => {
       const handler = createMoveHandler({
         liveRegistry: { get: vi.fn(() => makeLive(100)) },
         tryMoveDeps: deps,
-        markDirty,
+        // 실 헬퍼를 끼워 원시 seam에 도달한 스냅샷을 그대로 관찰한다(부분 스냅샷이면 여기서 드러난다).
+        markCharacterDirty: createMarkCharacterDirty(markDirty),
       })
 
       handler({ type: 'world:move', direction: '동' }, actor)
 
       expect(markDirty).toHaveBeenCalledTimes(1)
-      expect(markDirty).toHaveBeenCalledWith('characters', 'me', { currentRoom: 200 })
+      // collection·id 인자(핸들러가 actor.characterId를 넘긴다). 스냅샷은 아래에서 별도로 본다.
+      expect(markDirty.mock.calls[0]?.slice(0, 2)).toEqual(['characters', 'me'])
+      // 스냅샷은 mark 시점의 distinct 복사본이므로, currentRoom=B는 in-place 갱신이 마킹보다
+      // 선행했음을 증명한다(순서가 뒤집혔다면 출발 방 A가 실린다).
+      const snapshot = markDirty.mock.calls[0]?.[2] as Character
+      expect(snapshot.currentRoom).toBe(200)
+      // 부분 스냅샷이 아니라 전체 문서다 — 다른 필드가 함께 실린다(LWW write-loss 봉쇄 계약).
+      expect(snapshot).toMatchObject({ _id: 'me', level: 7, gold: 100, currentRoom: 200 })
     })
   })
 
   describe('미등록 actor 격리', () => {
-    it('liveRegistry.get이 undefined면 error{internal}, 이동·markDirty·tryMove 없음', () => {
+    it('liveRegistry.get이 undefined면 error{internal}, 이동·markCharacterDirty·tryMove 없음', () => {
       const source = makeRoom(100, [makeExit('동', 200)], ['me'])
       const { deps } = makeTryMoveDeps([source, makeRoom(200, [])])
       const markDirty = vi.fn()
       const handler = createMoveHandler({
         liveRegistry: { get: vi.fn(() => undefined) },
         tryMoveDeps: deps,
-        markDirty,
+        markCharacterDirty: createMarkCharacterDirty(markDirty),
       })
 
       const event = handler({ type: 'world:move', direction: '동' }, actor)
@@ -191,7 +221,7 @@ describe('createMoveHandler', () => {
       const handler = createMoveHandler({
         liveRegistry: { get: vi.fn(() => undefined) },
         tryMoveDeps: deps,
-        markDirty: vi.fn(),
+        markCharacterDirty: vi.fn(),
       })
 
       const event = handler({ type: 'world:move', direction: '동', id: 'm2' }, actor)
@@ -210,7 +240,7 @@ describe('createMoveHandler', () => {
       const handler = createMoveHandler({
         liveRegistry: { get: vi.fn(() => makeLive(777)) },
         tryMoveDeps: deps,
-        markDirty: vi.fn(),
+        markCharacterDirty: vi.fn(),
       })
 
       handler({ type: 'world:move', direction: '동' }, actor)
@@ -223,7 +253,7 @@ describe('createMoveHandler', () => {
       const handler = createMoveHandler({
         liveRegistry: { get: vi.fn(() => makeLive(100)) },
         tryMoveDeps: deps,
-        markDirty: vi.fn(),
+        markCharacterDirty: vi.fn(),
       })
       expect(handler({ type: 'debug:echo', text: '핑' }, actor)).toBeUndefined()
     })
@@ -248,9 +278,11 @@ describe('createCommandRegistry — world:move 조건부 등록', () => {
     const source = makeRoom(100, [makeExit('동', 200)], ['me'])
     const { deps } = makeTryMoveDeps([source, dest])
     const registry = createCommandRegistry(testChannelPort, {
-      liveRegistry: { get: vi.fn(() => makeLive(100)) },
-      tryMoveDeps: deps,
-      markDirty: vi.fn(),
+      move: {
+        liveRegistry: { get: vi.fn(() => makeLive(100)) },
+        tryMoveDeps: deps,
+        markCharacterDirty: vi.fn(),
+      },
     })
 
     const result = dispatch(registry, { type: 'world:move', direction: '동' }, actor, testPermission)

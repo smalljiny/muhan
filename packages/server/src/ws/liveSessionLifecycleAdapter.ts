@@ -1,8 +1,6 @@
 import type { SessionLifecyclePort, SessionEndContext } from './sessionLifecyclePort.js'
 import type { LiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
-
-/** characters 컬렉션 이름 — markDirty 키 파생(move·train·regen과 정합, 리터럴 분산 방지). */
-const CHARACTERS_COLLECTION = 'characters'
+import type { MarkCharacterDirty } from '../world/markCharacterDirty.js'
 
 /**
  * 라이브 세션 수명 어댑터 — 세션 종결 시 도메인 상태를 수렴시키는 `SessionLifecyclePort` 구현.
@@ -28,7 +26,7 @@ const CHARACTERS_COLLECTION = 'characters'
  * 이 어댑터는 그 계약에 의존하지 않고 정상 경로에서 던지지 않는다.
  *
  * ── dirty-before-release 순서(D-A1 / T6.3) ─────────────────────────
- * markDirty를 release보다 **먼저** 호출한다. 방 위치의 단일 출처는 `live.character.currentRoom`이며
+ * markCharacterDirty를 release보다 **먼저** 호출한다. 방 위치의 단일 출처는 `live.character.currentRoom`이며
  * (D-A1), release가 레지스트리 엔트리를 제거하면 그 값을 더 이상 읽을 수 없다. 따라서 종료 시점의 방을
  * 먼저 스냅샷으로 뽑아 markDirty한 뒤 release로 정리해야, 마지막에 있던 방이 정확히 영속화된다.
  *
@@ -66,12 +64,15 @@ export interface LiveSessionLifecycleAdapterDeps {
   readonly liveRegistry: Pick<LiveCharacterRegistry, 'get'>
   /** Story 3의 release 코어(occupants.delete → onRoomLeft → registry.remove). 미등록 id에 no-op. */
   readonly release: (characterId: string) => void
-  /** 변경 엔티티 side registry 기록(collection·id·스냅샷). 실 flush는 저장 스케줄러가 소유. */
-  readonly markDirty: (collection: string, id: string, snapshot: unknown) => void
+  /**
+   * characters 변경 기록 seam(타입 좁힘 — 전체 Character 문서만 수용). 실 flush는 저장 스케줄러가
+   * 소유한다. 부분 스냅샷은 타입 에러다(markCharacterDirty.ts 스냅샷 계약).
+   */
+  readonly markCharacterDirty: MarkCharacterDirty
 }
 
 /**
- * 라이브 세션 수명 어댑터를 만든다. onSessionEnd는 종료 시점의 방을 markDirty로 표시한 뒤 release로
+ * 라이브 세션 수명 어댑터를 만든다. onSessionEnd는 종료 시점 문서를 markCharacterDirty로 표시한 뒤 release로
  * 점유·엔트리를 정리한다. 미등록 characterId는 no-op이다.
  */
 export function createLiveSessionLifecycleAdapter(
@@ -82,10 +83,8 @@ export function createLiveSessionLifecycleAdapter(
       const live = deps.liveRegistry.get(ctx.characterId)
       if (live === undefined) return // 미등록 id → no-op(T6.4)
 
-      // dirty-before-release(D-A1/T6.3): release가 엔트리를 제거하기 전에 종료 시점 방을 스냅샷한다.
-      deps.markDirty(CHARACTERS_COLLECTION, ctx.characterId, {
-        currentRoom: live.character.currentRoom,
-      })
+      // dirty-before-release(D-A1/T6.3): release가 엔트리를 제거하기 전에 종료 시점 문서를 스냅샷한다.
+      deps.markCharacterDirty(ctx.characterId, live.character)
 
       // Story 3 release 코어 재사용(T6.2): occupants.delete → onRoomLeft → registry.remove.
       deps.release(ctx.characterId)

@@ -8,6 +8,7 @@ import { BankRepository } from '../repo/bankRepository.js'
 import { WorldRepository } from '../repo/worldRepository.js'
 import { ObjectRepository } from '../repo/objectRepository.js'
 import { createMongoTestDb, type MongoTestDb } from '../repo/mongoTestDb.testutil.js'
+import { createMarkCharacterDirty } from '../world/markCharacterDirty.js'
 import { FakeClock } from '../util/clock.testutil.js'
 
 /** 즉시 resolve backoff sleep. */
@@ -148,6 +149,86 @@ describe('SaveEngine (integration)', () => {
     await engine.shutdown()
 
     expect((await charRepo.findById('char-1'))?.gold).toBe(4242)
+  })
+
+  it('CC#5 — 전체 Character 문서 스냅샷이 stripImmutableId→updateById Zod 경계를 통과해 flush된다', async () => {
+    // 라이브 characters markDirty는 부분 스냅샷이 아니라 전체 문서를 싣는다(markCharacterDirty 계약).
+    // 그 형태가 어댑터 경계에서 조용히 거부되면(_id immutable 에러·strict patch 거부) 봉쇄하려던
+    // write-loss가 그대로 나므로, 실 Mongo·실 Zod 경계로 관통 검증한다.
+    // schemaVersion은 5(현행)로 둔다 — 라이브 캐릭터는 findById의 backfill 체인을 거쳐 v5로 승격된
+    // 문서이고, v4 이하면 read-path의 backfillCharacterV5가 spells·realm을 재시딩해 write 경계가 아닌
+    // 읽기 승격을 검증하게 된다.
+    await charRepo.insert(
+      makeCharacter({ _id: 'char-1', gold: 100, currentRoom: 1, level: 1, schemaVersion: 5 }),
+    )
+    const engine = makeEngine()
+    engine.start()
+
+    // 실 헬퍼를 통과시켜 라이브 경로가 실제로 흘리는 스냅샷 형태 그대로 경계를 친다 — 직접 markDirty에
+    // 넣으면 프로덕션이 만들 수 없는 형태(status 포함)를 검증하게 된다.
+    // optional 객체 필드(buffs·statusEffects)까지 실어 patch 스키마 표면을 넓게 친다.
+    const markCharacterDirty = createMarkCharacterDirty((collection, id, snapshot) =>
+      engine.markDirty(collection, id, snapshot),
+    )
+    markCharacterDirty(
+      'char-1',
+      makeCharacter({
+        _id: 'char-1',
+        gold: 4242,
+        currentRoom: 77,
+        level: 9,
+        experience: 5_000,
+        stats: [11, 12, 13, 14, 15],
+        realm: [1, 2, 3, 4],
+        schemaVersion: 5,
+        buffs: { 5: { until: 900 } },
+        statusEffects: { poison: { until: 800, interval: 10 } },
+      }),
+    )
+    await engine.shutdown()
+
+    // 거부됐다면 재시도 소진 후 폐기돼 문서가 그대로 남는다 — 아래 단언이 그 실패를 잡는다.
+    const persisted = await charRepo.findById('char-1')
+    expect(persisted).toMatchObject({ _id: 'char-1', gold: 4242, currentRoom: 77, level: 9 })
+    expect(persisted?.stats).toEqual([11, 12, 13, 14, 15])
+    expect(persisted?.realm).toEqual([1, 2, 3, 4])
+    expect(persisted?.buffs).toEqual({ 5: { until: 900 } })
+    expect(persisted?.statusEffects).toEqual({ poison: { until: 800, interval: 10 } })
+  })
+
+  it('CC#6 — soft-delete된 문서를 라이브 스냅샷 flush가 되살리지 않는다(무덤 부활 봉쇄)', async () => {
+    // 도달 경로: 계정당 다중 소켓이 허용되고 assertOwnership이 라이브 레지스트리를 조회하지 않으므로,
+    // 세션 S1이 캐릭터 C로 라이브 진입한 상태에서 형제 세션 S2가 C를 삭제할 수 있다. 이후 S1의 이동·종료
+    // flush가 라이브 객체의 status='active'를 실으면 무덤이 부활한다 — 스냅샷의 status 제외가 그 봉쇄다.
+    await charRepo.insert(makeCharacter({ _id: 'char-1', currentRoom: 1, schemaVersion: 5 }))
+    // S1이 라이브로 들고 있는 객체(삭제 전 hydrate라 여전히 active).
+    const liveCharacter = makeCharacter({
+      _id: 'char-1',
+      currentRoom: 77,
+      schemaVersion: 5,
+      status: 'active',
+    })
+    // S2의 삭제 — status='deleted' + deletedAt 기록.
+    await charRepo.softDelete('char-1')
+    expect((await charRepo.findById('char-1'))?.status).toBe('deleted')
+
+    const engine = makeEngine()
+    engine.start()
+    // 실 헬퍼를 통과시켜 라이브 경로가 실제로 흘리는 스냅샷 형태 그대로 flush한다.
+    const markCharacterDirty = createMarkCharacterDirty((collection, id, snapshot) =>
+      engine.markDirty(collection, id, snapshot),
+    )
+    markCharacterDirty('char-1', liveCharacter)
+    await engine.shutdown()
+
+    const persisted = await charRepo.findById('char-1')
+    // 라이브가 소유한 필드는 정상 flush됐다(단언이 vacuous하지 않음을 보장하는 대조 앵커).
+    expect(persisted?.currentRoom).toBe(77)
+    // 무덤은 그대로다 — status·deletedAt이 되돌려지지 않았다.
+    expect(persisted?.status).toBe('deleted')
+    expect(persisted?.deletedAt).toBeInstanceOf(Date)
+    // 재로그인 차단 불변식: 삭제 캐릭터가 계정 목록에 복귀하지 않는다.
+    expect(await charRepo.findByAccount('acc-1')).toEqual([])
   })
 
   it('shutdown 후 남은 pending이 없다(drain 완료)', async () => {

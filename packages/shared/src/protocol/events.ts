@@ -100,6 +100,24 @@ export const serverEventSchema = z.discriminatedUnion('type', [
     text: z.string().min(1).max(CHAT_TEXT_MAX),
     target: z.string().min(1).max(CHAT_TARGET_MAX).optional(),
   }),
+  // 연마 성공 통지 — train()이 확정한 성장 결과 스냅샷을 본인에게 1회 발화한다(D-C 최소 상태 통지).
+  // world:room 선례를 따라 correlationId를 싣지 않는다(상태 이벤트 — 거부만 error로 상관 키를 반향한다).
+  // stats는 characterSchema.stats와 동일한 5-튜플이다 — 와이어 계약이라 길이 드리프트를 타입으로 막는다.
+  // 나머지 numeric 필드도 characterSchema의 하한을 그대로 미러한다 — 클라(wsClient)가 인바운드
+  // 프레임을 이 스키마로 safeParse하므로 형식적 정합이 아니라 실 입력 검증 표면이다.
+  // prestige는 이번 연마의 승급 결과(무적·초인 전이 또는 일반 상승)다.
+  z.strictObject({
+    type: z.literal('progress:trained'),
+    level: z.int().min(1),
+    // 승급(무적·초인) 경로는 레벨을 올리지 않고 전이만 하므로 0이 유효하다.
+    levelsGained: z.int().min(0),
+    experience: z.int().min(0),
+    gold: z.int().min(0),
+    hpCurrent: z.int().min(0),
+    mpCurrent: z.int().min(0),
+    stats: z.tuple([z.int(), z.int(), z.int(), z.int(), z.int()]),
+    prestige: z.enum(['invincible', 'caretaker', 'none']),
+  }),
 ])
 
 export type ErrorCode = z.infer<typeof errorCodeSchema>
