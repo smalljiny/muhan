@@ -64,6 +64,11 @@ import { projectResistFlags, projectBuffFlags } from '../magic/buffEffects.js'
 /**
  * composeCharacterFlags — 캐릭터의 상태이상·저항·버프 투영을 OR한 16자 P-flag hex를 반환한다.
  *
+ * **스코프: 타이머 보유 효과 전용이다.** 비-타이머 성격 플래그(PHIDDN·PDMINV·PWIMPY·PCHAOS·PFAMIL·
+ * PUPDMG)는 영속 경로가 없어 항상 0으로 반환된다. `pvp.ts`·`aggro.ts`가 이미 그 비트를 읽으므로,
+ * 이 반환값을 `PlayerCombatState.flags`의 **유일 출처로** 배선하면 PvP 동의 게이트·패거리 전쟁
+ * 판정·은신/투명 aggro 제외가 조용히 봉쇄된다. 모듈 헤더의 파티션 표 경고를 먼저 읽을 것.
+ *
  * 세 투영 모두 16자 폭에서 시작하고 `orFlags`가 8바이트를 고정 순회하므로 반환 폭은 항상 16자다
  * (고바이트 절단 없음 — PFEARS 43·PSILNC 44는 byte 5, PFAMIL 55는 byte 6에 안착).
  * 만료된 효과는 각 투영이 이미 제외하므로 여기서 별도 만료 판정을 하지 않는다.

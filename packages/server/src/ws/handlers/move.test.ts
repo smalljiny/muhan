@@ -57,6 +57,7 @@ function makeCharacter(currentRoom: number): Character {
     schemaVersion: 5,
     accountId: 'acc-1',
     status: 'active',
+    alignment: 1,
   }
 }
 

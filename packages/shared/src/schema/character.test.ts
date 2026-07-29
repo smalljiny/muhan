@@ -138,12 +138,17 @@ describe('characterSchema', () => {
     if (result.success) expect(result.data.alignment).toBe(0)
   })
 
-  it('alignment 값역 [0,2] 밖을 거부한다 (저장 계층이 마지막 방어선)', () => {
-    // 상류 검증(sessionFsm의 refine 1|2)을 우회하는 write 경로가 생겨도 스키마가 막는다.
-    // E6(#123)이 -1000..+1000으로 넓힐 때 이 상한을 함께 갱신한다.
-    for (const bad of [-1, 3, 500]) {
-      expect(characterSchema.safeParse({ ...validCharacter(), alignment: bad }).success).toBe(false)
+  it('alignment에 값역 제약을 두지 않는다 (오라클 스케일 전환을 살아남는 영속 경계)', () => {
+    // 현 실 데이터 값역은 [0,2]지만 그건 한시적 인코딩이다. 오라클 alignment는 부호 있는 int16이고
+    // 소비 규칙이 이미 그 스케일 임계값(< -100 · > 250 등)을 보존한다 — 스키마에 [0,2] 캡을 걸면
+    // 부호가 충돌하고 레거시 세이브 이식·E6(#123) 부분 롤아웃에서 문서가 로드 불가가 된다.
+    // 도메인 강제는 상류(생성 FSM의 refine 1|2) 책임이며 스키마는 정수형만 본다.
+    for (const oracleScale of [-1000, -100, 250, 1000]) {
+      expect(
+        characterSchema.safeParse({ ...validCharacter(), alignment: oracleScale }).success,
+      ).toBe(true)
     }
+    // 정수형은 여전히 강제한다.
     expect(characterSchema.safeParse({ ...validCharacter(), alignment: 1.5 }).success).toBe(false)
   })
 
