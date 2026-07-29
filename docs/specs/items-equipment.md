@@ -42,7 +42,7 @@
 flags(hex string) 위에서 `world/hexFlags.js`의 `F_ISSET`으로 비트를 판정하는 순수 predicate substrate다. 게이트 순서·ARMOR type 검사·INVINCIBLE 전역 우회 조립은 소비자(`wear.ts`) 소관이며, 이 모듈은 predicate만 제공한다.
 
 - `genderAllowed(flags, gender)` — ONOFEM(여성 거부)·ONOMAL(남성 거부). 오라클 명명 역전 반영(gender 1=남/2=여).
-- `alignmentAllowed(flags, alignment)` — OGOODO+정렬<−50 거부, OEVILO+정렬>50 거부.
+- `alignmentAllowed(flags, alignment)` — OGOODO+정렬<−50 거부, OEVILO+정렬>50 거부. **known-divergence로 미발화** — `alignment` 실 값역이 `[0,2]`(생성 인터뷰 1|2 + backfill 중립 sentinel 0)라 두 조건이 항상 거짓이고 정렬 착용 제한이 걸리지 않는다. 오라클 임계값을 현 값역에 맞춰 "고치면" 오라클 상수가 소실되므로 보존한다 — E6 성향 시스템([#123](https://github.com/smalljiny/muhan/issues/123))이 `-1000..+1000`을 도입하면 코드 변경 없이 발화한다([character-flags.md](character-flags.md)).
 - `sizeAllowed(flags, race)` — `i = OSIZE1?2:0 + OSIZE2?1:0`; 1=소형(GNOME/HOBBIT/DWARF)·2=중형(HUMAN/ELF/HALFELF/ORC)·3=대형(HALFGIANT)·0=무제한. INVINCIBLE 우회는 담지 않는다(호출자가 외부 래핑).
 - `classAllowed(flags, class)` — ONOMAG+(MAGE|CLERIC) 거부 + OCLSEL 게이트 융합. 게이트 순서상 ONOMAG·OCLSEL이 분리 검사되어야 하므로 착용 게이트는 이 융합 predicate를 쓰지 않고 아래 `oclselBlocks`를 쓴다.
 - `oclselBlocks(flags, class)` — OCLSEL 세트 + (OCLSEL+class) 비트 없음 + class<INVINCIBLE이면 거부(true). 세 게이트가 공유해 INVINCIBLE 우회를 단일 출처로 둔다.

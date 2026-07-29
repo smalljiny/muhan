@@ -42,7 +42,7 @@ production boot에서 누가 이 seam들을 조립하는지(health-pulse xor 접
 |------|------|
 | `dice.ts` | `dice(n,s,p,rng)=p+Σⁿrng(1,s)`·`mdice(entity,rng)` 프리미티브. `CombatRng` seam(`(min,max)=>number`, mrand 관례)·`DiceSpec` 타입. `rng` 필수 파라미터. |
 | `constants.ts` | 튜닝 상수 — 크리티컬 배수(3~6)·명중 굴림 상한(플레이어 30·몬스터 20)·PvP 쿨다운 증분(+3)·MMAGIC 시전 확률(20%)·반격 쿨다운(기본 1초·실명 6초)·클래스 인덱스. |
-| `playerState.ts` | `PlayerCombatState`(라이브 플레이어 전투상태)·`WeaponDamage` 타입 + `toPlayerCombatState` 조립 헬퍼. |
+| `playerState.ts` | `PlayerCombatState`(라이브 플레이어 전투상태)·`WeaponDamage` 타입 + `toPlayerCombatState` 조립 헬퍼. `flags`는 합성하지 않고 **인자로 받는다**([character-flags.md](character-flags.md)). |
 | `combatRegistry.ts` | `CombatRegistry` — characterId-keyed 라이브 전투상태 인메모리 저장소(register/get/remove/has). |
 | `combatant.ts` | `Combatant` discriminated-union 어댑터 — 플레이어(`PlayerCombatState`)·몬스터(`CreatureInstance`)를 전투 operand로 통일. `toCombatant` 오버로드. |
 | `attackStats.ts` | 명중 임계값·피해 분기·PALADIN 정렬 보정(순수). 플레이어=stats-core 파생 소비, 몬스터=템플릿 read. |
@@ -50,7 +50,7 @@ production boot에서 누가 이 seam들을 조립하는지(health-pulse xor 접
 | `enmity.ts` | 적대 등록(`registerEnemy`)·병렬 데미지 원장(`createDamageLedger`/`accumulateDamage`). |
 | `resolveAttack.ts` | 단일 파이프 `resolveAttack(attacker, defender, ctx)` — 명중→피해→특수공격 훅→크리/불발→적용, 다중공격 루프, 내구도. **fire-free**(died 반환, death seam은 호출자 소유). |
 | `specialAttack.ts` | 몬스터 특수공격 6종(브레스·에너지드레인·독·질병·실명·장비용해) 확률 게이트·효과의 순수 이식 — `resolveSpecialAttack`. |
-| `statusEffects.ts` | 명명 상태이상(poison/disease/blind)의 부여·만료 순수 헬퍼 + 명명 필드 → combat flag hex 뷰 투영(`projectStatusFlags`). |
+| `statusEffects.ts` | 명명 상태이상(poison/disease/blind/silence/fear)의 부여·해제·판독 순수 헬퍼 + 명명 필드 → combat flag hex 뷰 투영(`projectStatusFlags`). silence·fear는 판독만 배선되고 시전 경로는 미배선. |
 | `dot.ts` | `resolvePlayerDot(char, room, ctx)` — 독/질병/위험방 DoT damage-only resolver. `dotApplied` 반환으로 재생과의 xor 계약 확정. |
 | `deathDistribution.ts` | `distributeCreatureDeath(dead, room, ledger, deps)` — 데미지비례 exp 분배·정렬 보정·전리품/골드 드롭을 순수 계산해 반환. |
 | `aggro.ts` | `selectAggroTarget`/`dexEvades`/`resolveAggro` — 선공 가중 랜덤 타깃선정 + 민첩 회피. |
@@ -63,6 +63,13 @@ production boot에서 누가 이 seam들을 조립하는지(health-pulse xor 접
 PWIMPY/PHIDDN/PINVIS/PDMINV·MAGGRE/MGAGGR/MEAGGR/MDINVI)와 `world/roomFlags.ts`(위험방·realm
 `number[]` flags — RPHARM/RPPOIS/RPMPDR/RPBEFU·REARTH/RWINDR/RFIRER/RWATER)가 이 토픽에서 새 상수를
 추가했다. 두 모듈은 서로 다른 엔티티(크리처/플레이어 vs 방)의 flags라 비트 값이 겹쳐도 무해하다.
+
+`hexFlags.ts`는 이후 P-flag 합성을 위해 `PSILNC`(44)·`PFEARS`(43) 상수와 바이트 OR 헬퍼 `orFlags(a, b)`를
+추가했다. `orFlags`는 **8바이트를 고정 순회**해 입력 길이와 무관하게 항상 16자를 반환한다 —
+`Math.min(a.length, b.length)`로 순회하면 짧은 피연산자가 결과 폭을 결정해 긴 쪽의 고바이트가 절단되고,
+PBLIND(42)·PFEARS(43)·PSILNC(44)가 전부 byte 5라 통째로 소실된다. 원작 `mtype.h` 매크로가 아닌 포트 고유
+헬퍼라 `F_` 접두를 쓰지 않는다(원작은 flags가 고정 8바이트 배열이라 폭 문제 자체가 없다). 상세는
+[character-flags.md](character-flags.md).
 
 ## 동작
 
@@ -108,6 +115,15 @@ PWIMPY/PHIDDN/PINVIS/PDMINV·MAGGRE/MGAGGR/MEAGGR/MDINVI)와 `world/roomFlags.ts
 
 - **파생값 정본은 stats-core**: 플레이어 `thaco`/`armor`/`bonus[]`/`mod_profic`은 재구현하지 않고
   소비한다.
+- **명중 임계 PFEARS +2 / PBLIND +5는 입력원이 연결됐다**: `toPlayerCombatState`가 `flags: ''`를
+  하드코딩하던 동안 두 보정은 구조적으로 미발화였다. 이제 조립 호출부가
+  `composeCharacterFlags(character, now)` 결과를 주입하면 `statusEffects.blind`·`.fear`에서 파생된
+  실 비트를 읽는다([character-flags.md](character-flags.md)). 주입 자체는 배선 토픽(#121) 소관이다.
+- **정렬 보정 PALADIN은 known-divergence로 미발화**: `alignment` 실 값역이 `[0,2]`(생성 인터뷰 1|2 +
+  backfill 중립 sentinel 0)라 `<0`·`>250` 두 분기가 모두 거짓이고 항상 `n`을 반환한다. 오라클 임계값을
+  **재조정하지 않는다** — 보존해야 E6 성향 시스템(`-1000..+1000`, [#123](https://github.com/smalljiny/muhan/issues/123))
+  도입 시 코드 변경 없이 발화한다. 같은 성격의 미발화 게이트가 `aggro.ts`(MGAGGR/MEAGGR)·
+  `magic/learning.ts`(study OGOODO/OEVILO)·`items/flags.ts`(`alignmentAllowed`)에도 있다.
 - **byte-fidelity**: 모든 `/`는 C 정수 나눗셈 = `Math.trunc`.
 - **RNG 소비 순서 고정**: 크리 굴림은 OALCRT 자동크리에도 항상 소비(`||` 좌변). 불발 굴림은 미크리 &
   무기 착용 시에만. 다중공격 count 굴림은 타격 루프 이전.
