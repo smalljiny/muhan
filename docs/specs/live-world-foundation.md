@@ -105,11 +105,13 @@ fan-out 대상 결정은 `createRoomChannelAdapter`(발화자 현재 방의 occu
 
 ### 조립 (부트 → 팩토리)
 
-부트(`index.ts`)는 원재료 묶음(월드 그래프·레지스트리·characterRepo·markDirty·currentHour·방 진입/퇴장 훅·logger)만 조립해 넘기고, `createLiveWorldWiring`이 진입 바인딩·이동 의존·수명 포트·방 해소자를 파생한다. 부트는 커버리지 제외 배선 코드이므로 파생 로직을 테스트 가능한 순수 팩토리로 뽑고 부트에는 묶음 전달만 남긴다.
+부트(`index.ts`)는 원재료 묶음(월드 그래프·레지스트리·characterRepo·markDirty·currentHour·방 진입/퇴장 훅·logger)만 조립해 넘기고, `createLiveWorldWiring`이 진입 바인딩·이동 의존(`moveDeps`)·연마 의존(`trainDeps`)·수명 포트·방 해소자(`resolveRoom`)·`markCharacterDirty` seam을 파생한다. 부트는 커버리지 제외 배선 코드이므로 파생 로직을 테스트 가능한 순수 팩토리로 뽑고 부트에는 묶음 전달만 남긴다. 규칙 명령이 늘어도 **원재료는 늘지 않는다** — 팩토리가 기존 묶음에서 명령별 deps를 파생하므로 부트 계약은 불변이다(train 배선이 이를 실증했다).
+
+`markCharacterDirty`는 원시 `bundle.markDirty`를 1회 감싼 **단일 인스턴스**로, `moveDeps`·`lifecyclePort`·`trainDeps`가 같은 참조를 공유한다(`characters` 스냅샷 계약의 단일화 — [`save-policy.md`](save-policy.md)). `resolveRoom`은 `characterId → 레지스트리 엔트리 → currentRoom → 방` 경로의 by-character 해소자이며, 소비자가 방 채널 조립에 더해 `trainDeps`까지 둘로 늘었다(방 그래프 직접 조회 `roomId → 방`은 별개 해소자다).
 
 **단일 공유 불변식**: 진입 코어와 레지스트리는 hydrate/place·이동·종료 release·발화자 방 해소가 **동일 인스턴스**를 배후에 둬야 상태가 분기하지 않는다. 팩토리가 진입 코어를 1회 생성해 네 소비자에 같은 참조를 전달한다.
 
-명시 `lifecyclePort`·`channelPort`가 함께 주어지면 묶음 파생보다 우선한다(explicit > bundle). 묶음 미주입이면 이동(`world:move`)이 라우터에 등록되지 않아 `unknown_type`으로 남고, 진입 seam도 통째로 생략된다.
+명시 `lifecyclePort`·`channelPort`가 함께 주어지면 묶음 파생보다 우선한다(explicit > bundle). 묶음 미주입이면 라이브 상태 seam을 요구하는 게임 명령(`world:move`·`progress:train`)이 라우터에 등록되지 않아 `unknown_type`으로 남고, 진입 seam도 통째로 생략된다(조건부 등록 번들 `GameCommandDeps`는 [`transport-protocol.md`](transport-protocol.md)가 정본).
 
 부트는 `onRoomEntered`/`onRoomLeft`를 월드 런타임 훅에 위임해 이동과 세션 진입/퇴장이 **동일 활성 집합**을 갱신하게 한다 — 이전까지 dormant였던 활성 집합 경계가 여기서 해소된다.
 
