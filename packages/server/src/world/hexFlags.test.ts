@@ -47,6 +47,20 @@ describe('F_ISSET — hex string 비트 조회', () => {
   })
 })
 
+/**
+ * P-flag 비트 번호 고정 — `help/pflags` 문서 값(PBLIND 43·PFEARS 44·PSILNC 45)은 raw `#define`보다
+ * +1이라 mtype.h를 정본으로 채택했다(hexFlags.ts 상단 주석). 세 비트는 전부 byte 5를 공유하므로
+ * off-by-one이 들어오면 투영·절단 검증이 조용히 어긋난다. 소유 모듈에서 수치를 pin한다.
+ */
+describe('P-flag 비트 번호 — mtype.h 정본', () => {
+  it('PBLIND=42 · PFEARS=43 · PSILNC=44 (전부 byte 5)', () => {
+    expect(PBLIND).toBe(42)
+    expect(PFEARS).toBe(43)
+    expect(PSILNC).toBe(44)
+    expect([PBLIND, PFEARS, PSILNC].map((b) => b >> 3)).toEqual([5, 5, 5])
+  })
+})
+
 describe('F_SET / F_CLR — 새 hex string 반환(불변)', () => {
   it('F_SET은 지정 비트를 세팅한 새 문자열을 반환하고 입력을 변형하지 않는다', () => {
     const flags = '0000000000000000'
