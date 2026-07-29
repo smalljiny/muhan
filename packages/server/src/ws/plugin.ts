@@ -559,7 +559,26 @@ export function registerWebsocket(
                   // command/dispatch 분기는 동기로 유지한다 — permissionPort가 동기라 await가 불필요하며 FSM
                   // 경계 밖이다(SessionAuthPort async 마이그레이션은 이 분기를 건드리지 않는다). buildActorContext의
                   // 배선 불변식 throw(account/boundCharacterId null)는 위 방어 try/catch가 error{internal}로 격리한다.
-                  const result = dispatch(commandRegistry, parsed, buildActorContext(ctx), permissionPort)
+                  const actor = buildActorContext(ctx)
+
+                  // 바인딩 신원 가드 — `ctx.state === command` 확인만으로는 부족하다. 서버 주도 종료(같은 캐릭터
+                  // 재로그인 evict·grace 만료·shutdown 수렴)의 teardown은 transport만 정리하고(cleanupConnection +
+                  // sock.close) 옛 ctx의 `state`·`boundCharacterId`는 되돌리지 않으며, `ctx.closed`도 소켓 'close'
+                  // 이벤트(별개 리스너, 다음 tick)에서야 true가 된다. 그 창에서 이미 버퍼된 프레임의 'message'가
+                  // 발화하면 승계된 옛 소켓이 command 상태·바인딩 키를 그대로 쥔 채 dispatch에 도달하고,
+                  // 라이브 레지스트리는 characterId 키라 그 명령이 **새 세션의** 엔트리를 변이한다(이동·gold 소비).
+                  // 따라서 이 ctx가 여전히 그 캐릭터의 현재 live 바인딩일 때만 명령을 실행한다.
+                  const binding = registry.get(actor.characterId)
+                  const isCurrentBinding =
+                    binding !== undefined && binding.connection === ctx && binding.link === 'live'
+                  if (!isCurrentBinding || ctx.closed) {
+                    // 조용히 무시한다 — 이 소켓은 이미 종결 중이라 safeSend가 OPEN 가드로 no-op이 될 공산이 크고,
+                    // 승계된 연결에 응답을 돌려줄 계약도 없다. idle 재-arm도 하지 않는다(무효 명령이 새 세션의
+                    // 무입력 창을 연장하지 못하게 한다 — rejected flood를 재-arm하지 않는 아래 규칙과 같은 이유).
+                    break
+                  }
+
+                  const result = dispatch(commandRegistry, parsed, actor, permissionPort)
                   // 유효 명령 처리 성공(handled)만 무입력 타이머를 재-arm한다 — 거부(rejected:
                   // unknown_type·bad_payload·forbidden·internal)가 flood로 타이머를 무한 연장하지 못하게 한다.
                   if (result.outcome === 'handled') ctx.idle?.arm()

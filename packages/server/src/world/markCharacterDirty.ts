@@ -19,8 +19,9 @@ import type { Character } from 'shared'
  *
  * ## 복사 깊이 결정(characterSchema 기준, 필요한 깊이까지만)
  * 라이브 캐릭터는 in-place로 변이되므로(D-A1 carve-out) 스냅샷이 라이브 객체와 별칭을 공유하면
- * mark 이후 변이가 flush 값에 샌다. 반대로 flush 주기마다 도는 경로라 재귀 복제·`structuredClone`은
- * 비용이 과하다. 그래서 **변이 가능한 컨테이너까지만** 끊는다:
+ * mark 이후 변이가 flush 값에 샌다. 반대로 스냅샷은 **변이 시점마다**(이동 1회·연마 1회·세션 종료 1회)
+ * 뜨므로 — flush 주기가 아니라 그보다 잦다 — 재귀 복제·`structuredClone`은 비용이 과하다. 그래서
+ * **변이 가능한 컨테이너까지만** 끊는다:
  *  - top-level: 얕은 spread(`{...character}`).
  *  - 배열 필드 `stats`(튜플[5])·`spells`(int[16])·`realm`(튜플[4]): 원소가 number라 1단 복사로 충분.
  *  - 객체 필드 `buffs`(주문번호 → `{until}`)·`statusEffects`(poison/disease → `{until, interval}`,
@@ -121,7 +122,7 @@ function copyStatusEffects(effects: StatusEffects): StatusEffects {
  */
 function snapshotCharacter(character: Character): CharacterSnapshot {
   // 구조분해 rest가 이미 distinct 객체다 — 다시 spread하면 전 필드를 두 번 복사하게 되므로,
-  // 갓 만든 이 로컬에 가변 컨테이너만 덮어쓴다(flush 주기 경로라 복사 1회로 줄인다).
+  // 갓 만든 이 로컬에 가변 컨테이너만 덮어쓴다(변이 시점마다 도는 경로라 복사 1회로 줄인다).
   const { status: _status, ...snapshot } = character
   snapshot.stats = [...character.stats]
   snapshot.spells = [...character.spells]
