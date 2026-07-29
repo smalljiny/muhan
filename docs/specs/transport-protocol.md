@@ -20,7 +20,7 @@
 
 `shared`의 기존 `schema/`(영속·도메인)와 **별개 모듈**이다 — 프로토콜은 와이어 메시지 계약, `schema/`는 저장 도메인 모델이다. 모든 TS 타입은 `z.infer`로만 파생하며 병렬 수기 타입을 두지 않는다. `index.ts` 배럴이 스키마·타입·`PROTOCOL_VERSION`을 함께 재노출하고, `shared/src/index.ts`가 이를 `export *`로 상위 노출한다. DOM 전역(`Event`·`Command`)과 충돌하지 않도록 파생 타입은 `ClientCommand`·`ServerEvent`로 한정 명명한다.
 
-**`version.ts`** — `PROTOCOL_VERSION = 2`. 계약이 하위 비호환으로 바뀔 때마다 1씩 단조 증가시키는 정수(semver 미채택 — 와이어 호환성만 판단하면 되므로 정수 동등 비교가 단순). 핸드셰이크가 이 값을 실어 client·server가 같은 계약 세대를 쓰는지 대조한다.
+**`version.ts`** — `PROTOCOL_VERSION = 3`. 계약이 하위 비호환으로 바뀔 때마다 1씩 단조 증가시키는 정수(semver 미채택 — 와이어 호환성만 판단하면 되므로 정수 동등 비교가 단순). 핸드셰이크가 이 값을 실어 client·server가 같은 계약 세대를 쓰는지 대조한다.
 
 **`payloads.ts`** — 명령 인자 패턴 building block 4종. 무한 명령 어휘가 인자 구조상 수렴하는 4패턴을 독립 `z.strictObject`로 못박아 command 봉투가 재사용한다. 다단 대화(prompt/response) payload는 T2 경계라 여기 두지 않는다.
 
@@ -48,6 +48,7 @@
 - `{ type: 'chat:message', channel: 'say'|'yell'|'broadcast', text: string(min 1, max 512), id?: string }` — 자유채팅(E3-4). `channel`로 전파 범위를 판별하고 `text`는 발화 내용. 채널 전파 대상 필드라 프레임 상한과 별개로 필드 단위 길이 상한을 둔다(DoS floor).
 - `{ type: 'chat:emote', emote: string(min 1, max 64), target?: string(min 1, max 64), text?: string(min 1, max 512), id?: string }` — 감정표현(E3-4, A2 감정표현 action). `emote`가 주 콘텐츠(별칭, 값 검증은 채널 어댑터/E7), `target`은 대상 캐릭터, `text`는 선택적 부가 메시지. `freeTextPayloadSchema.shape`를 spread하지 않는다(그 shape의 text는 필수라 optional 의도와 충돌). 검증된 채팅 명령은 `ChannelPort`로 핸드오프된다([`freechat-permission-seam.md`](freechat-permission-seam.md)).
 - `{ type: 'world:move', direction: string(min 1, max 32), id?: string }` — 이동. `direction`은 방 그래프 출구 **이름**과 정확 일치할 문자열이며, 상한 32는 입력 위생이다(어떤 출구 이름도 이 안에 든다). 방향 별칭·단축키 해소는 클라 책임이라 서버는 해소된 최종 문자열만 받고 `resolveExit` mode를 `directional`로 고정한다 — flee/sneak/named를 와이어에 노출하지 않는다. `targetOrdinalPayloadSchema`를 재사용하지 않는 이유가 이것이다. 정본 [`live-world-foundation.md`](live-world-foundation.md).
+- `{ type: 'progress:train', id?: string }` — 연마. **인자가 없다** — 훈련방 여부·클래스 일치·exp·gold 게이트를 전부 서버(`progression/train`)가 소유하므로 클라는 의도만 보내고 대상·수량 같은 인자 표면을 두지 않는다(입력 위생 부담 0). `id`는 상관 키(선택) — 성공 통지 `progress:trained`는 상태 이벤트라 상관 키를 싣지 않고, 거부 시 `error` 이벤트가 이 `id`를 `correlationId`로 반향한다. 정본 [`progression.md`](progression.md).
 
 **`events.ts`** — `serverEventSchema = z.discriminatedUnion('type', [...])` + `errorCodeSchema`.
 
@@ -60,6 +61,7 @@
 - `{ type: 'session:entered', characterId: string(min 1) }` — 지목한 캐릭터로 월드 입장 확정 통지(T2).
 - `{ type: 'world:room', roomId: int(min 0), exits: string[] }` — 최소 방 통지. 입장·이동 성공 시 본인에게 1회 발화한다. `exits`는 출구 **이름** 목록(인덱스가 아니다 — `world:move.direction`과 같은 어휘). 주변 점유자·아이템·방 설명은 싣지 않으며 상세 월드뷰는 후속 에픽이 확장한다. 정본 [`live-world-foundation.md`](live-world-foundation.md).
 - `{ type: 'chat:said', channel: 'say'|'yell'|'broadcast'|'emote', speakerCharacterId: string(min 1), text: string(min 1, max 512), target?: string(min 1, max 64) }` — 채널 fan-out 수신측 통지. `ChannelDeliveryContext`와 1:1 매핑(발화자를 `speakerCharacterId`로 평탄화)이며, 인바운드 `chat:message`와 이름을 달리해(said vs message) 방향을 판별한다. 길이 상한은 인바운드 chat 명령과 동일 값을 아웃바운드에도 적용한다.
+- `{ type: 'progress:trained', level: int(min 1), levelsGained: int(min 0), experience: int(min 0), gold: int(min 0), hpCurrent: int(min 0), mpCurrent: int(min 0), stats: [int×5], prestige: 'invincible'|'caretaker'|'none' }` — 연마 성공 통지. `train()`이 확정한 성장 결과 스냅샷을 본인에게 1회 발화한다. `world:room` 선례를 따라 **`correlationId`를 싣지 않는다**(상태 이벤트 — 거부만 `error`로 상관 키를 반향한다). train이 실제로 바꾸는 필드만 싣고 전체 캐릭터 상태 직렬화는 후속 토픽 몫이다. `levelsGained`가 0인 것은 유효하다 — 승급(무적·초인) 경로는 레벨을 올리지 않고 전이만 한다. `stats`는 `characterSchema.stats`와 동일한 5-튜플이며 numeric 하한도 `characterSchema`를 미러한다(클라 `wsClient`가 인바운드 프레임을 이 스키마로 `safeParse`하므로 형식적 정합이 아니라 실 입력 검증 표면이다). 정본 [`progression.md`](progression.md).
 
 `errorCodeSchema = z.enum(['handshake_required', 'unknown_type', 'bad_payload', 'internal', 'unauthorized', 'session_state', 'forbidden', 'rate_limited'])` — `handshake_required`(핸드셰이크 전 명령 수신), `unknown_type`(미지 discriminator), `bad_payload`(payload 형식 위반), `internal`(핸들러/처리 중 서버 내부 오류), `unauthorized`(소유하지 않은 캐릭터 지목 등 **미인증** 세션의 인가 실패, T2), `session_state`(현재 세션 단계에서 허용되지 않는 명령, T2), `forbidden`(**인증됐으나** RBAC 권한 부족으로 거부, E3-4), `rate_limited`(인바운드 프레임이 연결·계정 속도 상한을 초과해 `JSON.parse` 전에 drop됨, #64 — 연속 폐기 구간의 첫 폐기에만 1회 통지, 정본 [`ws-rate-limit.md`](ws-rate-limit.md)). `unauthorized`(신원 없음, 재인증 유도)와 `forbidden`(신원 있으나 자격 없음, 권한 없음 안내)은 client-visible 의미가 다르다. WS upgrade **전** 게이트의 거부(`401 unauthenticated`·`403 forbidden_origin`)는 프로토콜 error 이벤트가 아니라 HTTP 응답이며 이 열거에 없다(auth-session.md 참조).
 
@@ -116,6 +118,21 @@
 
 버전 대조는 **서버 권위 정확 비교**(`readField(parsed, 'protocolVersion') === ctx.protocolVersion`, 강제 변환 없음)다. 핸드셰이크는 type+버전만 게이트하고 `clientCommandSchema` strict 파싱을 돌리지 않는다 — 여분 필드가 실려도 `ready`로 전이하나, ready 이후 모든 command는 라우터가 strict 검증하므로 우회 표면이 없다. `reload`는 프레임을 먼저 보내고 `setImmediate`로 close한다(같은 tick close가 프레임 플러시를 앞질러 클라이언트가 reload를 못 받는 injectWS 특이 동작 회피).
 
+3. **`pass` 위임 분기** — 핸드셰이크를 통과한 프레임의 위임처는 세션 상태로 갈린다. `ctx.state === command`면 라우터(`dispatch`)로, 그 이전(`characterSelect`·`create`)이면 FSM `handleInput`으로 보낸다. 이미 파싱된 객체를 재파싱 없이 넘긴다.
+
+**바인딩 신원 가드 (dispatch 직전)** — `ctx.state === command` 확인만으로는 부족하다. 서버 주도 종료(같은 캐릭터 재로그인 evict·grace 만료·shutdown 수렴)의 teardown은 transport만 정리하고(`cleanupConnection` + `socket.close`) 옛 `ctx`의 `state`·`boundCharacterId`는 되돌리지 않으며, `ctx.closed`도 소켓 `'close'` 이벤트(별개 리스너, 다음 tick)에서야 `true`가 된다. 그 창에서 이미 버퍼된 프레임의 `'message'`가 발화하면 승계된 옛 소켓이 `command` 상태·바인딩 키를 그대로 쥔 채 dispatch에 도달하고, 라이브 레지스트리는 `characterId` 키라 그 명령이 **새 세션의** 엔트리를 변이한다(이동·gold 소비 — 세션 신뢰 경계 침범). 따라서 이 `ctx`가 여전히 해당 캐릭터의 **현재 live 바인딩**일 때만 명령을 실행한다.
+
+```ts
+const binding = registry.get(actor.characterId)
+const isCurrentBinding =
+  binding !== undefined && binding.connection === ctx && binding.link === 'live'
+if (!isCurrentBinding || ctx.closed) break   // 조용히 무시, idle 재-arm 없음
+```
+
+응답을 보내지 않는다 — 이 소켓은 이미 종결 중이라 `safeSend`가 OPEN 가드로 no-op이 될 공산이 크고, 승계된 연결에 응답을 돌려줄 계약도 없다. **idle 재-arm도 하지 않는다**(무효 명령이 새 세션의 무입력 창을 연장하지 못하게 한다 — rejected-nonrearm·rate-limit drop과 같은 원리). `binding.link === 'live'` 절은 defense-in-depth다: `markLinkDead`는 `'close'` 핸들러에서만 실행되고 그 핸들러가 `ctx.closed = true`를 먼저 세우므로 link-dead 케이스는 `|| ctx.closed`가 이미 차단한다. 세션 바인딩 계약은 [`session-lifecycle.md`](session-lifecycle.md)가 정본이다.
+
+4. **idle 재-arm 정책** — `dispatch` 결과가 `handled`인 **유효 명령 처리 성공만** 무입력 타이머를 재-arm한다. 거부(`unknown_type`·`bad_payload`·`forbidden`·`internal`)는 flood로 타이머를 무한 연장하지 못한다.
+
 ### 라우터·핸들러 레지스트리 (`router.ts`)
 
 `dispatch(registry, parsed, actor, permission)`는 핸드셰이크를 통과(`pass`)한 프레임을 O(1) 디스패치하는 순수 함수다. E3-4가 `actor: ActorContext`(3번째)·`permission: PermissionPort`(4번째) 파라미터를 threading했다([`freechat-permission-seam.md`](freechat-permission-seam.md)). 레이어 순서가 distinct error code를 강제하기 위해 load-bearing이다.
@@ -128,7 +145,19 @@
 
 상관 키 `id`는 type 판별 직후·payload 검증 이전에 `readStringField`로 추출해(빈 문자열도 유효 → `typeof`로 판별), `bad_payload`·`forbidden`·`internal` 응답도 상관 키를 실어 클라이언트가 실패를 상관지을 수 있게 한다. `unknown_type`은 type 판별 이전이라 상관 키를 싣지 않는다. `errorEvent()`는 `correlationId`가 있을 때만 키를 포함한다(undefined 키 금지).
 
-`createCommandRegistry(channelPort)`는 무인증 `debug:echo`와 자유채팅 `chat:message`·`chat:emote`(→ `createChatHandler(channelPort)` 클로저)를 배선한다. E3-4가 `channelPort`를 필수 파라미터로 받으며(레지스트리 팩토리가 어댑터를 소유하지 않고 `registerWebsocket`이 default 주입), 모듈 싱글턴이던 레지스트리를 `registerWebsocket` 스코프로 이동했다. 레지스트리는 의도적으로 `clientCommandSchema`보다 좁은 런타임 디스패치 집합이다 — `system:ready`는 스키마에 있으나 핸드셰이크가 `pass` 이전에 소비하므로 등록하지 않는다. 신규 핸들러는 반드시 `clientCommandSchema`에도 variant를 추가해야 한다(스키마에 없는 type의 핸들러는 `safeParse`가 매칭하지 못해 영구히 `bad_payload`로 떨어진다).
+`createCommandRegistry(channelPort, deps?)`는 무인증 `debug:echo`와 자유채팅 `chat:message`·`chat:emote`(→ `createChatHandler(channelPort)` 클로저)를 무조건 배선한다. E3-4가 `channelPort`를 필수 파라미터로 받으며(레지스트리 팩토리가 어댑터를 소유하지 않고 `registerWebsocket`이 default 주입), 모듈 싱글턴이던 레지스트리를 `registerWebsocket` 스코프로 이동했다. 레지스트리는 의도적으로 `clientCommandSchema`보다 좁은 런타임 디스패치 집합이다 — `system:ready`는 스키마에 있으나 핸드셰이크가 `pass` 이전에 소비하므로 등록하지 않는다. 신규 핸들러는 반드시 `clientCommandSchema`에도 variant를 추가해야 한다(스키마에 없는 type의 핸들러는 `safeParse`가 매칭하지 못해 영구히 `bad_payload`로 떨어진다).
+
+**조건부 등록 deps 번들 (`GameCommandDeps`)** — 라이브 상태 seam을 요구하는 게임 명령은 deps가 주입될 때만 등록된다. 명령 하나당 필드 하나를 갖는 번들 객체로 받는다.
+
+```ts
+export interface GameCommandDeps {
+  readonly move?: MoveHandlerDeps
+  readonly train?: TrainHandlerDeps
+}
+createCommandRegistry(channelPort: ChannelPort, deps?: GameCommandDeps): HandlerRegistry
+```
+
+명령이 늘 때마다 팩토리에 optional **위치 파라미터**를 덧붙이면 호출부가 인자 순서에 결합되고, 중간 명령만 미주입하려면 `undefined` 자리 채우기가 필요해진다. 필드 번들이 그 결합을 끊는다 — 호출부는 배선할 명령의 필드만 채우고, 필드가 없으면 그 명령은 미등록으로 남아 dispatch가 `unknown_type`을 반환한다(방 배치·영속 seam이 아직 없는 컨텍스트의 기본 동작). 모든 필드가 optional이라 번들 자체도 optional이며, 무-deps 호출부(라우터 순수 단위 테스트 등)는 1-인자 형태 그대로다. 현재 `deps.move`(→ `world:move`)·`deps.train`(→ `progress:train`) 둘을 받고, 후속 규칙 명령(teach·study·attack·cast)이 같은 형상으로 필드를 더한다.
 
 `echoHandler(command, _actor)`는 `debug:echo{text, id?}` → `debug:echo:result{text, correlationId?}`로 되돌린다. `actor`를 받되 무시하는 무권한 진단 핸들러다. 라우터가 이미 검증한 `ClientCommand`만 받으므로 payload를 재검증하지 않는다. `id`가 있을 때만(`!== undefined`, 빈 문자열도 유효) `correlationId` 키를 싣는다.
 

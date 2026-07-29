@@ -124,6 +124,12 @@ stale 판별의 불변식은 **객체 identity** `registry.get(characterId) === 
 
 `binding.connection === ctx` 가드가 load-bearing이다 — 서버 주도 종료 후 옛 소켓의 뒤늦은 close가 새 세션을 markLinkDead하는 재진입을 막는다. 결과적으로 `resolveDisconnect`(및 lifecycle 포트)는 등록된 command 바인딩의 종결에만 호출되며, `normalClose` reason은 존재하지 않는다.
 
+### 승계된 소켓의 잔여 프레임 (명령 디스패치 경계)
+
+서버 주도 종료의 teardown은 **transport만** 정리한다(`cleanupConnection` + `socket.close`). 옛 `ConnectionContext`의 `state`·`boundCharacterId`는 되돌리지 않고, `ctx.closed`도 소켓 `'close'` 이벤트(별개 리스너, 다음 tick)에서야 `true`가 된다. 그 창에서 이미 버퍼된 프레임의 `'message'`가 발화하면 승계된 옛 소켓이 `command` 상태·바인딩 키를 그대로 쥔 채 명령 디스패치에 도달한다. 라이브 캐릭터 레지스트리는 `characterId` 키이므로, 그 명령은 **새 세션의** 엔트리를 변이한다(이동·gold 소비 — 세션 신뢰 경계 침범).
+
+따라서 dispatch 직전에 **바인딩 신원 가드**를 둔다 — `registry.get(actor.characterId)`가 이 `ctx`를 `connection`으로 갖고 `link === 'live'`이며 `!ctx.closed`일 때만 명령을 실행하고, 아니면 조용히 무시한다(응답 없음, idle 재-arm 없음). close 판정표의 `binding.connection === ctx` 가드와 같은 identity 불변식을 **명령 경로에도** 적용하는 것이다: close 가드는 뒤늦은 종결이 새 세션을 markLinkDead하는 것을 막고, 이 가드는 뒤늦은 **명령**이 새 세션의 상태를 변이하는 것을 막는다. 배치·코드 형태는 [`transport-protocol.md`](transport-protocol.md) §메시지 처리 파이프라인이 정본이다.
+
 ### 재연결 흐름
 
 ```
