@@ -416,6 +416,68 @@ describe('serverEventSchema (server→client 봉투)', () => {
     })
   })
 
+  describe('progress:trained', () => {
+    /** 연마 성공 통지의 최소 유효 payload. 각 케이스가 필요한 필드만 덮어쓴다. */
+    const validTrained = {
+      type: 'progress:trained',
+      level: 3,
+      levelsGained: 1,
+      experience: 1200,
+      gold: 40,
+      hpCurrent: 55,
+      mpCurrent: 30,
+      stats: [10, 11, 12, 13, 14],
+      prestige: 'none',
+    }
+
+    it('전 필드가 채워지면 통과한다', () => {
+      const parsed = serverEventSchema.safeParse(validTrained)
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'progress:trained') {
+        expect(parsed.data.levelsGained).toBe(1)
+        expect(parsed.data.stats).toEqual([10, 11, 12, 13, 14])
+      }
+    })
+
+    it('stats는 정확히 5-튜플이다 (4개·6개는 거부)', () => {
+      expect(
+        serverEventSchema.safeParse({ ...validTrained, stats: [1, 2, 3, 4] }).success,
+      ).toBe(false)
+      expect(
+        serverEventSchema.safeParse({ ...validTrained, stats: [1, 2, 3, 4, 5, 6] }).success,
+      ).toBe(false)
+    })
+
+    it('stats 원소가 정수가 아니면 거부한다', () => {
+      expect(
+        serverEventSchema.safeParse({ ...validTrained, stats: [1, 2, 3, 4, 1.5] }).success,
+      ).toBe(false)
+    })
+
+    it.each([['invincible'], ['caretaker'], ['none']])('prestige=%s를 허용한다', (prestige) => {
+      expect(serverEventSchema.safeParse({ ...validTrained, prestige }).success).toBe(true)
+    })
+
+    it('prestige가 열거 밖이면 거부한다', () => {
+      expect(serverEventSchema.safeParse({ ...validTrained, prestige: 'god' }).success).toBe(false)
+    })
+
+    it('필수 필드가 빠지면 거부한다', () => {
+      const { gold: _gold, ...withoutGold } = validTrained
+      expect(serverEventSchema.safeParse(withoutGold).success).toBe(false)
+    })
+
+    it('correlationId를 싣지 않는다 (상태 이벤트 — world:room 선례, strict)', () => {
+      expect(
+        serverEventSchema.safeParse({ ...validTrained, correlationId: 'c1' }).success,
+      ).toBe(false)
+    })
+
+    it('알 수 없는 키를 거부한다 (strict)', () => {
+      expect(serverEventSchema.safeParse({ ...validTrained, extra: true }).success).toBe(false)
+    })
+  })
+
   it('command 전용 type(debug:echo)을 거부한다', () => {
     expect(serverEventSchema.safeParse({ type: 'debug:echo', text: '핑' }).success).toBe(false)
   })

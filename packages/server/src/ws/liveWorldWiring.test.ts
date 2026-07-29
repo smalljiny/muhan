@@ -158,6 +158,20 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
     )
   })
 
+  it('trainDeps는 기존 원재료(liveRegistry·by-character resolveRoom·markCharacterDirty)만으로 파생된다', () => {
+    const h = makeBundle(new Map<number, RoomNode>([[7, makeRoom(7)]]))
+
+    const wiring = createLiveWorldWiring(h.bundle)
+
+    // 묶음에 신규 원재료를 추가하지 않았음을 필드 동일성으로 고정한다 — 세 필드 모두 이미 존재하던
+    // seam(레지스트리·발화자 방 해소자·characters 스냅샷 헬퍼)의 재사용이다. resolveRoom은 by-roomId가
+    // 아니라 by-character 해소자와 **같은 인스턴스**여야 하며, 그 해소 동작 자체는 바로 아래
+    // 'resolveRoom(by-character)…' 케이스가 소유한다(여기서 재단언하지 않는다).
+    expect(wiring.trainDeps.liveRegistry).toBe(h.liveRegistry)
+    expect(wiring.trainDeps.markCharacterDirty).toBe(wiring.markCharacterDirty)
+    expect(wiring.trainDeps.resolveRoom).toBe(wiring.resolveRoom)
+  })
+
   it('resolveRoom(by-character)은 registry→currentRoom→worldGraph로 발화자 방을 해소한다', () => {
     const room = makeRoom(7, ['char-1'])
     const worldGraph = new Map<number, RoomNode>([[7, room]])
@@ -189,6 +203,25 @@ describe('createCommandRegistry with wiring.moveDeps (#4 world:move 등록)', ()
     const registry = createCommandRegistry(noop)
 
     expect(registry.has('world:move')).toBe(false)
+  })
+
+  it('묶음 파생 trainDeps 주입 시 progress:train이 등록된다', () => {
+    const worldGraph = new Map<number, RoomNode>([[1, makeRoom(1)]])
+    const { bundle } = makeBundle(worldGraph)
+    const wiring = createLiveWorldWiring(bundle)
+    const noop = createNoopChannelAdapter({ info: vi.fn() })
+
+    const registry = createCommandRegistry(noop, { train: wiring.trainDeps })
+
+    expect(registry.has('progress:train')).toBe(true)
+  })
+
+  it('trainDeps 미주입 시 progress:train은 미등록이다(거울 케이스)', () => {
+    const noop = createNoopChannelAdapter({ info: vi.fn() })
+
+    const registry = createCommandRegistry(noop)
+
+    expect(registry.has('progress:train')).toBe(false)
   })
 })
 

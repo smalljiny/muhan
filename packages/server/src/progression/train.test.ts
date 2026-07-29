@@ -3,6 +3,7 @@ import { neededExp, type Character } from 'shared'
 import { setFlag } from '../world/door.js'
 import { createMarkCharacterDirty } from '../world/markCharacterDirty.js'
 import { train, RTRAIN } from './train.js'
+import { trainingFlagsForClass } from './train.testutil.js'
 
 /**
  * train(연마) 3게이트 명시 레벨업 테스트.
@@ -43,16 +44,11 @@ function makeChar(overrides: Partial<Character> = {}): Character {
   }
 }
 
-/** class N의 훈련방(base RTRAIN + class-bit 역순 매칭)을 만든다. */
-function trainingRoomForClass(cls: number): number[] {
-  const bits = [RTRAIN] // base bit 3
-  const idx = cls - 1
-  // bit[i] = (idx & (1<<i)); room bit for i = RTRAIN+3-i (역순): i=0→6, i=1→5, i=2→4.
-  for (let i = 0; i < 3; i++) {
-    if ((idx & (1 << i)) !== 0) bits.push(RTRAIN + 3 - i)
-  }
-  return roomFlags(...bits)
-}
+/**
+ * class N의 훈련방(base RTRAIN + class-bit 역순 매칭)을 만든다.
+ * 역순 규칙은 train.testutil.ts가 단일 출처로 소유한다(소비자마다 재구현하면 드리프트한다).
+ */
+const trainingRoomForClass = trainingFlagsForClass
 
 describe('train — location gate', () => {
   it('RTRAIN 미설정 방 → not-training-room 거부', () => {
