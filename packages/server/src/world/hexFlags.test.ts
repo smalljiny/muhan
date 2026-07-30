@@ -3,6 +3,7 @@ import {
   F_ISSET,
   F_SET,
   F_CLR,
+  orFlags,
   MPERMT,
   MSCAVE,
   MHASSC,
@@ -11,6 +12,9 @@ import {
   OPERMT,
   OHIDDN,
   OSCENE,
+  PBLIND,
+  PFEARS,
+  PSILNC,
 } from './hexFlags.js'
 
 /**
@@ -43,6 +47,20 @@ describe('F_ISSET — hex string 비트 조회', () => {
   })
 })
 
+/**
+ * P-flag 비트 번호 고정 — `help/pflags` 문서 값(PBLIND 43·PFEARS 44·PSILNC 45)은 raw `#define`보다
+ * +1이라 mtype.h를 정본으로 채택했다(hexFlags.ts 상단 주석). 세 비트는 전부 byte 5를 공유하므로
+ * off-by-one이 들어오면 투영·절단 검증이 조용히 어긋난다. 소유 모듈에서 수치를 pin한다.
+ */
+describe('P-flag 비트 번호 — mtype.h 정본', () => {
+  it('PBLIND=42 · PFEARS=43 · PSILNC=44 (전부 byte 5)', () => {
+    expect(PBLIND).toBe(42)
+    expect(PFEARS).toBe(43)
+    expect(PSILNC).toBe(44)
+    expect([PBLIND, PFEARS, PSILNC].map((b) => b >> 3)).toEqual([5, 5, 5])
+  })
+})
+
 describe('F_SET / F_CLR — 새 hex string 반환(불변)', () => {
   it('F_SET은 지정 비트를 세팅한 새 문자열을 반환하고 입력을 변형하지 않는다', () => {
     const flags = '0000000000000000'
@@ -71,5 +89,71 @@ describe('F_SET / F_CLR — 새 hex string 반환(불변)', () => {
     expect(F_ISSET(set, MBEFUD)).toBe(true)
     // 낮은 비트로 오염되지 않는다(bit3은 byte0 bit3 — 오배치 시 참이 됐을 자리).
     expect(F_ISSET(set, 3)).toBe(false)
+  })
+})
+
+/**
+ * orFlags 폭 보존 검증 — 8바이트(16자) 고정 순회가 정본이다. `Math.min(a.length, b.length)`로
+ * 순회하면 짧은 피연산자가 결과 폭을 결정해 긴 쪽의 고바이트가 절단된다. PBLIND(42)·PFEARS(43)·
+ * PSILNC(44)는 전부 byte5(문자 인덱스 10-11)라 절단에 정확히 걸리는 회귀 탐지 비트다.
+ */
+describe('orFlags — 폭 보존 hex OR', () => {
+  it('양쪽 16자 입력을 바이트 단위로 OR하고 16자를 반환한다', () => {
+    const out = orFlags('0112000000000000', '0000040000000000')
+    expect(out).toBe('0112040000000000')
+    expect(out.length).toBe(16)
+  })
+
+  it('한쪽이 빈 문자열이면 다른 쪽을 그대로 살린 16자를 반환한다', () => {
+    const out = orFlags('0112000000000000', '')
+    expect(out).toBe('0112000000000000')
+    expect(out.length).toBe(16)
+  })
+
+  it('양쪽이 빈 문자열이면 0으로 채운 16자를 반환한다', () => {
+    const out = orFlags('', '')
+    expect(out).toBe('0000000000000000')
+    expect(out.length).toBe(16)
+  })
+
+  it('한쪽이 4자(짧은 피연산자)여도 고바이트를 절단하지 않는다', () => {
+    // 긴 쪽 byte5 = 0x1c = bit42|bit43|bit44 (PBLIND·PFEARS·PSILNC).
+    // Math.min 순회 구현은 여기서 '00ff'(4자)로 잘려 세 비트를 모두 잃는다.
+    const out = orFlags('00000000001c0000', '00ff')
+    expect(out).toBe('00ff0000001c0000')
+    expect(out.length).toBe(16)
+    expect(F_ISSET(out, PBLIND)).toBe(true)
+    expect(F_ISSET(out, PFEARS)).toBe(true)
+    expect(F_ISSET(out, PSILNC)).toBe(true)
+  })
+
+  it('짧은 피연산자가 앞에 와도(인자 순서 무관) 폭과 비트가 보존된다', () => {
+    const out = orFlags('00ff', '00000000001c0000')
+    expect(out).toBe('00ff0000001c0000')
+    expect(out.length).toBe(16)
+    expect(F_ISSET(out, PSILNC)).toBe(true)
+  })
+
+  it('양쪽에 겹쳐 세팅된 비트를 OR한다(XOR 아님)', () => {
+    // byte1: 0xff | 0xf0 = 0xff (XOR이면 0x0f), byte5: 0x1c | 0x1c = 0x1c (XOR이면 0x00).
+    // 세 투영 출처의 비트 집합은 오늘 서로소라 상위 Story가 겹침 입력을 만들지 않는다 —
+    // OR/XOR 구별은 이 단위 케이스가 유일한 방어선이다.
+    const out = orFlags('00ff0000001c0000', '00f00000001c0000')
+    expect(out).toBe('00ff0000001c0000')
+    expect(F_ISSET(out, PSILNC)).toBe(true)
+  })
+
+  it('대문자 hex 입력을 소문자 16자로 정규화한다', () => {
+    // 저장소 관행상 flags hex는 문자열 동등성으로 단정된다(worldGraph.test.ts 등) —
+    // 소문자 정규화는 JSDoc이 명시하는 계약이므로 테스트로 고정한다.
+    expect(orFlags('00FF', '')).toBe('00ff000000000000')
+  })
+
+  it('두 입력 문자열을 변형하지 않는다(순수 함수)', () => {
+    const a = '00000000001c0000'
+    const b = '00ff'
+    orFlags(a, b)
+    expect(a).toBe('00000000001c0000')
+    expect(b).toBe('00ff')
   })
 })

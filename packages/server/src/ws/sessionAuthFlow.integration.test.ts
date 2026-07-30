@@ -67,6 +67,7 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
     schemaVersion: 3,
     accountId: ACCT_A,
     status: 'active',
+    alignment: 1,
     ...overrides,
   }
 }

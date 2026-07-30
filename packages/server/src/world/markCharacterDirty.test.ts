@@ -27,6 +27,7 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
     schemaVersion: 5,
     accountId: 'acct-1',
     status: 'active',
+    alignment: 1,
     ...overrides,
   }
 }
@@ -114,6 +115,23 @@ describe('createMarkCharacterDirty', () => {
       expect(snap.statusEffects?.disease).toEqual({ until: 300, interval: 20 })
       expect(snap.statusEffects?.blind).toEqual({ until: 400 })
       expect(snap.statusEffects?.disease).not.toBe(character.statusEffects?.disease)
+    })
+
+    it('silence·fear도 값 보존 + 별개 참조로 스냅샷한다 (v6 신규 효과)', () => {
+      // 복사기 목록에서 누락되면 두 디버프가 조용히 스냅샷에서 빠져 flush 시 write-loss가 난다.
+      // satisfies Record<StatusEffectName, ...>가 컴파일에서 누락을 막지만, 값 복사 자체는 여기서 고정한다.
+      const h = harness()
+      const character = makeCharacter({
+        statusEffects: { silence: { until: 500 }, fear: { until: 600 } },
+      })
+
+      h.markCharacterDirty('char-1', character)
+      const snap = h.snapshot()
+
+      expect(snap.statusEffects?.silence).toEqual({ until: 500 })
+      expect(snap.statusEffects?.fear).toEqual({ until: 600 })
+      expect(snap.statusEffects?.silence).not.toBe(character.statusEffects?.silence)
+      expect(snap.statusEffects?.fear).not.toBe(character.statusEffects?.fear)
     })
   })
 

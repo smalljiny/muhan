@@ -92,6 +92,11 @@ export function genderAllowed(flags: string, gender: number): boolean {
 /**
  * 정렬 착용 허용 — 오라클 command3.c:143·152.
  * OGOODO 세트 + 정렬 < -50이면 거부, OEVILO 세트 + 정렬 > 50이면 거부. 그 외 허용.
+ *
+ * known divergence — 현 `alignment` 값역은 [0,2](생성 인터뷰 1|2 + backfill sentinel 0)라 두 조건이
+ * 항상 거짓이고 이 게이트는 실 데이터에서 미발화한다. 오라클 임계값을 보존해 E6 성향 시스템
+ * (-1000..+1000, #123)이 들어올 때 코드 변경 없이 발화하게 둔다 — 임계값을 현 값역에 맞춰 "고치면"
+ * 오라클 상수가 소실된다. 상세는 `magic/learning.ts`의 study 정렬 게이트 주석 참조.
  */
 export function alignmentAllowed(flags: string, alignment: number): boolean {
   if (F_ISSET(flags, OGOODO) && alignment < -50) return false

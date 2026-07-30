@@ -28,10 +28,11 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
     spells: new Array<number>(16).fill(0),
     realm: [0, 0, 0, 0],
     // CURRENT 버전으로 시딩해 findById roundtrip이 backfill passthrough가 되게 한다.
-    schemaVersion: 5,
+    schemaVersion: 6,
     // 계정 링크 FK(Story 1로 필수화)와 soft-delete 상태 기본값.
     accountId: 'acc-1',
     status: 'active',
+    alignment: 1,
     ...overrides,
   }
 }
@@ -247,7 +248,7 @@ describe('CharacterRepository (integration)', () => {
     await expect(repo.deleteById('missing')).rejects.toThrow(DocumentNotFoundError)
   })
 
-  it('findById는 vitals·experience·spells 없는 v1 문서를 backfill 체인(V5∘V4∘V3∘V2)으로 승격해 parse 통과시킨다', async () => {
+  it('findById는 vitals·experience·spells·alignment 없는 v1 문서를 backfill 체인(V6∘V5∘V4∘V3∘V2)으로 승격해 parse 통과시킨다', async () => {
     // repo.insert는 최신 스키마로 거부하므로 untyped 컬렉션에 raw v1 문서를 직접 주입한다.
     await db.collection<RawCharacterDoc>('characters').insertOne({
       _id: 'v1-load',
@@ -267,11 +268,13 @@ describe('CharacterRepository (integration)', () => {
     expect(found?.level).toBe(1)
     expect(found?.hpCurrent).toBe(seedVitals(3, 1).hpCurrent)
     expect(found?.mpCurrent).toBe(seedVitals(3, 1).mpCurrent)
-    // V3 스텝: level=1이라 experience 0으로 시딩. V5 스텝: 빈 spell store 시딩 + 최신 버전(5)으로 스탬프.
+    // V3 스텝: level=1이라 experience 0으로 시딩. V5 스텝: 빈 spell store 시딩.
+    // V6 스텝: alignment 중립 sentinel 0 시딩 + 최신 버전(6)으로 스탬프.
     expect(found?.experience).toBe(0)
     expect(found?.spells).toEqual(new Array<number>(16).fill(0))
     expect(found?.realm).toEqual([0, 0, 0, 0])
-    expect(found?.schemaVersion).toBe(5)
+    expect(found?.alignment).toBe(0)
+    expect(found?.schemaVersion).toBe(6)
   })
 
   it('findByAccount도 v1 문서를 backfill로 승격해 반환한다 (parse 이전 승격)', async () => {
@@ -293,7 +296,8 @@ describe('CharacterRepository (integration)', () => {
     expect(list[0]?.hpCurrent).toBe(seedVitals(4, 1).hpCurrent)
     expect(list[0]?.level).toBe(1)
     expect(list[0]?.experience).toBe(0)
-    expect(list[0]?.schemaVersion).toBe(5)
+    expect(list[0]?.alignment).toBe(0)
+    expect(list[0]?.schemaVersion).toBe(6)
   })
 
   it('★판별: level=50 v2 문서를 load하면 level·vitals를 보존하고 experience를 정합 시딩한다', async () => {
@@ -320,12 +324,12 @@ describe('CharacterRepository (integration)', () => {
     expect(found?.hpCurrent).toBe(777) // vitals 재시딩 금지
     expect(found?.mpCurrent).toBe(333)
     expect(found?.experience).toBe(neededExp(49)) // level L 도달 최소 누적 = neededExp(L-1)
-    expect(found?.schemaVersion).toBe(5)
+    expect(found?.schemaVersion).toBe(6)
   })
 
-  it('v3 문서를 load하면 V4·V5가 schemaVersion=5로 스탬프하되 기존 필드는 보존한다 (statusEffects 미시딩)', async () => {
-    // statusEffects·buffs는 선택 필드라 미시딩. V4는 버전만 3→4, V5는 spells·realm 시딩 + 4→5.
-    // vitals·level·experience는 불변.
+  it('v3 문서를 load하면 V4·V5·V6가 schemaVersion=6으로 스탬프하되 기존 필드는 보존한다 (statusEffects 미시딩)', async () => {
+    // statusEffects·buffs는 선택 필드라 미시딩. V4는 버전만 3→4, V5는 spells·realm 시딩 + 4→5,
+    // V6는 alignment 0 시딩 + 5→6. vitals·level·experience는 불변.
     await db.collection<RawCharacterDoc>('characters').insertOne({
       _id: 'v3-load',
       name: '삼세대',
@@ -344,12 +348,44 @@ describe('CharacterRepository (integration)', () => {
     })
 
     const found = await repo.findById('v3-load')
-    expect(found?.schemaVersion).toBe(5)
+    expect(found?.schemaVersion).toBe(6)
+    expect(found?.alignment).toBe(0)
     expect(found?.level).toBe(12)
     expect(found?.hpCurrent).toBe(60)
     expect(found?.experience).toBe(34567)
     expect(found?.statusEffects).toBeUndefined()
     expect(found?.buffs).toBeUndefined()
     expect(found?.spells).toEqual(new Array<number>(16).fill(0))
+  })
+
+  it('v5 문서를 load하면 V6가 스탬프만 6으로 올리고 기존 alignment를 보존한다', async () => {
+    // v5는 실 프로덕션 Mongo에 있는 모든 문서의 버전이며 V6가 **보존 분기**를 타는 유일한 입력이다
+    // (v1~v3는 전부 시딩 분기). 생성 경로가 dto.alignment 실값을 이미 저장했으므로 이 분기가
+    // 실 마이그레이션의 대표 케이스다 — 통합 레벨에서 고정한다.
+    await db.collection<RawCharacterDoc>('characters').insertOne({
+      _id: 'v5-load',
+      name: '오세대',
+      class: 4,
+      race: 1,
+      stats: [11, 12, 13, 14, 15],
+      gold: 700,
+      currentRoom: 2,
+      hpCurrent: 80,
+      mpCurrent: 60,
+      level: 20,
+      experience: 123456,
+      spells: new Array<number>(16).fill(0),
+      realm: [0, 0, 0, 0],
+      alignment: 2,
+      schemaVersion: 5,
+      accountId: 'acc-v5',
+      status: 'active',
+    })
+
+    const found = await repo.findById('v5-load')
+    expect(found?.schemaVersion).toBe(6)
+    expect(found?.alignment).toBe(2) // 시딩 sentinel 0으로 덮어쓰지 않는다
+    expect(found?.level).toBe(20)
+    expect(found?.experience).toBe(123456)
   })
 })

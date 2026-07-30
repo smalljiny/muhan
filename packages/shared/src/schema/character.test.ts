@@ -22,6 +22,7 @@ function validCharacter(): Character {
     realm: [0, 0, 0, 0],
     schemaVersion: 1,
     status: 'active',
+    alignment: 1,
   }
 }
 
@@ -116,11 +117,39 @@ describe('characterSchema', () => {
     expect(result.success).toBe(true)
   })
 
-  it('gender·weapon·alignment는 선택 필드다 (생략해도 통과 — 기존 픽스처 불변)', () => {
+  it('gender·weapon은 선택 필드다 (생략해도 통과 — 기존 픽스처 불변)', () => {
     const doc = validCharacter() as Partial<Character>
     expect('gender' in doc).toBe(false)
+    expect('weapon' in doc).toBe(false)
     const result = characterSchema.safeParse(doc)
     expect(result.success).toBe(true)
+  })
+
+  it('alignment가 없으면 거부한다 (required 승격 — 학습 게이트·전투가 값을 요구)', () => {
+    // 픽스처는 alignment: 1을 담으므로, 제거해야 required 승격이 드러난다.
+    const doc = validCharacter() as Partial<Character>
+    delete doc.alignment
+    expect(characterSchema.safeParse(doc).success).toBe(false)
+  })
+
+  it('alignment=0(중립 sentinel)을 통과시킨다 (backfillCharacterV6 시드값)', () => {
+    const result = characterSchema.safeParse({ ...validCharacter(), alignment: 0 })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.alignment).toBe(0)
+  })
+
+  it('alignment에 값역 제약을 두지 않는다 (오라클 스케일 전환을 살아남는 영속 경계)', () => {
+    // 현 실 데이터 값역은 [0,2]지만 그건 한시적 인코딩이다. 오라클 alignment는 부호 있는 int16이고
+    // 소비 규칙이 이미 그 스케일 임계값(< -100 · > 250 등)을 보존한다 — 스키마에 [0,2] 캡을 걸면
+    // 부호가 충돌하고 레거시 세이브 이식·E6(#123) 부분 롤아웃에서 문서가 로드 불가가 된다.
+    // 도메인 강제는 상류(생성 FSM의 refine 1|2) 책임이며 스키마는 정수형만 본다.
+    for (const oracleScale of [-1000, -100, 250, 1000]) {
+      expect(
+        characterSchema.safeParse({ ...validCharacter(), alignment: oracleScale }).success,
+      ).toBe(true)
+    }
+    // 정수형은 여전히 강제한다.
+    expect(characterSchema.safeParse({ ...validCharacter(), alignment: 1.5 }).success).toBe(false)
   })
 
   it('gender·weapon·alignment 정수를 담은 문서를 통과시킨다 (생성 선택 저장)', () => {
@@ -237,6 +266,55 @@ describe('characterSchema', () => {
       statusEffects: { poison: { until: 60 } },
     })
     expect(result.success).toBe(false)
+  })
+
+  it('silence·fear를 담은 statusEffects 문서를 통과시킨다 (절대-틱 만료, until만)', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      statusEffects: { silence: { until: 100 }, fear: { until: 100 } },
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.statusEffects?.silence).toEqual({ until: 100 })
+      expect(result.data.statusEffects?.fear).toEqual({ until: 100 })
+    }
+  })
+
+  // 두 신규 효과는 계약이 동일하다(개별 선택 + until-only strictObject) — 키별 복제 대신
+  // 테이블로 고정한다(debuffEffects.test.ts의 fear/silence it.each 선례).
+  it.each(['silence', 'fear'] as const)(
+    '%s는 개별 선택이며 until만 갖는다 (음수·부재·미정의 키 거부)',
+    (key) => {
+      const parse = (effect: unknown): boolean =>
+        characterSchema.safeParse({ ...validCharacter(), statusEffects: { [key]: effect } }).success
+      expect(parse({ until: 100 })).toBe(true)
+      expect(parse({ until: -1 })).toBe(false)
+      expect(parse({})).toBe(false)
+      // strictObject 보존 — blind 선례대로 간격을 갖지 않는다.
+      expect(parse({ until: 100, interval: 6 })).toBe(false)
+    },
+  )
+
+  it('silence·fear를 생략한 기존 v5 형태 문서의 parse 결과가 불변이다 (회귀)', () => {
+    const result = characterSchema.safeParse({
+      ...validCharacter(),
+      statusEffects: {
+        poison: { until: 120, interval: 6 },
+        disease: { until: 300, interval: 12 },
+        blind: { until: 50 },
+      },
+    })
+    expect(result.success).toBe(true)
+    // 전체 객체 동등성 — silence·fear 키가 주입되지 않고 기존 3필드가 그대로임을 고정한다.
+    // toEqual은 undefined 값 프로퍼티를 무시하므로 `silence: undefined` 주입을 놓친다 —
+    // toStrictEqual이라야 키 미주입(.default 오도입 포함)을 실제로 강제한다.
+    if (result.success) {
+      expect(result.data.statusEffects).toStrictEqual({
+        poison: { until: 120, interval: 6 },
+        disease: { until: 300, interval: 12 },
+        blind: { until: 50 },
+      })
+    }
   })
 
   it('spells가 없으면 거부한다 (지식 비트마스크 필수 영속 필드)', () => {

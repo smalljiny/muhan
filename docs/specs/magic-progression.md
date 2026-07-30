@@ -26,7 +26,7 @@
 | `packages/server/src/magic/buffEffects.ts` | — | 저항 버프(G5) + 타이머 보유 버프/감지/비행/발광(G7) effect |
 | `packages/server/src/magic/debuffEffects.ts` | — | 디버프 6종(G6) pure-report effect |
 | `packages/server/src/magic/instantEffects.ts` | — | 즉발 회복/해제/seam(G7) effect |
-| `packages/server/src/combat/statusEffects.ts` | (기존 확장) | `clearPoison`/`clearDisease`/`clearBlind` — cure effect 소비 대상 |
+| `packages/server/src/combat/statusEffects.ts` | (기존 확장) | `clearPoison`/`clearDisease`/`clearBlind` — cure effect 소비 대상. 이후 `grantSilence`/`grantFear`/`clearSilence`/`clearFear`/`isSilenceActive`/`isFearActive`가 blind 대칭으로 추가됐다(판독만 배선, 시전 경로 미배선 — [character-flags.md](character-flags.md)) |
 | `packages/server/src/magic/crtSpell.ts` | (기존 확장) | `isSelfTargetSpell`·`castSelfHeal` — 몬스터 self-target 치유(G8) |
 | `packages/shared/src/oracle/` | `generators/*Fixture.ts`+`fixtures/*.json` | 골든 fixture — spell store·spllv·addrealm·buff/debuff dur |
 
@@ -47,6 +47,10 @@
 ### G2 — 학습·전수
 
 `study(char, book)`(`learning.ts`)는 비법서(SCROLL) 연마를 게이트 순서대로 평가한다: PBLIND(실명) → 오브젝트 타입(SCROLL 아님) → 레벨(`book.ndice > level`) → 정렬(`OGOODO`이고 `alignment<-100` 또는 `OEVILO`이고 `alignment>100`) → 클래스(`OCLSEL` 켜져 있고 해당 클래스 비트 없고 `class<CARETAKER`) → `magicpower` 유효성(카탈로그 밖이면 `no-spell`). 통과 시 `setKnown(char.spells, book.magicpower-1)`한 새 store를 반환하고, 실패 시 원본 store를 그대로 반환한다.
+
+study의 **정렬 게이트는 known-divergence로 미발화**다 — `alignment` 실 값역이 `[0,2]`(생성 인터뷰 1|2 + backfill 중립 sentinel 0)라 `<-100`·`>100` 두 분기가 모두 거짓이고, 현재 어떤 캐릭터도 정렬로 연마를 거부당하지 않는다. 오라클 임계값을 **재조정하지 않는다** — 보존해야 E6 성향 시스템([#123](https://github.com/smalljiny/muhan/issues/123))이 `-1000..+1000`을 도입할 때 코드 변경 없이 발화한다. 같은 성격의 미발화 게이트가 `combat/aggro.ts`·`combat/attackStats.ts`·`items/flags.ts`에도 있다([character-flags.md](character-flags.md)).
+
+study·teach가 읽는 PBLIND·PSILNC의 **영속 입력원은 `characterSchema.statusEffects`**이며, `composeCharacterFlags`가 세 투영을 OR해 소비측이 `F_ISSET`으로 읽는 16자 hex를 만든다([character-flags.md](character-flags.md)). 명령 배선(#119·#120)이 그 합성값을 게이트에 주입한다.
 
 `teach(caster, target, spellNo)`는 PBLIND → PSILNC → base-class(`CARETAKER`/`MAGE`/`CLERIC`만 통과, `INVINCIBLE`·`SUB_DM`·`DM`은 불가) → 주문 존재(`spellByNo`) → 시전자 지식(`isKnown`) → `spllv` 전수등급 순서로 평가한다. `canTeachSpllv(casterClass, spllv)`는 등급별 최소 클래스를 판정한다: spllv 1(`CLERIC`↑)·2(`MAGE`↑)·3(`INVINCIBLE`↑)·4(`CARETAKER`↑)·5(`SUB_DM`↑). base-class 게이트가 `INVINCIBLE`·`SUB_DM`을 막으므로 spllv 5 주문은 실질 전수 불가한 quirk가 남는다(원작 충실). 통과 시 `setKnown(target.spells, spellNo)`한 새 store를 반환한다.
 

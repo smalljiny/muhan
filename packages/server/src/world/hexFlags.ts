@@ -207,3 +207,28 @@ export function F_CLR(hex: string, bit: number): string {
   const byte = byteAt(hex, bit) & ~(1 << (bit & 7))
   return withByte(hex, bit >> 3, byte)
 }
+
+/**
+ * 두 flags hex string을 바이트 단위로 OR한 16자 hex string을 반환한다(입력 불변, 소문자 정규화).
+ *
+ * 원본 mtype.h 매크로가 아니라 이 포트 고유 헬퍼라 `F_` 접두를 쓰지 않는다 — 원작은 flags가 고정
+ * 8바이트 배열이라 폭 문제가 없지만, 이 포트는 flags를 가변 길이 hex string으로 다루므로 폭을
+ * 명시적으로 복원해야 한다.
+ *
+ * 항상 8바이트(16자)를 고정 순회한다. `Math.min(a.length, b.length)`로 순회하면 짧은 피연산자가
+ * 결과 폭을 결정해 긴 쪽의 고바이트가 절단된다(예 PBLIND 42·PFEARS 43·PSILNC 44는 전부 byte5라
+ * 4자 피연산자와 OR하면 통째로 소실). `byteAt`이 범위 밖을 0으로 돌려주므로 짧은 입력은 자연히
+ * 0바이트로 취급된다.
+ *
+ * 반대 방향은 절단한다 — 입력이 16자를 넘으면 byte 8 이후는 무시된다. P/M/O-flag는 전부 `char flags[8]`
+ * (mstruct.h)이라 실 데이터가 이 경계를 넘지 않는다.
+ */
+export function orFlags(a: string, b: string): string {
+  let out = ''
+  for (let i = 0; i < 8; i++) {
+    // byteAt은 비트 인덱스를 받아 내부에서 bit>>3으로 바이트를 구하므로 바이트 i → 비트 i*8로 환산한다.
+    const byte = byteAt(a, i * 8) | byteAt(b, i * 8)
+    out += byte.toString(16).padStart(2, '0')
+  }
+  return out
+}

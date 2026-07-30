@@ -31,6 +31,7 @@ function makeCharacter(overrides: Partial<Character> = {}): Character {
     schemaVersion: 3,
     accountId: 'acc-1',
     status: 'active',
+    alignment: 1,
     ...overrides,
   }
 }
@@ -230,16 +231,21 @@ describe('FirebaseSessionAuthAdapter (integration)', () => {
       expect(persisted?.level).toBe(1)
       expect(persisted?.hpCurrent).toBe(seedVitals(2, 1).hpCurrent)
       expect(persisted?.mpCurrent).toBe(seedVitals(2, 1).mpCurrent)
-      // 1레벨 신규는 experience 0으로 시딩하고 최신 스키마 버전(5)으로 스탬프한다.
+      // 1레벨 신규는 experience 0으로 시딩하고 최신 스키마 버전(6)으로 스탬프한다.
+      // 생성 경로가 CURRENT_CHARACTER_SCHEMA_VERSION을 공유하므로 load 경로 backfill 목표 버전과
+      // 항상 일치한다(버전 드리프트 차단).
       expect(persisted?.experience).toBe(0)
-      expect(persisted?.schemaVersion).toBe(5)
+      expect(persisted?.schemaVersion).toBe(6)
       // 신규 문서는 backfillCharacterV5와 동일 시드값(빈 spells·[0,0,0,0] realm)을 갖는다(버전 드리프트 차단).
       expect(persisted?.spells).toEqual(new Array<number>(16).fill(0))
       expect(persisted?.realm).toEqual([0, 0, 0, 0])
     })
 
-    it('gender·weapon·alignment를 선택 필드로 영속한다', async () => {
-      const summary = await adapter.createCharacter('uid-1', makeDto({ gender: 2, weapon: 5, alignment: 2 }))
+    it('gender·weapon(선택)과 alignment(v6 필수)를 영속한다', async () => {
+      const summary = await adapter.createCharacter(
+        'uid-1',
+        makeDto({ gender: 2, weapon: 5, alignment: 2 }),
+      )
       const persisted = await characters.findById(summary.characterId)
       expect(persisted?.gender).toBe(2)
       expect(persisted?.weapon).toBe(5)

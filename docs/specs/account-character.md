@@ -36,7 +36,8 @@ E2-1 `characterSchema`에 계정 링크·soft-delete·생성 인터뷰 스칼라
 
 - `accountId: string().min(1)` — 소유 계정 필수 FK(`account._id`).
 - `status: enum(['active','deleted']).default('active')` + `deletedAt: coerce.date().optional()` — soft-delete graveyard 필드.
-- `gender`·`alignment`·`weapon: int().optional()` — 생성 인터뷰가 고른 원시 스칼라. `.default()`가 아닌 `.optional()`이라(deletedAt 선례) 기존 fixture를 깨지 않고 `createCharacter`가 항상 채운다. proficiency[5] 배열·성향 시스템 모델링은 E6 소관.
+- `gender`·`weapon: int().optional()` — 생성 인터뷰가 고른 원시 스칼라. `.default()`가 아닌 `.optional()`이라(deletedAt 선례) 기존 fixture를 깨지 않고 `createCharacter`가 항상 채운다. proficiency[5] 배열 모델링은 E6 소관.
+- `alignment: int()` — **required**. 같은 생성 인터뷰 스칼라지만 gender·weapon과 달리 필수다: 학습 게이트(study OGOODO/OEVILO)와 전투 상태(`PlayerCombatState.alignment`)가 매 판정마다 값을 요구해, 부재를 허용하면 소비 지점마다 폴백이 흩어진다. v5 이하 문서는 load 직전 `backfillCharacterV6`가 중립 sentinel `0`으로 시딩한다. 생성 경로(`FirebaseSessionAuthAdapter`)는 인터뷰 선택값을 그대로 싣는다 — 여기에 `?? undefined` 같은 선택 필드 관용을 도입하면 insert 경로의 `characterSchema.parse`가 throw한다. 값역 제약(`.min().max()`)은 의도적으로 두지 않으며 도메인 강제는 상류 `sessionFsm`의 `refine(1|2)`이 담당한다. 성향 시스템(`-1000..+1000`) 모델링은 [#123](https://github.com/smalljiny/muhan/issues/123) 소관이다 — 상세는 [character-flags.md](character-flags.md).
 
 ### accountRepository (`packages/server/src/repo/accountRepository.ts`)
 

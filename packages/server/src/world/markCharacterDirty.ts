@@ -87,8 +87,8 @@ function copyBuffs(buffs: Buffs): Buffs {
 type StatusEffectCopier = (from: StatusEffects, to: StatusEffects) => void
 
 /**
- * statusEffects 키별 복사기 목록. 세 효과는 값 형태가 서로 달라(poison/disease는 interval 보유, blind는
- * 미보유) 인덱스 순회로는 타입이 좁혀지지 않으므로 키별 복사기로 나눈다.
+ * statusEffects 키별 복사기 목록. 효과마다 값 형태가 서로 달라(poison/disease는 interval 보유,
+ * blind/silence/fear는 미보유) 인덱스 순회로는 타입이 좁혀지지 않으므로 키별 복사기로 나눈다.
  *
  * `satisfies Record<StatusEffectName, ...>`가 **exhaustive를 컴파일에서 강제**한다 — 스키마에 네 번째
  * 효과가 추가되면 이 리터럴에서 누락 프로퍼티 에러가 난다(조용한 스냅샷 누락 = stale write 재발 방지).
@@ -103,6 +103,12 @@ const STATUS_EFFECT_COPIERS = {
   },
   blind: (from, to) => {
     if (from.blind !== undefined) to.blind = { ...from.blind }
+  },
+  silence: (from, to) => {
+    if (from.silence !== undefined) to.silence = { ...from.silence }
+  },
+  fear: (from, to) => {
+    if (from.fear !== undefined) to.fear = { ...from.fear }
   },
 } satisfies Record<StatusEffectName, StatusEffectCopier>
 

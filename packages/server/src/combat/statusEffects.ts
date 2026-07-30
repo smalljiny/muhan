@@ -1,5 +1,5 @@
 import { type Character } from 'shared'
-import { F_SET, PPOISN, PDISEA, PBLIND } from '../world/hexFlags.js'
+import { F_SET, PPOISN, PDISEA, PBLIND, PSILNC, PFEARS } from '../world/hexFlags.js'
 
 /**
  * statusEffects — 명명 상태이상(Story 1 characterSchema.statusEffects)의 부여·만료 순수 헬퍼와
@@ -16,7 +16,10 @@ import { F_SET, PPOISN, PDISEA, PBLIND } from '../world/hexFlags.js'
  * immutability: 모든 grant는 입력 Character·기존 statusEffects 객체를 변형하지 않고 새 객체를 반환한다.
  */
 
-/** 8바이트(16자) 0 기반 flag hex. PDISEA=41·PBLIND=42가 byte 5에 안착하도록 full-width에서 시작한다. */
+/**
+ * 8바이트(16자) 0 기반 flag hex. PDISEA=41·PBLIND=42·PFEARS=43·PSILNC=44가 byte 5에 안착하도록
+ * full-width에서 시작한다.
+ */
 const ZERO_FLAGS = '0000000000000000'
 
 /** poison until/interval을 세팅한 새 Character를 반환한다(기존 statusEffects 병합, 입력 불변). */
@@ -40,6 +43,32 @@ export function grantBlind(character: Character, until: number): Character {
   return {
     ...character,
     statusEffects: { ...character.statusEffects, blind: { until } },
+  }
+}
+
+/**
+ * silence until을 세팅한 새 Character를 반환한다(blind 대칭 — 간격 없음, 발화 차단은 주기 피해가 아니다).
+ *
+ * 시전 경로 미배선 — 플레이어 대상 디버프 부여는 본 토픽 범위 밖(debuffEffects는
+ * `target.kind !== 'creature'`에서 유예 유지)이다. 이 헬퍼는 순수 상태 전이만 제공한다.
+ */
+export function grantSilence(character: Character, until: number): Character {
+  return {
+    ...character,
+    statusEffects: { ...character.statusEffects, silence: { until } },
+  }
+}
+
+/**
+ * fear until을 세팅한 새 Character를 반환한다(blind 대칭 — 간격 없음).
+ *
+ * 시전 경로 미배선 — 플레이어 대상 디버프 부여는 본 토픽 범위 밖(debuffEffects는
+ * `target.kind !== 'creature'`에서 유예 유지)이다. 이 헬퍼는 순수 상태 전이만 제공한다.
+ */
+export function grantFear(character: Character, until: number): Character {
+  return {
+    ...character,
+    statusEffects: { ...character.statusEffects, fear: { until } },
   }
 }
 
@@ -71,6 +100,30 @@ export function clearBlind(character: Character): Character {
   return { ...character, statusEffects: next }
 }
 
+/**
+ * silence 필드를 해제한 새 Character를 반환한다(clearBlind 대칭, 입력 불변).
+ *
+ * 시전 경로 미배선 — 플레이어 대상 디버프 해제도 본 토픽 범위 밖이다.
+ */
+export function clearSilence(character: Character): Character {
+  if (character.statusEffects === undefined) return character
+  const next = { ...character.statusEffects }
+  delete next.silence
+  return { ...character, statusEffects: next }
+}
+
+/**
+ * fear 필드를 해제한 새 Character를 반환한다(clearBlind 대칭, 입력 불변).
+ *
+ * 시전 경로 미배선 — 플레이어 대상 디버프 해제도 본 토픽 범위 밖이다.
+ */
+export function clearFear(character: Character): Character {
+  if (character.statusEffects === undefined) return character
+  const next = { ...character.statusEffects }
+  delete next.fear
+  return { ...character, statusEffects: next }
+}
+
 /** 절대-틱 만료 판정 — 효과가 존재하고 until >= now이면 활성. */
 export function isActive(effect: { until: number } | undefined, now: number): boolean {
   return effect !== undefined && effect.until >= now
@@ -91,15 +144,28 @@ export function isBlindActive(character: Character, now: number): boolean {
   return isActive(character.statusEffects?.blind, now)
 }
 
+/** silence가 활성(만료 안 됨)인지. 시전 경로 미배선 — 판정만 제공한다. */
+export function isSilenceActive(character: Character, now: number): boolean {
+  return isActive(character.statusEffects?.silence, now)
+}
+
+/** fear가 활성(만료 안 됨)인지. 시전 경로 미배선 — 판정만 제공한다. */
+export function isFearActive(character: Character, now: number): boolean {
+  return isActive(character.statusEffects?.fear, now)
+}
+
 /**
  * 명명 상태이상 → combat flag hex 뷰 투영. 활성(만료 안 된) 효과만 대응 P-flag 비트를 세팅한다:
- * poison→PPOISN(16), disease→PDISEA(41), blind→PBLIND(42). 만료 효과는 제외한다.
- * 반환 hex는 F_ISSET로 판독 가능하다(소비측의 combat flag 관용 무파괴).
+ * poison→PPOISN(16), disease→PDISEA(41), blind→PBLIND(42), fear→PFEARS(43), silence→PSILNC(44).
+ * 만료 효과는 제외한다. PFEARS·PSILNC도 PBLIND와 같은 byte 5에 안착하므로 ZERO_FLAGS 16자 폭에서
+ * 절단 없이 세팅된다. 반환 hex는 F_ISSET로 판독 가능하다(소비측의 combat flag 관용 무파괴).
  */
 export function projectStatusFlags(character: Character, now: number): string {
   let hex = ZERO_FLAGS
   if (isPoisonActive(character, now)) hex = F_SET(hex, PPOISN)
   if (isDiseaseActive(character, now)) hex = F_SET(hex, PDISEA)
   if (isBlindActive(character, now)) hex = F_SET(hex, PBLIND)
+  if (isFearActive(character, now)) hex = F_SET(hex, PFEARS)
+  if (isSilenceActive(character, now)) hex = F_SET(hex, PSILNC)
   return hex
 }

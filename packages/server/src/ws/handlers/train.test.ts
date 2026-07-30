@@ -49,10 +49,10 @@ function makeRoom(roomId: number, flags: number[]): RoomNode {
 /**
  * 유효 Character 픽스처 — progression/train.test.ts의 makeChar 미러.
  *
- * `alignment`를 **의도적으로 싣지 않는다**(OQ5): train 경로는 alignment를 한 번도 읽지 않으므로
- * (checkLocation·neededExp·goldToTrain·classifyPrestige·upLevel·resync 전 구간), optional 필드가
- * 없는 문서로도 성공 경로가 관통해야 한다. alignment required 인터페이스(items/wear·combat)는
- * Character에서 별도 조립되며 train은 그중 어느 것도 거치지 않는다.
+ * `alignment`는 v6에서 **required로 승격**돼 더는 생략할 수 없다(부재 문서의 sentinel 0 시딩은
+ * backfillCharacterV6 소관). train 경로가 alignment를 한 번도 읽지 않는다는 사실(checkLocation·
+ * neededExp·goldToTrain·classifyPrestige·upLevel·resync 전 구간)은 그대로이나, 그 사실을 "필드를
+ * 생략한 문서"로 표현하는 것이 타입상 불가해졌으므로 형제 픽스처 관례대로 `1`을 싣는다.
  */
 function makeChar(overrides: Partial<Character> = {}): Character {
   return {
@@ -72,6 +72,7 @@ function makeChar(overrides: Partial<Character> = {}): Character {
     schemaVersion: 3,
     accountId: 'acc-1',
     status: 'active',
+    alignment: 1,
     ...overrides,
   }
 }
@@ -83,12 +84,13 @@ const SUCCESS_LEVEL = 2
 const SUCCESS_EXP = neededExp(SUCCESS_LEVEL)
 const SUCCESS_GOLD = goldToTrain(SUCCESS_LEVEL)
 
-function makeSuccessChar(): Character {
+function makeSuccessChar(overrides: Partial<Character> = {}): Character {
   return makeChar({
     class: 1,
     level: SUCCESS_LEVEL,
     experience: SUCCESS_EXP,
     gold: SUCCESS_GOLD,
+    ...overrides,
   })
 }
 
@@ -151,17 +153,20 @@ describe('createTrainHandler', () => {
       }
     })
 
-    it('alignment가 없는 Character로도 성공한다 (OQ5 — train 경로는 alignment를 읽지 않는다)', () => {
-      const character = makeSuccessChar()
-      expect(character.alignment).toBeUndefined() // 픽스처가 실제로 alignment를 안 싣는지 고정
-      const { deps } = makeDeps({
-        live: { character },
-        room: makeRoom(1, trainingFlagsForClass(1)),
-      })
+    it('alignment 값과 무관하게 성공한다 (OQ5 — train 경로는 alignment를 읽지 않는다)', () => {
+      // v6에서 alignment가 required가 돼 "필드를 생략한 문서"로는 이 사실을 표현할 수 없다.
+      // 대신 세 값(중립 sentinel 0 · 선 1 · 악 2) 전부에서 성공 경로가 동일함을 고정한다 —
+      // 어느 값에서든 분기하면 train이 alignment를 읽고 있다는 뜻이다.
+      for (const alignment of [0, 1, 2]) {
+        const { deps } = makeDeps({
+          live: { character: makeSuccessChar({ alignment }) },
+          room: makeRoom(1, trainingFlagsForClass(1)),
+        })
 
-      const event = createTrainHandler(deps)({ type: 'progress:train' }, actor)
+        const event = createTrainHandler(deps)({ type: 'progress:train' }, actor)
 
-      expect(event).toMatchObject({ type: 'progress:trained' })
+        expect(event).toMatchObject({ type: 'progress:trained' })
+      }
     })
 
     it('markCharacterDirty가 정확히 1회 호출된다 (핸들러 중복 마킹 없음 — train.finalize가 소유)', () => {

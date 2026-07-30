@@ -101,6 +101,13 @@ export function study(char: StudyChar, book: SpellBook): StudyResult {
 
   // ④ 정렬 — OGOODO인데 alignment<-100, 또는 OEVILO인데 alignment>100이면 실패(magic1.c:305).
   //    원작은 이때 비법서를 방에 떨어뜨리지만, 그 소멸/이동은 배선 계층 소관(store만 불변 반환).
+  //
+  //    known divergence — 현 alignment는 생성 인터뷰가 고른 1(선)|2(악) 스칼라이고 backfill 시드는
+  //    0(중립)이라, 값역이 [0,2]다. 따라서 아래 두 분기(<-100, >100)는 실 데이터에서 항상 거짓이며
+  //    OGOODO/OEVILO 게이트는 미발화한다 — 현재 어떤 캐릭터도 정렬로 연마를 거부당하지 않는다.
+  //    임계값은 오라클(-100/+100)을 그대로 이식해 두고, E6에서 -1000..+1000 성향 시스템을 도입해
+  //    alignment가 실제로 그 범위를 오르내리면 코드 변경 없이 발화한다. 임계값을 현 1|2 값역에
+  //    맞춰 재조정하지 않는다(오라클 상수 보존이 E6 확장 시 재해석을 불필요하게 만든다).
   if (
     (F_ISSET(book.flags, OGOODO) && char.alignment < -100) ||
     (F_ISSET(book.flags, OEVILO) && char.alignment > 100)
