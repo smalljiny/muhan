@@ -1,0 +1,1420 @@
+<title>무한 포팅 로드맵 — 진행 궤도</title>
+<style>
+  :root {
+    --bg: #f4f5f9;
+    --panel: #ffffff;
+    --panel-2: #fafbfd;
+    --ink: #14161d;
+    --ink-2: #4b5162;
+    --ink-3: #7b8194;
+    --line: #e1e4ec;
+    --line-strong: #cbd0dc;
+
+    --star: #4b62d6;
+    --star-soft: #e7eaf9;
+    --star-line: #b9c2ef;
+
+    --now: #d4562a;
+    --now-soft: #fbe9e1;
+
+    --done: #2f8a6b;
+    --done-soft: #e0f1ea;
+    --wip: #a97a12;
+    --wip-soft: #f7eeda;
+    --todo: #7b8194;
+    --todo-soft: #eceef4;
+    --debt: #c0433e;
+    --debt-soft: #f9e3e2;
+
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Pretendard", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+    --shadow: 0 1px 2px rgba(20,22,29,.04), 0 4px 14px rgba(20,22,29,.05);
+    --shadow-lg: 0 10px 20px rgba(12,14,20,.12), 0 30px 60px rgba(12,14,20,.2);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1119; --panel: #161a23; --panel-2: #1a1f29;
+      --ink: #e8ebf2; --ink-2: #a5adbe; --ink-3: #6d7588;
+      --line: #252b37; --line-strong: #323a49;
+      --star: #8b9bee; --star-soft: #1d2340; --star-line: #3a4577;
+      --now: #f0794a; --now-soft: #3a2118;
+      --done: #46b48d; --done-soft: #113028;
+      --wip: #d2a344; --wip-soft: #332810;
+      --todo: #7b8496; --todo-soft: #222732;
+      --debt: #e5615c; --debt-soft: #371d1c;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.35);
+      --shadow-lg: 0 10px 24px rgba(0,0,0,.5), 0 34px 70px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f5f9; --panel: #ffffff; --panel-2: #fafbfd;
+    --ink: #14161d; --ink-2: #4b5162; --ink-3: #7b8194;
+    --line: #e1e4ec; --line-strong: #cbd0dc;
+    --star: #4b62d6; --star-soft: #e7eaf9; --star-line: #b9c2ef;
+    --now: #d4562a; --now-soft: #fbe9e1;
+    --done: #2f8a6b; --done-soft: #e0f1ea;
+    --wip: #a97a12; --wip-soft: #f7eeda;
+    --todo: #7b8194; --todo-soft: #eceef4;
+    --debt: #c0433e; --debt-soft: #f9e3e2;
+    --shadow: 0 1px 2px rgba(20,22,29,.04), 0 4px 14px rgba(20,22,29,.05);
+    --shadow-lg: 0 10px 20px rgba(12,14,20,.12), 0 30px 60px rgba(12,14,20,.2);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1119; --panel: #161a23; --panel-2: #1a1f29;
+    --ink: #e8ebf2; --ink-2: #a5adbe; --ink-3: #6d7588;
+    --line: #252b37; --line-strong: #323a49;
+    --star: #8b9bee; --star-soft: #1d2340; --star-line: #3a4577;
+    --now: #f0794a; --now-soft: #3a2118;
+    --done: #46b48d; --done-soft: #113028;
+    --wip: #d2a344; --wip-soft: #332810;
+    --todo: #7b8496; --todo-soft: #222732;
+    --debt: #e5615c; --debt-soft: #371d1c;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.35);
+    --shadow-lg: 0 10px 24px rgba(0,0,0,.5), 0 34px 70px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); line-height: 1.55; -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--star); text-decoration: none; border-bottom: 1px solid transparent; }
+  a:hover { border-bottom-color: var(--star-line); }
+  a:focus-visible { outline: 2px solid var(--star); outline-offset: 2px; border-radius: 3px; }
+  code { font-family: var(--mono); font-size: .88em; }
+
+  .wrap { max-width: 1140px; margin: 0 auto; padding: 42px 26px 72px; }
+
+  /* ── header ─────────────────────────────── */
+  .eyebrow {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--ink-3); margin: 0 0 9px;
+  }
+  h1 {
+    font-size: clamp(25px, 3.2vw, 34px); line-height: 1.14; margin: 0 0 10px;
+    letter-spacing: -.022em; text-wrap: balance; font-weight: 640;
+  }
+  .lede { max-width: 70ch; color: var(--ink-2); font-size: 15px; margin: 0; }
+
+  /* ── HERO: 진행 궤도 ────────────────────── */
+  .orbit {
+    margin-top: 30px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 16px; box-shadow: var(--shadow); padding: 26px 4px 22px;
+    position: relative; overflow: hidden;
+  }
+  .orbit-head {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    padding: 0 24px; margin-bottom: 6px;
+  }
+  .orbit-head h2 { font-size: 15px; font-weight: 640; margin: 0; letter-spacing: -.01em; }
+  .orbit-head .tag {
+    font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--ink-3);
+  }
+  .orbit-head .pct {
+    margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .orbit-head .pct b { color: var(--ink); font-size: 13px; }
+
+  .rail-box { position: relative; padding: 46px 24px 8px; }
+
+  .stations {
+    display: grid;
+    grid-template-columns: repeat(11, minmax(74px, 1fr));
+    position: relative; z-index: 2;
+  }
+
+  /* rail sits behind the node row */
+  .rail, .rail-fill {
+    position: absolute; height: 3px; border-radius: 3px; top: 46px;
+    margin-top: 19.5px; /* node center: 42px / 2 - rail 3px / 2 */
+    z-index: 1;
+  }
+  .rail { left: 24px; right: 24px; background: var(--line-strong); }
+  .rail-fill {
+    left: 24px; width: var(--fill, 0%);
+    background: linear-gradient(90deg, var(--done), var(--done) 78%, var(--now));
+  }
+
+  .st { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0 4px; }
+
+  .node {
+    width: 42px; height: 42px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 12px; font-weight: 700;
+    background: var(--panel); border: 2.5px solid var(--line-strong); color: var(--ink-3);
+    flex: none; position: relative; z-index: 2;
+  }
+  .st.done .node { border-color: var(--done); background: var(--done-soft); color: var(--done); }
+  .st.wip .node  { border-color: var(--wip);  background: var(--wip-soft);  color: var(--wip); }
+  .st.todo .node { border-color: var(--line-strong); background: var(--panel-2); }
+
+  .st.gate .node {
+    border-radius: 7px; transform: rotate(45deg);
+    border-color: var(--star); background: var(--star-soft); color: var(--star);
+  }
+  .st.gate .node span { transform: rotate(-45deg); font-size: 13px; }
+  .st.gate.locked .node { border-color: var(--line-strong); background: var(--panel-2); color: var(--ink-3); }
+
+  .st-id {
+    font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .05em;
+    color: var(--ink-2); margin-top: 9px;
+  }
+  .st.gate .st-id { color: var(--star); }
+  .st.gate.locked .st-id { color: var(--ink-3); }
+  .st-lbl { font-size: 11.5px; color: var(--ink-3); line-height: 1.35; margin-top: 2px; max-width: 12ch; }
+
+  .st-bar { width: 42px; height: 4px; border-radius: 3px; background: var(--todo-soft); margin-top: 8px; overflow: hidden; }
+  .st-bar i { display: block; height: 100%; background: var(--done); }
+  .st.wip .st-bar i { background: var(--wip); }
+  .st.gate .st-bar { display: none; }
+
+  /* NOW marker */
+  .now-flag {
+    position: absolute; top: 0; transform: translateX(-50%);
+    left: var(--now-x, 28%); z-index: 4; display: flex; flex-direction: column; align-items: center;
+    pointer-events: none;
+  }
+  .now-pill {
+    background: var(--now); color: #fff; font-family: var(--mono); font-size: 11px; font-weight: 700;
+    letter-spacing: .06em; padding: 4px 11px; border-radius: 999px; white-space: nowrap;
+    box-shadow: 0 3px 10px rgba(212,86,42,.35);
+  }
+  .now-stem { width: 2px; height: 14px; background: var(--now); }
+  .now-tip {
+    width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent;
+    border-top: 6px solid var(--now);
+  }
+  .st.now .node {
+    border-color: var(--now); background: var(--now-soft); color: var(--now);
+    box-shadow: 0 0 0 5px var(--now-soft);
+  }
+  .st.now .st-id { color: var(--now); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .st.now .node { animation: pulse 2.6s ease-out infinite; }
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(212,86,42,.34); }
+      70%  { box-shadow: 0 0 0 12px rgba(212,86,42,0); }
+      100% { box-shadow: 0 0 0 0 rgba(212,86,42,0); }
+    }
+  }
+
+  .orbit-legend {
+    display: flex; flex-wrap: wrap; gap: 7px 18px; padding: 16px 24px 0; margin-top: 14px;
+    border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-2);
+  }
+  .orbit-legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .sw { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+  .sw.d { background: var(--done-soft); border: 2px solid var(--done); }
+  .sw.w { background: var(--wip-soft); border: 2px solid var(--wip); }
+  .sw.t { background: var(--panel-2); border: 2px solid var(--line-strong); }
+  .sw.g { background: var(--star-soft); border: 2px solid var(--star); border-radius: 3px; transform: rotate(45deg); }
+  .sw.n { background: var(--now-soft); border: 2px solid var(--now); }
+  .hint { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-left: auto; letter-spacing: .04em; }
+  .hint::before { content: "⌖ "; color: var(--star); }
+  @media (hover: none), (pointer: coarse) { .hint { display: none; } }
+
+  /* ── 현재 위치 3-카드 ───────────────────── */
+  .status {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
+    gap: 12px; margin-top: 14px;
+  }
+  .s-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 15px 17px; box-shadow: var(--shadow); border-top: 3px solid var(--line-strong);
+  }
+  .s-card.past { border-top-color: var(--done); }
+  .s-card.here { border-top-color: var(--now); background: var(--panel); }
+  .s-card.nextup { border-top-color: var(--star); }
+  .s-k {
+    font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+  .s-card.past .s-k { color: var(--done); }
+  .s-card.here .s-k { color: var(--now); }
+  .s-card.nextup .s-k { color: var(--star); }
+  .s-t { font-size: 15px; font-weight: 640; letter-spacing: -.012em; margin: 5px 0 5px; }
+  .s-d { font-size: 12.5px; color: var(--ink-2); }
+  .s-d code { background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  .s-list { margin: 7px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+  .s-list li { font-size: 12.5px; color: var(--ink-2); display: flex; gap: 7px; }
+  .s-list li::before { content: "▸"; color: var(--now); flex: none; }
+  .s-card.nextup .s-list li::before { color: var(--star); }
+  .s-list li.muted { color: var(--ink-3); }
+  .s-list li.muted::before { content: "⏸"; color: var(--ink-3); font-size: 10px; }
+
+  /* ── 의존 그래프 ────────────────────────── */
+  :root {
+    --m0: #64748b; --m0s: #e8eaef;
+    --m1: #0d8f84; --m1s: #dcf0ee;
+    --m2: #3b6fd4; --m2s: #e3ebfa;
+    --m3: #7c5cd6; --m3s: #ebe5fa;
+    --m4: #a94a9c; --m4s: #f7e4f4;
+    --m5: #b4801a; --m5s: #f7eeda;
+    --m6: #5f8f27; --m6s: #e9f2d9;
+    --m7: #1c7f9e; --m7s: #dcedf5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --m0: #94a3b8; --m0s: #242a35;
+      --m1: #38c2b3; --m1s: #12312e;
+      --m2: #7ea2ee; --m2s: #182642;
+      --m3: #a68bf0; --m3s: #241d3c;
+      --m4: #dd8ad0; --m4s: #382034;
+      --m5: #d2a344; --m5s: #332810;
+      --m6: #9cc75c; --m6s: #232f14;
+      --m7: #5cb6d4; --m7s: #122b35;
+    }
+  }
+  :root[data-theme="light"] {
+    --m0: #64748b; --m0s: #e8eaef; --m1: #0d8f84; --m1s: #dcf0ee;
+    --m2: #3b6fd4; --m2s: #e3ebfa; --m3: #7c5cd6; --m3s: #ebe5fa;
+    --m4: #a94a9c; --m4s: #f7e4f4; --m5: #b4801a; --m5s: #f7eeda;
+    --m6: #5f8f27; --m6s: #e9f2d9; --m7: #1c7f9e; --m7s: #dcedf5;
+  }
+  :root[data-theme="dark"] {
+    --m0: #94a3b8; --m0s: #242a35; --m1: #38c2b3; --m1s: #12312e;
+    --m2: #7ea2ee; --m2s: #182642; --m3: #a68bf0; --m3s: #241d3c;
+    --m4: #dd8ad0; --m4s: #382034; --m5: #d2a344; --m5s: #332810;
+    --m6: #9cc75c; --m6s: #232f14; --m7: #5cb6d4; --m7s: #122b35;
+  }
+
+  .graph-box {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+    box-shadow: var(--shadow); padding: 20px 0 16px;
+  }
+  .graph-scroll { overflow-x: auto; padding: 0 20px; }
+  .graph-scroll svg { display: block; width: 100%; min-width: 760px; height: auto; }
+
+  .edge { fill: none; stroke: var(--line-strong); stroke-width: 1.5; }
+  .edge.debt { stroke: var(--debt); stroke-dasharray: 4 3; opacity: .7; }
+
+  .gnode { cursor: pointer; }
+  .gnode circle.body {
+    fill: var(--ns); stroke: var(--nc); stroke-width: 2.4;
+    transition: r .12s ease, stroke-width .12s ease;
+  }
+  .gnode.todo circle.body { fill: var(--panel-2); stroke-width: 1.8; stroke-dasharray: 4 3.2; }
+  .gnode circle.inner { fill: none; stroke: var(--nc); stroke-width: 1.4; stroke-dasharray: 3 3.4; opacity: .8; }
+  .gnode text {
+    font-family: var(--mono); font-size: 12px; font-weight: 700; fill: var(--nc);
+    text-anchor: middle; dominant-baseline: central; pointer-events: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .gnode.sm text { font-size: 10.5px; }
+  .gnode.sm circle.body { stroke-width: 1.8; }
+  .gnode.dbt { --nc: var(--debt); --ns: var(--debt-soft); }
+  .gnode:hover circle.body { stroke-width: 3.4; }
+  .gnode-link { outline: none; }
+  .gnode-link:focus-visible circle.body { stroke-width: 3.6; stroke: var(--star); }
+  .gnode.m0 { --nc: var(--m0); --ns: var(--m0s); }
+  .gnode.m1 { --nc: var(--m1); --ns: var(--m1s); }
+  .gnode.m2 { --nc: var(--m2); --ns: var(--m2s); }
+  .gnode.m3 { --nc: var(--m3); --ns: var(--m3s); }
+  .gnode.m4 { --nc: var(--m4); --ns: var(--m4s); }
+  .gnode.m5 { --nc: var(--m5); --ns: var(--m5s); }
+  .gnode.m6 { --nc: var(--m6); --ns: var(--m6s); }
+  .gnode.m7 { --nc: var(--m7); --ns: var(--m7s); }
+  .g-cap { font-family: var(--mono); font-size: 10px; fill: var(--ink-3); text-anchor: end; }
+
+  .g-legend {
+    display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 15px 22px 0; margin-top: 14px;
+    border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-2);
+  }
+  .g-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .g-legend .ms-sw { width: 13px; height: 13px; border-radius: 50%; flex: none; border: 2.4px solid; }
+  .g-legend .ms-sw.g0 { border-color: var(--m0); background: var(--m0s); }
+  .g-legend .ms-sw.g1 { border-color: var(--m1); background: var(--m1s); }
+  .g-legend .ms-sw.g2 { border-color: var(--m2); background: var(--m2s); }
+  .g-legend .ms-sw.g3 { border-color: var(--m3); background: var(--m3s); }
+  .g-legend .ms-sw.g4 { border-color: var(--m4); background: var(--m4s); }
+  .g-legend .ms-sw.g5 { border-color: var(--m5); background: var(--m5s); }
+  .g-legend .ms-sw.g6 { border-color: var(--m6); background: var(--m6s); }
+  .g-legend .ms-sw.g7 { border-color: var(--m7); background: var(--m7s); }
+  .g-legend .ms-sw.gx { border-color: var(--debt); background: var(--debt-soft); border-style: dashed; }
+  .g-legend .div { width: 1px; height: 15px; background: var(--line); }
+  .g-legend .st-sw { width: 13px; height: 13px; border-radius: 50%; flex: none;
+    border: 2.4px solid var(--ink-3); background: var(--todo-soft); }
+  .g-legend .st-sw.p { background: var(--todo-soft); box-shadow: inset 0 0 0 1.4px var(--panel); }
+  .g-legend .st-sw.n { background: var(--panel-2); border-style: dashed; border-width: 1.8px; }
+
+  /* floating note */
+  #gnote {
+    position: fixed; z-index: 60; pointer-events: none; opacity: 0;
+    transform: translateY(4px); transition: opacity .13s ease, transform .13s ease;
+    max-width: 330px; background: var(--panel); color: var(--ink);
+    border: 1px solid var(--line-strong); border-left: 3px solid var(--nc, var(--star));
+    border-radius: 10px; padding: 10px 13px; box-shadow: var(--shadow-lg);
+  }
+  #gnote.on { opacity: 1; transform: translateY(0); }
+  #gnote .n-num {
+    font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--nc, var(--star));
+    letter-spacing: .04em;
+  }
+  #gnote .n-title { font-size: 13.5px; font-weight: 620; letter-spacing: -.01em; margin: 2px 0 4px; }
+  #gnote .n-meta { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); letter-spacing: .04em; }
+  #gnote .n-dep { font-size: 12px; color: var(--ink-2); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
+  @media (prefers-reduced-motion: reduce) { #gnote { transition: opacity .01s linear; } }
+
+  /* ── section heads ──────────────────────── */
+  .sec { margin-top: 46px; }
+  .sec-head { display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap; margin-bottom: 4px; }
+  .sec-head h2 { font-size: 19px; font-weight: 640; letter-spacing: -.015em; margin: 0; }
+  .sec-tag { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
+  .sec-note { font-size: 13.5px; color: var(--ink-2); margin: 0 0 18px; max-width: 78ch; }
+
+  /* ── timeline detail ────────────────────── */
+  .track { display: flex; flex-direction: column; gap: 13px; }
+
+  .ms {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; box-shadow: var(--shadow); overflow: hidden;
+  }
+  .ms.is-now { border-color: var(--now); box-shadow: 0 0 0 3px var(--now-soft), var(--shadow); }
+  .ms-head {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 13px 18px 12px; border-bottom: 1px solid var(--line); background: var(--panel-2);
+  }
+  .ms-id {
+    font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: .04em;
+    color: var(--ink); background: var(--todo-soft); border: 1px solid var(--line-strong);
+    border-radius: 6px; padding: 2px 8px;
+  }
+  .ms.closed .ms-id { background: var(--done-soft); border-color: var(--done); color: var(--done); }
+  .ms-name { font-size: 15px; font-weight: 620; letter-spacing: -.01em; }
+  .ms-meta { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-left: auto; }
+  .ms-now {
+    font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .07em;
+    background: var(--now); color: #fff; border-radius: 5px; padding: 2px 8px;
+  }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 1px; background: var(--line); }
+  .card { background: var(--panel); padding: 15px 18px 17px; position: relative; }
+  .card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
+  .card.d::before { background: var(--done); }
+  .card.w::before { background: var(--wip); }
+  .card.t::before { background: var(--line-strong); }
+
+  .card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .chip {
+    font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; border-radius: 5px; padding: 2px 7px; flex: none;
+  }
+  .chip.d { background: var(--done-soft); color: var(--done); }
+  .chip.w { background: var(--wip-soft); color: var(--wip); }
+  .chip.t { background: var(--todo-soft); color: var(--ink-3); }
+  .card-num { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); margin-left: auto; }
+  .card-title { font-size: 14.5px; font-weight: 620; letter-spacing: -.005em; }
+
+  .kv { display: flex; gap: 8px; font-size: 12.5px; margin-top: 8px; }
+  .kv .k {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--ink-3); flex: none; width: 42px; padding-top: 2px;
+  }
+  .kv .v { color: var(--ink-2); }
+  .kv.rest .v { color: var(--ink); }
+  .kv .v code { background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: var(--ink); }
+
+  /* ── checkpoint band ────────────────────── */
+  .cp {
+    border: 1.5px solid var(--star); background: var(--star-soft);
+    border-radius: 14px; padding: 16px 20px 18px; box-shadow: var(--shadow); position: relative;
+  }
+  .cp.is-now { border-color: var(--now); background: var(--now-soft); box-shadow: 0 0 0 3px var(--now-soft), var(--shadow); }
+  .cp-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .cp-mark { color: var(--star); font-size: 13px; }
+  .cp.is-now .cp-mark { color: var(--now); }
+  .cp-id { font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--star); }
+  .cp.is-now .cp-id { color: var(--now); }
+  .cp-title { font-size: 16px; font-weight: 660; letter-spacing: -.012em; }
+  .cp-when { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-left: auto; }
+  .cp-desc { font-size: 13.5px; color: var(--ink-2); margin: 6px 0 12px; max-width: 80ch; }
+
+  .gates { display: flex; flex-wrap: wrap; gap: 7px; }
+  .gate {
+    font-size: 12.5px; padding: 4px 11px; border-radius: 999px;
+    border: 1px solid var(--star-line); background: var(--panel); color: var(--ink-2);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .gate.ok { border-color: var(--done); color: var(--done); }
+  .gate.open { border-style: dashed; }
+  .gate.held { border-style: dashed; border-color: var(--line-strong); color: var(--ink-3); }
+  .cp.is-now .gate.open { border-color: var(--now); color: var(--now); }
+  .cp.is-now .gate.held { border-color: var(--line-strong); color: var(--ink-3); }
+  .cp-foot { font-size: 12.5px; color: var(--ink-2); margin: 12px 0 0; padding-top: 11px; border-top: 1px solid var(--star-line); }
+  .cp.is-now .cp-foot { border-top-color: var(--now); }
+  .cp-foot b { color: var(--star); font-weight: 620; }
+  .cp.is-now .cp-foot b { color: var(--now); }
+
+  /* ── debt ───────────────────────────────── */
+  .debt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .debt-card {
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--line-strong);
+    border-radius: 10px; padding: 13px 16px; box-shadow: var(--shadow);
+  }
+  .debt-card.high { border-left-color: var(--debt); }
+  .debt-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .sev {
+    font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .06em;
+    border-radius: 5px; padding: 2px 7px; background: var(--todo-soft); color: var(--ink-3);
+  }
+  .sev.high { background: var(--debt-soft); color: var(--debt); }
+  .debt-num { font-family: var(--mono); font-size: 11.5px; margin-left: auto; }
+  .debt-title { font-size: 13.5px; font-weight: 600; }
+  .debt-body { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
+  .debt-gate { font-family: var(--mono); font-size: 10.5px; color: var(--star); margin-top: 8px; letter-spacing: .04em; }
+
+  /* ── next ───────────────────────────────── */
+  .next { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .next-card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 15px 17px; box-shadow: var(--shadow); }
+  .next-n { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--star); letter-spacing: .05em; }
+  .next-t { font-size: 14px; font-weight: 620; margin: 3px 0 4px; }
+  .next-d { font-size: 12.5px; color: var(--ink-2); }
+
+  footer {
+    margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--ink-3); font-family: var(--mono);
+    display: flex; flex-wrap: wrap; gap: 6px 20px;
+  }
+
+  /* ── hover zoom overlay ─────────────────── */
+  #zoom-layer { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
+  #zoom-layer::before {
+    content: ""; position: absolute; inset: 0; background: rgba(12,14,20,.34);
+    opacity: 0; transition: opacity .18s ease;
+  }
+  #zoom-layer.on::before { opacity: 1; }
+  @media (prefers-color-scheme: dark) { #zoom-layer::before { background: rgba(0,0,0,.5); } }
+  :root[data-theme="dark"] #zoom-layer::before { background: rgba(0,0,0,.5); }
+  :root[data-theme="light"] #zoom-layer::before { background: rgba(12,14,20,.34); }
+
+  .zoom-clone {
+    position: fixed; margin: 0; opacity: 0; transform-origin: center center;
+    transform: translate(var(--dx, 0px), var(--dy, 0px)) scale(1);
+    transition: transform .17s cubic-bezier(.2,.7,.3,1), opacity .17s ease;
+    background: var(--panel); border: 1px solid var(--line-strong);
+    border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-lg);
+  }
+  .zoom-clone.in { opacity: 1; transform: translate(var(--dx, 0px), var(--dy, 0px)) scale(var(--s, 1.2)); }
+  .zoom-clone.cp { border-color: var(--star); }
+  .zoom-clone.cp.is-now, .zoom-clone.ms.is-now { border-color: var(--now); }
+  .zoom-clone .st.now .node { animation: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .zoom-clone { transition: opacity .01s linear; }
+    #zoom-layer::before { transition: none; }
+  }
+
+  /* ── responsive: 궤도를 세로로 ──────────── */
+  @media (max-width: 900px) {
+    .rail-box { padding: 12px 18px 8px; }
+    .rail, .rail-fill { top: 12px; margin-top: 0; width: 3px; height: auto; }
+    .rail { left: 39px; right: auto; bottom: 40px; }
+    .rail-fill { left: 39px; width: 3px; height: var(--fill-v, 0%); background: linear-gradient(180deg, var(--done), var(--done) 78%, var(--now)); }
+    .stations { grid-template-columns: 1fr; gap: 14px; }
+    .st { flex-direction: row; align-items: center; text-align: left; gap: 13px; padding: 0; }
+    .st-id { margin-top: 0; flex: none; width: 42px; }
+    .st-lbl { max-width: none; }
+    .st-bar { width: 60px; margin-top: 0; margin-left: auto; flex: none; }
+    .now-flag { position: static; transform: none; flex-direction: row; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .now-stem, .now-tip { display: none; }
+  }
+  @media (max-width: 620px) {
+    .wrap { padding: 32px 16px 56px; }
+    .ms-meta, .cp-when { margin-left: 0; width: 100%; }
+    .kv { flex-direction: column; gap: 2px; }
+    .kv .k { width: auto; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">muhan · github issues → roadmap · 2026-07-30 · <strong>develop fd40682</strong></p>
+    <h1>지금 어디에 있나 — 무한 포팅 진행 궤도</h1>
+    <p class="lede">1991–93년 Mordor 파생 한국어 MUD "무한"을 Node.js + 웹으로 재구현하는 프로젝트입니다. 에픽 E1~E13과 토픽·부채 이슈에서 파생한 현황입니다. <strong>규칙 엔진의 순수 레이어(전투·마법·진행·스탯·아이템·경제)는 전부 닫혔고, 지금 남은 것은 그 규칙을 살아 있는 세션에 잇는 "배선"입니다.</strong> 크리티컬 패스는 라이브 명령 배선 체인이며 그 유일한 헤드는 <a href="https://github.com/smalljiny/muhan/issues/118">#118</a>(오라클 이름 매처)입니다.</p>
+    <p class="lede" style="margin-top:8px"><strong>07-30 기준</strong> — 게임 command 디스패처 + 연마(<code>train</code>) 배선 <a href="https://github.com/smalljiny/muhan/issues/106">#106</a>(PR #125)과 <code>character.flags</code> 스키마 <a href="https://github.com/smalljiny/muhan/issues/117">#117</a>(PR #127)이 머지됐습니다. <code>PROTOCOL_VERSION</code> 3. <strong>열린 PR 0 · 활성 worktree 0 · 작업 트리 clean</strong> — 착수 대기 상태이고, 막힌 항목은 없습니다. 다만 라이브에 진입한 <code>train</code>이 <a href="https://github.com/smalljiny/muhan/issues/124">#124</a>(재접속 시 진행도 무성 revert)에 노출됐습니다.</p>
+
+    <!-- ══ HERO 다이어그램 ══ -->
+    <div class="orbit">
+      <div class="orbit-head">
+        <h2>진행 궤도</h2>
+        <span class="tag">M0 → M7 · 체크포인트 3</span>
+        <span class="pct"><b>8.5 / 13</b> 에픽 (E6 부분 완료 0.5 가중)</span>
+      </div>
+
+      <div class="rail-box">
+        <div class="rail" aria-hidden="true"></div>
+        <div class="rail-fill" style="--fill: 48%; --fill-v: 50%;" aria-hidden="true"></div>
+
+        <div class="now-flag" style="--now-x: 50%;" aria-hidden="true">
+          <span class="now-pill">지금 여기</span>
+          <span class="now-stem"></span>
+          <span class="now-tip"></span>
+        </div>
+
+        <div class="stations">
+          <div class="st done">
+            <div class="node">13/13</div>
+            <div class="st-id">M0</div>
+            <div class="st-lbl">역설계·게임 분석</div>
+            <div class="st-bar"><i style="width:100%"></i></div>
+          </div>
+
+          <div class="st done">
+            <div class="node">4/4</div>
+            <div class="st-id">M1</div>
+            <div class="st-lbl">서버 기반</div>
+            <div class="st-bar"><i style="width:100%"></i></div>
+          </div>
+
+          <div class="st done">
+            <div class="node">2/2</div>
+            <div class="st-id">M2</div>
+            <div class="st-lbl">월드·계정</div>
+            <div class="st-bar"><i style="width:100%"></i></div>
+          </div>
+
+          <div class="st done">
+            <div class="node">8/8</div>
+            <div class="st-id">M3</div>
+            <div class="st-lbl">규칙 코어</div>
+            <div class="st-bar"><i style="width:100%"></i></div>
+          </div>
+
+          <div class="st done">
+            <div class="node">2/2</div>
+            <div class="st-id">M4</div>
+            <div class="st-lbl">접속 셸</div>
+            <div class="st-bar"><i style="width:100%"></i></div>
+          </div>
+
+          <div class="st wip now">
+            <div class="node">2/7</div>
+            <div class="st-id">M5</div>
+            <div class="st-lbl">걷기</div>
+            <div class="st-bar"><i style="width:29%"></i></div>
+          </div>
+
+          <div class="st gate">
+            <div class="node"><span>◆</span></div>
+            <div class="st-id">CP1</div>
+            <div class="st-lbl">걸어볼 수 있는 무한</div>
+          </div>
+
+          <div class="st todo">
+            <div class="node">0/8</div>
+            <div class="st-id">M6</div>
+            <div class="st-lbl">싸우기</div>
+            <div class="st-bar"><i style="width:0%"></i></div>
+          </div>
+
+          <div class="st gate locked">
+            <div class="node"><span>◆</span></div>
+            <div class="st-id">CP2</div>
+            <div class="st-lbl">싸울 수 있는 무한</div>
+          </div>
+
+          <div class="st todo">
+            <div class="node">0/2</div>
+            <div class="st-id">M7</div>
+            <div class="st-lbl">어울리기</div>
+            <div class="st-bar"><i style="width:0%"></i></div>
+          </div>
+
+          <div class="st gate locked">
+            <div class="node"><span>◆</span></div>
+            <div class="st-id">CP3</div>
+            <div class="st-lbl">as-shipped 무한</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="orbit-legend">
+        <span><i class="sw d"></i> 완료</span>
+        <span><i class="sw w"></i> 부분 완료</span>
+        <span><i class="sw t"></i> 미착수</span>
+        <span><i class="sw g"></i> 체크포인트</span>
+        <span><i class="sw n"></i> 현재 위치</span>
+        <span class="hint">카드에 커서를 올리면 확대</span>
+      </div>
+    </div>
+
+    <!-- ══ 현재 위치 3-카드 ══ -->
+    <div class="status">
+      <div class="s-card past">
+        <div class="s-k">방금 끝낸 것</div>
+        <div class="s-t">디스패처 기반 + flags 스키마</div>
+        <p class="s-d"><a href="https://github.com/smalljiny/muhan/issues/106">#106</a> 게임 command 디스패처 + <code>progress:train</code> 라이브 배선(PR #125) · <a href="https://github.com/smalljiny/muhan/issues/117">#117</a> <code>character.flags</code> 스키마(PR #127). 후속 명령 5건이 복제할 <strong>deps 번들 패턴</strong>과 실명·침묵 게이트 입력원이 확보됐습니다.</p>
+      </div>
+      <div class="s-card here">
+        <div class="s-k">지금 해야 할 것 — 체인 헤드</div>
+        <div class="s-t">#118 오라클 이름 매처</div>
+        <ul class="s-list">
+          <li><strong>#118</strong> — #119·#120·#121·#122 <strong>4건의 유일한 blocking</strong></li>
+          <li>순수 유틸(완전일치 → 유일 접두 → 모호 거부)</li>
+          <li>저장소 전체에 이름 매처 <strong>0건</strong></li>
+        </ul>
+      </div>
+      <div class="s-card nextup">
+        <div class="s-k">병행 가능한 트랙</div>
+        <div class="s-t">FE 단독 + 무성 결함 2건</div>
+        <ul class="s-list">
+          <li>#60 E11 월드 뷰 — 프로토콜 게이트 해소, FE 단독</li>
+          <li>#124 진행도 무성 revert · #126 검증 거짓 통과</li>
+          <li>#116 이동 leave/join 방송 (독립)</li>
+        </ul>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══ 의존 관계 그래프 ══ -->
+  <section class="sec" aria-label="이슈 의존 관계">
+    <div class="sec-head">
+      <h2>이슈 의존 관계</h2>
+      <span class="sec-tag">dependency graph · 색 = 마일스톤</span>
+    </div>
+    <p class="sec-note">노드는 이슈 번호, 색은 아래 표에서 도출한 마일스톤 그룹입니다. 실선은 선행 관계(왼쪽이 먼저), 붉은 점선은 해당 항목을 게이팅하는 보안·부채 이슈입니다. 분석 에픽 A1~A13(<code>#1</code>~<code>#13</code>)은 전부 종료돼 결정 게이트 <code>#14</code>로 수렴하므로 그래프에서는 <code>#14</code> 하나로 접었습니다. <strong>노드에 커서를 올리면 제목이 뜨고, 클릭하면 GitHub 이슈로 이동</strong>합니다.</p>
+
+    <div class="graph-box">
+      <div class="graph-scroll">
+        <svg id="dep-graph" viewBox="0 0 800 500" role="img"
+             aria-label="이슈 의존 관계 그래프 — 결정 게이트 #14에서 시작해 E1(#30)·E2·E3·E8이 기반을 만들고, E6(#36)를 허브로 라이브 배선 체인(#118 → #119·#120·#121 → #122)이 갈라지며, 웹 클라이언트 라인(#58 → #59 → #60 → #61)이 아래로 흐릅니다."></svg>
+      </div>
+      <div class="g-legend">
+        <span><i class="ms-sw g0"></i> M0 역설계·분석</span>
+        <span><i class="ms-sw g1"></i> M1 서버 기반</span>
+        <span><i class="ms-sw g2"></i> M2 월드·계정</span>
+        <span><i class="ms-sw g3"></i> M3 규칙 코어</span>
+        <span><i class="ms-sw g4"></i> M4 접속 셸</span>
+        <span><i class="ms-sw g5"></i> M5 걷기</span>
+        <span><i class="ms-sw g6"></i> M6 싸우기</span>
+        <span><i class="ms-sw g7"></i> M7 어울리기</span>
+        <span><i class="ms-sw gx"></i> 부채</span>
+        <i class="div"></i>
+        <span><i class="st-sw"></i> 완료</span>
+        <span><i class="st-sw p"></i> 부분 (안쪽 점선 링)</span>
+        <span><i class="st-sw n"></i> 미착수 (점선 테두리)</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 상세 타임라인 ══ -->
+  <section class="sec" aria-label="마일스톤 상세">
+    <div class="sec-head">
+      <h2>마일스톤 상세</h2>
+      <span class="sec-tag">epics · topics · gates</span>
+    </div>
+    <p class="sec-note"><strong>M0~M7과 CP1~CP3은 GitHub 마일스톤 필드가 아니라 이 페이지가 이슈 의존 관계에서 도출한 그룹핑입니다</strong> — GitHub에는 <code>게임 분석</code>·<code>스택·아키텍처 결정</code>·<code>구현</code> 3개만 있고 E9~E13(<code>#58</code>~<code>#62</code>)에는 마일스톤이 지정돼 있지 않습니다. 또한 에픽 이슈의 열림/닫힘만으로는 판단할 수 없습니다 — E6(<code>#36</code>)는 열려 있지만 하위 규칙 토픽 8개가 전부 닫혔고, E4(<code>#34</code>)는 닫혔지만 유예 항목 <code>#116</code>이 열려 있습니다. 아래는 실제 완료 토픽 기준입니다.</p>
+
+    <div class="track">
+
+      <div class="ms closed">
+        <div class="ms-head">
+          <span class="ms-id">M0</span>
+          <span class="ms-name">역설계 · 게임 분석</span>
+          <span class="ms-meta">분석 13/13 · 결정 게이트 통과</span>
+        </div>
+        <div class="cards">
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">디스크 포맷 역설계 → JSON</span>
+              <span class="card-num">이슈 밖</span></div>
+            <div class="kv"><span class="k">확정</span><span class="v">32비트 ABI · EUC-KR · <code>room</code>=480 · <code>exit_</code>=44 · <code>object</code>=352 · <code>creature</code>=1184. C oracle 대조로 object 907 + creature 1049 전 필드 일치</span></div>
+            <div class="kv"><span class="k">산출</span><span class="v"><code>port/</code> 파서·변환기 → <code>data/world/</code>(rooms·creatures·objects·events). 방 3216개 중 정본 <strong>2341</strong> · orphan 875 제외</span></div>
+          </div>
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">게임 분석 A1~A13</span>
+              <span class="card-num">#1–#13</span></div>
+            <div class="kv"><span class="k">범위</span><span class="v">런타임 틱 · 명령 체계 · 한글 I/O · 이동/방 · 전투 · 마법 · 진행 · 아이템/경제 · 몬스터 AI · 소셜 · 특수 훅 · 세션 · DM 기능</span></div>
+            <div class="kv"><span class="k">역할</span><span class="v"><code>legacy/muhan/src</code>는 이식 대상이 아니라 <strong>동작 명세(behavioral oracle)</strong>. 분석 노트가 이후 전 에픽의 콘텐츠 출처</span></div>
+          </div>
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">스택·아키텍처 결정 게이트 ★</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/14">#14</a></div>
+            <div class="kv"><span class="k">확정</span><span class="v">손수 <code>ws</code>+EventEmitter(Colyseus 반려) · 단일 프로세스 1Hz 틱 · MongoDB 네이티브 세이브 · pnpm monorepo · as-shipped + 형상 개선 정책</span></div>
+            <div class="kv"><span class="k">정본</span><span class="v"><code>docs/specs/architecture.md</code> — 전역 불변식 6개 · 결정 D0~D8</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ms closed">
+        <div class="ms-head">
+          <span class="ms-id">M1</span>
+          <span class="ms-name">서버 기반 — 인프라 · 영속화 · 전송 · 테스트</span>
+          <span class="ms-meta">에픽 4/4 완료</span>
+        </div>
+        <div class="cards">
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">E1 monorepo 스캐폴딩</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/30">#30</a></div>
+            <div class="kv"><span class="k">토픽</span><span class="v"><code>monorepo</code> — pnpm workspaces 4패키지(<code>shared</code>·<code>server</code>·<code>client</code>·<code>port</code>) · vitest 80% 임계</span></div>
+          </div>
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">E2 영속화 기반 ★</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/31">#31</a></div>
+            <div class="kv"><span class="k">토픽</span><span class="v"><code>persistence</code>(#39) · <code>save-policy</code>(#40) — 부팅 전량 로드 · dirty-flag write-behind · 금화 가드</span></div>
+            <div class="kv rest"><span class="k">부채</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/43">#43</a> 은행 트랜잭션 ↔ write-behind 조정 · <a href="https://github.com/smalljiny/muhan/issues/124">#124</a> 재접속 re-hydrate 무성 revert</span></div>
+          </div>
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">E3 전송·세션 계층</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/32">#32</a></div>
+            <div class="kv"><span class="k">토픽</span><span class="v"><code>transport-protocol</code>(#45) · <code>auth-session</code>(#46) · <code>session-lifecycle</code>(#47) + 하드닝 <code>ws-rate-limit</code>(#64) · <code>ws-resource-guard</code>(#54) · #49 · #53 · #77</span></div>
+            <div class="kv"><span class="k">결정</span><span class="v">D6 보정 — argon2id 대신 <strong>Firebase Auth 세션 쿠키</strong> + <code>SessionAuthPort</code> DIP seam</span></div>
+          </div>
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">E8 테스트 인프라 (oracle fixture)</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/33">#33</a></div>
+            <div class="kv"><span class="k">토픽</span><span class="v"><code>golden-fixture-harness</code>(#70) · <code>property-testing</code>(#71) — E6의 <strong>선행 조건</strong>이라 앞당겨 배치</span></div>
+            <div class="kv rest"><span class="k">부채</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/126">#126</a> turbo 해시가 상위 패키지 변경 미반영 → 검증 게이트 거짓 통과</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ms closed">
+        <div class="ms-head">
+          <span class="ms-id">M2</span>
+          <span class="ms-name">월드 · 계정</span>
+          <span class="ms-meta">에픽 2/2 완료</span>
+        </div>
+        <div class="cards">
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">E4 월드 상태 엔진 ★</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/34">#34</a></div>
+            <div class="kv"><span class="k">토픽</span><span class="v"><code>runtime-foundation</code>(#67, 1Hz 틱·shutdown) · <code>movement-rooms</code>(#69, <code>tryMove</code>·문·방 채널) · <code>creature-spawn</code>(#68, 스폰 3트리거·AI 큐)</span></div>
+            <div class="kv"><span class="k">추가</span><span class="v"><code>live-world-foundation</code>(<a href="https://github.com/smalljiny/muhan/issues/114">#114</a>, PR #115) — 세션↔캐릭터 <strong>라이브 상태원</strong>·방 배치·<code>tryMove</code> 프로덕션 결선. E4가 유예했던 고아 갭</span></div>
+            <div class="kv rest"><span class="k">유예</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/116">#116</a> 이동 leave/join 방송이 <code>noopBroadcast</code> — 같은 방 점유자가 입·퇴장을 볼 수 없음</span></div>
+          </div>
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">E5 인증·계정</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/35">#35</a></div>
+            <div class="kv"><span class="k">토픽</span><span class="v"><code>account-character</code>(#90) — <code>account 1:N character</code> · 생성 인터뷰 FSM · soft-delete · RBAC seam</span></div>
+            <div class="kv rest"><span class="k">잠복</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/89">#89</a> 세션 revocation 미검사 + <code>status='banned'</code> 비강제 — 프로덕션 Firebase credential 프로비저닝 필요</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ms closed">
+        <div class="ms-head">
+          <span class="ms-id">M3</span>
+          <span class="ms-name">규칙 코어 — E6 순수 레이어</span>
+          <span class="ms-meta">토픽 8/8 완료 · 에픽 #36은 배선 잔여로 열림</span>
+        </div>
+        <div class="cards">
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">E6a 전투 엔진</span>
+              <span class="card-num">#82 · #83</span></div>
+            <div class="kv"><span class="k">토픽</span><span class="v"><code>combat</code> — <code>resolveAttack</code>·thaco·명중·피해·PvP · 특수공격·DoT·사망 분배·전투 AI. <a href="https://github.com/smalljiny/muhan/issues/91">#91</a> 라운드 order·death timing 충실도 포함</span></div>
+          </div>
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">E6b 마법</span>
+              <span class="card-num">#84 · #85</span></div>
+            <div class="kv"><span class="k">토픽</span><span class="v"><code>magic</code> — 주문 카탈로그·시전 게이트·공격 데미지 · <code>magic-progression</code> — 버프 타이머·저항·숙련·마나·학습</span></div>
+            <div class="kv rest"><span class="k">파생</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/108">#108</a> 몬스터 self-heal healer 게이트(divergence 32%) · <a href="https://github.com/smalljiny/muhan/issues/100">#100</a> <code>spell_fail</code> 미배선</span></div>
+          </div>
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">E6c 진행 · 스탯</span>
+              <span class="card-num">#80 · #81</span></div>
+            <div class="kv"><span class="k">토픽</span><span class="v"><code>stats-core</code> — base/effective 분리·선언 테이블·파생 스탯 · <code>progression</code> — exp·레벨업·성장·재생·사망·승급</span></div>
+          </div>
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">E6d 아이템 · 경제</span>
+              <span class="card-num">#86 · #87</span></div>
+            <div class="kv"><span class="k">토픽</span><span class="v"><code>items-equipment</code> — object·착용 슬롯·파생 트리거 · <code>economy</code>·<code>bank-items</code> — 금화·상점·은행 계좌 도메인</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ms closed">
+        <div class="ms-head">
+          <span class="ms-id">M4</span>
+          <span class="ms-name">접속 셸 — 웹 클라이언트 전송 · 세션 진입</span>
+          <span class="ms-meta">에픽 2/2 완료</span>
+        </div>
+        <div class="cards">
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">E9 전송 셸</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/58">#58</a></div>
+            <div class="kv"><span class="k">토픽</span><span class="v"><code>transport-shell</code>(PR #65) — React + 얇은 WS 레이어 · <code>system:hello</code>/<code>ready</code> 버전 협상 · 이벤트 로그 뷰 · dev 인증 접속 + docker e2e</span></div>
+            <div class="kv"><span class="k">경계</span><span class="v">클라이언트는 <code>shared/protocol</code>(버전화된 Zod 와이어 계약)에만 의존 — 프론트/백엔드 병행의 유일한 접점</span></div>
+          </div>
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">E10 세션 진입 플로우</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/59">#59</a></div>
+            <div class="kv"><span class="k">토픽</span><span class="v"><code>session-entry</code>(PR #75) — 캐릭터 목록·선택·생성 프롬프트·진입/재개 전이·에러 code 표면화</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ms is-now">
+        <div class="ms-head">
+          <span class="ms-id">M5</span>
+          <span class="ms-name">걷기 — 이동 · 대화 라이브화</span>
+          <span class="ms-now">현재 위치</span>
+          <span class="ms-meta">2/7 · 막힌 항목 없음</span>
+        </div>
+        <div class="cards">
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">게임 command 디스패처 + 연마(train)</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/106">#106</a></div>
+            <div class="kv"><span class="k">랜딩</span><span class="v">PR #125 — <code>GameCommandDeps</code> 번들 · <code>progress:train</code>/<code>progress:trained</code> variant · <code>markCharacterDirty</code> 헬퍼(write-loss 봉쇄) · <code>PROTOCOL_VERSION</code> 2→3</span></div>
+            <div class="kv rest"><span class="k">함정</span><span class="v">레지스트리에만 등록하고 <code>clientCommandSchema</code>에 variant를 추가하지 않으면 그 명령은 <strong>영구히 <code>bad_payload</code></strong>로 떨어집니다 — 후속 5건이 복제할 계약</span></div>
+          </div>
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title"><code>character.flags</code> 스키마</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/117">#117</a></div>
+            <div class="kv"><span class="k">랜딩</span><span class="v">PR #127 — P-flag 영속 입력원 + 합성 계층. 실명·침묵 게이트(<code>study</code>·<code>teach</code>·전투)의 입력원 확립. <code>alignment</code> 값 계약 단일 소유</span></div>
+            <div class="kv rest"><span class="k">해제</span><span class="v">#119 · #120 · #121 · <a href="https://github.com/smalljiny/muhan/issues/123">#123</a>의 blocking 해소 — 남은 blocking은 <strong>#118 하나</strong></span></div>
+          </div>
+          <div class="card t">
+            <div class="card-top"><span class="chip t">체인 헤드</span><span class="card-title">오라클 이름 매처 이식 ★</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/118">#118</a></div>
+            <div class="kv"><span class="k">문제</span><span class="v">저장소 전체에 이름 매처가 <strong>0건</strong>. 방 안 대상을 한글 이름으로 찾을 수 없고 한글 주문명을 <code>spellNo</code>로 해소할 수 없음</span></div>
+            <div class="kv"><span class="k">규칙</span><span class="v">오라클(<code>magic1.c:50-56</code>·<code>creature.c:29</code>)은 <strong>완전일치 우선 → 유일 접두 → 모호하면 거부</strong> + 서수(N번째) 선택. 주문·대상이 같은 규칙 패밀리</span></div>
+            <div class="kv rest"><span class="k">영향</span><span class="v">#119 · #120 · #121 · #122 <strong>4건의 유일한 blocking</strong>. 순수 유틸이라 비용은 낮음</span></div>
+          </div>
+          <div class="card t">
+            <div class="card-top"><span class="chip t">미착수</span><span class="card-title">teach 명령 배선</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/119">#119</a></div>
+            <div class="kv"><span class="k">범위</span><span class="v"><code>progress:teach</code> variant + 방 스코프 대상 해소 + <code>setKnown</code> write-back·<code>markDirty</code> + 양측 broadcast. 실패 6종은 <code>rule_rejected</code>로 접음</span></div>
+            <div class="kv"><span class="k">선행</span><span class="v">#118 (#117 ✅ 해소)</span></div>
+          </div>
+          <div class="card t">
+            <div class="card-top"><span class="chip t">미착수</span><span class="card-title">이동 leave/join 방송 결선</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/116">#116</a></div>
+            <div class="kv"><span class="k">범위</span><span class="v"><code>broadcastLeave</code>/<code>broadcastJoin</code> 실 구현 주입 · 아웃바운드 이벤트 계약 확정 · sneak/flee 억제 오라클 대조</span></div>
+            <div class="kv"><span class="k">상태</span><span class="v"><strong>완전 독립</strong> — <code>occupants</code>·채널 포트는 이미 살아 있고 이동 이벤트만 통지되지 않음</span></div>
+          </div>
+          <div class="card t">
+            <div class="card-top"><span class="chip t">미착수</span><span class="card-title">E11 월드 뷰 (방·이동·주변)</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/60">#60</a></div>
+            <div class="kv"><span class="k">해제</span><span class="v"><code>world:room</code> ServerEvent + <code>world:move</code> ClientCommand 실재(<code>PROTOCOL_VERSION</code> 3), E4·E10 종료 → <strong>FE 단독 트랙으로 착수 가능</strong></span></div>
+            <div class="kv rest"><span class="k">순서</span><span class="v">방 스냅샷(<code>world:room</code>) 기준으로 먼저 세우고, 점유자 실시간 갱신은 #116 착지 후</span></div>
+          </div>
+          <div class="card t">
+            <div class="card-top"><span class="chip t">HIGH</span><span class="card-title">재접속 진행도 무성 revert</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/124">#124</a></div>
+            <div class="kv"><span class="k">경로</span><span class="v">grace(30초) &lt; flush 주기(120초) → 재접속 <code>hydrate</code>가 DirtyTracker pending을 안 보고 저장소 재읽기 → stale 스냅샷이 LWW 승자</span></div>
+            <div class="kv rest"><span class="k">긴급</span><span class="v"><code>train</code>이 이미 라이브라 <strong>실사용 데이터가 지금 노출됨</strong>. level·gold·experience·vitals·stats 전체 소실</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cp">
+        <div class="cp-head">
+          <span class="cp-mark">◆</span>
+          <span class="cp-id">CP1</span>
+          <span class="cp-title">걸어볼 수 있는 무한 — 첫 플레이</span>
+          <span class="cp-when">다음 관문 · 코드 작업</span>
+        </div>
+        <p class="cp-desc">접속 → 캐릭터 생성/선택 → 방 설명을 읽고 → 이동하고 → 같은 방 사람과 대화한다. 전투 없이 <strong>월드를 걸어 다니는 것</strong>까지가 이 관문입니다. 1993년 무한에 처음 로그인했을 때의 첫 30초를 재현하는 지점.</p>
+        <div class="gates">
+          <span class="gate ok">✓ M4 접속 셸 (E9·E10)</span>
+          <span class="gate ok">✓ 라이브 상태원 · 방 배치 · tryMove (#114)</span>
+          <span class="gate ok">✓ 방 채팅 fan-out (#47 · roomChannelAdapter)</span>
+          <span class="gate ok">✓ command 디스패처 (#106)</span>
+          <span class="gate open">E11 월드 뷰 (#60)</span>
+          <span class="gate open">#116 이동 leave/join 방송</span>
+          <span class="gate open">HIGH #124 진행도 무성 revert</span>
+          <span class="gate open">HIGH #126 검증 게이트 거짓 통과</span>
+        </div>
+        <p class="cp-foot"><b>남은 것은 전부 코드이고, 막힌 것은 없습니다.</b> #60은 FE 단독, #116은 완전 독립이라 병렬로 돌 수 있습니다. 다만 <strong>#124를 닫지 않고 이 관문을 통과하면 안 됩니다</strong> — 진행도를 먹는 세계에 사람을 초대할 수는 없고, <code>train</code>이 이미 라이브라 노출 창이 열려 있습니다. #126은 이후 모든 토픽의 <code>/flow-verify</code> 결과를 의심스럽게 만들므로 함께 닫는 것이 싸게 끝납니다.</p>
+      </div>
+
+      <div class="ms">
+        <div class="ms-head">
+          <span class="ms-id">M6</span>
+          <span class="ms-name">싸우기 — 전투 · 마법 · 아이템 라이브화</span>
+          <span class="ms-meta">0/8 · #118 해소 후 개방</span>
+        </div>
+        <div class="cards">
+          <div class="card t">
+            <div class="card-top"><span class="chip t">미착수</span><span class="card-title">attack 배선 + PlayerCombatState 파이프</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/121">#121</a></div>
+            <div class="kv"><span class="k">실체</span><span class="v">"배선"이 아니라 <strong>파이프 신규 구축</strong>. <code>EffectiveStatContext</code> 8필드 중 5필드 합성 코드가 0건이고 장비→<code>StatModifier[]</code> 변환·<code>WeaponDamage</code> 투영 생산자가 없음</span></div>
+            <div class="kv"><span class="k">추가</span><span class="v"><code>combatRegistry</code> non-test caller 0건 — 월드 입·퇴장 대칭 등록 콜사이트 신설</span></div>
+          </div>
+          <div class="card t">
+            <div class="card-top"><span class="chip t">미착수</span><span class="card-title">cast 배선 — 플레이어 시전 진입점</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/122">#122</a></div>
+            <div class="kv"><span class="k">실체</span><span class="v"><code>magic/index.ts</code>에 플레이어 시전 진입 함수가 export되지 않음. <code>crtSpell</code>(몬스터용)이 유일한 worked example — 게이트→디스패치→핸들러를 플레이어용으로 복제</span></div>
+            <div class="kv"><span class="k">설계</span><span class="v">offensive/instant/buff/debuff 4종 request 형태 분기(<code>pietyBonus</code> 사전계산·target 타입 불일치) + <code>realmGrowth</code> write-back</span></div>
+            <div class="kv"><span class="k">선행</span><span class="v">#121 (<code>toCaster(PlayerCombatState)</code>) — 체인 종단</span></div>
+          </div>
+          <div class="card t">
+            <div class="card-top"><span class="chip t">미착수</span><span class="card-title">아이템 인스턴스 라이브화 + study</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/120">#120</a></div>
+            <div class="kv"><span class="k">4중 결손</span><span class="v">인벤이 라이브 상태에 없음(<code>object.owner</code> 파생 설계) · <code>hydrateInventory</code>가 wiring 표면에 미노출 · <code>loadObjectTemplates</code> boot 호출 0건 · 인스턴스→템플릿 join 함수 없음</span></div>
+            <div class="kv rest"><span class="k">결정</span><span class="v">입장 시 hydrate vs 명령 시점 조회 — 후자면 <code>CommandHandler</code>를 <strong>async로 확장</strong>(전 핸들러 파급). <code>read</code>/<code>drink</code>/<code>zap</code>의 선행 계층</span></div>
+          </div>
+          <div class="card t">
+            <div class="card-top"><span class="chip t">미착수</span><span class="card-title">몬스터 전투/마법 tick boot 배선</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/99">#99</a></div>
+            <div class="kv"><span class="k">현황</span><span class="v"><code>createWorldRuntime</code>에 <code>onCombatTick</code> 미전달(<code>index.ts:87</code>). <code>createCombatTick</code>·<code>crtSpell</code> non-test 호출 0건 → 실행 중 서버에서 <strong>몬스터가 근접·시전을 하지 않음</strong></span></div>
+            <div class="kv rest"><span class="k">동반</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/100">#100</a> <code>spell_fail</code>(전사계 fizzle) 배선 + 몬스터 마나 재생 tick 미구현. <code>spawnRng</code>·<code>invasionRng</code>·<code>broadcast</code>·<code>templates</code>도 함께 미주입</span></div>
+          </div>
+          <div class="card t">
+            <div class="card-top"><span class="chip t">미착수</span><span class="card-title">성향(alignment) 스칼라 확장</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/123">#123</a></div>
+            <div class="kv"><span class="k">범위</span><span class="v">현 1=선/2=악 → 원작 <code>-1000..+1000</code> 연속 스칼라. 증감 규칙 오라클 역설계 · OGOODO/OEVILO <code>study</code> 게이트 <strong>실발화 회귀 검증</strong> · PALADIN 보정 재확인</span></div>
+            <div class="kv rest"><span class="k">해제</span><span class="v">#117 종료로 값 계약 확정 — 착수 가능</span></div>
+          </div>
+          <div class="card t">
+            <div class="card-top"><span class="chip t">미착수</span><span class="card-title">몬스터 self-heal healer 게이트</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/108">#108</a></div>
+            <div class="kv"><span class="k">규모</span><span class="v">heal 주문을 아는 몬스터 195마리 중 <strong>62마리(32%)</strong>가 비-healer 클래스. 오라클은 melee로 fold하지만 현 포트는 self-heal 시전 — 코너 케이스 아님</span></div>
+            <div class="kv"><span class="k">상태</span><span class="v">상수(<code>CLERIC</code>/<code>PALADIN</code>/<code>INVINCIBLE</code>)가 이미 존재해 knowable. SMENDW/SFHEAL 게이트 동일성만 개별 대조 필요</span></div>
+          </div>
+          <div class="card t">
+            <div class="card-top"><span class="chip t">미착수</span><span class="card-title">E12 캐릭터·전투·인벤 패널</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/61">#61</a></div>
+            <div class="kv"><span class="k">범위</span><span class="v">스탯 패널(HP·MP·레벨·경험치·능력치) · 전투 로그(라운드·데미지·명중) · 인벤토리·장비 뷰</span></div>
+            <div class="kv rest"><span class="k">게이트</span><span class="v">E6이 전투·스탯·아이템 ServerEvent를 <code>shared/protocol</code>에 추가해야 <code>/flow-spec</code> 작성 가능 — <strong>#121·#122가 그 계약을 낳음</strong></span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cp">
+        <div class="cp-head">
+          <span class="cp-mark">◆</span>
+          <span class="cp-id">CP2</span>
+          <span class="cp-title">싸울 수 있는 무한 — 핵심 루프</span>
+          <span class="cp-when">잠김 · CP1 이후</span>
+        </div>
+        <p class="cp-desc">몬스터를 만나 때리고, 주문을 펼치고, 죽고, 경험치를 얻고, 연마해 레벨이 오른다. 규칙 코어(M3)는 이미 완성돼 있으므로 이 관문은 <strong>순수 함수를 살아 있는 세션에 잇는 일</strong>입니다.</p>
+        <div class="gates">
+          <span class="gate open">CP1 통과</span>
+          <span class="gate open">#118 → #121 → #122 체인</span>
+          <span class="gate open">#120 아이템 라이브화 · study</span>
+          <span class="gate open">#99 · #100 몬스터 tick · fizzle</span>
+          <span class="gate open">#61 E12 전투·인벤 패널</span>
+          <span class="gate open">#43 은행 write-path 조정</span>
+          <span class="gate held">⏸ #123 성향 스칼라 — 게이트 발화 회귀</span>
+        </div>
+        <p class="cp-foot"><b><a href="https://github.com/smalljiny/muhan/issues/43">#43</a>은 카드가 아니라 계약입니다</b> — 이슈 본문이 "#43 해소 전 은행 명령 배선 금지"를 blocking으로 고정했습니다. 상점·은행 명령을 배선하는 순간 gold가 write-behind와 Mongo 트랜잭션 두 경로로 흐르고, 커밋 이후 도착한 stale flush가 결과를 무성 revert합니다. 그리고 #99를 배선하기 전까지 몬스터는 여전히 <strong>가만히 서 있습니다</strong> — 유닛 테스트는 통과하지만 프로덕션에서는 죽어 있습니다.</p>
+      </div>
+
+      <div class="ms">
+        <div class="ms-head">
+          <span class="ms-id">M7</span>
+          <span class="ms-name">어울리기 — 소셜 · 채널</span>
+          <span class="ms-meta">0/2 · 방 채팅 절반은 이미 충족</span>
+        </div>
+        <div class="cards">
+          <div class="card t">
+            <div class="card-top"><span class="chip t">미착수</span><span class="card-title">E7 소셜·채널</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/37">#37</a></div>
+            <div class="kv"><span class="k">범위</span><span class="v">EventEmitter 토픽(전역 잡담·환호·패거리·결혼·wiz·eaves) · HP 비용 곡선·일일한도·외침 1홉 · 우편·게시판 · 패거리(가입 경제·두목·명부) · 결혼 2단계 · 추종 · 가시성·권한 필터</span></div>
+            <div class="kv"><span class="k">Open Q</span><span class="v">PFMBOS 두목 임명 규칙은 오라클에 없어 <strong>신규 설계</strong>. 예상 토픽 2~3</span></div>
+          </div>
+          <div class="card t">
+            <div class="card-top"><span class="chip t">부분 해제</span><span class="card-title">E13 소셜·채팅 UI</span>
+              <a class="card-num" href="https://github.com/smalljiny/muhan/issues/62">#62</a></div>
+            <div class="kv"><span class="k">충족</span><span class="v">방 채팅 — <code>chat:message</code> + <code>chat:said</code> 실재, <code>roomChannelAdapter</code> fan-out 동작 → <strong>방 채팅 UI만 먼저 착수 가능</strong>(CP1 범위와 겹침)</span></div>
+            <div class="kv rest"><span class="k">미충족</span><span class="v">전역/채널·귓속말·이모트 — E7이 채널 ServerEvent를 추가해야 함. <code>chat:emote</code> 커맨드는 있으나 <strong>대응 ServerEvent가 없음</strong></span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cp">
+        <div class="cp-head">
+          <span class="cp-mark">◆</span>
+          <span class="cp-id">CP3</span>
+          <span class="cp-title">as-shipped 무한 — 콘텐츠 완성</span>
+          <span class="cp-when">잠김 · CP2 이후</span>
+        </div>
+        <p class="cp-desc">1993년에 실제로 돌던 무한이 그대로 돈다. ADR의 <strong>as-shipped 정책</strong>(P1 버그 ~40건은 재현하되 개별 태깅) 기준으로 콘텐츠·규칙·명령 어휘가 전부 이식된 지점입니다. 이후는 형상 개선과 신규 설계 영역.</p>
+        <div class="gates">
+          <span class="gate open">CP2 통과</span>
+          <span class="gate open">#37 E7 소셜·채널</span>
+          <span class="gate open">#62 E13 채널·귓속말 UI</span>
+          <span class="gate open">#108 known-divergence 해소</span>
+          <span class="gate open">#89 세션 revocation · banned 강제</span>
+          <span class="gate open">#113 전이 취약점 · #51 타이머 소유권</span>
+          <span class="gate held">⏸ FE-6 디자인 시스템 — 기능 freeze 후</span>
+        </div>
+        <p class="cp-foot">프론트엔드 정책은 <b>"기능-우선 → 디자인-후"</b>입니다 — 디자인 시스템(FE-6)은 E11·E12·E13이 닫힌 뒤에 착수하며 체크포인트 체인 밖입니다. A13 DM/빌더 명령 배선도 이 지점 이후의 별도 트랙입니다.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ══ 부채 ══ -->
+  <section class="sec" aria-label="보안·기술부채">
+    <div class="sec-head">
+      <h2>보안 · 기술부채</h2>
+      <span class="sec-tag">off-milestone · gates</span>
+    </div>
+    <p class="sec-note">어느 에픽에도 속하지 않지만 체크포인트의 통과 조건으로 작동합니다. <strong>둘은 "조용한 거짓" 계열</strong>입니다 — #124는 데이터를 조용히 되돌리고, #126은 검증을 조용히 통과시킵니다. 둘 다 실패가 눈에 보이지 않아 우선순위를 앞에 둡니다.</p>
+
+    <div class="debt-grid">
+      <div class="debt-card high">
+        <div class="debt-top"><span class="sev high">HIGH</span><span class="debt-title">재접속 re-hydrate가 진행도를 무성 revert</span>
+          <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/124">#124</a></div>
+        <div class="debt-body">grace(30초) &lt; flush 주기(120초)라 정상 설정에서 창이 열립니다. <code>hydrate</code>가 DirtyTracker pending을 보지 않고 저장소를 재읽기 → stale 스냅샷이 LWW 승자 → level·gold·experience·vitals·stats 전체 소실. 세션 종료 시 flush를 트리거하는 지점이 <strong>코드 전체에 없습니다</strong>. <code>train</code>이 이미 라이브라 노출 창이 열려 있습니다.</div>
+        <div class="debt-gate">▸ CP1 게이트 · 실사용 데이터 유실</div>
+      </div>
+      <div class="debt-card high">
+        <div class="debt-top"><span class="sev high">HIGH</span><span class="debt-title">turbo 캐시가 검증 게이트를 거짓 통과시킴</span>
+          <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/126">#126</a></div>
+        <div class="debt-body"><code>type-check</code>·<code>lint</code>가 <code>dependsOn: []</code> + <code>inputs</code> 미지정이라 해시에 <code>shared</code>가 전혀 포함되지 않습니다. 여기에 worktree 간 공유 캐시가 겹쳐 <strong>다른 브랜치의 결과가 이 브랜치의 검증 결과로 둔갑</strong>합니다. 우연이 아니라 구조적이며, <code>shared</code>를 건드리는 모든 향후 토픽에서 조용히 반복됩니다.</div>
+        <div class="debt-gate">▸ CP1 게이트 · 모든 토픽의 검증 신뢰성</div>
+      </div>
+      <div class="debt-card high">
+        <div class="debt-top"><span class="sev high">계약</span><span class="debt-title">은행 트랜잭션 ↔ SaveEngine write-behind</span>
+          <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/43">#43</a></div>
+        <div class="debt-body"><code>BankTransactionService</code>는 gold를 Mongo 트랜잭션으로 직접 쓰고 <code>SaveEngine</code>은 같은 컬렉션을 write-behind로 씁니다. 공유 per-key 조정점이 없어 커밋 이후 도착한 stale flush가 <code>$set</code>으로 트랜잭션 결과를 덮습니다. <strong>현재는 도달 불가</strong>(gold를 dirty로 흘리는 은행 caller 0건)이나 <code>train</code> 배선으로 한쪽이 무장됐습니다.</div>
+        <div class="debt-gate">▸ blocking: 해소 전 은행 명령 배선 금지 · CP2</div>
+      </div>
+      <div class="debt-card">
+        <div class="debt-top"><span class="sev">divergence</span><span class="debt-title">몬스터 시전 경로 2건 미배선</span>
+          <span class="debt-num"><a href="https://github.com/smalljiny/muhan/issues/100">#100</a> · <a href="https://github.com/smalljiny/muhan/issues/108">#108</a></span></div>
+        <div class="debt-body">#100 — 전사계 MMAGIC 캐스터 12종이 <code>spell_fail</code> fizzle 없이 항상 명중합니다. 마나 소비를 <code>spell_fail</code> 前으로 재배치해야 하는데 현 포트는 gate가 pre-consume이라 gate-timing 모델 재검토가 필요합니다. #108 — 비-healer 몬스터 62/195(32%)가 self-heal을 시전합니다.</div>
+        <div class="debt-gate">▸ #99 몬스터 tick 배선과 동일 토픽 권장 · CP2~CP3</div>
+      </div>
+      <div class="debt-card">
+        <div class="debt-top"><span class="sev">HIGH×4</span><span class="debt-title">devDependency 전이 취약점</span>
+          <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/113">#113</a></div>
+        <div class="debt-body"><code>postcss</code> 8.5.16(경로 순회, fix 8.5.18+) · <code>brace-expansion</code> 1.1.16/2.1.2/5.0.7(DoS, fix 5.0.8). 전부 dev 전이 의존성이라 런타임 번들 밖입니다. 기존 <code>pnpm.overrides</code>가 5.x 계열을 잡지 못하고, brace-expansion은 1.x/2.x 소비자를 5.x로 강제해야 해 eslint 툴체인 호환성 검토가 필요합니다.</div>
+        <div class="debt-gate">▸ 상시 · CP3 이전 · 저위험·소규모</div>
+      </div>
+      <div class="debt-card">
+        <div class="debt-top"><span class="sev">잠복</span><span class="debt-title">세션 revocation + banned 비강제</span>
+          <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/89">#89</a></div>
+        <div class="debt-body">revoke된 세션 쿠키가 자연 만료(~2주)까지 통과하고, <code>account.status='banned'</code>가 연결 게이트에서 검사되지 않습니다. <code>checkRevoked</code>가 서비스 계정 자격증명을 요구해 <strong>프로덕션 Firebase credential 프로비저닝과 함께</strong> 랜딩합니다. 함정 — <code>ensureAccountUpserted</code>의 dedup 캐시 경로에 status 검사를 얹으면 캐시 hit에서 검사가 함께 건너뛰어집니다.</div>
+        <div class="debt-gate">▸ CP3 게이트 · A13 RBAC 명령 배선과 함께</div>
+      </div>
+      <div class="debt-card">
+        <div class="debt-top"><span class="sev">정리</span><span class="debt-title">ctx.heartbeat 타이머 이중 소유권</span>
+          <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/51">#51</a></div>
+        <div class="debt-body">타이머 1개에 소유자가 2개(매니저 <code>stop()</code> + <code>cleanupConnection</code>의 clear)이고 raw 핸들만 담아 향후 레지스트리 스윕이 매니저 상태에 도달하지 못합니다. 현재 동작은 idempotent로 검증됐으나 altitude가 어긋난 상태입니다.</div>
+        <div class="debt-gate">▸ 게이트 없음 · 유지보수</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 다음 한 수 ══ -->
+  <section class="sec" aria-label="다음 한 수">
+    <div class="sec-head">
+      <h2>다음 한 수</h2>
+      <span class="sec-tag">recommended order</span>
+    </div>
+    <p class="sec-note">순서는 의존성 해제 폭과 되돌리기 비용 기준입니다. 지금 <strong>열린 PR 0 · 활성 worktree 0</strong>이므로 셋을 병렬 트랙으로 띄울 수 있습니다.</p>
+    <div class="next">
+      <div class="next-card">
+        <div class="next-n">01</div>
+        <div class="next-t">#118 이름 매처를 먼저</div>
+        <div class="next-d">체인 4건(<strong>#119 · #120 · #121 · #122</strong>)의 <strong>유일한 blocking</strong>이고, 순수 유틸이라 가장 싼 항목입니다. 오라클 규칙(완전일치 → 유일 접두 → 모호 거부 + 서수)이 주문·대상 양쪽에 공통이라 한 번에 둘을 풉니다. 여기가 막혀 있으면 M6 전체가 열리지 않습니다.</div>
+      </div>
+      <div class="next-card">
+        <div class="next-n">02</div>
+        <div class="next-t">#124 + #126을 한 토픽으로</div>
+        <div class="next-d">둘 다 <strong>"조용한 거짓"</strong>입니다 — 하나는 데이터를 조용히 되돌리고, 하나는 검증을 조용히 통과시킵니다. <code>train</code>이 이미 라이브라 #124는 지금 실사용 데이터를 먹을 수 있고, #126을 방치하면 이후 모든 토픽의 <code>/flow-verify</code> 결과가 근거를 잃습니다. CP1을 열기 전에 닫는 것이 가장 쌉니다.</div>
+      </div>
+      <div class="next-card">
+        <div class="next-n">03</div>
+        <div class="next-t">#60 E11 + #116을 병행</div>
+        <div class="next-d">#60은 <code>world:room</code>·<code>world:move</code>가 이미 실재해 <strong>FE 단독 트랙</strong>이고, #116은 백엔드 완전 독립입니다. 서로도 독립이라 백엔드 체인과 3중 병렬이 가능합니다. #60을 방 스냅샷 기준으로 먼저 세우고 #116 착지 후 점유자 실시간 갱신을 얹으면 두 토픽이 자연히 CP1을 완성합니다.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>출처: GitHub 이슈 #1~#127 · PR ~#127 (2026-07-30 · develop fd40682)</span>
+    <span>설계 정본: docs/specs/architecture.md (ADR #14)</span>
+    <span>구현 명세: docs/specs/ 28개 문서</span>
+    <span>SoT는 GitHub 이슈·PR·docs/specs/ — 이 페이지는 파생 조감도이고, M0~M7·CP1~CP3은 이슈 의존 관계에서 도출한 그룹핑입니다</span>
+  </footer>
+</div>
+
+<div id="zoom-layer" aria-hidden="true"></div>
+<div id="gnote" role="tooltip" aria-hidden="true"></div>
+
+<script>
+/* ── 의존 관계 그래프 빌드 ─────────────────────────── */
+(function () {
+  var svg = document.getElementById("dep-graph");
+  if (!svg) return;
+  var NS = "http://www.w3.org/2000/svg";
+  var REPO = "https://github.com/smalljiny/muhan/issues/";
+
+  // id, milestone, status, x, y, title, role
+  var N = [
+    [14,  0, "done", 46,  214, "스택·아키텍처 결정 게이트 ★", "분석 A1~A13(#1~#13) 종료 후 ADR 확정"],
+    [30,  1, "done", 128, 214, "E1 monorepo 스캐폴딩", "pnpm workspaces 4패키지 · 이후 전부의 선행"],
+    [31,  1, "done", 216, 150, "E2 영속화 기반", "Mongo 연결·스키마·repository·세이브 정책"],
+    [32,  1, "done", 216, 220, "E3 전송·세션 계층", "ws+TLS·세션 FSM·Zod 프로토콜·재연결"],
+    [33,  1, "done", 216, 290, "E8 테스트 인프라 (oracle fixture)", "골든 fixture·property 테스트 — E6의 선행"],
+    [34,  2, "done", 312, 160, "E4 월드 상태 엔진 ★", "방 그래프·tryMove·1Hz 틱·스폰 + 라이브 상태원(#114)"],
+    [35,  2, "done", 312, 248, "E5 인증·계정", "account 1:N character · 생성 FSM · RBAC seam"],
+    [58,  4, "done", 312, 342, "E9 웹 클라 전송 셸", "React + WS 레이어 · 버전 협상 · dev 인증"],
+    [116, 5, "todo", 410, 64,  "이동 leave/join 방송 결선", "broadcast seam이 no-op — 완전 독립"],
+    [36,  3, "wip",  410, 150, "E6 게임 규칙 엔진 ★", "규칙 토픽 8/8 완료 · 라이브 배선 잔여"],
+    [37,  7, "todo", 410, 250, "E7 소셜·채널", "채널·우편·게시판·패거리·결혼·추종"],
+    [59,  4, "done", 410, 342, "E10 세션 진입 플로우", "캐릭터 목록·선택·생성·진입/재개"],
+    [118, 5, "todo", 510, 68,  "오라클 이름 매처 이식 ★", "체인 헤드 — #119·#120·#121·#122의 유일 blocking"],
+    [123, 6, "todo", 510, 140, "성향(alignment) 스칼라 확장", "-1000..+1000 · study 게이트 실발화"],
+    [99,  6, "todo", 510, 206, "몬스터 전투/마법 tick boot 배선", "프로덕션에서 몬스터가 움직이지 않음"],
+    [60,  5, "todo", 510, 342, "E11 월드 뷰 (방·이동·주변)", "프로토콜 게이트 해소 — FE 단독 착수 가능"],
+    [119, 5, "todo", 610, 42,  "teach 명령 배선", "방 내 대상 플레이어 전수"],
+    [120, 6, "todo", 610, 100, "아이템 라이브화 + study", "read/drink/zap의 선행 계층 · 4중 결손"],
+    [121, 6, "todo", 610, 158, "attack 배선 + PlayerCombatState 파이프", "장비 해소·유효 스탯 합성 신규 구축"],
+    [61,  6, "todo", 610, 342, "E12 캐릭터·전투·인벤 패널", "E6 규칙 이벤트 게이트 — #121·#122가 낳음"],
+    [122, 6, "todo", 710, 158, "cast 배선 — 플레이어 시전 진입점", "체인 종단 · 4종 request 디스패치 설계"],
+    [62,  7, "todo", 710, 262, "E13 소셜·채팅 UI", "방 채팅 절반 충족 · 채널·귓속말은 E7 게이트"],
+    [113, -1, "dbt", 58,  296, "devDependency 전이 취약점 4건", "postcss · brace-expansion · dev-only"],
+    [51,  -1, "dbt", 128, 320, "ctx.heartbeat 타이머 이중 소유권", "유지보수 · 게이트 없음"],
+    [126, -1, "dbt", 130, 400, "turbo 해시가 상위 패키지 변경 미반영", "HIGH · 검증 게이트 거짓 통과 · CP1"],
+    [43,  -1, "dbt", 128, 96,  "은행 트랜잭션 ↔ write-behind 조정", "계약: 해소 전 은행 명령 배선 금지 · CP2"],
+    [124, -1, "dbt", 300, 448, "재접속 re-hydrate 무성 revert", "HIGH · 진행도 전체 소실 · CP1"],
+    [89,  -1, "dbt", 390, 440, "세션 revocation + banned 비강제", "잠복 · Firebase credential 필요 · CP3"],
+    [100, -1, "dbt", 452, 300, "몬스터 spell_fail(전사계 fizzle) 미배선", "전사계 MMAGIC 12종 항상 명중"],
+    [108, -1, "dbt", 452, 372, "몬스터 self-heal healer 게이트 미이식", "divergence 62/195 = 32%"]
+  ];
+
+  var E = [[14,30],[30,31],[30,32],[30,33],[31,34],[32,34],[32,35],[34,36],[33,36],
+           [32,58],[58,59],[59,60],[34,116],[36,118],[36,123],[36,99],
+           [118,119],[118,120],[118,121],[121,122],
+           [60,61],[36,61],[34,37],[35,37],[59,62],[37,62]];
+  var D = [[124,36],[126,33],[43,31],[100,99],[108,99],[89,35],[51,32],[113,30]];
+
+  var MS_NAME = ["M0 역설계·분석", "M1 서버 기반", "M2 월드·계정", "M3 규칙 코어",
+                 "M4 접속 셸", "M5 걷기", "M6 싸우기", "M7 어울리기"];
+  var ST_NAME = { done: "완료", wip: "부분 완료", todo: "미착수", dbt: "보안·부채" };
+
+  var map = {};
+  N.forEach(function (n) {
+    map[n[0]] = { id: n[0], ms: n[1], st: n[2], x: n[3], y: n[4], t: n[5], role: n[6],
+                  r: n[1] === -1 ? 15 : 19 };
+  });
+
+  var defs = document.createElementNS(NS, "defs");
+  defs.innerHTML =
+    '<marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
+      '<path d="M0.5 0.5 L7.5 4 L0.5 7.5 z" fill="currentColor"/></marker>';
+  svg.appendChild(defs);
+
+  var gEdges = document.createElementNS(NS, "g");
+  svg.appendChild(gEdges);
+
+  function line(a, b, cls) {
+    var A = map[a], B = map[b];
+    if (!A || !B) return;
+    var dx = B.x - A.x, dy = B.y - A.y;
+    var len = Math.sqrt(dx * dx + dy * dy) || 1;
+    var ux = dx / len, uy = dy / len;
+    var x1 = A.x + ux * (A.r + 3), y1 = A.y + uy * (A.r + 3);
+    var x2 = B.x - ux * (B.r + 8), y2 = B.y - uy * (B.r + 8);
+    var p = document.createElementNS(NS, "path");
+    p.setAttribute("d", "M" + x1.toFixed(1) + " " + y1.toFixed(1) + " L" + x2.toFixed(1) + " " + y2.toFixed(1));
+    p.setAttribute("class", cls);
+    p.setAttribute("marker-end", "url(#ah)");
+    p.setAttribute("color", cls.indexOf("debt") > -1 ? "var(--debt)" : "var(--line-strong)");
+    gEdges.appendChild(p);
+  }
+  E.forEach(function (e) { line(e[0], e[1], "edge"); });
+  D.forEach(function (e) { line(e[0], e[1], "edge debt"); });
+
+  var cap = document.createElementNS(NS, "text");
+  cap.setAttribute("class", "g-cap");
+  cap.setAttribute("x", "784");
+  cap.setAttribute("y", "472");
+  cap.textContent = "붉은 점선 = 게이팅 부채";
+  svg.appendChild(cap);
+
+  N.forEach(function (raw) {
+    var n = map[raw[0]];
+    var a = document.createElementNS(NS, "a");
+    a.setAttribute("href", REPO + n.id);
+    a.setAttribute("target", "_blank");
+    a.setAttribute("rel", "noopener");
+    a.setAttribute("class", "gnode-link");
+    a.setAttribute("aria-label", "이슈 #" + n.id + " " + n.t);
+
+    var g = document.createElementNS(NS, "g");
+    g.setAttribute("class", "gnode " + (n.ms === -1 ? "dbt sm" : "m" + n.ms + " " + n.st));
+    g.dataset.id = n.id;
+
+    var c = document.createElementNS(NS, "circle");
+    c.setAttribute("class", "body");
+    c.setAttribute("cx", n.x); c.setAttribute("cy", n.y); c.setAttribute("r", n.r);
+    g.appendChild(c);
+
+    if (n.st === "wip") {
+      var inner = document.createElementNS(NS, "circle");
+      inner.setAttribute("class", "inner");
+      inner.setAttribute("cx", n.x); inner.setAttribute("cy", n.y); inner.setAttribute("r", n.r - 5.5);
+      g.appendChild(inner);
+    }
+
+    var t = document.createElementNS(NS, "text");
+    t.setAttribute("x", n.x); t.setAttribute("y", n.y + 0.5);
+    t.textContent = "#" + n.id;
+    g.appendChild(t);
+
+    a.appendChild(g);
+    svg.appendChild(a);
+  });
+
+  /* ── floating note ── */
+  var note = document.getElementById("gnote");
+  var shown = null;
+
+  function deps(id) {
+    var into = [], out = [];
+    E.concat(D).forEach(function (e) {
+      if (e[1] === id) into.push("#" + e[0]);
+      if (e[0] === id) out.push("#" + e[1]);
+    });
+    var s = [];
+    if (into.length) s.push("선행 " + into.join(" · "));
+    if (out.length) s.push("후속 " + out.join(" · "));
+    return s.join("  |  ");
+  }
+
+  function place(x, y) {
+    var w = note.offsetWidth, h = note.offsetHeight, m = 12;
+    var left = x + 16, top = y + 16;
+    if (left + w + m > window.innerWidth) left = x - w - 16;
+    if (top + h + m > window.innerHeight) top = y - h - 16;
+    note.style.left = Math.max(m, left) + "px";
+    note.style.top = Math.max(m, top) + "px";
+  }
+
+  function open(g, x, y) {
+    var n = map[g.dataset.id];
+    if (!n) return;
+    var color = n.ms === -1 ? "var(--debt)" : "var(--m" + n.ms + ")";
+    note.style.setProperty("--nc", color);
+    var d = deps(n.id);
+    note.innerHTML =
+      '<div class="n-num">#' + n.id + '</div>' +
+      '<div class="n-title"></div>' +
+      '<div class="n-meta"></div>' +
+      (d ? '<div class="n-dep"></div>' : "");
+    note.querySelector(".n-title").textContent = n.t;
+    note.querySelector(".n-meta").textContent =
+      (n.ms === -1 ? "마일스톤 외" : MS_NAME[n.ms]) + " · " + ST_NAME[n.st] + " · " + n.role;
+    if (d) note.querySelector(".n-dep").textContent = d;
+    note.classList.add("on");
+    note.setAttribute("aria-hidden", "false");
+    place(x, y);
+    shown = g;
+  }
+
+  function close() {
+    if (!shown) return;
+    shown = null;
+    note.classList.remove("on");
+    note.setAttribute("aria-hidden", "true");
+  }
+
+  svg.addEventListener("pointerover", function (e) {
+    var g = e.target.closest ? e.target.closest(".gnode") : null;
+    if (!g) return;
+    open(g, e.clientX, e.clientY);
+  });
+  svg.addEventListener("pointermove", function (e) {
+    if (shown) place(e.clientX, e.clientY);
+  });
+  svg.addEventListener("pointerout", function (e) {
+    var g = e.target.closest ? e.target.closest(".gnode") : null;
+    if (!g) return;
+    if (e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest(".gnode") === g) return;
+    close();
+  });
+  svg.addEventListener("focusin", function (e) {
+    var t = e.target;
+    var g = (t.closest && t.closest(".gnode")) || (t.querySelector && t.querySelector(".gnode"));
+    if (!g) return;
+    var b = g.getBoundingClientRect();
+    open(g, b.left + b.width / 2, b.bottom - 8);
+  });
+  svg.addEventListener("focusout", close);
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
+  window.addEventListener("scroll", close, { passive: true });
+  window.addEventListener("resize", close);
+})();
+</script>
+
+<script>
+(function () {
+  if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+
+  var layer = document.getElementById("zoom-layer");
+  var SELECTOR = ".card, .cp, .debt-card, .next-card, .s-card";
+  var MAX_SCALE = 1.32, MIN_GAIN = 1.04, OPEN_DELAY = 130, margin = 14;
+  var current = null, openTimer = null;
+
+  function clear() {
+    if (openTimer) { clearTimeout(openTimer); openTimer = null; }
+    if (!current) return;
+    var clone = current.clone;
+    current = null;
+    layer.classList.remove("on");
+    clone.classList.remove("in");
+    var drop = function () { if (clone.parentNode) clone.parentNode.removeChild(clone); };
+    clone.addEventListener("transitionend", drop, { once: true });
+    setTimeout(drop, 400);
+  }
+
+  function show(el) {
+    var r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    var scale = Math.min(MAX_SCALE,
+      (window.innerWidth - margin * 2) / r.width,
+      (window.innerHeight - margin * 2) / r.height);
+    if (scale < MIN_GAIN) return;
+
+    var clone = el.cloneNode(true);
+    clone.classList.add("zoom-clone");
+    clone.removeAttribute("id");
+    clone.setAttribute("aria-hidden", "true");
+    clone.style.left = r.left + "px";
+    clone.style.top = r.top + "px";
+    clone.style.width = r.width + "px";
+    clone.style.height = r.height + "px";
+    clone.style.setProperty("--s", scale);
+
+    var cw = r.width * scale, ch = r.height * scale;
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    var tx = Math.min(Math.max(cx, cw / 2 + margin), window.innerWidth - cw / 2 - margin);
+    var ty = Math.min(Math.max(cy, ch / 2 + margin), window.innerHeight - ch / 2 - margin);
+    clone.style.setProperty("--dx", (tx - cx) + "px");
+    clone.style.setProperty("--dy", (ty - cy) + "px");
+
+    layer.appendChild(clone);
+    current = { el: el, clone: clone };
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        if (current && current.clone === clone) { clone.classList.add("in"); layer.classList.add("on"); }
+      });
+    });
+  }
+
+  function target(node) { return node && node.closest ? node.closest(SELECTOR) : null; }
+
+  document.addEventListener("pointerover", function (e) {
+    if (e.pointerType && e.pointerType !== "mouse") return;
+    var el = target(e.target);
+    if (!el || (current && current.el === el)) return;
+    clear();
+    openTimer = setTimeout(function () { openTimer = null; show(el); }, OPEN_DELAY);
+  });
+  document.addEventListener("pointerout", function (e) {
+    var el = target(e.target);
+    if (!el) return;
+    if (e.relatedTarget && target(e.relatedTarget) === el) return;
+    clear();
+  });
+  document.addEventListener("focusin", function (e) {
+    var el = target(e.target);
+    if (!el) { clear(); return; }
+    if (current && current.el === el) return;
+    clear(); show(el);
+  });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") clear(); });
+  window.addEventListener("scroll", clear, { passive: true });
+  window.addEventListener("resize", clear);
+  window.addEventListener("blur", clear);
+})();
+</script>
