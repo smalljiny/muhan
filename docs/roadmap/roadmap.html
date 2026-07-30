@@ -534,6 +534,7 @@
     <h1>지금 어디에 있나 — 무한 포팅 진행 궤도</h1>
     <p class="lede">1991–93년 Mordor 파생 한국어 MUD "무한"을 Node.js + 웹으로 재구현하는 프로젝트입니다. 에픽 E1~E13과 토픽·부채 이슈에서 파생한 현황입니다. <strong>규칙 엔진의 순수 레이어(전투·마법·진행·스탯·아이템·경제)는 전부 닫혔고, 지금 남은 것은 그 규칙을 살아 있는 세션에 잇는 "배선"입니다.</strong> 크리티컬 패스는 라이브 명령 배선 체인이며 그 유일한 헤드는 <a href="https://github.com/smalljiny/muhan/issues/118">#118</a>(오라클 이름 매처)입니다.</p>
     <p class="lede" style="margin-top:8px"><strong>07-30 기준</strong> — 게임 command 디스패처 + 연마(<code>train</code>) 배선 <a href="https://github.com/smalljiny/muhan/issues/106">#106</a>(PR #125)과 <code>character.flags</code> 스키마 <a href="https://github.com/smalljiny/muhan/issues/117">#117</a>(PR #127)이 머지됐습니다. <code>PROTOCOL_VERSION</code> 3. <strong>열린 PR 0 · 활성 worktree 0 · 작업 트리 clean</strong> — 착수 대기 상태이고, 막힌 항목은 없습니다. 다만 라이브에 진입한 <code>train</code>이 <a href="https://github.com/smalljiny/muhan/issues/124">#124</a>(재접속 시 진행도 무성 revert)에 노출됐습니다.</p>
+    <p class="lede" style="margin-top:8px"><strong>릴리스 계획</strong> — <strong>CP1이 첫 릴리스 지점</strong>입니다. 통과 시 릴리스를 내고 <code>develop</code>을 <code>main</code>에 병합합니다. 그때까지 원격에는 <code>develop</code> 하나만 존재하는 것이 정상입니다.</p>
 
     <!-- ══ HERO 다이어그램 ══ -->
     <div class="orbit">
@@ -903,10 +904,10 @@
         <div class="cp-head">
           <span class="cp-mark">◆</span>
           <span class="cp-id">CP1</span>
-          <span class="cp-title">걸어볼 수 있는 무한 — 첫 플레이</span>
+          <span class="cp-title">걸어볼 수 있는 무한 — 첫 플레이 · 첫 릴리스</span>
           <span class="cp-when">다음 관문 · 코드 작업</span>
         </div>
-        <p class="cp-desc">접속 → 캐릭터 생성/선택 → 방 설명을 읽고 → 이동하고 → 같은 방 사람과 대화한다. 전투 없이 <strong>월드를 걸어 다니는 것</strong>까지가 이 관문입니다. 1993년 무한에 처음 로그인했을 때의 첫 30초를 재현하는 지점.</p>
+        <p class="cp-desc">접속 → 캐릭터 생성/선택 → 방 설명을 읽고 → 이동하고 → 같은 방 사람과 대화한다. 전투 없이 <strong>월드를 걸어 다니는 것</strong>까지가 이 관문입니다. 1993년 무한에 처음 로그인했을 때의 첫 30초를 재현하는 지점. <strong>이 관문이 곧 첫 릴리스 지점입니다</strong> — 통과 시 릴리스를 내고 <code>develop</code>을 <code>main</code>에 병합합니다.</p>
         <div class="gates">
           <span class="gate ok">✓ M4 접속 셸 (E9·E10)</span>
           <span class="gate ok">✓ 라이브 상태원 · 방 배치 · tryMove (#114)</span>
@@ -916,8 +917,9 @@
           <span class="gate open">#116 이동 leave/join 방송</span>
           <span class="gate open">HIGH #124 진행도 무성 revert</span>
           <span class="gate open">HIGH #126 검증 게이트 거짓 통과</span>
+          <span class="gate open">릴리스 + <code>develop</code> → <code>main</code> 병합</span>
         </div>
-        <p class="cp-foot"><b>남은 것은 전부 코드이고, 막힌 것은 없습니다.</b> #60은 FE 단독, #116은 완전 독립이라 병렬로 돌 수 있습니다. 다만 <strong>#124를 닫지 않고 이 관문을 통과하면 안 됩니다</strong> — 진행도를 먹는 세계에 사람을 초대할 수는 없고, <code>train</code>이 이미 라이브라 노출 창이 열려 있습니다. #126은 이후 모든 토픽의 <code>/flow-verify</code> 결과를 의심스럽게 만들므로 함께 닫는 것이 싸게 끝납니다.</p>
+        <p class="cp-foot"><b>남은 것은 전부 코드이고, 막힌 것은 없습니다.</b> #60은 FE 단독, #116은 완전 독립이라 병렬로 돌 수 있습니다. 다만 <strong>#124를 닫지 않고 이 관문을 통과하면 안 됩니다</strong> — 진행도를 먹는 세계에 사람을 초대할 수는 없고, <code>train</code>이 이미 라이브라 노출 창이 열려 있습니다. #126은 이후 모든 토픽의 <code>/flow-verify</code> 결과를 의심스럽게 만들므로 함께 닫는 것이 싸게 끝납니다.<br><br><b>브랜치 상태 —</b> 원격에는 현재 <code>develop</code> 하나만 있고 기본 브랜치도 <code>develop</code>입니다. <code>main</code>은 <strong>이 관문에서 처음 생깁니다</strong>(로컬 <code>main</code>은 <code>3c1e209</code>에 멈춘 <code>develop</code>의 조상이라 고유 커밋 0개 — 병합 대상으로 보존). <code>.harness/rules/git-workflow.md</code>의 <code>main</code>=production 전략은 문서가 맞고 원격이 아직 따라오지 않은 상태입니다.</p>
       </div>
 
       <div class="ms">
