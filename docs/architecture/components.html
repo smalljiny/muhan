@@ -1,0 +1,926 @@
+<title>무한 컴포넌트 다이어그램 — L1 컨텍스트 · L2 서버 구획 · seam</title>
+<style>
+  :root {
+    --bg: #f4f5f9;
+    --panel: #ffffff;
+    --panel-2: #fafbfd;
+    --ink: #14161d;
+    --ink-2: #4b5162;
+    --ink-3: #7b8194;
+    --line: #e1e4ec;
+    --line-strong: #cbd0dc;
+
+    --star: #4b62d6;
+    --star-soft: #e7eaf9;
+    --star-line: #b9c2ef;
+
+    --now: #d4562a;
+    --now-soft: #fbe9e1;
+
+    --done: #2f8a6b;
+    --done-soft: #e0f1ea;
+    --wip: #a97a12;
+    --wip-soft: #f7eeda;
+    --todo: #7b8194;
+    --todo-soft: #eceef4;
+    --debt: #c0433e;
+    --debt-soft: #f9e3e2;
+
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Pretendard", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+    --shadow: 0 1px 2px rgba(20,22,29,.04), 0 4px 14px rgba(20,22,29,.05);
+    --shadow-lg: 0 10px 20px rgba(12,14,20,.12), 0 30px 60px rgba(12,14,20,.2);
+
+    --m0: #64748b; --m0s: #e8eaef;
+    --m1: #0d8f84; --m1s: #dcf0ee;
+    --m2: #3b6fd4; --m2s: #e3ebfa;
+    --m3: #7c5cd6; --m3s: #ebe5fa;
+    --m4: #a94a9c; --m4s: #f7e4f4;
+    --m5: #b4801a; --m5s: #f7eeda;
+    --m6: #5f8f27; --m6s: #e9f2d9;
+    --m7: #1c7f9e; --m7s: #dcedf5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1119; --panel: #161a23; --panel-2: #1a1f29;
+      --ink: #e8ebf2; --ink-2: #a5adbe; --ink-3: #6d7588;
+      --line: #252b37; --line-strong: #323a49;
+      --star: #8b9bee; --star-soft: #1d2340; --star-line: #3a4577;
+      --now: #f0794a; --now-soft: #3a2118;
+      --done: #46b48d; --done-soft: #113028;
+      --wip: #d2a344; --wip-soft: #332810;
+      --todo: #7b8496; --todo-soft: #222732;
+      --debt: #e5615c; --debt-soft: #371d1c;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.35);
+      --shadow-lg: 0 10px 24px rgba(0,0,0,.5), 0 34px 70px rgba(0,0,0,.6);
+      --m0: #94a3b8; --m0s: #242a35;
+      --m1: #38c2b3; --m1s: #12312e;
+      --m2: #7ea2ee; --m2s: #182642;
+      --m3: #a68bf0; --m3s: #241d3c;
+      --m4: #dd8ad0; --m4s: #382034;
+      --m5: #d2a344; --m5s: #332810;
+      --m6: #9cc75c; --m6s: #232f14;
+      --m7: #5cb6d4; --m7s: #122b35;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f5f9; --panel: #ffffff; --panel-2: #fafbfd;
+    --ink: #14161d; --ink-2: #4b5162; --ink-3: #7b8194;
+    --line: #e1e4ec; --line-strong: #cbd0dc;
+    --star: #4b62d6; --star-soft: #e7eaf9; --star-line: #b9c2ef;
+    --now: #d4562a; --now-soft: #fbe9e1;
+    --done: #2f8a6b; --done-soft: #e0f1ea;
+    --wip: #a97a12; --wip-soft: #f7eeda;
+    --todo: #7b8194; --todo-soft: #eceef4;
+    --debt: #c0433e; --debt-soft: #f9e3e2;
+    --shadow: 0 1px 2px rgba(20,22,29,.04), 0 4px 14px rgba(20,22,29,.05);
+    --shadow-lg: 0 10px 20px rgba(12,14,20,.12), 0 30px 60px rgba(12,14,20,.2);
+    --m0: #64748b; --m0s: #e8eaef; --m1: #0d8f84; --m1s: #dcf0ee;
+    --m2: #3b6fd4; --m2s: #e3ebfa; --m3: #7c5cd6; --m3s: #ebe5fa;
+    --m4: #a94a9c; --m4s: #f7e4f4; --m5: #b4801a; --m5s: #f7eeda;
+    --m6: #5f8f27; --m6s: #e9f2d9; --m7: #1c7f9e; --m7s: #dcedf5;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1119; --panel: #161a23; --panel-2: #1a1f29;
+    --ink: #e8ebf2; --ink-2: #a5adbe; --ink-3: #6d7588;
+    --line: #252b37; --line-strong: #323a49;
+    --star: #8b9bee; --star-soft: #1d2340; --star-line: #3a4577;
+    --now: #f0794a; --now-soft: #3a2118;
+    --done: #46b48d; --done-soft: #113028;
+    --wip: #d2a344; --wip-soft: #332810;
+    --todo: #7b8496; --todo-soft: #222732;
+    --debt: #e5615c; --debt-soft: #371d1c;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.35);
+    --shadow-lg: 0 10px 24px rgba(0,0,0,.5), 0 34px 70px rgba(0,0,0,.6);
+    --m0: #94a3b8; --m0s: #242a35; --m1: #38c2b3; --m1s: #12312e;
+    --m2: #7ea2ee; --m2s: #182642; --m3: #a68bf0; --m3s: #241d3c;
+    --m4: #dd8ad0; --m4s: #382034; --m5: #d2a344; --m5s: #332810;
+    --m6: #9cc75c; --m6s: #232f14; --m7: #5cb6d4; --m7s: #122b35;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); line-height: 1.55; -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--star); text-decoration: none; border-bottom: 1px solid transparent; }
+  a:hover { border-bottom-color: var(--star-line); }
+  a:focus-visible { outline: 2px solid var(--star); outline-offset: 2px; border-radius: 3px; }
+  code { font-family: var(--mono); font-size: .88em; }
+
+  .wrap { max-width: 1140px; margin: 0 auto; padding: 42px 26px 72px; }
+
+  /* ── header ─────────────────────────────── */
+  .eyebrow {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--ink-3); margin: 0 0 9px;
+  }
+  h1 {
+    font-size: clamp(25px, 3.2vw, 34px); line-height: 1.14; margin: 0 0 10px;
+    letter-spacing: -.022em; text-wrap: balance; font-weight: 640;
+  }
+  .lede { max-width: 70ch; color: var(--ink-2); font-size: 15px; margin: 0; }
+
+  /* ── 레벨 안내 3-카드 ───────────────────── */
+  .levels {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
+    gap: 12px; margin-top: 26px;
+  }
+  .lv {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 15px 17px; box-shadow: var(--shadow); border-top: 3px solid var(--line-strong);
+  }
+  .lv.a { border-top-color: var(--m2); }
+  .lv.b { border-top-color: var(--m3); }
+  .lv.c { border-top-color: var(--line-strong); }
+  .lv-k {
+    font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+  .lv.a .lv-k { color: var(--m2); }
+  .lv.b .lv-k { color: var(--m3); }
+  .lv-t { font-size: 15px; font-weight: 640; letter-spacing: -.012em; margin: 5px 0 5px; }
+  .lv-d { font-size: 12.5px; color: var(--ink-2); margin: 0; }
+  .lv-d code { background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  .lv-n {
+    font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
+    margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line); letter-spacing: .03em;
+  }
+
+  /* ── section heads ──────────────────────── */
+  .sec { margin-top: 46px; }
+  .sec-head { display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap; margin-bottom: 4px; }
+  .sec-head h2 { font-size: 19px; font-weight: 640; letter-spacing: -.015em; margin: 0; }
+  .sec-tag { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
+  .sec-note { font-size: 13.5px; color: var(--ink-2); margin: 0 0 18px; max-width: 78ch; }
+
+  /* ── diagram box ────────────────────────── */
+  .dia {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+    box-shadow: var(--shadow); padding: 20px 0 16px;
+  }
+  .dia-scroll { overflow-x: auto; padding: 0 20px; }
+  .dia-scroll svg { display: block; width: 100%; height: auto; }
+  #svg-l1 { min-width: 900px; }
+  #svg-l2 { min-width: 880px; }
+
+  /* node boxes */
+  .nb { cursor: default; }
+  .nb rect.body {
+    fill: var(--ns); stroke: var(--nc); stroke-width: 2;
+    transition: stroke-width .12s ease;
+  }
+  .nb.ext rect.body { stroke-dasharray: 5 3.5; }
+  .nb:hover rect.body { stroke-width: 3.2; }
+  .nb .n-t {
+    font-family: var(--sans); font-size: 12.5px; font-weight: 640; fill: var(--ink);
+    text-anchor: middle; pointer-events: none;
+  }
+  .nb .n-s {
+    font-family: var(--mono); font-size: 10px; fill: var(--nc);
+    text-anchor: middle; pointer-events: none; letter-spacing: .03em;
+  }
+  .nb.m0 { --nc: var(--m0); --ns: var(--m0s); }
+  .nb.m1 { --nc: var(--m1); --ns: var(--m1s); }
+  .nb.m2 { --nc: var(--m2); --ns: var(--m2s); }
+  .nb.m3 { --nc: var(--m3); --ns: var(--m3s); }
+  .nb.m4 { --nc: var(--m4); --ns: var(--m4s); }
+  .nb.m5 { --nc: var(--m5); --ns: var(--m5s); }
+  .nb.m6 { --nc: var(--m6); --ns: var(--m6s); }
+  .nb.m7 { --nc: var(--m7); --ns: var(--m7s); }
+
+  /* edges */
+  .ed { fill: none; stroke-width: 1.6; }
+  .ed.live { stroke: var(--done); }
+  .ed.gap  { stroke: var(--debt); stroke-dasharray: 5 3.5; }
+  .ed.type { stroke: var(--line-strong); stroke-dasharray: 2 3; }
+  .ed-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; }
+  .ed-hit:hover + .ed, .ed-hit:focus-visible + .ed { stroke-width: 3.2; }
+
+  .d-legend {
+    display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 15px 22px 0; margin-top: 14px;
+    border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-2);
+  }
+  .d-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .d-legend i.el { width: 22px; height: 0; border-top-width: 2px; border-top-style: solid; flex: none; }
+  .d-legend i.el.live { border-top-color: var(--done); }
+  .d-legend i.el.gap  { border-top-color: var(--debt); border-top-style: dashed; }
+  .d-legend i.el.type { border-top-color: var(--line-strong); border-top-style: dotted; }
+  .d-legend i.nl { width: 14px; height: 12px; border-radius: 3px; border: 2px solid var(--ink-3); background: var(--todo-soft); flex: none; }
+  .d-legend i.nl.ext { border-style: dashed; }
+  .d-legend .div { width: 1px; height: 15px; background: var(--line); }
+  .d-hint { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-left: auto; letter-spacing: .04em; }
+  .d-hint::before { content: "⌖ "; color: var(--star); }
+  @media (hover: none), (pointer: coarse) { .d-hint { display: none; } }
+
+  /* floating note */
+  #dnote {
+    position: fixed; z-index: 60; pointer-events: none; opacity: 0;
+    transform: translateY(4px); transition: opacity .13s ease, transform .13s ease;
+    max-width: 340px; background: var(--panel); color: var(--ink);
+    border: 1px solid var(--line-strong); border-left: 3px solid var(--nc, var(--star));
+    border-radius: 10px; padding: 10px 13px; box-shadow: var(--shadow-lg);
+  }
+  #dnote.on { opacity: 1; transform: translateY(0); }
+  #dnote .n-k {
+    font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--nc, var(--star));
+    letter-spacing: .08em; text-transform: uppercase;
+  }
+  #dnote .n-h { font-size: 13.5px; font-weight: 620; letter-spacing: -.01em; margin: 3px 0 5px; }
+  #dnote .n-b { font-size: 12.5px; color: var(--ink-2); }
+  #dnote .n-b code { font-family: var(--mono); font-size: .9em; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; }
+  #dnote .n-f {
+    font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); margin-top: 7px;
+    padding-top: 6px; border-top: 1px solid var(--line); letter-spacing: .03em;
+  }
+  @media (prefers-reduced-motion: reduce) { #dnote { transition: opacity .01s linear; } }
+
+  /* ── tables ─────────────────────────────── */
+  .tbl-wrap {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    box-shadow: var(--shadow); overflow-x: auto;
+  }
+  table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 12.5px; }
+  thead th {
+    text-align: left; font-family: var(--mono); font-size: 10px; font-weight: 700;
+    letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3);
+    padding: 11px 14px; border-bottom: 1px solid var(--line-strong); background: var(--panel-2);
+    white-space: nowrap;
+  }
+  tbody td { padding: 11px 14px; border-bottom: 1px solid var(--line); color: var(--ink-2); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--panel-2); }
+  td.nm { color: var(--ink); font-family: var(--mono); font-size: 11.5px; white-space: nowrap; }
+  td code, th code { font-family: var(--mono); font-size: 11px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: var(--ink); }
+  tbody tr:hover td code { background: var(--panel); }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+    font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .05em;
+    border-radius: 5px; padding: 2px 7px;
+  }
+  .pill.live { background: var(--done-soft); color: var(--done); }
+  .pill.gap  { background: var(--debt-soft); color: var(--debt); }
+  .pill.warn { background: var(--wip-soft); color: var(--wip); }
+  .pill.na   { background: var(--todo-soft); color: var(--ink-3); }
+
+  /* ── L3 plan ────────────────────────────── */
+  .plan { display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 12px; }
+  .plan-card {
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--line-strong);
+    border-radius: 10px; padding: 13px 16px; box-shadow: var(--shadow);
+  }
+  .plan-card.q { border-left-color: var(--m2); }
+  .plan-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+  .plan-t { font-size: 13.5px; font-weight: 620; letter-spacing: -.008em; }
+  .plan-n { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-left: auto; white-space: nowrap; }
+  .plan-b { font-size: 12.5px; color: var(--ink-2); margin: 0; }
+  .plan-b code { font-family: var(--mono); font-size: 11px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  .plan-w { font-family: var(--mono); font-size: 10.5px; color: var(--star); margin-top: 8px; letter-spacing: .04em; }
+
+  .excl {
+    margin-top: 12px; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 13px 16px; font-size: 12.5px; color: var(--ink-2);
+  }
+  .excl b { color: var(--ink); font-weight: 620; }
+
+  footer {
+    margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--ink-3); font-family: var(--mono);
+    display: flex; flex-wrap: wrap; gap: 6px 20px;
+  }
+
+  @media (max-width: 620px) {
+    .wrap { padding: 32px 16px 56px; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">muhan · component diagram · 2026-07-30 · <strong>develop fd40682</strong></p>
+    <h1>무한 컴포넌트 다이어그램 — 무엇이 실제로 이어져 있나</h1>
+    <p class="lede">C4 방식 3레벨입니다. 이 프로젝트는 배포 단위가 <strong>서버 프로세스 하나</strong>라 Context와 Container 레벨이 붕괴하므로, L1은 패키지 목록이 아니라 <strong>시스템 컨텍스트</strong>(외부 경계 + 빌드타임 입력)로 잡았습니다.</p>
+    <p class="lede" style="margin-top:8px">간선은 포함 관계가 아니라 <strong>배선 상태</strong>를 인코딩합니다 — 초록 실선은 프로덕션에서 실제로 흐르는 경로, 붉은 점선은 seam은 있으나 <code>noop</code>이거나 호출처가 없는 경로입니다. 포함 관계는 LSP 도구가 라이브로 더 정확히 답하고, 이 프로젝트를 두 번 놀라게 한 것은 <strong>"배선만 하면 된다"는 전제</strong>였습니다. <strong>간선에 커서를 올리면 계약·주입 지점·이슈 번호</strong>가 뜹니다.</p>
+
+    <div class="levels">
+      <div class="lv a">
+        <div class="lv-k">Level 1 — 이 문서</div>
+        <div class="lv-t">시스템 컨텍스트</div>
+        <p class="lv-d">외부 경계와 빌드타임 입력. <code>legacy/muhan/src</code> 오라클과 <code>data/world/</code> JSON이 여기 들어가는 게 이 프로젝트의 특징입니다.</p>
+        <div class="lv-n">노드 9 · 스택 결정이 바뀔 때만 변경</div>
+      </div>
+      <div class="lv b">
+        <div class="lv-k">Level 2 — 이 문서</div>
+        <div class="lv-t">서버 내부 구획</div>
+        <p class="lv-d">단일 프로세스 안의 구획과 계약 경계. 조립 루트에서 규칙 엔진까지의 의존 방향과 배선 상태를 담습니다.</p>
+        <div class="lv-n">노드 7 · 간선 14 (미배선 2) · 에픽이 닫힐 때 변경</div>
+      </div>
+      <div class="lv c">
+        <div class="lv-k">Level 3 — 예정</div>
+        <div class="lv-t">영역별 모듈 상세</div>
+        <p class="lv-d">6개 영역만 작성합니다. L2에서 하나로 접은 <strong>규칙 엔진</strong>도 여기서 전투·마법으로 갈립니다. 노드는 <strong>모듈(파일)</strong>까지 — 함수 단위로 내려가면 C4의 Code 레벨이고 즉시 drift합니다.</p>
+        <div class="lv-n">아래 §L3 작성 계획 참조</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══ L1 ══ -->
+  <section class="sec" aria-label="L1 시스템 컨텍스트">
+    <div class="sec-head">
+      <h2>L1 — 시스템 컨텍스트</h2>
+      <span class="sec-tag">context · 외부 경계 + 빌드타임 입력</span>
+    </div>
+    <p class="sec-note">왼쪽 3개는 <strong>빌드타임 파이프라인</strong>입니다 — 1993년 32비트 구조체 덤프를 <code>port/</code>가 JSON으로 풀고, 서버는 그 JSON만 읽습니다. <code>legacy/muhan/src</code>는 실행 대상이 아니라 <strong>동작 명세(oracle)</strong>이고, 런타임 의존이 아니라 사람과 골든 fixture가 참조하는 경로라 점선 테두리로 뒀습니다.</p>
+
+    <div class="dia">
+      <div class="dia-scroll">
+        <svg id="svg-l1" role="img" aria-label="L1 시스템 컨텍스트 — legacy 오라클에서 port 변환기를 거쳐 data/world JSON이 만들어지고, 서버 프로세스가 그것을 읽으며 MongoDB·Firebase Auth에 연결하고, shared/protocol 계약을 통해 브라우저 클라이언트와 WebSocket으로 통신합니다."></svg>
+      </div>
+      <div class="d-legend">
+        <span><i class="el live"></i> 실 배선</span>
+        <span><i class="el type"></i> 계약·참조 의존</span>
+        <i class="div"></i>
+        <span><i class="nl"></i> 이 저장소가 만드는 것</span>
+        <span><i class="nl ext"></i> 외부·읽기 전용</span>
+        <span class="d-hint">간선에 커서를 올리면 계약</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ L2 ══ -->
+  <section class="sec" aria-label="L2 서버 내부 구획">
+    <div class="sec-head">
+      <h2>L2 — 서버 내부 구획</h2>
+      <span class="sec-tag">container · 배선 상태 인코딩</span>
+    </div>
+    <p class="sec-note">이 다이어그램의 핵심은 <strong>붉은 점선 2개</strong>입니다 — 규칙 엔진으로 들어가는 진입 경로가 둘(플레이어 명령 / 몬스터 tick)인데 <strong>양쪽이 다 끊겼습니다</strong>. 규칙 레이어는 완성돼 오라클 대조까지 끝났고, 유닛 테스트는 통과하지만 프로덕션에서는 죽어 있습니다. 살아 있는 유일한 규칙 경로는 <code>progress:train</code> 하나입니다. 조립은 전부 <code>index.ts</code>(186줄) → <code>liveWorldWiring</code>(185줄) → <code>plugin.ts</code>(692줄) 단일 체인을 지납니다.</p>
+
+    <div class="dia">
+      <div class="dia-scroll">
+        <svg id="svg-l2" role="img" aria-label="L2 서버 내부 구획 — 부트스트랩이 전송·세션·월드 런타임·영속화·인증을 조립하고, 규칙 엔진으로 가는 두 진입 경로(플레이어 명령·몬스터 tick) 중 연마(train) 하나만 배선돼 있습니다."></svg>
+      </div>
+      <div class="d-legend">
+        <span><i class="el live"></i> 실 배선 (프로덕션에서 흐름)</span>
+        <span><i class="el gap"></i> 미배선 (noop 또는 호출처 0건)</span>
+        <span><i class="el type"></i> 타입·계약 의존</span>
+        <span class="d-hint">간선에 커서를 올리면 seam·이슈</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ seam 카탈로그 ══ -->
+  <section class="sec" aria-label="seam 카탈로그">
+    <div class="sec-head">
+      <h2>seam 카탈로그</h2>
+      <span class="sec-tag">table · 레벨 아님 · HEAD 재검증</span>
+    </div>
+    <p class="sec-note">이 프로젝트는 DIP seam 위에 서 있습니다. 패턴은 일관되게 <code>명시 주입 ?? 묶음 파생 ?? 기본 어댑터</code>이고, 기본 어댑터가 <code>noop</code>이라 <strong>주입을 빼먹어도 조용히 동작합니다</strong> — 그게 이 표가 필요한 이유입니다. 아래 상태는 전부 <code>develop fd40682</code>에서 확인했습니다.</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>포트 / seam</th>
+            <th>실 어댑터</th>
+            <th>기본(fallback)</th>
+            <th>주입 지점</th>
+            <th>상태</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="nm">SessionAuthPort</td>
+            <td><code>FirebaseSessionAuthAdapter</code><br><code>devSeedSessionAuth</code>(dev)</td>
+            <td><code>InMemorySessionAuthAdapter</code></td>
+            <td><code>index.ts:110-112</code><br><span style="color:var(--ink-3)">DEV_LOGIN_ENABLED 분기</span></td>
+            <td><span class="pill live">LIVE</span></td>
+          </tr>
+          <tr>
+            <td class="nm">SessionLifecyclePort</td>
+            <td><code>createLiveSessionLifecycleAdapter</code><br><span style="color:var(--ink-3)">묶음 파생</span></td>
+            <td><code>createNoopSessionLifecycleAdapter</code></td>
+            <td><code>plugin.ts:340</code></td>
+            <td><span class="pill live">LIVE</span></td>
+          </tr>
+          <tr>
+            <td class="nm">ChannelPort</td>
+            <td><code>assembleRoomChannelPort</code> →<br><code>createRoomChannelAdapter</code></td>
+            <td><code>createNoopChannelAdapter</code></td>
+            <td><code>plugin.ts:328-338</code><br><span style="color:var(--ink-3)">유일한 transport 결합점</span></td>
+            <td><span class="pill live">LIVE</span><br><span style="color:var(--ink-3)">방 채팅만</span></td>
+          </tr>
+          <tr>
+            <td class="nm">PermissionPort</td>
+            <td>— <strong>없음</strong></td>
+            <td><code>createPermissivePermissionAdapter</code><br><span style="color:var(--debt)">항상 allow</span></td>
+            <td><code>plugin.ts:307</code> 기본 파라미터<br><span style="color:var(--ink-3)">app.ts가 undefined 통과</span></td>
+            <td><span class="pill warn">PERMISSIVE</span></td>
+          </tr>
+          <tr>
+            <td class="nm">tryMove.onRoomEntered<br>tryMove.onRoomLeft</td>
+            <td><code>worldRuntime.onRoomEntered/Left</code></td>
+            <td><code>noopOnRoomEntered/Left</code><br><code>tryMove.ts:86,89</code></td>
+            <td><code>index.ts:100-101</code></td>
+            <td><span class="pill live">LIVE</span></td>
+          </tr>
+          <tr>
+            <td class="nm">tryMove.broadcastLeave<br>tryMove.broadcastJoin</td>
+            <td>— <strong>없음</strong></td>
+            <td><code>noopBroadcast</code><br><code>liveWorldWiring.ts:107</code></td>
+            <td><code>liveWorldWiring.ts:111-112</code></td>
+            <td><span class="pill gap">NOOP</span><br><a href="https://github.com/smalljiny/muhan/issues/116">#116</a></td>
+          </tr>
+          <tr>
+            <td class="nm">worldRuntime.onCombatTick</td>
+            <td><code>createCombatTick</code><br><span style="color:var(--ink-3)">정의만, 호출처 0건</span></td>
+            <td><code>defaultOnCombatTick</code>(no-op)</td>
+            <td><code>index.ts:87</code> — <code>now</code>만 전달</td>
+            <td><span class="pill gap">미주입</span><br><a href="https://github.com/smalljiny/muhan/issues/99">#99</a></td>
+          </tr>
+          <tr>
+            <td class="nm">worldRuntime.spawnRng<br>invasionRng · broadcast<br>templates · events</td>
+            <td>— <strong>없음</strong></td>
+            <td>내부 stub</td>
+            <td><code>index.ts:87</code> 미전달<br><span style="color:var(--ink-3)">invasion 슬롯은 register 제외</span></td>
+            <td><span class="pill gap">미주입</span><br><a href="https://github.com/smalljiny/muhan/issues/99">#99</a></td>
+          </tr>
+          <tr>
+            <td class="nm">SpellDispatch</td>
+            <td><code>registerOffensiveSpells</code> 외 6종<br><code>crtSpell.ts:86,94</code> 자체 등록</td>
+            <td>빈 dispatch</td>
+            <td><code>crtSpell</code> 모듈 내부<br><span style="color:var(--ink-3)">crtSpell 자체가 미배선</span></td>
+            <td><span class="pill gap">DORMANT</span><br><a href="https://github.com/smalljiny/muhan/issues/99">#99</a> · <a href="https://github.com/smalljiny/muhan/issues/122">#122</a></td>
+          </tr>
+          <tr>
+            <td class="nm">명령 레지스트리</td>
+            <td><code>createMoveHandler</code> · <code>createTrainHandler</code><br><code>createChatHandler</code> · echo</td>
+            <td>등록 안 함 → <code>unknown_type</code></td>
+            <td><code>router.ts:65-76</code><br><span style="color:var(--ink-3)">deps 있을 때만 set</span></td>
+            <td><span class="pill live">4/9</span><br><span style="color:var(--ink-3)">attack·cast·study·teach 없음</span></td>
+          </tr>
+          <tr>
+            <td class="nm">SaveEngine.markDirty</td>
+            <td><code>createMarkCharacterDirty</code> 래퍼</td>
+            <td>—</td>
+            <td><code>index.ts:98</code> → <code>liveWorldWiring.ts:91</code></td>
+            <td><span class="pill live">LIVE</span><br><a href="https://github.com/smalljiny/muhan/issues/124">#124</a> 노출</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══ dormant 모듈 ══ -->
+  <section class="sec" aria-label="dormant 모듈">
+    <div class="sec-head">
+      <h2>dormant 모듈</h2>
+      <span class="sec-tag">정의 + 배럴 export만 · 실 호출처 0건</span>
+    </div>
+    <p class="sec-note">규칙 레이어에 완성돼 있으나 프로덕션 경로에서 아무도 부르지 않는 함수들입니다. <code>packages/*/src</code>에서 테스트·<code>testutil</code>·배럴 재export·주석을 제외하고 확인했습니다. 이것들이 L2의 붉은 점선을 만드는 실체입니다.</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>함수 / 모듈</th>
+            <th>정의 위치</th>
+            <th>왜 못 부르나</th>
+            <th>소관 이슈</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="nm">createCombatTick</td>
+            <td><code>combat/combatTick.ts:84</code></td>
+            <td><code>index.ts</code> boot가 <code>onCombatTick</code>을 조립하지 않는다 — 결과적으로 실행 중 서버에서 몬스터가 근접·시전을 하지 않는다</td>
+            <td><a href="https://github.com/smalljiny/muhan/issues/99">#99</a></td>
+          </tr>
+          <tr>
+            <td class="nm">createCombatRegistry</td>
+            <td><code>combat/combatRegistry.ts</code></td>
+            <td>월드 입·퇴장 대칭 등록 콜사이트가 커넥션 계층 글루로 유예됐다. 현 <code>liveWorldWiring</code>은 <code>liveRegistry</code>만 다룬다</td>
+            <td><a href="https://github.com/smalljiny/muhan/issues/121">#121</a></td>
+          </tr>
+          <tr>
+            <td class="nm">initiateAttack</td>
+            <td><code>combat/initiateAttack.ts:43</code></td>
+            <td><code>PlayerCombatant</code> 생산 경로가 없다 (아래 <code>toPlayerCombatState</code> 참조)</td>
+            <td><a href="https://github.com/smalljiny/muhan/issues/121">#121</a></td>
+          </tr>
+          <tr>
+            <td class="nm">toPlayerCombatState</td>
+            <td><code>combat/playerState.ts:101</code></td>
+            <td>두 입력이 모두 미구현 — <code>EffectiveStatContext</code> 8필드 중 5필드 합성 코드가 0건이고, 장비 → <code>StatModifier[]</code> 변환과 <code>WeaponDamage</code> 투영 생산자가 없다</td>
+            <td><a href="https://github.com/smalljiny/muhan/issues/121">#121</a></td>
+          </tr>
+          <tr>
+            <td class="nm">loadObjectTemplates</td>
+            <td><code>items/objectTemplate.ts:96</code></td>
+            <td><code>index.ts</code> boot 전체에 호출이 없다. <code>ObjectRepository</code>는 인스턴스 문서 전용이라 템플릿을 취급하지 않는다</td>
+            <td><a href="https://github.com/smalljiny/muhan/issues/120">#120</a></td>
+          </tr>
+          <tr>
+            <td class="nm">crtSpell</td>
+            <td><code>magic/crtSpell.ts</code></td>
+            <td>몬스터 tick이 미배선이라 진입점이 없다. 다만 게이트 → 디스패치 → 핸들러 조립의 <strong>유일한 worked example</strong>이라 <code>cast</code> 배선의 참조 구현이 된다</td>
+            <td><a href="https://github.com/smalljiny/muhan/issues/99">#99</a> · <a href="https://github.com/smalljiny/muhan/issues/122">#122</a></td>
+          </tr>
+          <tr>
+            <td class="nm">hydrateInventory</td>
+            <td><code>repo/characterRepository.ts:122</code></td>
+            <td>존재하지만 <code>LiveWorldWiringBundle.characterRepo</code>가 <code>findById</code>만 노출해 라이브 경로에서 호출 불가</td>
+            <td><a href="https://github.com/smalljiny/muhan/issues/120">#120</a></td>
+          </tr>
+          <tr>
+            <td class="nm">projectEquipStats</td>
+            <td><code>items/equipStats.ts:44</code></td>
+            <td><code>EffectiveStatContext</code> 8필드 중 3필드만 산출한다. 인스턴스 → 템플릿 join 함수도 없어 <code>EquippedPair</code>를 만들 수 없다</td>
+            <td><a href="https://github.com/smalljiny/muhan/issues/121">#121</a> · <a href="https://github.com/smalljiny/muhan/issues/120">#120</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══ L3 계획 ══ -->
+  <section class="sec" aria-label="L3 작성 계획">
+    <div class="sec-head">
+      <h2>L3 작성 계획</h2>
+      <span class="sec-tag">6 영역 · 디렉터리 15개 전부가 아님</span>
+    </div>
+    <p class="sec-note">배선이 자명하지 않은 영역만 작성합니다. 15개 디렉터리마다 L3를 만들면 15장이 되고 ~200개 소스 파일과 동기화해야 하는 부채가 됩니다. L3 노드는 <strong>모듈(파일)</strong>까지이고, 배선 상태 오버레이는 이 문서와 같은 방식으로 HEAD 기준 재검증 후 붙입니다.</p>
+
+    <div class="plan">
+      <div class="plan-card q">
+        <div class="plan-top"><span class="plan-t">전송·세션</span><span class="plan-n">ws · 33 모듈</span></div>
+        <p class="plan-b">FSM + 라우터 + 포트 4개 + 조립. 최대 복잡도이고 <code>plugin.ts</code> 692줄이 우선순위 분기(<code>explicit &gt; bundle &gt; noop</code>)를 전부 담고 있습니다.</p>
+        <div class="plan-w">▸ 최우선 · seam 표의 절반이 여기서 나옴</div>
+      </div>
+      <div class="plan-card q">
+        <div class="plan-top"><span class="plan-t">월드 런타임</span><span class="plan-n">world · 23 모듈</span></div>
+        <p class="plan-b">1Hz 틱 슬롯·스폰 3트리거·<code>tryMove</code>·라이브 캐릭터 레지스트리. <code>worldRuntime</code> 미주입 의존 5개가 여기 모입니다.</p>
+        <div class="plan-w">▸ 최우선 · #99 범위와 일치</div>
+      </div>
+      <div class="plan-card q">
+        <div class="plan-top"><span class="plan-t">영속화</span><span class="plan-n">repo+save+db · 15 모듈</span></div>
+        <p class="plan-b">write-behind(<code>DirtyTracker</code> LWW) 경로와 Mongo 트랜잭션 경로가 조정점 없이 공존합니다. <strong>HIGH 2건이 여기 삽니다</strong>.</p>
+        <div class="plan-w">▸ #124 · #43 진단에 직접 쓰임</div>
+      </div>
+      <div class="plan-card q">
+        <div class="plan-top"><span class="plan-t">규칙: 전투</span><span class="plan-n">combat · 19 모듈</span></div>
+        <p class="plan-b">순수/불순 경계와 <code>initiateAttack</code> 진입점. death seam 발화 책임이 호출자로 이양된 구조를 그려야 <code>attack</code> 배선 범위가 보입니다.</p>
+        <div class="plan-w">▸ #121 착수 전</div>
+      </div>
+      <div class="plan-card q">
+        <div class="plan-top"><span class="plan-t">규칙: 마법</span><span class="plan-n">magic · 15 모듈</span></div>
+        <p class="plan-b">게이트 → 디스패치 → 핸들러에서 request 형태가 4종(offensive·instant·buff·debuff)으로 갈리고 target 타입이 서로 다릅니다.</p>
+        <div class="plan-w">▸ #122 착수 전</div>
+      </div>
+      <div class="plan-card q">
+        <div class="plan-top"><span class="plan-t">공유 계약</span><span class="plan-n">shared · ~40 모듈</span></div>
+        <p class="plan-b"><code>protocol</code>(와이어) · <code>schema</code>(문서) · <code>oracle</code>(골든 fixture) · <code>stats</code>. 프론트/백엔드 병행의 유일한 접점이라 경계가 문서화될 값이 큽니다.</p>
+        <div class="plan-w">▸ E11·E12 프로토콜 확장 전</div>
+      </div>
+    </div>
+
+    <div class="excl">
+      <b>L3를 만들지 않는 영역 —</b> <code>client</code>(8 모듈) · <code>port</code>(3) · <code>auth</code>(10) · <code>items</code>/<code>economy</code>/<code>bank</code>(12)는 L2 리프 상자로 둡니다. 규모가 작아 L2 노드 하나 + seam 표 한 줄로 충분히 표현되고, LSP 도구가 라이브로 더 정확하게 답합니다. <code>client</code>는 E11·E12·E13이 착지해 컴포넌트가 늘어나면 그때 L3를 추가하는 것이 맞습니다.
+    </div>
+  </section>
+
+  <footer>
+    <span>검증 기준: develop fd40682 (2026-07-30)</span>
+    <span>설계 정본: docs/specs/architecture.md (ADR #14)</span>
+    <span>진행 상황: docs/roadmap/roadmap.html</span>
+    <span>SoT는 코드와 GitHub 이슈 — 이 페이지는 파생 조감도이고, 배선 상태는 위 커밋에서만 참이다</span>
+  </footer>
+</div>
+
+<div id="dnote" role="tooltip" aria-hidden="true"></div>
+
+<script>
+/* ── 레이어 자동 배치 다이어그램 빌더 ───────────────────────
+   노드는 col(레이어)만 선언하고 좌표는 계산한다. 손으로 좌표를 놓으면
+   노드가 하나 늘 때마다 기하를 다시 풀어야 하고 간선 겹침이 조용히 생긴다. */
+(function () {
+  var NS = "http://www.w3.org/2000/svg";
+  var note = document.getElementById("dnote");
+  var shown = null;
+
+  function el(name, attrs) {
+    var e = document.createElementNS(NS, name);
+    for (var k in attrs) if (Object.hasOwn(attrs, k)) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  function place(x, y) {
+    var w = note.offsetWidth, h = note.offsetHeight, m = 12;
+    var left = x + 16, top = y + 16;
+    if (left + w + m > window.innerWidth) left = x - w - 16;
+    if (top + h + m > window.innerHeight) top = y - h - 16;
+    note.style.left = Math.max(m, left) + "px";
+    note.style.top = Math.max(m, top) + "px";
+  }
+
+  function openNote(data, color, x, y) {
+    note.style.setProperty("--nc", color);
+    note.innerHTML =
+      '<div class="n-k"></div><div class="n-h"></div><div class="n-b"></div>' +
+      (data.foot ? '<div class="n-f"></div>' : "");
+    note.querySelector(".n-k").textContent = data.kind;
+    note.querySelector(".n-h").textContent = data.head;
+    note.querySelector(".n-b").innerHTML = data.body;
+    if (data.foot) note.querySelector(".n-f").textContent = data.foot;
+    note.classList.add("on");
+    note.setAttribute("aria-hidden", "false");
+    place(x, y);
+    shown = true;
+  }
+
+  function closeNote() {
+    if (!shown) return;
+    shown = null;
+    note.classList.remove("on");
+    note.setAttribute("aria-hidden", "true");
+  }
+
+  var STATUS_LABEL = { live: "실 배선", gap: "미배선", type: "계약 의존" };
+
+  function build(svgId, N, E, opt) {
+    var svg = document.getElementById(svgId);
+    if (!svg) return;
+
+    var BW = opt.bw, BH = opt.bh, COLGAP = opt.colgap, ROWGAP = opt.rowgap;
+    var PADX = opt.padx, PADY = opt.pady;
+
+    // 열별로 묶고, 각 열을 수직 중앙 정렬한다.
+    var cols = {}, colKeys = [];
+    N.forEach(function (n) {
+      if (!Object.hasOwn(cols, n.col)) { cols[n.col] = []; colKeys.push(n.col); }
+      cols[n.col].push(n);
+    });
+    colKeys.sort(function (a, b) { return a - b; });
+
+    var maxRows = 0;
+    colKeys.forEach(function (c) { if (cols[c].length > maxRows) maxRows = cols[c].length; });
+    var innerH = maxRows * BH + (maxRows - 1) * ROWGAP;
+    var maxCol = colKeys[colKeys.length - 1];
+    var W = PADX * 2 + (maxCol + 1) * BW + maxCol * COLGAP;
+
+    colKeys.forEach(function (c) {
+      var list = cols[c];
+      var colH = list.length * BH + (list.length - 1) * ROWGAP;
+      var startY = PADY + (innerH - colH) / 2;
+      list.forEach(function (n, i) {
+        n.x = PADX + c * (BW + COLGAP);
+        n.y = startY + i * (BH + ROWGAP);
+      });
+    });
+
+    var map = {};
+    N.forEach(function (n) { map[n.id] = n; });
+
+    /* 열을 건너뛰는 간선이 중간 상자에 가려 사라지는 문제를, 간선을 상자 위에 그려서 풀면
+       상자의 라벨을 훼손한다. 그래서 (a) 상자를 지나는 간선을 수식으로 판정하고 (b) 그런
+       간선만 다이어그램 아래 별도 레인으로 우회시킨다. 손으로 고르지 않고 코드가 검출한다. */
+    function cubicAt(p, t) {
+      var u = 1 - t, a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, dd = t * t * t;
+      return { x: a * p[0] + b * p[2] + c * p[4] + dd * p[6], y: a * p[1] + b * p[3] + c * p[5] + dd * p[7] };
+    }
+    function crossesBox(p, skipA, skipB) {
+      for (var t = 0.02; t < 0.99; t += 0.01) {
+        var q = cubicAt(p, t);
+        for (var i = 0; i < N.length; i++) {
+          var n = N[i];
+          if (n.id === skipA || n.id === skipB) continue;
+          if (q.x > n.x - 2 && q.x < n.x + BW + 2 && q.y > n.y - 2 && q.y < n.y + BH + 2) return true;
+        }
+      }
+      return false;
+    }
+
+    /* 레인 경로는 완전 직교로 만든다 — A의 오른쪽에서 나가 열 사이 빈틈으로 내려가고, 상자 아래
+       레인을 따라 이동한 뒤 B의 왼쪽 앞 빈틈에서 올라와 B로 들어간다. 상자 위·아래를 지나는 구간이
+       없으므로 같은 열의 이웃 상자를 관통하지 않는다(직전 구현의 결함). 모서리는 짧은 Q로 둥글린다. */
+    function orthoLane(sx, sy, ax0, ly, bx0, By, ex) {
+      var r = Math.min(8, Math.abs(ly - sy) / 2, Math.abs(By - ly) / 2, Math.abs(bx0 - ax0) / 2, Math.abs(ax0 - sx) || 8);
+      if (!(r > 1)) r = 2;
+      var xm = bx0 > ax0 ? 1 : -1;
+      var ys = ly > sy ? 1 : -1;
+      var yb = By < ly ? -1 : 1;
+      return "M" + sx + " " + sy +
+        " L" + (ax0 - r) + " " + sy +
+        " Q" + ax0 + " " + sy + " " + ax0 + " " + (sy + ys * r) +
+        " L" + ax0 + " " + (ly - ys * r) +
+        " Q" + ax0 + " " + ly + " " + (ax0 + xm * r) + " " + ly +
+        " L" + (bx0 - xm * r) + " " + ly +
+        " Q" + bx0 + " " + ly + " " + bx0 + " " + (ly + yb * r) +
+        " L" + bx0 + " " + (By - yb * r) +
+        " Q" + bx0 + " " + By + " " + (bx0 + r) + " " + By +
+        " L" + ex + " " + By;
+    }
+
+    // 1차 패스: 각 간선의 경로 방식과 레인 번호를 정한다(그리기 전에 높이를 알아야 한다).
+    var lanes = 0, sameColSeen = 0, plan = [];
+    E.forEach(function (e) {
+      var A = map[e.from], B = map[e.to];
+      if (!A || !B) { plan.push(null); return; }
+      if (B.col > A.col) {
+        var off = e.yoff || 0;
+        var x1 = A.x + BW, y1 = A.y + BH / 2 + off;
+        var x2 = B.x - 7, y2 = B.y + BH / 2 + off;
+        var cx = (x2 - x1) * 0.5;
+        var pts = [x1, y1, x1 + cx, y1, x2 - cx, y2, x2, y2];
+        if (!crossesBox(pts, e.from, e.to)) { plan.push({ mode: "fwd", pts: pts }); return; }
+        plan.push({ mode: "lane", lane: lanes++ });
+      } else if (B.col === A.col) {
+        plan.push({ mode: "same", n: ++sameColSeen });
+      } else {
+        plan.push({ mode: "lane", lane: lanes++ });
+      }
+    });
+
+    var LANE_STEP = 13;
+    var bendRoom = lanes > 0 ? lanes * LANE_STEP + 26 : 0;
+    var H = innerH + PADY * 2 + bendRoom;
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+
+    // 화살촉은 marker로 두지 않고 경로 끝 접선에서 직접 계산해 그린다. SVG marker의
+    // orient="auto-start-reverse"는 베지어 끝 접선 해석이 엔진마다 갈려 방향이 뒤집히므로,
+    // getPointAtLength로 실제 접선을 재서 폴리곤을 놓는다(수치로 검증 가능).
+    // halo와 선을 별도 그룹에 모은다 — 뒤에 그려지는 간선의 halo가 앞 간선의 선을 지우지 않도록
+    // halo 전부를 먼저, 선·화살촉 전부를 그 위에 둔다.
+    var gHalo = el("g", {});
+    var gEdges = el("g", {});
+    svg.appendChild(gHalo);
+    svg.appendChild(gEdges);
+
+    E.forEach(function (e, ei) {
+      var A = map[e.from], B = map[e.to];
+      var pl = plan[ei];
+      if (!A || !B || !pl) { return; }
+      var d;
+      if (pl.mode === "fwd") {
+        var p = pl.pts;
+        d = "M" + p[0] + " " + p[1] + " C" + p[2] + " " + p[3] + " " + p[4] + " " + p[5] + " " + p[6] + " " + p[7];
+      } else if (pl.mode === "same") {
+        // 같은 열: 오른쪽으로 부풀린 호.
+        var bx = A.x + BW + 16 + pl.n * 10;
+        var sy = A.y + BH / 2, ey = B.y + BH / 2;
+        d = "M" + (A.x + BW) + " " + sy + " C" + bx + " " + sy + " " + bx + " " + ey + " " + (B.x + BW + 7) + " " + ey;
+      } else {
+        // 레인 우회 — 상자를 지나게 되는 간선만 다이어그램 아래 전용 레인으로 내린다.
+        // 레인마다 y를 벌리고, 수직 구간의 x도 레인마다 살짝 어긋내 서로 겹치지 않게 한다.
+        var ly = innerH + PADY + 14 + pl.lane * LANE_STEP;
+        var ax0 = A.x + BW + 12 + (pl.lane % 3) * 6;
+        var bx0 = B.x - 30 + (pl.lane % 3) * 5;
+        d = orthoLane(A.x + BW, A.y + BH / 2, ax0, ly, bx0, B.y + BH / 2, B.x - 7);
+      }
+
+      var hit = el("path", { d: d, class: "ed-hit", tabindex: "0", role: "button" });
+      // halo — 간선이 상자 위를 지날 때 상자 배경색 테두리를 깔아 선이 끊겨 보이지 않게 한다.
+      // 열을 건너뛰는 간선(허브형 그래프에서 불가피)이 중간 상자에 가려 사라지는 것을 막는 유일한 방법이다.
+      gHalo.appendChild(el("path", {
+        d: d, fill: "none", stroke: "var(--panel)", "stroke-width": "5",
+        "stroke-linecap": "round", "pointer-events": "none"
+      }));
+      var vis = el("path", { d: d, class: "ed " + e.st });
+      var label = A.t + " → " + B.t;
+      hit.setAttribute("aria-label", label + " · " + STATUS_LABEL[e.st] + (e.contract ? " · " + e.contract : ""));
+
+      var color = e.st === "live" ? "var(--done)" : e.st === "gap" ? "var(--debt)" : "var(--ink-3)";
+      var data = {
+        kind: STATUS_LABEL[e.st],
+        head: label,
+        body: e.contract || "",
+        foot: e.where || ""
+      };
+      hit.addEventListener("pointerenter", function (ev) { openNote(data, color, ev.clientX, ev.clientY); });
+      hit.addEventListener("pointermove", function (ev) { if (shown) place(ev.clientX, ev.clientY); });
+      hit.addEventListener("pointerleave", closeNote);
+      hit.addEventListener("focus", function () {
+        var b = hit.getBoundingClientRect();
+        openNote(data, color, b.left + b.width / 2, b.top + b.height / 2);
+      });
+      hit.addEventListener("blur", closeNote);
+
+      gEdges.appendChild(hit);
+      gEdges.appendChild(vis);
+
+      // 끝 접선을 실측해 화살촉을 놓는다. 경로 마지막 3px 구간의 방향을 쓴다.
+      var L = vis.getTotalLength();
+      var pEnd = vis.getPointAtLength(L);
+      var pBack = vis.getPointAtLength(Math.max(0, L - 3));
+      var ang = Math.atan2(pEnd.y - pBack.y, pEnd.x - pBack.x);
+      var AL = 8, AW = 4.2;
+      var tipX = pEnd.x + Math.cos(ang) * 1.5, tipY = pEnd.y + Math.sin(ang) * 1.5;
+      function corner(sign) {
+        return (tipX - Math.cos(ang) * AL + Math.cos(ang + sign * Math.PI / 2) * AW).toFixed(1) + "," +
+               (tipY - Math.sin(ang) * AL + Math.sin(ang + sign * Math.PI / 2) * AW).toFixed(1);
+      }
+      gEdges.appendChild(el("polygon", {
+        points: tipX.toFixed(1) + "," + tipY.toFixed(1) + " " + corner(1) + " " + corner(-1),
+        fill: e.st === "live" ? "var(--done)" : e.st === "gap" ? "var(--debt)" : "var(--line-strong)",
+        "pointer-events": "none"
+      }));
+    });
+
+    N.forEach(function (n) {
+      var g = el("g", { class: "nb m" + n.ms + (n.ext ? " ext" : "") });
+      g.appendChild(el("rect", {
+        class: "body", x: n.x, y: n.y, width: BW, height: BH, rx: "9"
+      }));
+      var t1 = el("text", { class: "n-t", x: n.x + BW / 2, y: n.y + BH / 2 - 4 });
+      t1.textContent = n.t;
+      g.appendChild(t1);
+      var t2 = el("text", { class: "n-s", x: n.x + BW / 2, y: n.y + BH / 2 + 13 });
+      t2.textContent = n.s;
+      g.appendChild(t2);
+
+      var color = "var(--m" + n.ms + ")";
+      var data = { kind: n.kind || "구획", head: n.t, body: n.desc || "", foot: n.s };
+      g.addEventListener("pointerenter", function (ev) { openNote(data, color, ev.clientX, ev.clientY); });
+      g.addEventListener("pointermove", function (ev) { if (shown) place(ev.clientX, ev.clientY); });
+      g.addEventListener("pointerleave", closeNote);
+
+      svg.appendChild(g);
+    });
+
+  }
+
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeNote(); });
+  window.addEventListener("scroll", closeNote, { passive: true });
+  window.addEventListener("resize", closeNote);
+
+  /* ── L1 시스템 컨텍스트 ── */
+  var L1_N = [
+    { id: "legacy", col: 0, ms: 0, ext: true, t: "legacy/muhan/src", s: "C · EUC-KR · 읽기 전용",
+      kind: "오라클", desc: "1991–93년 원본 C 소스. <strong>이식 대상이 아니라 동작 명세</strong>다 — 코드를 옮기지 않고 게임이 무엇을 하는지 읽는다. 골든 fixture가 이 코드를 컴파일해 대조한다." },
+    { id: "disk", col: 0, ms: 0, ext: true, t: "원본 디스크 덤프", s: "rooms/ · objmon/",
+      kind: "입력 데이터", desc: "1993년 32비트 raw 구조체 덤프. <code>room</code>=480 · <code>exit_</code>=44 · <code>object</code>=352 · <code>creature</code>=1184 바이트." },
+    { id: "port", col: 1, ms: 1, t: "port/ 변환기", s: "순수 JS · 의존성 0",
+      kind: "빌드타임 도구", desc: "디스크 포맷 파서·변환기. <code>parseRoom</code> · <code>templates</code> · <code>convertWorld</code>. C oracle과 바이트 단위 대조로 검증됐다(object 907 + creature 1049 전 필드 일치)." },
+    { id: "world", col: 2, ms: 1, t: "data/world/ JSON", s: "방 2341 · orphan 제외",
+      kind: "정본 산출물", desc: "변환 결과이자 서버의 유일한 월드 입력. 방의 진짜 ID는 로드 경로의 번호이지 구조체 내부 <code>rom_num</code>이 아니다." },
+    { id: "server", col: 3, ms: 2, t: "서버 프로세스", s: "Node 24 · ws · 1Hz 틱",
+      kind: "단일 배포 단위", desc: "인메모리 권위 객체 그래프 + 1Hz 중앙 틱. 프로세스가 하나라 C4의 Context와 Container 레벨이 붕괴한다 — 그래서 L1을 패키지 목록이 아니라 컨텍스트로 잡았다." },
+    { id: "mongo", col: 4, ms: 5, ext: true, t: "MongoDB", s: "write-behind · 트랜잭션",
+      kind: "외부 저장소", desc: "부팅 시 월드 전량 로드, 이후 dirty-flag 주기 flush. 은행만 Mongo 트랜잭션을 직접 쓴다 — 두 경로에 공유 조정점이 없다(#43)." },
+    { id: "fb", col: 4, ms: 4, ext: true, t: "Firebase Auth", s: "세션 쿠키 검증",
+      kind: "외부 인증", desc: "ADR D6의 argon2id 자체 해싱을 대체한 결정. <code>SessionAuthPort</code> DIP seam 뒤에 있어 dev는 시드 어댑터로 갈아끼운다." },
+    { id: "proto", col: 4, ms: 7, t: "shared/protocol", s: "Zod · 계약 버전 3",
+      kind: "와이어 계약", desc: "클라이언트가 의존하는 <strong>유일한</strong> 접점. 서버 내부 구현 미의존이라 프론트/백엔드가 병행 가능하다. 클라이언트는 버전을 <code>shared</code>에서 import해 bump가 자동 전파된다." },
+    { id: "client", col: 5, ms: 3, t: "브라우저 클라이언트", s: "React + Vite · 8 모듈",
+      kind: "프론트엔드", desc: "전송 셸(E9)과 세션 진입(E10)까지 착지. 월드 뷰(E11)·전투 패널(E12)·소셜(E13)은 미착수." }
+  ];
+  var L1_E = [
+    { from: "disk", to: "port", st: "live", contract: "고정크기 구조체 평면 배열을 <code>lseek(idx*size)</code>로 읽는다. 텍스트는 EUC-KR 완성형.", where: "port/parseRoom.js · templates.js" },
+    { from: "legacy", to: "port", st: "type", contract: "직렬화 코드(<code>files1.c</code>의 <code>read_rom</code>/<code>read_crt</code>/<code>read_obj</code>)를 필드 오프셋의 출처로 읽는다. 실행하지 않는다.", where: "참조 방향 · 런타임 의존 아님" },
+    { from: "port", to: "world", st: "live", contract: "멱등 전체 변환. orphan(디렉터리가 N/1000 공식과 안 맞는 파일)은 게임이 로드 못 하므로 제외한다.", where: "node port/convertWorld.js" },
+    { from: "world", to: "server", st: "live", contract: "부팅 시 <code>loadWorldGraph()</code>로 방 그래프 전량을 인메모리에 올린다.", where: "index.ts:60" },
+    { from: "legacy", to: "server", st: "type", contract: "골든 fixture가 오라클을 컴파일해 규칙 공식 출력을 바이트 단위로 대조한다(E8). 서버 런타임은 이 경로를 타지 않는다.", where: "shared/oracle · 26 모듈" },
+    { from: "server", to: "mongo", st: "live", contract: "<code>connectMongo</code> fail-fast → repository 5종 → <code>SaveEngine</code> write-behind.", where: "index.ts:49-57 · 75" },
+    { from: "server", to: "fb", st: "live", contract: "<code>verifySessionCookie</code>로 <code>__session</code> 쿠키를 검증한다. <code>checkRevoked</code>는 서비스 계정 자격증명이 필요해 미적용(#89).", where: "index.ts:110-112 분기" },
+    { from: "server", to: "proto", st: "live", contract: "명령 파싱·이벤트 직렬화가 전부 이 Zod 스키마를 지난다. 레지스트리에만 등록하고 스키마에 variant를 빼먹으면 그 명령은 영구히 <code>bad_payload</code>다.", where: "ws/router.ts · serverEvent.ts" },
+    { from: "proto", to: "client", st: "live", contract: "클라이언트의 유일한 의존. 송수신 양방향을 <code>safeParse</code>로 검증한다.", where: "client/transport/wsClient.ts" },
+    { from: "server", to: "client", st: "live", contract: "WSS <code>/game</code> — <code>system:hello</code>/<code>ready</code> 버전 협상 후 ClientCommand ↔ ServerEvent. preValidation이 Origin allowlist와 세션 쿠키를 게이팅한다.", where: "ws/plugin.ts · handshake.ts" }
+  ];
+
+  /* ── L2 서버 내부 구획 ── */
+  var L2_N = [
+    { id: "boot", col: 0, ms: 0, t: "부트스트랩", s: "index.ts 186 · app.ts",
+      kind: "조립 루트", desc: "유일한 composition root. env fail-fast → DB 연결 → repository·SaveEngine·WorldClock·라이브 묶음 조립 → <code>buildApp</code> → 슬롯 등록 → listen. 커버리지 제외 배선 코드다." },
+    { id: "ws", col: 1, ms: 2, t: "전송·세션", s: "ws · 33 모듈",
+      kind: "구획", desc: "핸드셰이크·세션 FSM·명령 라우터·재연결 레지스트리·유량 제한·정원 게이트. <code>plugin.ts</code> 692줄이 포트 우선순위(<code>explicit &gt; bundle &gt; noop</code>)를 담는다." },
+    { id: "world", col: 2, ms: 1, t: "월드 런타임", s: "world · 23 모듈",
+      kind: "구획", desc: "1Hz 틱 슬롯·방 그래프·<code>tryMove</code>·문 상태머신·스폰 3트리거·활성 크리처 큐·라이브 캐릭터 레지스트리." },
+    { id: "auth", col: 2, ms: 4, t: "인증", s: "auth · 10 모듈",
+      kind: "구획", desc: "<code>SessionAuthPort</code> + 어댑터 3종(Firebase·dev 시드·인메모리). 종족 보정 테이블도 여기 있다." },
+    { id: "persist", col: 2, ms: 5, t: "영속화", s: "repo+save+db · 15 모듈",
+      kind: "구획", desc: "repository 5종 + <code>SaveEngine</code>(<code>DirtyTracker</code> LWW → 주기 flush → async worker). HIGH 2건(#124 무성 revert · #43 트랜잭션 충돌)이 이 구획에 있다." },
+    { id: "rules", col: 3, ms: 3, t: "규칙 엔진", s: "4 도메인 · 55 모듈",
+      kind: "규칙 (순수)", desc: "<code>combat</code> 19 · <code>magic</code> 15 · <code>progression</code>+<code>stats</code> 9 · <code>items</code>+<code>economy</code>+<code>bank</code> 12. 전부 완성돼 골든 fixture로 오라클 대조까지 끝났다. <strong>도메인별 분해는 L3</strong>로 내린다 — L2에서 4개로 쪼개면 간선이 서로를 가려 이 다이어그램의 요점(배선 상태)이 안 보인다." },
+    { id: "shared", col: 4, ms: 7, t: "공유 계약", s: "shared · ~40 모듈",
+      kind: "계약", desc: "<code>protocol</code>(와이어 Zod) · <code>schema</code>(문서 Zod) · <code>oracle</code>(골든 fixture) · <code>stats</code> · <code>property</code>. 서버·클라이언트가 같은 정의를 쓴다." }
+  ];
+  var L2_E = [
+    { from: "boot", to: "ws", st: "live", contract: "<code>buildApp</code> → <code>registerWebsocket(app, sessionAuth, lifecyclePort?, channelPort?, permissionPort=permissive, liveWorld?, liveWorldDeps?)</code>. 인자 7개 중 4개가 optional이고 기본값이 noop이다.", where: "app.ts:86-93 · plugin.ts:302" },
+    { from: "boot", to: "world", st: "live", contract: "<code>loadWorldGraph</code> · <code>WorldClock</code> · <code>createWorldRuntime</code> · <code>createLiveCharacterRegistry</code>. 슬롯을 등록한 뒤 <code>worldClock.start()</code>.", where: "index.ts:60-87 · 123-126" },
+    { from: "boot", to: "persist", st: "live", contract: "repository 5종 <code>init()</code> 병렬 → <code>new SaveEngine(characters, bank, world, logger)</code> → <code>start()</code>. shutdown이 유일한 force-flush 지점이다.", where: "index.ts:52-57 · 75 · 155" },
+    { from: "boot", to: "auth", st: "live", contract: "<code>DEV_LOGIN_ENABLED</code> 분기 — true면 dev 시드 어댑터, false면 <code>FirebaseSessionAuthAdapter</code>. <code>FIREBASE_PROJECT_ID</code> 없으면 fail-fast한다(무효 어댑터 배포 차단).", where: "index.ts:32-43 · 110-112" },
+    { from: "ws", to: "world", st: "live", contract: "<code>createLiveWorldWiring(bundle)</code>이 진입 코어·<code>moveDeps</code>·<code>trainDeps</code>·<code>lifecyclePort</code>·방 해소자를 파생한다. <code>entry</code>·<code>liveRegistry</code>는 단일 인스턴스를 네 소비자가 공유한다.", where: "plugin.ts:323 → liveWorldWiring.ts:87" },
+    { from: "ws", to: "auth", st: "live", contract: "게임 소켓 <code>preValidation</code>이 Origin allowlist와 <code>__session</code> 쿠키를 게이팅한다(403/401).", where: "ws/plugin.ts · cookies.ts" },
+    { from: "ws", to: "persist", st: "live", contract: "<code>markCharacterDirty</code>(<code>SaveEngine.markDirty</code> 1회 래핑)를 <code>moveDeps</code>·<code>lifecyclePort</code>·<code>trainDeps</code>가 공유한다. <code>DirtyTracker</code>가 LWW 교체라 전체/부분 스냅샷 혼재 시 유실된다.", where: "index.ts:98 → liveWorldWiring.ts:91" },
+    { from: "ws", to: "rules", st: "live", contract: "<code>progress:train</code> → <code>createTrainHandler(deps.train)</code>. 게임 규칙 명령 <strong>5종 중 1종</strong>만 라이브다. 등록은 deps가 주입됐을 때만 일어난다.", where: "router.ts:74-75 · handlers/train.ts" },
+    { from: "ws", to: "rules", st: "gap", yoff: 15, contract: "<code>attack</code>·<code>cast</code>·<code>study</code>·<code>teach</code> 4종 전부 미배선 — <code>clientCommandSchema</code>에 variant가 없다. 배선이 아니라 신규 구축이다: 장비 해소 파이프(#121) · 시전 진입점 조립(#122) · 아이템 라이브화(#120).", where: "미배선 · #118 → #121 → #122 · #120" },
+    { from: "world", to: "rules", st: "gap", contract: "<code>createWorldRuntime(worldGraph, { now })</code>가 <code>onCombatTick</code>을 전달하지 않고 <code>crtSpell</code>도 호출처가 0건이다. 실행 중 서버에서 <strong>몬스터가 근접도 시전도 하지 않는다</strong>.", where: "index.ts:87 · #99 · #100" },
+    { from: "world", to: "shared", st: "live", contract: "<code>worldGraph</code>·<code>worldLoader</code>·<code>roomState</code> 스키마를 <code>shared</code>에서 가져온다.", where: "shared/worldGraph.ts" },
+    { from: "ws", to: "shared", st: "live", contract: "<code>clientCommandSchema</code>·<code>serverEventSchema</code>·<code>PROTOCOL_VERSION</code>. 와이어 계약의 단일 출처다.", where: "shared/protocol" },
+    { from: "rules", to: "shared", st: "live", contract: "<code>schema</code>(문서) · <code>stats</code>(base/effective) · <code>magic</code> 카탈로그 · <code>economy</code> 금화 규약 · <code>oracle</code> 골든 fixture 대조.", where: "shared/schema · stats · oracle" },
+    { from: "persist", to: "shared", st: "live", contract: "<code>character</code>·<code>account</code>·<code>object</code>·<code>bankAccount</code>·<code>roomState</code> 문서 스키마. 값 저장(안정 ID + version) 규약을 담는다.", where: "shared/schema" }
+  ];
+
+  build("svg-l1", L1_N, L1_E, { bw: 158, bh: 56, colgap: 40, rowgap: 22, padx: 14, pady: 16 });
+  build("svg-l2", L2_N, L2_E, { bw: 158, bh: 56, colgap: 42, rowgap: 20, padx: 14, pady: 16 });
+})();
+</script>
