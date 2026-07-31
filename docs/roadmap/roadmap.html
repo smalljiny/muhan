@@ -659,9 +659,9 @@
       </div>
       <div class="s-card nextup">
         <div class="s-k">병행 가능한 트랙</div>
-        <div class="s-t">FE 단독 + 무성 결함 2건</div>
+        <div class="s-t">프로토콜 확장 + 무성 결함 2건</div>
         <ul class="s-list">
-          <li>#60 E11 월드 뷰 — 프로토콜 게이트 해소, FE 단독</li>
+          <li>#60 E11 월드 뷰 — <strong>프로토콜 확장 선행</strong>(FE 단독 아님)</li>
           <li>#124 진행도 무성 revert · #126 검증 거짓 통과</li>
           <li>#116 이동 leave/join 방송 (독립)</li>
         </ul>
@@ -888,8 +888,8 @@
           <div class="card t">
             <div class="card-top"><span class="chip t">미착수</span><span class="card-title">E11 월드 뷰 (방·이동·주변)</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/60">#60</a></div>
-            <div class="kv"><span class="k">해제</span><span class="v"><code>world:room</code> ServerEvent + <code>world:move</code> ClientCommand 실재(<code>PROTOCOL_VERSION</code> 3), E4·E10 종료 → <strong>FE 단독 트랙으로 착수 가능</strong></span></div>
-            <div class="kv rest"><span class="k">순서</span><span class="v">방 스냅샷(<code>world:room</code>) 기준으로 먼저 세우고, 점유자 실시간 갱신은 #116 착지 후</span></div>
+            <div class="kv"><span class="k">정정</span><span class="v">이슈 본문의 "프로토콜 게이트 해소 · FE 단독"은 <strong>참이 아니다</strong> — <code>world:room</code>은 <code>roomId</code>+<code>exits</code>만 나르고 방 설명·점유자·아이템이 없다(스키마 주석 D-C가 명시). 데이터는 <code>RoomNode</code>에 완비돼 병목은 프로토콜 한 겹</span></div>
+            <div class="kv rest"><span class="k">범위</span><span class="v"><code>shared</code> 스키마 확장 + <code>buildRoomSummary</code> 확장 + <code>PROTOCOL_VERSION</code> 3→4 + 클라 방 패널 — 세 계층 단일 PR(부분 머지 불가). 점유자 실시간 갱신은 #116 착지 후. 스펙 확정됨(<code>world-view</code>)</span></div>
           </div>
           <div class="card t">
             <div class="card-top"><span class="chip t">HIGH</span><span class="card-title">재접속 진행도 무성 revert</span>
@@ -919,7 +919,7 @@
           <span class="gate open">HIGH #126 검증 게이트 거짓 통과</span>
           <span class="gate open">릴리스 + <code>develop</code> → <code>main</code> 병합</span>
         </div>
-        <p class="cp-foot"><b>남은 것은 전부 코드이고, 막힌 것은 없습니다.</b> #60은 FE 단독, #116은 완전 독립이라 병렬로 돌 수 있습니다. 다만 <strong>#124를 닫지 않고 이 관문을 통과하면 안 됩니다</strong> — 진행도를 먹는 세계에 사람을 초대할 수는 없고, <code>train</code>이 이미 라이브라 노출 창이 열려 있습니다. #126은 이후 모든 토픽의 <code>/flow-verify</code> 결과를 의심스럽게 만들므로 함께 닫는 것이 싸게 끝납니다.<br><br><b>브랜치 상태 —</b> 원격에는 현재 <code>develop</code> 하나만 있고 기본 브랜치도 <code>develop</code>입니다. <code>main</code>은 <strong>이 관문에서 처음 생깁니다</strong>(로컬 <code>main</code>은 <code>3c1e209</code>에 멈춘 <code>develop</code>의 조상이라 고유 커밋 0개 — 병합 대상으로 보존). <code>.harness/rules/git-workflow.md</code>의 <code>main</code>=production 전략은 문서가 맞고 원격이 아직 따라오지 않은 상태입니다.</p>
+        <p class="cp-foot"><b>남은 것은 전부 코드이고, 막힌 것은 없습니다.</b> #60은 세 계층(<code>shared</code>·<code>server</code>·<code>client</code>)을 걸치지만 백엔드 배선 체인과 독립이고, #116도 완전 독립이라 병렬로 돌 수 있습니다. 다만 <strong>#124를 닫지 않고 이 관문을 통과하면 안 됩니다</strong> — 진행도를 먹는 세계에 사람을 초대할 수는 없고, <code>train</code>이 이미 라이브라 노출 창이 열려 있습니다. #126은 이후 모든 토픽의 <code>/flow-verify</code> 결과를 의심스럽게 만들므로 함께 닫는 것이 싸게 끝납니다.<br><br><b>브랜치 상태 —</b> 원격에는 현재 <code>develop</code> 하나만 있고 기본 브랜치도 <code>develop</code>입니다. <code>main</code>은 <strong>이 관문에서 처음 생깁니다</strong>(로컬 <code>main</code>은 <code>3c1e209</code>에 멈춘 <code>develop</code>의 조상이라 고유 커밋 0개 — 병합 대상으로 보존). <code>.harness/rules/git-workflow.md</code>의 <code>main</code>=production 전략은 문서가 맞고 원격이 아직 따라오지 않은 상태입니다.</p>
       </div>
 
       <div class="ms">
@@ -1115,7 +1115,7 @@
       <div class="next-card">
         <div class="next-n">03</div>
         <div class="next-t">#60 E11 + #116을 병행</div>
-        <div class="next-d">#60은 <code>world:room</code>·<code>world:move</code>가 이미 실재해 <strong>FE 단독 트랙</strong>이고, #116은 백엔드 완전 독립입니다. 서로도 독립이라 백엔드 체인과 3중 병렬이 가능합니다. #60을 방 스냅샷 기준으로 먼저 세우고 #116 착지 후 점유자 실시간 갱신을 얹으면 두 토픽이 자연히 CP1을 완성합니다.</div>
+        <div class="next-d">#60은 <strong>FE 단독이 아니라</strong> <code>world:room</code> 페이로드 확장(<code>PROTOCOL_VERSION</code> 3→4)을 선행으로 갖는 세 계층 작업이고, #116은 백엔드 완전 독립입니다. 서로도 독립이라 백엔드 체인과 3중 병렬이 가능합니다. #60을 방 스냅샷 기준으로 먼저 세우고 #116 착지 후 점유자 실시간 갱신을 얹으면 두 토픽이 자연히 CP1을 완성합니다.</div>
       </div>
     </div>
   </section>
@@ -1156,7 +1156,7 @@
     [118, 5, "todo", 510, 68,  "오라클 이름 매처 이식 ★", "체인 헤드 — #119·#120·#121·#122의 유일 blocking"],
     [123, 6, "todo", 510, 140, "성향(alignment) 스칼라 확장", "-1000..+1000 · study 게이트 실발화"],
     [99,  6, "todo", 510, 206, "몬스터 전투/마법 tick boot 배선", "프로덕션에서 몬스터가 움직이지 않음"],
-    [60,  5, "todo", 510, 342, "E11 월드 뷰 (방·이동·주변)", "프로토콜 게이트 해소 — FE 단독 착수 가능"],
+    [60,  5, "todo", 510, 342, "E11 월드 뷰 (방·이동·주변)", "world:room 페이로드 확장 선행 — 세 계층 단일 PR"],
     [119, 5, "todo", 610, 42,  "teach 명령 배선", "방 내 대상 플레이어 전수"],
     [120, 6, "todo", 610, 100, "아이템 라이브화 + study", "read/drink/zap의 선행 계층 · 4중 결손"],
     [121, 6, "todo", 610, 158, "attack 배선 + PlayerCombatState 파이프", "장비 해소·유효 스탯 합성 신규 구축"],
