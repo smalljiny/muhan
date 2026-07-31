@@ -1,4 +1,4 @@
-import type { RoomNode } from 'shared'
+import type { RoomNode, ServerEvent } from 'shared'
 import { hasFlag, XSECRT, XINVIS, XNOSEE } from './door.js'
 import { F_ISSET, OHIDDN, OSCENE, OINVIS, MHIDDN, MINVIS } from './hexFlags.js'
 
@@ -23,28 +23,12 @@ import { F_ISSET, OHIDDN, OSCENE, OINVIS, MHIDDN, MINVIS } from './hexFlags.js'
  */
 
 /**
- * 방 표시 뷰. Story 2에서 shared `world:room` 와이어 계약 파생 타입으로 교체되므로 필드 이름·
- * 순서를 그 계약과 정렬해 둔다. `shortDesc`는 싣지 않는다 — 2341방 중 2327방이 빈 문자열이라
- * 표시 가치가 없다(스펙 §3.1).
+ * 방 표시 뷰 — shared `world:room` 와이어 계약에서 discriminator만 뺀 파생 타입이다. 수기 재선언을
+ * 두지 않아 스키마-투영 드리프트가 타입 에러로 즉시 드러난다(계약에 필드가 늘면 이 함수가 깨진다).
+ * `shortDesc`는 계약에 없다 — 2341방 중 2327방이 빈 문자열이라 싣지 않는다(스펙 §3.1).
  */
-export type RoomView = {
-  roomId: number
-  name: string
-  longDesc: string
-  exits: string[]
-  occupants: { characterId: string; name: string }[]
-  items: { instanceId: string; name: string }[]
-  creatures: { instanceId: string; name: string; level: number }[]
-}
+export type RoomView = Omit<Extract<ServerEvent, { type: 'world:room' }>, 'type'>
 
-/**
- * 방 노드를 표시용 뷰로 투영한다. 입력 `room`과 그 하위 배열·객체를 변형하지 않고 새 배열·새
- * 객체만 만든다(프로젝트 immutability 규칙).
- *
- * @param room 투영할 라이브 방 노드
- * @param resolveCharacterName characterId → 표시 이름 해소자. `undefined`(미접속·미해소)나 빈
- *   문자열을 돌려준 점유자는 목록에서 빠진다 — 와이어 계약이 `name`에 최소 1자를 요구한다.
- */
 /** 방 표시에서 감추는 출구 비트(XSECRT 비밀·XINVIS 투명·XNOSEE 불가시)가 하나라도 있으면 true. */
 function isExitHidden(flags: number[]): boolean {
   return hasFlag(flags, XSECRT) || hasFlag(flags, XINVIS) || hasFlag(flags, XNOSEE)
@@ -60,6 +44,14 @@ function isCreatureHidden(flags: string): boolean {
   return F_ISSET(flags, MHIDDN) || F_ISSET(flags, MINVIS)
 }
 
+/**
+ * 방 노드를 표시용 뷰로 투영한다. 입력 `room`과 그 하위 배열·객체를 변형하지 않고 새 배열·새
+ * 객체만 만든다(프로젝트 immutability 규칙).
+ *
+ * @param room 투영할 라이브 방 노드
+ * @param resolveCharacterName characterId → 표시 이름 해소자. `undefined`(미접속·미해소)나 빈
+ *   문자열을 돌려준 점유자는 목록에서 빠진다 — 와이어 계약이 `name`에 최소 1자를 요구한다.
+ */
 export function projectRoomView(
   room: RoomNode,
   resolveCharacterName: (characterId: string) => string | undefined,

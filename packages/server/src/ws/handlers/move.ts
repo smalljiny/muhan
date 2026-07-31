@@ -4,6 +4,7 @@ import type { ActorContext } from '../actorContext.js'
 import type { LiveCharacterRegistry } from '../../world/liveCharacterRegistry.js'
 import { tryMove, type MoveActor, type TryMoveDeps } from '../../world/tryMove.js'
 import type { MarkCharacterDirty } from '../../world/markCharacterDirty.js'
+import { projectRoomView } from '../../world/roomView.js'
 import { makeErrorEvent } from '../serverEvent.js'
 
 /**
@@ -14,11 +15,14 @@ import { makeErrorEvent } from '../serverEvent.js'
  * 소비하는 방 그래프·게임시각·방송·훅·rng seam이다(tryMove가 소유·전달, 핸들러는 그대로 위임).
  * `markCharacterDirty`는 write-behind 영속화 seam으로, characters 스냅샷을 전체 Character 문서로
  * 통일하는 타입 좁힌 헬퍼다(부분 스냅샷은 타입 에러 — markCharacterDirty.ts 참조).
+ * `resolveCharacterName`은 도착 방 점유자 characterId를 표시 이름으로 바꾸는 seam으로, 진입 경로
+ * (`LiveWorldBinding.resolveCharacterName`)와 **같은 인스턴스**를 공유한다(liveWorldWiring 불변식 #3).
  */
 export interface MoveHandlerDeps {
   readonly liveRegistry: Pick<LiveCharacterRegistry, 'get'>
   readonly tryMoveDeps: TryMoveDeps
   readonly markCharacterDirty: MarkCharacterDirty
+  readonly resolveCharacterName: (characterId: string) => string | undefined
 }
 
 /**
@@ -37,7 +41,9 @@ export interface MoveHandlerDeps {
  * 거부 경로에서 핸들러는 live·markCharacterDirty를 건드리지 않는다.
  *
  * 반환:
- *   - 성공 → `world:room{roomId, exits}`(상태 이벤트, correlationId 없음 — D-C 최소 방 통지).
+ *   - 성공 → `world:room{roomId, name, longDesc, exits, occupants, items, creatures}`(상태 이벤트,
+ *     correlationId 없음). 페이로드는 `projectRoomView`가 도착 방에서 투영하며, 진입 경로
+ *     (`enterCommand` → `buildRoomSummary`)와 같은 투영을 공유해 두 경로가 분기하지 않는다.
  *   - 거부 → `error{rule_rejected, message}`(게임 규칙 거부, id 있으면 correlationId 반향 — D-D).
  *   - 라이브 미등록 actor(registry에 엔트리 없음) → `error{internal}`(배선 격리). 방이 그래프에서
  *     미해소인 경우는 이 경로가 아니라 tryMove가 `NO_EXIT`→`rule_rejected`로 처리한다.
@@ -72,10 +78,8 @@ export function createMoveHandler(deps: MoveHandlerDeps): CommandHandler {
     //     갱신이 마킹보다 반드시 먼저다 — 순서가 뒤집히면 출발 방이 스냅샷에 실린다.
     live.character.currentRoom = result.arrivedRoom.roomId
     deps.markCharacterDirty(actor.characterId, live.character)
-    return {
-      type: 'world:room',
-      roomId: result.arrivedRoom.roomId,
-      exits: result.arrivedRoom.exits.map((e) => e.name),
-    }
+    // 필드를 손으로 열거하지 않고 진입 경로와 같은 투영(projectRoomView)을 스프레드한다 — 두 생산자가
+    // 같은 방에 대해 같은 페이로드를 내야 한다(가시성 필터 포함).
+    return { type: 'world:room', ...projectRoomView(result.arrivedRoom, deps.resolveCharacterName) }
   }
 }

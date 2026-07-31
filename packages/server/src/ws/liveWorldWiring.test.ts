@@ -2,9 +2,12 @@ import { describe, it, expect, vi } from 'vitest'
 import type { Character, RoomNode, ServerEvent } from 'shared'
 import { createLiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
 import { defaultFleeRng } from '../world/tryMove.js'
+import { makeExitTo, makeItem, makeCreature, makeRoom as makeRoomBase } from '../world/roomFixtures.testutil.js'
 import { createConnectionContext, type ConnectionContext } from './connection.js'
 import { createSessionRegistry } from './sessionRegistry.js'
 import { createCommandRegistry } from './router.js'
+import { createMoveHandler } from './handlers/move.js'
+import { buildSessionLiveWorld } from './liveWorldBinding.js'
 import { createNoopChannelAdapter } from './noopChannelAdapter.js'
 import type { ChannelDeliveryContext, ChannelPort } from './channelPort.js'
 import type { ActorContext } from './actorContext.js'
@@ -41,21 +44,21 @@ function makeCharacter(id: string, currentRoom: number): Character {
   }
 }
 
-function makeRoom(roomId: number, occupantIds: readonly string[] = []): RoomNode {
-  return {
+function makeRoom(
+  roomId: number,
+  occupantIds: readonly string[] = [],
+  exits: readonly { name: string; targetRoomId: number }[] = [],
+  overrides: Partial<RoomNode> = {},
+): RoomNode {
+  return makeRoomBase({
     roomId,
     name: `방-${roomId}`,
     shortDesc: '',
     longDesc: '',
-    exits: [],
-    items: [],
-    flags: [],
+    exits: exits.map(({ name, targetRoomId }) => makeExitTo(name, targetRoomId)),
     occupants: new Set<string>(occupantIds),
-    creatures: [],
-    permMon: [],
-    random: [],
-    traffic: 0,
-  }
+    ...overrides,
+  })
 }
 
 type BundleHarness = {
@@ -172,6 +175,25 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
     expect(wiring.trainDeps.resolveRoom).toBe(wiring.resolveRoom)
   })
 
+  it('resolveCharacterName은 1회 생성돼 liveWorldBinding·moveDeps가 같은 참조를 공유한다(#3)', () => {
+    const h = makeBundle(new Map<number, RoomNode>([[3, makeRoom(3)]]))
+
+    const wiring = createLiveWorldWiring(h.bundle)
+
+    // 참조 동일성 — 클로저를 두 번 만들면 진입·이동 두 world:room 생산자가 서로 다른 해소자를 쓰게 된다.
+    expect(wiring.liveWorldBinding.resolveCharacterName).toBe(wiring.moveDeps.resolveCharacterName)
+  })
+
+  it('resolveCharacterName은 registry 등록 캐릭터 이름을 주고 미등록 id에는 undefined를 준다', () => {
+    const h = makeBundle(new Map<number, RoomNode>([[3, makeRoom(3)]]))
+    h.liveRegistry.register({ character: makeCharacter('char-1', 3) })
+
+    const wiring = createLiveWorldWiring(h.bundle)
+
+    expect(wiring.liveWorldBinding.resolveCharacterName('char-1')).toBe('테스토스')
+    expect(wiring.liveWorldBinding.resolveCharacterName('unknown')).toBeUndefined()
+  })
+
   it('resolveRoom(by-character)은 registry→currentRoom→worldGraph로 발화자 방을 해소한다', () => {
     const room = makeRoom(7, ['char-1'])
     const worldGraph = new Map<number, RoomNode>([[7, room]])
@@ -182,6 +204,41 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
 
     expect(wiring.resolveRoom('char-1')).toBe(room)
     expect(wiring.resolveRoom('unknown')).toBeUndefined()
+  })
+})
+
+describe('world:room 두 생산자 페이로드 동일성 (진입 vs 이동)', () => {
+  it('같은 방에 대해 enterCommand 경로(roomSummary)와 이동 경로(move 핸들러)가 같은 페이로드를 낸다', () => {
+    // A=100 →'동'→ B=200. char-1이 A에 있다가 B로 이동한 뒤, 같은 B에 대한 두 경로의 페이로드를 비교한다.
+    const roomA = makeRoom(100, ['char-1'], [{ name: '동', targetRoomId: 200 }])
+    // 아이템·크리처까지 non-vacuous하게 비교하려면 도착 방에 실물이 있어야 한다(빈 배열끼리 비교는
+    // 두 생산자의 투영이 갈려도 통과한다).
+    const roomB = makeRoom(200, [], [{ name: '서', targetRoomId: 100 }], {
+      items: [makeItem('obj-1', '녹슨 검')],
+      creatures: [makeCreature('crt-1', '박쥐', { level: 2 })],
+    })
+    const worldGraph = new Map<number, RoomNode>([[100, roomA], [200, roomB]])
+    const h = makeBundle(worldGraph)
+    h.liveRegistry.register({ character: makeCharacter('char-1', 100) })
+
+    const wiring = createLiveWorldWiring(h.bundle)
+    const handler = createMoveHandler(wiring.moveDeps)
+
+    const moveEvent = handler(
+      { type: 'world:move', direction: '동' },
+      { accountId: 'acct-1', characterId: 'char-1' },
+    )
+
+    // 이동이 끝난 뒤(점유자가 B에 있는 상태)의 같은 방을 진입 경로가 요약한다.
+    const entrySummary = buildSessionLiveWorld(wiring.liveWorldBinding).roomSummary(200)
+
+    expect(entrySummary).toBeDefined()
+    // non-vacuous: 두 페이로드 모두 실제 점유자·아이템·크리처·출구를 담는다(빈 값 비교가 아니다).
+    expect(entrySummary?.occupants).toEqual([{ characterId: 'char-1', name: '테스토스' }])
+    expect(entrySummary?.items).toEqual([{ instanceId: 'obj-1', name: '녹슨 검' }])
+    expect(entrySummary?.creatures).toEqual([{ instanceId: 'crt-1', name: '박쥐', level: 2 }])
+    expect(entrySummary?.exits).toEqual(['서'])
+    expect(moveEvent).toEqual({ type: 'world:room', ...entrySummary })
   })
 })
 

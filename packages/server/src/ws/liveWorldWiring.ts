@@ -26,7 +26,12 @@ import type { ConnectionContext } from './connection.js'
  *
  * 단일 공유 불변식(#3): entry(진입 코어)·liveRegistry는 hydrate/place(liveWorldBinding)·이동(moveDeps)·
  * 종료 정리(lifecyclePort.release)·발화자 방 해소(resolveRoom)가 **동일 인스턴스**를 배후에 둬야 상태가
- * 분기하지 않는다. 팩토리가 entry를 1회 생성해 네 소비자에 같은 참조를 전달한다.
+ * 분기하지 않는다. 팩토리가 entry를 1회 생성해 네 소비자에 같은 참조를 전달한다. 같은 이유로 점유자 이름
+ * 해소자(resolveCharacterName)도 1회 생성해 진입·이동 두 world:room 생산자가 같은 참조를 공유한다.
+ *
+ * 이 불변식은 **이 팩토리를 거친 묶음 파생 경로에 한정**된다. `plugin.ts`가 진입 seam을
+ * `liveWorld ?? wiring?.liveWorldBinding`로 해소하므로, 호출자가 `liveWorld`와 `liveWorldDeps`를 함께
+ * 주입하면 두 생산자가 서로 다른 해소자를 갖게 된다(현재 프로덕션 호출자는 후자만 넘겨 도달 불가).
  */
 
 /** logger seam — save/logger·worldClock 관례 미러(console 금지). EntryLogger를 그대로 재사용한다. */
@@ -100,7 +105,16 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     logger: bundle.logger,
   })
 
-  const liveWorldBinding: LiveWorldBinding = { entry, resolveRoom: resolveRoomById }
+  // 점유자 이름 해소자 — **1회 생성**해 진입 seam(liveWorldBinding)과 이동 seam(moveDeps)이 같은 참조를
+  // 공유한다(#3). 두 번 만들면 두 발화 경로가 서로 다른 클로저를 쓰게 되어 나중에 해소 규칙이 갈릴 수 있다.
+  const resolveCharacterName = (characterId: string): string | undefined =>
+    bundle.liveRegistry.get(characterId)?.character.name
+
+  const liveWorldBinding: LiveWorldBinding = {
+    entry,
+    resolveRoom: resolveRoomById,
+    resolveCharacterName,
+  }
 
   // 이동 방송 seam은 Story 8이 채널 어댑터로 결선한다(이동 통지). 이 토픽은 no-op으로 두어 tryMove 계약만
   // 충족한다 — 방 채팅 전파(#6)는 채널 포트가, 이동 leave/join 통지는 후속 토픽이 소유한다.
@@ -118,6 +132,7 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     liveRegistry: bundle.liveRegistry,
     tryMoveDeps,
     markCharacterDirty,
+    resolveCharacterName,
   }
 
   // 세션 종료 수명 어댑터 — release는 진입 코어의 것을 그대로 주입해 같은 레지스트리/방을 정리한다(#3).

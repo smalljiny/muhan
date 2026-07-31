@@ -267,43 +267,133 @@ describe('serverEventSchema (server→client 봉투)', () => {
   })
 
   describe('world:room', () => {
-    it('roomId 0 + 빈 exits 배열이 있으면 통과한다', () => {
-      const parsed = serverEventSchema.safeParse({ type: 'world:room', roomId: 0, exits: [] })
+    /** 확장 계약(7필드)의 최소 유효 페이로드 — 케이스별로 필요한 필드만 덮어쓴다. */
+    const baseRoom = {
+      type: 'world:room',
+      roomId: 0,
+      name: '',
+      longDesc: '',
+      exits: [],
+      occupants: [],
+      items: [],
+      creatures: [],
+    }
+
+    it('roomId 0 + 빈 문자열 name·longDesc + 빈 배열 3종이 있으면 통과한다', () => {
+      const parsed = serverEventSchema.safeParse(baseRoom)
       expect(parsed.success).toBe(true)
       if (parsed.success && parsed.data.type === 'world:room') {
         expect(parsed.data.roomId).toBe(0)
         expect(parsed.data.exits).toEqual([])
+        // 빈 name·longDesc는 정본 월드 데이터에 실재한다(빈 name 97방·빈 longDesc 433방) — 유효값이다.
+        expect(parsed.data.name).toBe('')
+        expect(parsed.data.longDesc).toBe('')
       }
     })
 
-    it('roomId + exits 이름 목록이 있으면 통과한다', () => {
+    it('확장 필드 전량(이름·설명·출구·점유자·아이템·크리처)이 있으면 통과한다', () => {
       const parsed = serverEventSchema.safeParse({
-        type: 'world:room',
+        ...baseRoom,
         roomId: 5,
+        name: '무한의 광장',
+        longDesc: '넓은 광장이다.',
         exits: ['북', '남'],
+        occupants: [{ characterId: 'char-1', name: '타이' }],
+        items: [{ instanceId: 'obj-1', name: '단검' }],
+        creatures: [{ instanceId: 'crt-1', name: '쥐', level: 1 }],
       })
       expect(parsed.success).toBe(true)
       if (parsed.success && parsed.data.type === 'world:room') {
         expect(parsed.data.roomId).toBe(5)
+        expect(parsed.data.name).toBe('무한의 광장')
+        expect(parsed.data.longDesc).toBe('넓은 광장이다.')
         expect(parsed.data.exits).toEqual(['북', '남'])
+        expect(parsed.data.occupants).toEqual([{ characterId: 'char-1', name: '타이' }])
+        expect(parsed.data.items).toEqual([{ instanceId: 'obj-1', name: '단검' }])
+        expect(parsed.data.creatures).toEqual([{ instanceId: 'crt-1', name: '쥐', level: 1 }])
       }
     })
 
     it('roomId가 음수이면 거부한다', () => {
-      expect(
-        serverEventSchema.safeParse({ type: 'world:room', roomId: -1, exits: [] }).success,
-      ).toBe(false)
+      expect(serverEventSchema.safeParse({ ...baseRoom, roomId: -1 }).success).toBe(false)
     })
 
     it('roomId가 정수가 아니면 거부한다 (z.int 경계)', () => {
-      expect(
-        serverEventSchema.safeParse({ type: 'world:room', roomId: 1.5, exits: [] }).success,
-      ).toBe(false)
+      expect(serverEventSchema.safeParse({ ...baseRoom, roomId: 1.5 }).success).toBe(false)
     })
 
     it('알 수 없는 키를 거부한다 (strict)', () => {
+      expect(serverEventSchema.safeParse({ ...baseRoom, extra: 1 }).success).toBe(false)
+    })
+
+    it('shortDesc를 거부한다 (계약에 없는 필드 — strict)', () => {
+      expect(serverEventSchema.safeParse({ ...baseRoom, shortDesc: '광장' }).success).toBe(false)
+    })
+
+    // 7필드 전량이 required다 — 하나라도 빠지면 거부한다.
+    it.each([
+      'roomId',
+      'name',
+      'longDesc',
+      'exits',
+      'occupants',
+      'items',
+      'creatures',
+    ] as const)('%s가 없으면 거부한다 (required)', (key) => {
+      const { [key]: _omitted, ...without } = baseRoom
+      expect(serverEventSchema.safeParse(without).success).toBe(false)
+    })
+
+    // 표시 이름은 최소 1자다 — 빈 문자열은 "미해소 점유자" 신호라 와이어에 오르면 안 된다.
+    // 식별자(characterId·instanceId)도 빈 문자열을 거부한다.
+    it.each([
+      ['occupants[].characterId', { occupants: [{ characterId: '', name: '타이' }] }],
+      ['occupants[].name', { occupants: [{ characterId: 'char-1', name: '' }] }],
+      ['items[].instanceId', { items: [{ instanceId: '', name: '단검' }] }],
+      ['creatures[].instanceId', { creatures: [{ instanceId: '', name: '쥐', level: 1 }] }],
+    ])('%s가 빈 문자열이면 거부한다', (_label, patch) => {
+      expect(serverEventSchema.safeParse({ ...baseRoom, ...patch }).success).toBe(false)
+    })
+
+    // 표시 이름 최소길이는 occupants에만 요구한다 — 빈 이름이 "미해소 점유자" 신호로 쓰여
+    // projectRoomView가 그 항목을 목록에서 빼기 때문이다. 아이템·크리처엔 그 신호가 없다.
+    it('items[].name·creatures[].name은 빈 문자열도 허용한다 (미해소 신호가 없는 필드)', () => {
       expect(
-        serverEventSchema.safeParse({ type: 'world:room', roomId: 0, exits: [], extra: 1 }).success,
+        serverEventSchema.safeParse({
+          ...baseRoom,
+          items: [{ instanceId: 'obj-1', name: '' }],
+          creatures: [{ instanceId: 'crt-1', name: '', level: 0 }],
+        }).success,
+      ).toBe(true)
+    })
+
+    it('creatures[].level이 음수이거나 정수가 아니면 거부한다', () => {
+      expect(
+        serverEventSchema.safeParse({
+          ...baseRoom,
+          creatures: [{ instanceId: 'crt-1', name: '쥐', level: -1 }],
+        }).success,
+      ).toBe(false)
+      expect(
+        serverEventSchema.safeParse({
+          ...baseRoom,
+          creatures: [{ instanceId: 'crt-1', name: '쥐', level: 1.5 }],
+        }).success,
+      ).toBe(false)
+    })
+
+    it('중첩 객체의 알 수 없는 키를 거부한다 (strict)', () => {
+      expect(
+        serverEventSchema.safeParse({
+          ...baseRoom,
+          items: [{ instanceId: 'obj-1', name: '단검', extra: 1 }],
+        }).success,
+      ).toBe(false)
+    })
+
+    it('exits는 문자열 배열이다 — 문 상태 객체를 거부한다 (OQ3)', () => {
+      expect(
+        serverEventSchema.safeParse({ ...baseRoom, exits: [{ name: '북', locked: true }] }).success,
       ).toBe(false)
     })
   })

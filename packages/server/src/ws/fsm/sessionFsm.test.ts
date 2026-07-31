@@ -32,6 +32,7 @@ import {
   handleSessionFrame,
   type FsmContext,
   type SessionContext,
+  type SessionLiveWorld,
   type CreateProgress,
 } from './sessionFsm.js'
 
@@ -1410,6 +1411,26 @@ function makeRoomNode(roomId: number, exitNames: string[] = []): RoomNode {
   }
 }
 
+/**
+ * roomSummary 페이크가 돌려줄 world:room 페이로드 픽스처 — 확장 계약 전 필드를 한 곳에서 채운다.
+ * `makeRoomNode`가 만드는 방을 실 투영(projectRoomView)한 결과와 같은 값을 낸다(이름 `방-<id>`, 빈 설명,
+ * 점유자·아이템·크리처 없음). FSM은 이 페이로드를 그대로 스프레드해 발화할 뿐 해석하지 않는다.
+ */
+function makeRoomView(
+  roomId: number,
+  exits: string[],
+): NonNullable<ReturnType<SessionLiveWorld['roomSummary']>> {
+  return {
+    roomId,
+    name: `방-${roomId}`,
+    longDesc: '',
+    exits,
+    occupants: [],
+    items: [],
+    creatures: [],
+  }
+}
+
 describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', () => {
   it('배치(entry): enterWorld→place→session:entered→world:room 순서로 발화하고 place는 1회, world:room은 exit 이름을 싣는다', async () => {
     const R = 501
@@ -1418,7 +1439,7 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
     const events: ServerEvent[] = []
     const place = vi.fn(() => void order.push('place'))
     const hydrate = vi.fn(() => Promise.resolve(live))
-    const roomSummary = vi.fn((roomId: number) => ({ roomId, exits: ['북', '남'] }))
+    const roomSummary = vi.fn((roomId: number) => makeRoomView(roomId, ['북', '남']))
     const enterWorld = vi.fn((): 'entered' | 'resumed' => {
       order.push('enterWorld')
       return 'entered'
@@ -1449,7 +1470,8 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
     expect(order).toEqual(['enterWorld', 'place', 'emit:session:entered', 'emit:world:room'])
     const roomEvents = events.filter((e) => e.type === 'world:room')
     expect(roomEvents).toHaveLength(1)
-    expect(roomEvents[0]).toEqual({ type: 'world:room', roomId: R, exits: ['북', '남'] })
+    // 요약 필드를 재열거하지 않고 통째로 스프레드해 발화한다(계약 확장이 조용히 누락되지 않는다).
+    expect(roomEvents[0]).toEqual({ type: 'world:room', ...makeRoomView(R, ['북', '남']) })
   })
 
   it('D-G 3 순서 불변식: 옛 세션 종결(eviction)이 occupants·registry를 지워도 이후 place가 재배치해 최종적으로 방에 있다', async () => {
@@ -1498,7 +1520,7 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
         place: (l) => entry.place(l),
         roomSummary: (roomId) => {
           const r = rooms.get(roomId)
-          return r === undefined ? undefined : { roomId: r.roomId, exits: r.exits.map((e) => e.name) }
+          return r === undefined ? undefined : makeRoomView(r.roomId, r.exits.map((e) => e.name))
         },
       },
     }
@@ -1557,7 +1579,7 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
         place: (l) => entry.place(l),
         roomSummary: (roomId) => {
           const r = rooms.get(roomId)
-          return r === undefined ? undefined : { roomId: r.roomId, exits: r.exits.map((e) => e.name) }
+          return r === undefined ? undefined : makeRoomView(r.roomId, r.exits.map((e) => e.name))
         },
       },
     }
@@ -1625,7 +1647,7 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
       clearDeadline: vi.fn(),
       enterWorld: vi.fn((): 'entered' | 'resumed' => 'entered'),
       isClosed: () => false,
-      liveWorld: { hydrate, place, roomSummary: (roomId) => ({ roomId, exits: ['북'] }) },
+      liveWorld: { hydrate, place, roomSummary: (roomId) => makeRoomView(roomId, ['북']) },
     }
     const ctx: FsmContext = {
       state: ConnectionState.create,
@@ -1645,7 +1667,7 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
     expect(place).toHaveBeenCalledTimes(1)
     expect(events).toEqual([
       { type: 'session:entered', characterId: 'char-1' },
-      { type: 'world:room', roomId: R, exits: ['북'] },
+      { type: 'world:room', ...makeRoomView(R, ['북']) },
     ])
   })
 
