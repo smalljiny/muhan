@@ -12,6 +12,10 @@
 // ── 크리처 M-flag 비트(mtype.h 검증) ─────────────────────────────────────────
 /** 고정 몬스터(입장 리스폰 대상). */
 export const MPERMT = 0
+/** 숨음(hidden) 상태 — MHIDDN(mtype.h). 방 표시 루틴이 목록에서 제외(room.c 방 표시 + creature 나열). */
+export const MHIDDN = 1
+/** 투명(invisibility) 상태 — MINVIS(mtype.h). 방 표시 루틴이 목록에서 제외(관찰자 PDINVI 예외는 후속 항목). */
+export const MINVIS = 2
 /** 무차별 공격형. */
 export const MAGGRE = 6
 /** 투명 탐지(Detect invisibility) — MDINVI(mtype.h:432). aggro 타깃선정 시 PINVIS 플레이어 자격 부여(update.c:589~592). */
@@ -150,6 +154,8 @@ export const PRMAGI = 32
 export const OPERMT = 0
 /** 숨겨진 아이템(회수 불가). */
 export const OHIDDN = 1
+/** 투명 아이템 — OINVIS(mtype.h). 방 바닥 목록에서 제외(object.c:174 list_obj, 관찰자 PDINVI 예외는 후속 항목). */
+export const OINVIS = 2
 /** 영구2(회수 불가). */
 export const OPERM2 = 9
 /** 집을 수 없음(회수 불가). */
