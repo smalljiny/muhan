@@ -8,12 +8,13 @@
  * 루트 공용 설정(tsconfig.base.json·eslint.config.js) 변경은 전 태스크에 반영된다.
  *
  * 프로브가 워킹 트리를 변조하므로 4중 보호를 둔다.
- *   1. 자가 치유 — 스크립트 전용 프로브 파일을 시작 시 무조건 제거한다.
+ *   1. 자가 치유 — 스크립트 전용 프로브 파일이 미추적이면 시작 시 제거한다 (추적 중이면 중단).
  *   2. 사전 차단 — 추적 파일 프로브 대상이 이미 더티면 아무것도 건드리지 않고 종료한다.
  *   3. 복원 — finally·exit·시그널 어느 경로로 빠져나가도 restoreAll()이 돈다.
  *   4. 사후 자기 검사 — 종료 직전 워킹 트리가 시작 시점과 동일한지 스스로 확인한다.
  *
- * 종료 코드: 0 = 전 프로브 통과, 1 = 단정 실패 또는 사후 검사 실패, 2 = 사전 차단.
+ * 종료 코드: 0 = 전 프로브 통과, 1 = 단정 실패 또는 사후 검사 실패, 2 = 사전 차단,
+ *            128 + signum = 시그널 종료 (SIGHUP 129 · SIGINT 130 · SIGTERM 143).
  */
 
 import { spawnSync } from 'node:child_process'
@@ -295,6 +296,8 @@ async function runProbe(probe, baseline) {
   // 프로브별로 복원 성공을 확인한다. 앞 프로브의 잔재가 남은 채 다음 프로브를 돌리면
   // 오염된 트리가 "전부 CHANGED" 기대를 자동으로 만족시켜 허위 통과가 나온다.
   // 판정은 `finally` 밖에서 한다 — `finally` 안에서 던지면 측정 단계의 원인 예외가 가려진다.
+  // 측정이 예외로 끝나면 여기 도달하지 않지만, 그 경로의 복원 검사는 최상위 `finally`가 맡는다.
+  // 이 줄들을 `finally` 안으로 되돌리지 말 것.
   if (!restoreVerdict.ok) {
     throw new Error(`${probe.name} 복원 실패 — 이후 프로브를 중단한다.\n${restoreVerdict.reason}`)
   }
@@ -397,7 +400,13 @@ try {
   const verdict = verifyTreeRestored()
   if (verdict.ok) {
     if (probesAttempted) {
-      console.log('\n워킹 트리 자기 검사 통과 — 실행 전후 상태 동일')
+      // 복원 재시도가 성공했더라도 앞서 실패 메시지가 출력됐을 수 있다.
+      // 종료 코드로 문구를 갈라 "실패 직후 무설명 합격"으로 읽히지 않게 한다.
+      console.log(
+        process.exitCode === EXIT_PASS
+          ? '\n워킹 트리 자기 검사 통과 — 실행 전후 상태 동일'
+          : '\n워킹 트리 자기 검사 통과 — 위 실패에도 트리는 원상 복구됐다',
+      )
     }
   } else {
     console.error(`\n사후 자기 검사 실패 — ${verdict.reason}`)
