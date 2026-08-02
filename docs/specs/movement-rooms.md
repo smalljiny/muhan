@@ -113,6 +113,30 @@ gate 1(출구 존재)과 `XNOSEE` 이름 탐색 제외는 `tryMove`가 담당한
 
 거부 경로는 부수효과 없이 `false`만 반환한다. `keyMatch(obj, exit)`는 이름이 아니라 숫자 매칭이다 — `obj.type === KEY(11) && obj.ndice === exit.key`. 열쇠 0 소진 시 파괴 처리는 호출자 seam이다. WS 명령 배선·인벤토리 조회·picklock(도둑 전용)은 모두 호출자 seam으로 범위 밖이다.
 
+### 방 표시 가시성 필터 (`roomView.ts`)
+
+`projectRoomView(room, resolveCharacterName)`는 `RoomNode`를 클라이언트 표시용 뷰로 거르는 순수 함수다. 오라클 `legacy/muhan/src/room.c` 방 표시 루틴 + `object.c:174 list_obj` 이식으로, 원작에서 안 보이던 것이 보이지 않게 한다.
+
+| 대상 | 제외 조건 | flags 표현 |
+|---|---|---|
+| 출구 | `XSECRT`(0) · `XINVIS`(1) · `XNOSEE`(19) 중 하나 | 바이트당 한 원소인 `number[]` → `door.hasFlag` |
+| 바닥 아이템 | `OHIDDN`(1) · `OSCENE`(18) · `OINVIS`(2) 중 하나 | 16자 hex string → `hexFlags.F_ISSET` |
+| 크리처 | `MHIDDN`(1) · `MINVIS`(2) 중 하나, 또는 `hpcur ≤ 0` | 위와 동일 |
+| 점유자 | 이름 해소 실패(라이브 엔트리 없음·빈 문자열) | — |
+
+`door.ts`의 `XSECRT`·`XINVIS` 상수는 이 필터 전용이다 — 문 상태머신 전이 함수는 읽지 않는다. `hexFlags.ts`의 `MHIDDN=1`·`MINVIS=2`는 같은 비트값의 `PHIDDN`·`PINVIS`와 공존한다(원작이 플레이어·몬스터·오브젝트를 같은 `char flags[8]`로 다루므로 네임스페이스별 동일 비트 공존은 이 파일의 기존 관례다 — `MPERMT`/`PBLESS`/`OPERMT`가 전부 0인 것과 같다).
+
+`name`·`longDesc`는 빈 문자열도 그대로 옮긴다(표시 fallback은 클라이언트 소유). `contains`(컨테이너 중첩 아이템)로 재귀하지 않는다 — 오라클 방 표시는 바닥 오브젝트만 나열한다. 점유자는 **본인을 제외하지 않는다**(제외는 클라이언트 책임).
+
+**표시 필터 ≠ 통행 게이트 (의도된 비대칭)**: `world:room.exits`는 `XSECRT`·`XINVIS`를 제외하지만, `tryMove`의 출구 해석(위 §게이트 건틀릿 — `XNOSEE`만 제외)은 그대로다. 비밀 출구는 버튼 목록에서 사라지되 방향 문자열을 직접 보내면 통행 가능하다 — 오라클과 일치하는 동작이다. `tryMove`를 "일관성 정정" 목적으로 고치면 이동 동작이 조용히 바뀐다.
+
+**관찰자 비의존 (봉인된 게이트 2개)**: `projectRoomView`는 관찰자를 인자로 받지 않아 오라클의 다음 두 게이트를 구현하지 않는다.
+
+1. **점유자 은신·투명** — 오라클은 `PHIDDN`·`PINVIS`(`PDINVI` 보유자는 예외 통과)·`PDMINV` 플레이어를 방 표시에서 뺀다. 현재 도달 불가: `PHIDDN`·`PDMINV`는 영속 경로가 없어 항상 0이고(`character/flags.ts` 파티션 표), `PINVIS`는 `buffs`에서 파생되나 `magic/`이 라이브 세션에 미배선이다.
+2. **광원·실명** — 오라클은 어두운 방에서 광원이 없거나 관찰자가 `PBLIND`면 방 표시 전체를 숨긴다. 이 포트는 `RDARK`·`has_light`를 모델링하지 않았고 `combat/`도 미배선이다.
+
+두 게이트 모두 관찰자 캐릭터를 투영 인자로 요구하므로, 여는 순간 `world:room`이 방 단위 fan-out 캐시가 아니라 수신자별 페이로드가 된다. `magic/`·`combat/` 배선 토픽 또는 광원 이식 토픽이 이 반환 계약을 함께 재검토해야 한다.
+
 ### 출구 자동 재잠금 (`checkExits.ts`)
 
 `createCheckExitsSlot(graph)`는 `intervalSec=1`(매 틱 평가) 월드클럭 슬롯을 반환한다. `run(tickSec)`은 `now=tickSec`으로 그래프 모든 방·출구를 순회하며 만료(`ltime + interval < now`, strict less-than)를 판정한다. 두 능력 비트는 원본 `room.c:469`대로 `if / else if`로 배타 평가한다:
@@ -141,7 +165,8 @@ gate 1(출구 존재)과 `XNOSEE` 이름 탐색 제외는 `tryMove`가 담당한
 - **문 명령·인벤토리·picklock 미배선** — 전이 함수·`keyMatch` predicate만 제공한다. 플레이어 WS 명령(openexit/lock 등)·열쇠 오브젝트 실 조회·picklock(도둑 클래스·쿨다운·dex)은 호출자 seam(명령/인벤토리 에픽·E5).
 - **이동 leave/join 방송 미결선** — `broadcastLeave`/`broadcastJoin`은 프로덕션 배선에서 no-op이다. 방 채팅 전파는 채널 포트가 소유하고, 이동 통지(누가 들어왔다/나갔다)는 후속 토픽 몫이다.
 - **라이브 상태만 — write-back 없음** — 방 점유자·문 상태는 인메모리 라이브 상태다. 영속화(write-back)는 seam이며 재부팅 시 문 상태는 기본값(`ltime=0`·`interval=60`)으로 복귀한다.
-- **좌표 없음** — 서버는 그래프+방향 힌트만 권위다. automap 좌표 합성·렌더는 클라 파생(E11).
+- **좌표 없음** — 서버는 그래프+방향 힌트만 권위다. automap 좌표 합성·렌더는 클라 파생(E11에서도 미구현 — 현재 방만 렌더한다).
+- **방 표시 가시성 필터가 관찰자 비의존** — 점유자 은신(`PHIDDN`/`PINVIS`/`PDMINV`)·광원/실명 게이트를 구현하지 않는다. 지금은 해당 상태를 세울 라이브 경로가 없어 누출이 없으나, `magic/`·`combat/` 배선 또는 광원 이식이 이 전제를 깬다(위 §방 표시 가시성 필터).
 - **flag 52 latent bug 미재현** — A4 §8이 경고한 `F_ISSET(ext, 52)` 경계 밖 접근(비트 52는 4바이트 출구 flags 범위 밖 → ltime 침범)은 어떤 게이트·flee 로직도 읽지 않는다.
 
 ## 관련 문서

@@ -32,8 +32,10 @@ session.emit({
 `WsClientSnapshot`에 세션 서브상태 `session`을 추가한다:
 
 - `SessionPhase` — `connecting | negotiating | selecting | creating | entered | resumed`. 전송 라이프사이클 `status`(`disconnected`…`ready`)와 독립적으로 갱신되는 파생 필드다.
-- `SessionState { phase, characterList, activePrompt, lastError }` — 진입 서브상태 단일 출처.
+- `SessionState { phase, characterList, activePrompt, lastError, characterId }` — 진입 서브상태 단일 출처. `characterId`는 E11이 더했다 — `session:entered`·`session:resumed` 양쪽에서 보관하며 방 패널의 본인 제외에 쓴다.
 - `ActivePrompt { promptId, kind, options? }` — 진행 중 prompt 요약.
+
+**층 경계 규칙** — 스냅샷 최상위는 전송 라이프사이클 + **서버 권위 월드 스냅샷**이고, `session`은 진입 대화 서브상태다. E11이 최상위에 `room: RoomState | null`을 더하며 첫 월드-도메인 멤버가 생겼다([`world-view.md`](world-view.md)). 후속 에픽이 `progress:trained`·`chat:said`를 상태로 승격할 때 이 경계가 배치 근거다 — 진입 대화에 속하지 않는 서버 권위 상태는 최상위에 둔다.
 
 `dispatch`가 `session:characterList`/`session:prompt`/`session:entered`/`session:resumed`/`error`를 이 세션 상태로 반영한다(변경 키만 새 `session` 객체로 교체하는 불변 재할당, 기존 `useSyncExternalStore` 구독 유지). 사용자 구동 명령 메서드 `selectCharacter(characterId)`·`replyPrompt(promptId, value)`를 노출하며, 둘 다 기존 `send()` 경로(`clientCommandSchema.safeParse` 검증)를 재사용한다. `replyPrompt`의 `value`는 호출자가 넘긴 그대로 전달한다(sentinel·confirm 값 하드코딩 없음). 이전 `autoSelect`/`selectSent` 스텁은 제거됐다.
 
@@ -68,7 +70,9 @@ select prompt의 '새 캐릭터 생성' 버튼을 누르면 `option.value`(=`CRE
 
 ## 제약사항
 
-- **재연결 시 세션 phase 미초기화** — `connect`/`disconnect`/`reconnect`는 `status`만 바꾸고 `session.phase`/`activePrompt`/`characterList`/`lastError`를 리셋하지 않는다. `entered`에서 재연결하면 새 소켓이 `CONNECTING`인 동안 stale 셸이 유지되어, 이때 명령을 제출하면 `send()`가 소켓 non-null만 검사(`readyState` 미검사)하므로 브라우저가 `InvalidStateError`를 throw할 수 있다. `ConnectionStatus`가 실제 연결 상태를 독립 렌더해 사용자에게 알리므로 비블로킹이며, 단절 구간 상태 복원은 E4/E11 및 E3-3 재연결 에픽 소관이다.
+- **재연결 시 세션 phase 미초기화** — `connect`/`disconnect`/`reconnect`는 `status`만 바꾸고 `session.phase`/`activePrompt`/`characterList`/`lastError`/`characterId`와 최상위 `room`을 리셋하지 않는다. `entered`에서 재연결하면 새 소켓이 `CONNECTING`인 동안 stale 셸이 유지되어, 이때 명령을 제출하면 `send()`가 소켓 non-null만 검사(`readyState` 미검사)하므로 브라우저가 `InvalidStateError`를 throw할 수 있다.
+
+  **E11 이후 영향 범위가 넓어졌다** — 이전 판정은 "stale 셸, 비블로킹"이었으나 방 패널 도입으로 잔존 상태가 **조작 가능 표면**이 됐다. (a) 직전 방의 출구 버튼이 그대로 렌더되므로, 재연결이 다른 캐릭터로 착지한 뒤 서버가 미해소 방이라 `world:room` 발화를 생략하면 그 방에서만 유효한 방향으로 `world:move`가 나간다. (b) stale `characterId`는 `RoomPanel`의 본인 제외가 엉뚱한 점유자를 지우게 만든다. 여전히 `ConnectionStatus`가 실제 연결 상태를 독립 렌더하고 서버가 방향을 권위 판정하므로 치명적이지는 않으나, 단절 구간 상태 복원(#116·E3-3 재연결 에픽)이 닫아야 할 항목이다.
 - **class/race 원시 코드** — 카드 표시와 생성 입력 모두 카탈로그 없이 원시 정수 코드다. 코드→이름 카탈로그·직업/종족 콘텐츠 이식은 E6 소관이다.
 - **실제 월드 뷰 없음** — 진입 후 셸은 `EventLog`+`CommandInput` placeholder다. 방·이동·주변 렌더는 E11, 전투·인벤 패널은 E12, 소셜은 E13이 소유한다.
 - **디자인·시각 스타일링 없음** — 컴포넌트는 최소 시맨틱 마크업만 제공한다(기능 freeze 후 별도 등록).
