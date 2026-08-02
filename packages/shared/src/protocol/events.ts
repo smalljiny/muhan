@@ -83,12 +83,31 @@ export const serverEventSchema = z.discriminatedUnion('type', [
     type: z.literal('session:resumed'),
     characterId: z.string().min(1),
   }),
-  // 방 통지 — 이동/입장 성공 시 본인에게 1회 발화하는 최소 방 통지(현재 방 id + 출구 이름 목록).
-  // 주변 점유자·아이템·설명은 싣지 않는다 — 최소 방 상태만 전달하고 나머지는 후속 에픽이 확장한다(D-C).
+  // 방 통지 — 이동/입장 성공 시 본인에게 1회 발화하는 방 스냅샷. 방 id·이름·설명·출구 이름 목록에
+  // 더해 눈에 보이는 점유자·바닥 아이템·크리처를 싣는다(서버 `projectRoomView`가 오라클 방 표시 규칙으로
+  // 숨김 개체·비밀 출구를 이미 걸러 낸다). 스냅샷이지 실시간 델타가 아니다 — 다른 사람의 입·퇴장은 다음
+  // world:room까지 반영되지 않는다(#116).
+  //
+  // `name`·`longDesc`는 빈 문자열이 유효하다 — 정본 월드 데이터에 빈 name 97방·빈 longDesc 433방이
+  // 실재하며, 대체 문구('이름 없는 곳'·'설명이 없다.') 선택은 표시 계층의 관심사다.
+  // `exits`는 이름 문자열 배열을 유지한다 — 문 잠김·닫힘 상태를 노출하지 않고, 버튼을 눌러 막히면
+  // 서버가 error{rule_rejected}로 답한다(OQ3). `shortDesc`는 2341방 중 2327방이 빈 문자열이라 싣지 않는다.
+  // `occupants`는 본인을 포함한다 — 본인 제외는 클라이언트가 수행한다.
   z.strictObject({
     type: z.literal('world:room'),
     roomId: z.int().min(0),
+    name: z.string(),
+    longDesc: z.string(),
     exits: z.array(z.string()),
+    occupants: z.array(z.strictObject({ characterId: z.string().min(1), name: z.string().min(1) })),
+    items: z.array(z.strictObject({ instanceId: z.string().min(1), name: z.string() })),
+    creatures: z.array(
+      z.strictObject({
+        instanceId: z.string().min(1),
+        name: z.string(),
+        level: z.int().min(0),
+      }),
+    ),
   }),
   // 채팅 발화 통지 — ChannelDeliveryContext와 1:1 매핑(speaker→speakerCharacterId로 평탄화). 인바운드
   // chat:message와 이름을 달리해(said vs message) 방향을 판별한다(D-E). channel은 채널 전달 컨텍스트와 동일

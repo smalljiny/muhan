@@ -1,26 +1,26 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { Character, ExitEdge, RoomNode } from 'shared'
-import { setFlag, XLOCKD } from '../../world/door.js'
+import type { Character, RoomNode } from 'shared'
+import { XLOCKD, XSECRT } from '../../world/door.js'
+import { OHIDDN, MINVIS } from '../../world/hexFlags.js'
 import { defaultFleeRng, type TryMoveDeps } from '../../world/tryMove.js'
 import type { LiveCharacter } from '../../world/liveCharacterRegistry.js'
 import { createMarkCharacterDirty } from '../../world/markCharacterDirty.js'
+import { exitFlags, flagsHex, makeExitTo, makeItem, makeCreature } from '../../world/roomFixtures.testutil.js'
 import type { ActorContext } from '../actorContext.js'
-import { createMoveHandler } from './move.js'
+import { createMoveHandler, type MoveHandlerDeps } from './move.js'
 import { dispatch, createCommandRegistry } from '../router.js'
 import type { ChannelPort } from '../channelPort.js'
 import type { PermissionPort } from '../permissionPort.js'
 
-// ── 픽스처 팩토리 (tryMove.test.ts 관례 재사용) ───────────────────────────────
+// ── 픽스처 팩토리 (world/roomFixtures.testutil.ts 공유 헬퍼 재사용) ────────────
 
-// 출구 엣지(4바이트=32비트 flags). name·targetRoomId·세팅 비트만 지정.
-function makeExit(name: string, targetRoomId: number, bits: number[] = []): ExitEdge {
-  const flags = [0, 0, 0, 0]
-  for (const bit of bits) setFlag(flags, bit)
-  return { name, targetRoomId, flags, key: 0, ltime: 0, interval: 60 }
-}
-
-// 방(8바이트=64비트 flags). exits·점유자를 지정.
-function makeRoom(roomId: number, exits: ExitEdge[], occupantIds: string[] = []): RoomNode {
+// 방(8바이트=64비트 flags). roomId·exits·점유자를 지정하고, 나머지는 overrides로 덮어쓴다.
+function makeRoom(
+  roomId: number,
+  exits: RoomNode['exits'],
+  occupantIds: string[] = [],
+  overrides: Partial<RoomNode> = {},
+): RoomNode {
   return {
     roomId,
     name: `방${roomId}`,
@@ -34,6 +34,7 @@ function makeRoom(roomId: number, exits: ExitEdge[], occupantIds: string[] = [])
     permMon: [],
     random: [],
     traffic: 0,
+    ...overrides,
   }
 }
 
@@ -82,23 +83,49 @@ function makeTryMoveDeps(rooms: RoomNode[]) {
   return { deps, graph }
 }
 
+// 이름을 해소하지 못하는 기본 해소자 — 점유자를 다루지 않는 케이스의 잡음을 없앤다.
+const noNames = (): undefined => undefined
+
+// 방 200 도착 시 world:room 완성 기대값 — 출발 100→도착 200(출구 '서'), 점유자·아이템·크리처 없음.
+const ROOM_200_ARRIVAL_EVENT = {
+  type: 'world:room',
+  roomId: 200,
+  name: '방200',
+  longDesc: '',
+  exits: ['서'],
+  occupants: [],
+  items: [],
+  creatures: [],
+} as const
+
 // actor에는 방 필드가 없다(D2) — accountId/characterId만. 핸들러는 currentRoom을 오직 registry에서 읽는다.
 const actor: ActorContext = { accountId: 'acc-1', characterId: 'me' }
+
+// handler 조립기 — 4필드 리터럴 반복을 없앤다. overrides가 준 부분만 기본 deps를 덮어쓴다.
+function makeHandler(rooms: RoomNode[], overrides: Partial<MoveHandlerDeps> = {}) {
+  const { deps } = makeTryMoveDeps(rooms)
+  const handler = createMoveHandler({
+    liveRegistry: { get: vi.fn(() => makeLive(100)) },
+    tryMoveDeps: deps,
+    markCharacterDirty: vi.fn(),
+    resolveCharacterName: noNames,
+    ...overrides,
+  })
+  return { handler, deps }
+}
 
 describe('createMoveHandler', () => {
   describe('성공 이동 (A≠B, non-vacuous)', () => {
     // 출발 방 A=100, 도착 방 B=200, A≠B. A는 '동'→B 출구를 갖고, B는 '서'→A 명명 출구를 가져
     // exits.map(e=>e.name)이 non-vacuous(['서'])다.
     it('점유자 재배치·live.currentRoom 갱신·world:room 이벤트를 낸다', () => {
-      const dest = makeRoom(200, [makeExit('서', 100)])
-      const source = makeRoom(100, [makeExit('동', 200)], ['me'])
+      const dest = makeRoom(200, [makeExitTo('서', 100)])
+      const source = makeRoom(100, [makeExitTo('동', 200)], ['me'])
       expect(source.roomId).not.toBe(dest.roomId) // A≠B 명시
-      const { deps } = makeTryMoveDeps([source, dest])
       const live = makeLive(100)
       const markDirty = vi.fn()
-      const handler = createMoveHandler({
+      const { handler } = makeHandler([source, dest], {
         liveRegistry: { get: vi.fn(() => live) },
-        tryMoveDeps: deps,
         markCharacterDirty: createMarkCharacterDirty(markDirty),
       })
 
@@ -109,19 +136,75 @@ describe('createMoveHandler', () => {
       expect(dest.occupants.has('me')).toBe(true)
       // live 방 위치가 도착 방으로 갱신됐다(D-A1).
       expect(live.character.currentRoom).toBe(200)
-      // world:room 상태 이벤트 — correlationId 없음.
-      expect(event).toEqual({ type: 'world:room', roomId: 200, exits: ['서'] })
+      // world:room 상태 이벤트 — correlationId 없음. 점유자는 이름 미해소(noNames)라 비어 있다
+      // (해소 케이스는 아래 별도 it이 소유한다).
+      expect(event).toEqual(ROOM_200_ARRIVAL_EVENT)
+    })
+
+    it('도착 방의 이름·설명·아이템·크리처를 싣는다', () => {
+      const dest = makeRoom(200, [makeExitTo('서', 100)], [], {
+        name: '어두운 동굴',
+        longDesc: '축축한 동굴이다.',
+        items: [makeItem('obj-1', '녹슨 검')],
+        creatures: [makeCreature('crt-1', '박쥐', { level: 2 })],
+      })
+      const source = makeRoom(100, [makeExitTo('동', 200)], ['me'])
+      const { handler } = makeHandler([source, dest])
+
+      const event = handler({ type: 'world:move', direction: '동' }, actor)
+
+      expect(event).toMatchObject({
+        name: '어두운 동굴',
+        longDesc: '축축한 동굴이다.',
+        items: [{ instanceId: 'obj-1', name: '녹슨 검' }],
+        creatures: [{ instanceId: 'crt-1', name: '박쥐', level: 2 }],
+      })
+    })
+
+    it('도착 방의 숨김 아이템·숨김 크리처·비밀 출구를 걸러 낸다', () => {
+      const dest = makeRoom(200, [makeExitTo('서', 100), makeExitTo('숨은문', 300, exitFlags(XSECRT))], [], {
+        items: [makeItem('obj-1', '녹슨 검'), makeItem('obj-2', '숨은 열쇠', flagsHex(OHIDDN))],
+        creatures: [
+          makeCreature('crt-1', '박쥐', { level: 2 }),
+          makeCreature('crt-2', '투명 유령', { level: 2, flags: flagsHex(MINVIS) }),
+        ],
+      })
+      const source = makeRoom(100, [makeExitTo('동', 200)], ['me'])
+      const { handler } = makeHandler([source, dest])
+
+      const event = handler({ type: 'world:move', direction: '동' }, actor)
+
+      expect(event).toMatchObject({
+        exits: ['서'],
+        items: [{ instanceId: 'obj-1', name: '녹슨 검' }],
+        creatures: [{ instanceId: 'crt-1', name: '박쥐', level: 2 }],
+      })
+    })
+
+    it('도착 방 점유자 이름을 resolveCharacterName으로 해소하고 본인도 그대로 싣는다', () => {
+      // 도착 방에 먼저 다른 사람(char-2)이 있고, 이동한 본인('me')도 tryMove가 추가한다.
+      const dest = makeRoom(200, [makeExitTo('서', 100)], ['char-2'])
+      const source = makeRoom(100, [makeExitTo('동', 200)], ['me'])
+      const names = new Map<string, string>([['me', '무한전사'], ['char-2', '테스토스']])
+      const { handler } = makeHandler([source, dest], { resolveCharacterName: (id) => names.get(id) })
+
+      const event = handler({ type: 'world:move', direction: '동' }, actor)
+
+      // 본인 제외는 클라이언트 책임이므로 서버는 'me'를 그대로 싣는다(스펙 §4).
+      expect(event).toMatchObject({ type: 'world:room' })
+      const occupants = (event as { occupants: { characterId: string; name: string }[] }).occupants
+      expect(new Set(occupants)).toEqual(
+        new Set([
+          { characterId: 'char-2', name: '테스토스' },
+          { characterId: 'me', name: '무한전사' },
+        ]),
+      )
     })
 
     it('hook 순서: onRoomLeft는 source delete 후, onRoomEntered는 dest add 후 각 1회', () => {
-      const dest = makeRoom(200, [makeExit('서', 100)])
-      const source = makeRoom(100, [makeExit('동', 200)], ['me'])
-      const { deps } = makeTryMoveDeps([source, dest])
-      const handler = createMoveHandler({
-        liveRegistry: { get: vi.fn(() => makeLive(100)) },
-        tryMoveDeps: deps,
-        markCharacterDirty: vi.fn(),
-      })
+      const dest = makeRoom(200, [makeExitTo('서', 100)])
+      const source = makeRoom(100, [makeExitTo('동', 200)], ['me'])
+      const { handler, deps } = makeHandler([source, dest])
 
       handler({ type: 'world:move', direction: '동' }, actor)
 
@@ -135,13 +218,11 @@ describe('createMoveHandler', () => {
   describe('거부 (막힌 방향/잠긴 문)', () => {
     it('rule_rejected 이벤트를 내고 점유자·live.currentRoom 불변, markCharacterDirty 미호출', () => {
       const dest = makeRoom(200, [])
-      const source = makeRoom(100, [makeExit('동', 200, [XLOCKD])], ['me'])
-      const { deps } = makeTryMoveDeps([source, dest])
+      const source = makeRoom(100, [makeExitTo('동', 200, exitFlags(XLOCKD))], ['me'])
       const live = makeLive(100)
       const markDirty = vi.fn()
-      const handler = createMoveHandler({
+      const { handler } = makeHandler([source, dest], {
         liveRegistry: { get: vi.fn(() => live) },
-        tryMoveDeps: deps,
         markCharacterDirty: createMarkCharacterDirty(markDirty),
       })
 
@@ -155,13 +236,8 @@ describe('createMoveHandler', () => {
     })
 
     it('id가 있으면 rule_rejected 이벤트에 correlationId를 반향한다', () => {
-      const source = makeRoom(100, [makeExit('동', 200, [XLOCKD])], ['me'])
-      const { deps } = makeTryMoveDeps([source, makeRoom(200, [])])
-      const handler = createMoveHandler({
-        liveRegistry: { get: vi.fn(() => makeLive(100)) },
-        tryMoveDeps: deps,
-        markCharacterDirty: vi.fn(),
-      })
+      const source = makeRoom(100, [makeExitTo('동', 200, exitFlags(XLOCKD))], ['me'])
+      const { handler } = makeHandler([source, makeRoom(200, [])])
 
       const event = handler({ type: 'world:move', direction: '동', id: 'm1' }, actor)
 
@@ -171,14 +247,11 @@ describe('createMoveHandler', () => {
 
   describe('성공 시 dirty 마킹 (A≠B, non-vacuous)', () => {
     it("markCharacterDirty를 ('characters', characterId, 전체 문서)로 1회 호출한다 — snapshot이 도착 방", () => {
-      const dest = makeRoom(200, [makeExit('서', 100)])
-      const source = makeRoom(100, [makeExit('동', 200)], ['me'])
+      const dest = makeRoom(200, [makeExitTo('서', 100)])
+      const source = makeRoom(100, [makeExitTo('동', 200)], ['me'])
       expect(source.roomId).not.toBe(dest.roomId) // A≠B 명시 — snapshot이 A가 아닌 B임을 증명하려면 필수
-      const { deps } = makeTryMoveDeps([source, dest])
       const markDirty = vi.fn()
-      const handler = createMoveHandler({
-        liveRegistry: { get: vi.fn(() => makeLive(100)) },
-        tryMoveDeps: deps,
+      const { handler } = makeHandler([source, dest], {
         // 실 헬퍼를 끼워 원시 seam에 도달한 스냅샷을 그대로 관찰한다(부분 스냅샷이면 여기서 드러난다).
         markCharacterDirty: createMarkCharacterDirty(markDirty),
       })
@@ -199,12 +272,10 @@ describe('createMoveHandler', () => {
 
   describe('미등록 actor 격리', () => {
     it('liveRegistry.get이 undefined면 error{internal}, 이동·markCharacterDirty·tryMove 없음', () => {
-      const source = makeRoom(100, [makeExit('동', 200)], ['me'])
-      const { deps } = makeTryMoveDeps([source, makeRoom(200, [])])
+      const source = makeRoom(100, [makeExitTo('동', 200)], ['me'])
       const markDirty = vi.fn()
-      const handler = createMoveHandler({
+      const { handler, deps } = makeHandler([source, makeRoom(200, [])], {
         liveRegistry: { get: vi.fn(() => undefined) },
-        tryMoveDeps: deps,
         markCharacterDirty: createMarkCharacterDirty(markDirty),
       })
 
@@ -218,12 +289,7 @@ describe('createMoveHandler', () => {
     })
 
     it('미등록 actor + id면 internal 이벤트에 correlationId를 반향한다', () => {
-      const { deps } = makeTryMoveDeps([])
-      const handler = createMoveHandler({
-        liveRegistry: { get: vi.fn(() => undefined) },
-        tryMoveDeps: deps,
-        markCharacterDirty: vi.fn(),
-      })
+      const { handler } = makeHandler([], { liveRegistry: { get: vi.fn(() => undefined) } })
 
       const event = handler({ type: 'world:move', direction: '동', id: 'm2' }, actor)
 
@@ -235,14 +301,9 @@ describe('createMoveHandler', () => {
     it('핸들러는 currentRoom을 registry 엔트리에서 읽는다(actor에는 방 필드가 없다)', () => {
       // registry가 방 777을 준다. actor에는 어떤 방 정보도 없다. tryMove가 777을 source로 해석함을
       // resolveRoom 호출 인자로 확인한다 — 방 위치가 오직 registry에서 왔음을 증명한다.
-      const dest = makeRoom(888, [makeExit('북', 777)])
-      const source = makeRoom(777, [makeExit('동', 888)], ['me'])
-      const { deps } = makeTryMoveDeps([source, dest])
-      const handler = createMoveHandler({
-        liveRegistry: { get: vi.fn(() => makeLive(777)) },
-        tryMoveDeps: deps,
-        markCharacterDirty: vi.fn(),
-      })
+      const dest = makeRoom(888, [makeExitTo('북', 777)])
+      const source = makeRoom(777, [makeExitTo('동', 888)], ['me'])
+      const { handler, deps } = makeHandler([source, dest], { liveRegistry: { get: vi.fn(() => makeLive(777)) } })
 
       handler({ type: 'world:move', direction: '동' }, actor)
 
@@ -250,12 +311,7 @@ describe('createMoveHandler', () => {
     })
 
     it('defensive narrow: world:move가 아닌 명령은 undefined를 반환한다', () => {
-      const { deps } = makeTryMoveDeps([])
-      const handler = createMoveHandler({
-        liveRegistry: { get: vi.fn(() => makeLive(100)) },
-        tryMoveDeps: deps,
-        markCharacterDirty: vi.fn(),
-      })
+      const { handler } = makeHandler([])
       expect(handler({ type: 'debug:echo', text: '핑' }, actor)).toBeUndefined()
     })
   })
@@ -275,20 +331,21 @@ describe('createCommandRegistry — world:move 조건부 등록', () => {
   })
 
   it('moveDeps를 주면 world:move가 move 핸들러로 디스패치된다', () => {
-    const dest = makeRoom(200, [makeExit('서', 100)])
-    const source = makeRoom(100, [makeExit('동', 200)], ['me'])
+    const dest = makeRoom(200, [makeExitTo('서', 100)])
+    const source = makeRoom(100, [makeExitTo('동', 200)], ['me'])
     const { deps } = makeTryMoveDeps([source, dest])
     const registry = createCommandRegistry(testChannelPort, {
       move: {
         liveRegistry: { get: vi.fn(() => makeLive(100)) },
         tryMoveDeps: deps,
         markCharacterDirty: vi.fn(),
+        resolveCharacterName: noNames,
       },
     })
 
     const result = dispatch(registry, { type: 'world:move', direction: '동' }, actor, testPermission)
 
     expect(result.outcome).toBe('handled')
-    expect(result.event).toEqual({ type: 'world:room', roomId: 200, exits: ['서'] })
+    expect(result.event).toEqual(ROOM_200_ARRIVAL_EVENT)
   })
 })

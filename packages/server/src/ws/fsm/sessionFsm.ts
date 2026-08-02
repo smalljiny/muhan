@@ -174,7 +174,12 @@ export interface SessionContext {
 export interface SessionLiveWorld {
   hydrate(characterId: string): Promise<LiveCharacter>
   place(live: LiveCharacter): void
-  roomSummary(roomId: number): { roomId: number; exits: string[] } | undefined
+  /**
+   * 방 뷰 파생 — world:room이 싣는 필드 전량(id·이름·설명·출구·점유자·아이템·크리처)을 돌려준다.
+   * 반환 타입을 shared 와이어 계약에서 파생해 FSM이 셸 모듈 타입(`world/roomView.ts`)에 의존하지 않는다
+   * (3층 경계 유지). 셸측 구현(`buildRoomSummary`)이 같은 계약에서 파생한 `RoomView`를 돌려 구조적으로 맞물린다.
+   */
+  roomSummary(roomId: number): Omit<Extract<ServerEvent, { type: 'world:room' }>, 'type'> | undefined
 }
 
 /**
@@ -500,7 +505,8 @@ function enterCommand(
   if (live !== undefined && session.liveWorld !== undefined) {
     const summary = session.liveWorld.roomSummary(live.character.currentRoom)
     if (summary !== undefined) {
-      session.emit({ type: 'world:room', roomId: summary.roomId, exits: summary.exits })
+      // 필드를 재열거하지 않고 스프레드한다 — 계약이 넓어질 때 진입 경로가 조용히 뒤처지지 않는다.
+      session.emit({ type: 'world:room', ...summary })
     }
   }
   return ConnectionState.command

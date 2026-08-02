@@ -6,6 +6,7 @@ import { CharacterList } from './components/CharacterList'
 import { CommandInput } from './components/CommandInput'
 import { ConnectionStatus } from './components/ConnectionStatus'
 import { EventLog } from './components/EventLog'
+import { RoomPanel } from './components/RoomPanel'
 import { SessionErrorBanner } from './components/SessionErrorBanner'
 import { SessionPrompt } from './components/SessionPrompt'
 import { WsClient, type SocketFactory } from './transport/wsClient'
@@ -49,6 +50,7 @@ export function App({ socketFactory }: AppProps = {}) {
     (characterId: string) => client.selectCharacter(characterId),
     [client],
   )
+  const move = useCallback((direction: string) => client.move(direction), [client])
 
   const { phase, characterList, activePrompt, lastError } = snapshot.session
 
@@ -77,6 +79,19 @@ export function App({ socketFactory }: AppProps = {}) {
         return (
           <>
             {phase === 'resumed' && <p>재접속됨</p>}
+            {/* 서버가 미해소 방에서 발화를 생략하므로 room === null 구간이 존재한다(스펙 §3.4).
+                여기가 스냅샷의 두 서브트리(최상위 room + session.characterId)를 조인하는 첫 지점이다.
+                서버는 방 단위 fan-out 캐시를 유지하려고 수신자와 무관한 같은 페이로드를 보내며
+                occupants에 **본인을 포함**한다 — 제외는 소비자 책임이다(스펙 §4). 방 점유자를 쓰는
+                후속 소비자(#116 델타 통지·#62 소셜)도 같은 규약을 적용해야 한다.
+                RoomPanel 위에 렌더한다 — 이동 후 새 방이 이벤트 로그 위에서 바로 보여야 한다. */}
+            {snapshot.room !== null && (
+              <RoomPanel
+                room={snapshot.room}
+                selfCharacterId={snapshot.session.characterId}
+                onMove={move}
+              />
+            )}
             <EventLog events={snapshot.events} />
             <CommandInput onSubmitEcho={sendEcho} />
           </>

@@ -14,10 +14,19 @@ import type { ExitEdge } from 'shared'
  *
  * 범위 경계: WS 명령 배선·인벤토리 조회·picklock(도둑 전용)은 호출자 seam이다.
  *   전이 함수는 문 상태(flags+ltime)만 변경하고, `now`(현재 실초)는 인자 주입 seam이다.
+ *
+ * 이 파일은 문 상태머신과 함께 **출구 플래그 어휘 전체 + `number[]` 비트 헬퍼**를 소유한다
+ * (크리처·오브젝트·플레이어 비트 어휘가 hexFlags.ts에 모인 것과 대칭). 따라서 전이 함수가 읽지
+ * 않는 표시 전용 비트(XSECRT·XINVIS)도 여기 산다 — 소비자는 roomView·tryMove 등 다른 모듈이다.
  */
 
 // ── 출구 플래그 비트 상수 (oracle a4 §2, 오라클 검증 완료) ────────────────────
-// 상태 2비트 + 능력 3비트. XNOSEE는 가시성+통행 게이트(§2)로 여기선 hasFlag 검증용.
+// 상태 2비트 + 능력 3비트 + 표시·통행 가시성 비트. XSECRT·XINVIS는 표시 전용(roomView가 소비),
+// XNOSEE는 표시+통행 양쪽 게이트(§2, tryMove도 읽는다).
+/** 비밀 출구(표시 전용) — F_ISSET bit 0. 방 표시 목록에서 제외되나 통행은 가능하다. */
+export const XSECRT = 0
+/** 투명 출구(표시 전용) — F_ISSET bit 1. 방 표시 목록에서 제외되나 통행은 가능하다. */
+export const XINVIS = 1
 /** 잠김(상태) — F_ISSET bit 2. */
 export const XLOCKD = 2
 /** 닫힘(상태) — F_ISSET bit 3. */

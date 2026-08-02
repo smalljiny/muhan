@@ -20,7 +20,7 @@
 
 `shared`의 기존 `schema/`(영속·도메인)와 **별개 모듈**이다 — 프로토콜은 와이어 메시지 계약, `schema/`는 저장 도메인 모델이다. 모든 TS 타입은 `z.infer`로만 파생하며 병렬 수기 타입을 두지 않는다. `index.ts` 배럴이 스키마·타입·`PROTOCOL_VERSION`을 함께 재노출하고, `shared/src/index.ts`가 이를 `export *`로 상위 노출한다. DOM 전역(`Event`·`Command`)과 충돌하지 않도록 파생 타입은 `ClientCommand`·`ServerEvent`로 한정 명명한다.
 
-**`version.ts`** — `PROTOCOL_VERSION = 3`. 계약이 하위 비호환으로 바뀔 때마다 1씩 단조 증가시키는 정수(semver 미채택 — 와이어 호환성만 판단하면 되므로 정수 동등 비교가 단순). 핸드셰이크가 이 값을 실어 client·server가 같은 계약 세대를 쓰는지 대조한다.
+**`version.ts`** — `PROTOCOL_VERSION = 4`. 계약이 하위 비호환으로 바뀔 때마다 1씩 단조 증가시키는 정수(semver 미채택 — 와이어 호환성만 판단하면 되므로 정수 동등 비교가 단순). 핸드셰이크가 이 값을 실어 client·server가 같은 계약 세대를 쓰는지 대조한다. 직전 bump는 E11(#60)의 `world:room` 페이로드 확장이다 — 기존 variant가 `z.strictObject`라 required 필드를 더하면 구버전 클라의 `safeParse`가 깨지므로 3 → 4로 올렸다.
 
 **`payloads.ts`** — 명령 인자 패턴 building block 4종. 무한 명령 어휘가 인자 구조상 수렴하는 4패턴을 독립 `z.strictObject`로 못박아 command 봉투가 재사용한다. 다단 대화(prompt/response) payload는 T2 경계라 여기 두지 않는다.
 
@@ -59,7 +59,7 @@
 - `{ type: 'session:prompt', promptId: string(min 1), kind: PromptKind, options?: PromptOption[] }` — 세션 prompt 제시(T2). `promptId`로 질문을 식별, `kind`로 단계(`selectCharacter`/`createField`)를, `options`로 선택지를 싣는다.
 - `{ type: 'session:characterList', characters: CharacterSummary[] }` — 캐릭터 선택 화면이 실을 와이어 전용 요약 배열(T2).
 - `{ type: 'session:entered', characterId: string(min 1) }` — 지목한 캐릭터로 월드 입장 확정 통지(T2).
-- `{ type: 'world:room', roomId: int(min 0), exits: string[] }` — 최소 방 통지. 입장·이동 성공 시 본인에게 1회 발화한다. `exits`는 출구 **이름** 목록(인덱스가 아니다 — `world:move.direction`과 같은 어휘). 주변 점유자·아이템·방 설명은 싣지 않으며 상세 월드뷰는 후속 에픽이 확장한다. 정본 [`live-world-foundation.md`](live-world-foundation.md).
+- `{ type: 'world:room', roomId: int(min 0), exits: string[], name: string, longDesc: string, occupants: {characterId: string(min 1), name: string(min 1)}[], items: {instanceId: string(min 1), name: string}[], creatures: {instanceId: string(min 1), name: string, level: int(min 0)}[] }` — 방 상태 스냅샷. 입장·이동 성공 시 본인에게 1회 발화한다. `exits`는 출구 **이름** 목록(인덱스가 아니다 — `world:move.direction`과 같은 어휘)이며 문 상태(`XLOCKD`/`XCLOSD`)를 노출하지 않는 `z.array(z.string())`을 유지한다 — 잠긴 문은 눌렀을 때 `error{rule_rejected}`로 답한다. `name`·`longDesc`는 빈 문자열이 유효하다(각각 97방·433방) — `.min(1)`을 걸지 않고 표시 fallback은 클라이언트가 소유한다. `occupants`는 **본인을 포함**하며 제외는 클라이언트 책임이다(수신자별 페이로드를 만들면 방 단위 fan-out 캐시가 불가능해진다). `shortDesc`는 싣지 않는다(2341방 중 2327방이 빈 문자열). 서버가 싣는 목록은 오라클 방 표시 규칙으로 걸러진 것이다 — [`movement-rooms.md`](movement-rooms.md) §방 표시 가시성 필터. 정본 [`live-world-foundation.md`](live-world-foundation.md).
 - `{ type: 'chat:said', channel: 'say'|'yell'|'broadcast'|'emote', speakerCharacterId: string(min 1), text: string(min 1, max 512), target?: string(min 1, max 64) }` — 채널 fan-out 수신측 통지. `ChannelDeliveryContext`와 1:1 매핑(발화자를 `speakerCharacterId`로 평탄화)이며, 인바운드 `chat:message`와 이름을 달리해(said vs message) 방향을 판별한다. 길이 상한은 인바운드 chat 명령과 동일 값을 아웃바운드에도 적용한다.
 - `{ type: 'progress:trained', level: int(min 1), levelsGained: int(min 0), experience: int(min 0), gold: int(min 0), hpCurrent: int(min 0), mpCurrent: int(min 0), stats: [int×5], prestige: 'invincible'|'caretaker'|'none' }` — 연마 성공 통지. `train()`이 확정한 성장 결과 스냅샷을 본인에게 1회 발화한다. `world:room` 선례를 따라 **`correlationId`를 싣지 않는다**(상태 이벤트 — 거부만 `error`로 상관 키를 반향한다). train이 실제로 바꾸는 필드만 싣고 전체 캐릭터 상태 직렬화는 후속 토픽 몫이다. `levelsGained`가 0인 것은 유효하다 — 승급(무적·초인) 경로는 레벨을 올리지 않고 전이만 한다. `stats`는 `characterSchema.stats`와 동일한 5-튜플이며 numeric 하한도 `characterSchema`를 미러한다(클라 `wsClient`가 인바운드 프레임을 이 스키마로 `safeParse`하므로 형식적 정합이 아니라 실 입력 검증 표면이다). 정본 [`progression.md`](progression.md).
 
@@ -204,5 +204,5 @@ E3 하드닝(#54)이 자원 한도 3필드(`WS_MAX_CONNECTIONS`·`WS_MAX_CONNECT
 - **`debug:echo`는 무권한 노출** — 진단·파이프라인 검증 전용이다. 프로덕션 빌드 제거/플래그 게이트 여부는 후속 하드닝에서 재검토한다.
 - **`WS_HEARTBEAT_PONG_TIMEOUT_MS`는 미소비 예약 seam** — 현재 단일 인터벌 모델의 유효 per-pong 마감은 `PING_INTERVAL`이다. 이 필드를 낮춰도 종료 타이밍은 바뀌지 않는다.
 - **TLS는 TLS-ready pass-through만** — `buildApp`이 `https` 서버 옵션을 Fastify로 pass-through해 `wss`를 지원한다. dev는 평문 loopback `ws`. 프로덕션 TLS 종단 지점(Fastify https vs 리버스 프록시)과 하트비트 인터벌 확정값(프록시 idle timeout 75% 규칙)은 배포/인프라 토픽에서 재조정한다.
-- **`protocolVersion` bump 정책 미확정** — 형식은 단조 증가 정수로 확정(현재 `2` — 라이브 월드 foundation의 `world:move`·`world:room`·`chat:said` 신설에서 1→2). *언제* 올리는가(호환 불가 변경 기준·문서화)는 프로토콜이 커질 때 별도로 정한다.
+- **`protocolVersion` bump 정책 미확정** — 형식은 단조 증가 정수로 확정(현재 `4`. 1→2 라이브 월드 foundation의 `world:move`·`world:room`·`chat:said` 신설, 2→3 이후 확장, 3→4 E11 `world:room` 페이로드 확장). *언제* 올리는가(호환 불가 변경 기준·문서화)는 프로토콜이 커질 때 별도로 정한다. 지금까지의 실효 관행은 "`strictObject` variant에 required 필드가 늘거나 variant가 신설되면 올린다"이다.
 - **한글 자유 텍스트 파서 없음** — E3-4가 자유채팅 입력을 `ChannelPort`로 핸드오프하는 seam을 얹었고([`freechat-permission-seam.md`](freechat-permission-seam.md)) 라이브 월드 foundation이 실 방 채널 어댑터를 결선해 같은 방 전파는 동작한다([`live-world-foundation.md`](live-world-foundation.md)). 전서버 방송·외쳐 1홉 인접 전파·구독 필터는 소셜 에픽(#37), 동사-후치 자유 텍스트 파서는 자유 모드 UI 토픽(구조화 명령은 클라가 이미 분리 전송), 조사 i18n 렌더·클라이언트 UI는 프론트엔드 토픽이다.

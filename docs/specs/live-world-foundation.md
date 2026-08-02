@@ -44,7 +44,7 @@ interface LiveCharacter {
 | 방향 | variant | 형태 |
 |---|---|---|
 | client → server | `world:move` | `{ direction: string(1~32), id?: string }` |
-| server → client | `world:room` | `{ roomId: int≥0, exits: string[] }` |
+| server → client | `world:room` | `{ roomId, exits, name, longDesc, occupants[], items[], creatures[] }` (E11에서 7필드로 확장) |
 | server → client | `chat:said` | `{ channel, speakerCharacterId, text, target? }` |
 
 `world:move.direction`은 방 그래프 출구 **이름**과 정확 일치할 문자열이다. 방향 별칭·단축키(numpad·자모·대각선) 해소는 **클라이언트 책임**이며, 서버는 해소된 최종 문자열만 받아 `resolveExit` mode를 `directional`로 고정한다 — flee/sneak/named mode를 와이어에 노출하지 않는다. 상한 32는 입력 위생이다(방 그래프의 어떤 출구 이름도 이 안에 든다).
@@ -76,7 +76,7 @@ FSM(`sessionFsm.ts`)은 레지스트리·월드 그래프를 직접 만지지 �
 1. `liveRegistry.get(actor.characterId)` — 미등록이면 `error{internal}`(배선 격리). `currentRoom`은 **오직 레지스트리에서** 읽고 actor에서 읽지 않는다(actor에는 방 필드가 없다).
 2. `MoveActor{characterId, currentRoomId}` 조립 → `tryMove(deps, actor, direction, 'directional')`.
 3. 거부 → `error{rule_rejected, reason}`(`id`가 있으면 correlationId 반향). `tryMove`가 어떤 mutation·방송보다 먼저 bail하므로 거부 경로에서 라이브 상태와 markDirty는 불변이다.
-4. 성공 → `live.character.currentRoom`을 도착 방으로 in-place 갱신하고 `markCharacterDirty(id, live.character)`로 **전체 문서 스냅샷**을 write-behind한 뒤 `world:room{roomId, exits}` 반환. `exits`는 출구 **이름** 목록이다(인덱스가 아니다). 부분 스냅샷 `{currentRoom}`을 넘기지 않는 이유는 [`save-policy.md`](save-policy.md)의 `characters` 전체 문서 계약을 참조한다.
+4. 성공 → `live.character.currentRoom`을 도착 방으로 in-place 갱신하고 `markCharacterDirty(id, live.character)`로 **전체 문서 스냅샷**을 write-behind한 뒤 `world:room` 반환. 페이로드는 필드를 손으로 열거하지 않고 `projectRoomView(arrivedRoom, resolveCharacterName)` 스프레드로 조립한다(아래 §방 뷰 투영). `exits`는 출구 **이름** 목록이다(인덱스가 아니다). 부분 스냅샷 `{currentRoom}`을 넘기지 않는 이유는 [`save-policy.md`](save-policy.md)의 `characters` 전체 문서 계약을 참조한다.
 
 점유자 재배치·leave/join 방송·leave/enter 훅은 전부 `tryMove`가 소유한다 — 핸들러는 occupants Set을 건드리지 않는다.
 
@@ -111,6 +111,16 @@ fan-out 대상 결정은 `createRoomChannelAdapter`(발화자 현재 방의 occu
 
 **단일 공유 불변식**: 진입 코어와 레지스트리는 hydrate/place·이동·종료 release·발화자 방 해소가 **동일 인스턴스**를 배후에 둬야 상태가 분기하지 않는다. 팩토리가 진입 코어를 1회 생성해 네 소비자에 같은 참조를 전달한다.
 
+`resolveCharacterName: (characterId) => string | undefined`도 같은 규약을 따른다 — 팩토리가 `bundle.liveRegistry.get(id)?.character.name`으로 클로저를 **1회 생성해** `liveWorldBinding`과 `moveDeps`에 같은 참조를 넘긴다(테스트가 참조 동일성으로 단정). 레지스트리를 통째로 넘기지 않고 해소자 하나만 주입해 바인딩이 레지스트리 전 표면에 의존하지 않게 한다.
+
+### 방 뷰 투영 (`world/roomView.ts`)
+
+`projectRoomView(room, resolveCharacterName)`가 `RoomNode`를 `world:room` 표시 페이로드로 거르는 **순수 함수**다. 정본은 [`movement-rooms.md`](movement-rooms.md) §방 표시 가시성 필터.
+
+진입(`sessionFsm.enterCommand`)과 이동(`handlers/move.ts`) 두 발화 경로가 이 단일 투영을 공유해 같은 방에 대해 **동일한 페이로드**를 낸다. 두 생산자가 필드를 각자 열거하면 진입·이동 페이로드가 조용히 분기하므로, 양쪽 모두 `{ type: 'world:room', ...projectRoomView(...) }` 스프레드만 쓴다.
+
+`buildRoomSummary(resolveRoom, resolveCharacterName)`는 이 투영에 위임하며 미해소 방은 계속 `undefined`를 돌려 발화를 생략한다. FSM 쪽 `SessionLiveWorld.roomSummary`의 반환 타입은 server 셸 모듈이 아니라 shared 계약(`Omit<Extract<ServerEvent, {type:'world:room'}>, 'type'>`)으로 표현해 3층 경계를 유지한다.
+
 명시 `lifecyclePort`·`channelPort`가 함께 주어지면 묶음 파생보다 우선한다(explicit > bundle). 묶음 미주입이면 라이브 상태 seam을 요구하는 게임 명령(`world:move`·`progress:train`)이 라우터에 등록되지 않아 `unknown_type`으로 남고, 진입 seam도 통째로 생략된다(조건부 등록 번들 `GameCommandDeps`는 [`transport-protocol.md`](transport-protocol.md)가 정본).
 
 부트는 `onRoomEntered`/`onRoomLeft`를 월드 런타임 훅에 위임해 이동과 세션 진입/퇴장이 **동일 활성 집합**을 갱신하게 한다 — 이전까지 dormant였던 활성 집합 경계가 여기서 해소된다.
@@ -119,9 +129,9 @@ fan-out 대상 결정은 `createRoomChannelAdapter`(발화자 현재 방의 occu
 
 - **이동 leave/join 방송 미결선** — `tryMove`의 `broadcastLeave`/`broadcastJoin`은 no-op으로 채운다. 방 채팅 전파는 채널 포트가 소유하고, 이동 통지(누가 들어왔다/나갔다)는 후속 토픽 몫이다.
 - **규칙 명령은 `train` 하나만 배선됨** — 이 foundation 위에 `progress:train`이 얹혔다(디스패처 패턴 확립 + 레벨·경험치·gold·능력치 변이). 나머지 규칙 명령은 여전히 미배선이며 선행 결손이 배선이 아닌 신규 구현을 요구한다: `teach`(#119)·`study`(#120)·`attack`(#121)·`cast`(#122). 인벤·장비는 로드되나 dormant다.
-- **`world:room`은 최소 통지** — 주변 점유자·아이템·방 설명을 싣지 않는다. 상세 월드뷰 이벤트는 프론트엔드 월드뷰 에픽이 소비 시점에 확정한다.
+- **`world:room`은 스냅샷이지 델타가 아니다** — E11(#60)이 방 이름·설명·점유자·아이템·크리처를 실어 최소 통지에서 벗어났다. 그러나 발화 시점은 여전히 진입·이동 성공 두 곳뿐이라, 내가 가만히 있는 동안 다른 사람이 들어와도 목록이 갱신되지 않는다. 실시간 입·퇴장 델타는 #116 소관이다.
 - **스폰 정책 미완결** — orphan `currentRoom`은 `DEFAULT_START_ROOM = 1` 단일 폴백으로만 방어한다. 레벨·종족·소속별 시작지 정책은 별도다.
-- **가시성 필터 없음** — 방 채널 fan-out은 occupants 전 멤버 대상이며 발화자 자신도 제외하지 않는다. PINVIS·어둠·투명 필터는 E5 소관이다.
+- **채널 fan-out에 가시성 필터 없음** — 방 채널 fan-out은 occupants 전 멤버 대상이며 발화자 자신도 제외하지 않는다. PINVIS·어둠·투명 필터는 E5 소관이다. (방 **표시**의 가시성 필터는 E11에서 별도로 들어왔다 — [`movement-rooms.md`](movement-rooms.md) §방 표시 가시성 필터. 두 필터는 다른 관심사다.)
 - **broadcast·yell 채널 미분화** — 실 방 어댑터가 붙었으므로 `broadcast`·`yell`도 방 단위로만 전달된다(전서버 방송·1홉 인접 전파 아님). 전역 fan-out과 `minLevel` 게이트 강제는 소셜·채널 에픽(#37)이 함께 소유한다.
 - **몬스터 측 live-ization 없음** — 크리처 틱 부트 배선·마나 재생은 별도 토픽이다.
 

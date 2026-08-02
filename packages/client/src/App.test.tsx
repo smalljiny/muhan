@@ -1,9 +1,11 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PROTOCOL_VERSION } from 'shared'
 import { describe, expect, it, vi } from 'vitest'
+import type { Mock } from 'vitest'
 
 import { App } from './App'
+import { makeEmptyRoom, makeRoom, roomEvent } from './test/roomFixtures.testutil'
 import type { SocketLike } from './transport/wsClient'
 
 function makeFakeSocket(): SocketLike {
@@ -28,6 +30,13 @@ function emit(socket: SocketLike, event: unknown): void {
 
 const CHARACTER = { characterId: 'c1', name: '용사', class: 1, race: 1, level: 5 }
 
+// send.mock.calls에서 주어진 type의 프레임을 찾아 반환한다. 못 찾으면 즉시 실패시킨다.
+function sentFrame(send: Mock<(data: string) => void>, type: string): string {
+  const frame = send.mock.calls.map((call) => call[0]).find((f) => f.includes(`"type":"${type}"`))
+  expect(frame).toBeDefined()
+  return frame as string
+}
+
 // 소켓을 open→hello→characterList→prompt(selectCharacter)까지 몰아 phase='selecting'에 도달시킨다.
 function driveToSelecting(socket: SocketLike): void {
   act(() => socket.onopen?.(new Event('open')))
@@ -45,6 +54,13 @@ function driveToSelecting(socket: SocketLike): void {
 function driveToEntered(socket: SocketLike): void {
   driveToSelecting(socket)
   emit(socket, { type: 'session:entered', characterId: 'c1' })
+}
+
+// open→hello→session:resumed까지 몰아 phase='entered'(재접속 경로)에 도달시킨다.
+function driveToResumed(socket: SocketLike): void {
+  act(() => socket.onopen?.(new Event('open')))
+  emit(socket, { type: 'system:hello', protocolVersion: PROTOCOL_VERSION })
+  emit(socket, { type: 'session:resumed', characterId: 'c1' })
 }
 
 // open→hello→prompt(createField)까지 몰아 phase='creating'(텍스트 입력)에 도달시킨다.
@@ -147,19 +163,14 @@ describe('App', () => {
     await user.type(screen.getByLabelText('명령'), '핑')
     await user.click(screen.getByRole('button', { name: '보내기' }))
 
-    const frames = send.mock.calls.map((call) => call[0] ?? '')
-    const echo = frames.find((frame) => frame.includes('"type":"debug:echo"'))
-    expect(echo).toBeDefined()
-    expect(echo).toContain('핑')
+    expect(sentFrame(send, 'debug:echo')).toContain('핑')
   })
 
   it('renders the resumed shell on session:resumed', () => {
     const socket = makeFakeSocket()
     render(<App socketFactory={() => socket} />)
 
-    act(() => socket.onopen?.(new Event('open')))
-    emit(socket, { type: 'system:hello', protocolVersion: PROTOCOL_VERSION })
-    emit(socket, { type: 'session:resumed', characterId: 'c1' })
+    driveToResumed(socket)
 
     expect(screen.getByRole('list', { name: '이벤트 로그' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '보내기' })).toBeInTheDocument()
@@ -189,10 +200,7 @@ describe('App', () => {
     driveToSelecting(socket)
     await user.click(screen.getByRole('button', { name: '선택' }))
 
-    const frames = send.mock.calls.map((call) => call[0] ?? '')
-    const frame = frames.find((f) => f.includes('"type":"session:selectCharacter"'))
-    expect(frame).toBeDefined()
-    expect(frame).toContain('"characterId":"c1"')
+    expect(sentFrame(send, 'session:selectCharacter')).toContain('"characterId":"c1"')
   })
 
   it('renders a text SessionPrompt during phase=creating', () => {
@@ -217,9 +225,7 @@ describe('App', () => {
     await user.type(screen.getByRole('textbox'), '아무개')
     await user.click(screen.getByRole('button', { name: '확인' }))
 
-    const frames = send.mock.calls.map((call) => call[0] ?? '')
-    const frame = frames.find((f) => f.includes('"type":"session:reply"'))
-    expect(frame).toBeDefined()
+    const frame = sentFrame(send, 'session:reply')
     expect(frame).toContain('"promptId":"create:name"')
     expect(frame).toContain('아무개')
   })
@@ -240,5 +246,92 @@ describe('App', () => {
     expect(alert).toHaveTextContent('잘못된 상태입니다')
     // 배너가 분기 콘텐츠(캐릭터 목록)와 공존한다.
     expect(screen.getByLabelText('캐릭터 목록')).toBeInTheDocument()
+  })
+
+  // 방 패널 배선 — 소켓에서 온 world:room이 스냅샷을 거쳐 화면에 도달하는 전 구간을 통합으로 확인한다.
+  // 방 내용 단정은 방 섹션 안으로 범위를 좁힌다(EventLog가 같은 이벤트를 원본 JSON으로도 렌더한다).
+  it('renders the room panel after a world:room frame arrives in the entered shell', () => {
+    const socket = makeFakeSocket()
+    render(<App socketFactory={() => socket} />)
+
+    driveToEntered(socket)
+    emit(socket, roomEvent(makeRoom()))
+
+    const panel = within(screen.getByLabelText('방'))
+    expect(panel.getByRole('heading', { name: '무한의 광장' })).toBeInTheDocument()
+    // 진입 시퀀스의 본인(c1)은 사람 목록에서 빠지고, 목록이 비므로 섹션 자체가 없다.
+    // selfCharacterId 배선을 잡는 유일한 단정 — RoomPanel 자체 내용 검증은 RoomPanel.test.tsx가 담당한다.
+    expect(panel.queryByLabelText('사람')).not.toBeInTheDocument()
+  })
+
+  it('places the room panel above the event log', () => {
+    const socket = makeFakeSocket()
+    render(<App socketFactory={() => socket} />)
+
+    driveToEntered(socket)
+    emit(socket, roomEvent(makeRoom()))
+
+    // 방 패널이 먼저 와야 이동 후 새 방이 로그 위에서 바로 보인다(플랜 T4.4).
+    // DOCUMENT_POSITION_FOLLOWING = 방 패널 기준으로 로그가 뒤에 있다.
+    const position = screen
+      .getByLabelText('방')
+      .compareDocumentPosition(screen.getByRole('list', { name: '이벤트 로그' }))
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('sends a world:move frame with the exit name when an exit button is clicked', async () => {
+    const user = userEvent.setup()
+    const send = vi.fn<(data: string) => void>()
+    const socket: SocketLike = { ...makeFakeSocket(), send }
+    render(<App socketFactory={() => socket} />)
+
+    driveToEntered(socket)
+    emit(socket, roomEvent(makeRoom()))
+    // 첫 출구('북')가 아니라 두 번째('동')를 눌러 exits[0] 하드코딩 배선을 배제한다.
+    await user.click(screen.getByRole('button', { name: '동' }))
+
+    expect(sentFrame(send, 'world:move')).toContain('"direction":"동"')
+  })
+
+  it('replaces the room panel content when a later world:room frame arrives', () => {
+    const socket = makeFakeSocket()
+    render(<App socketFactory={() => socket} />)
+
+    driveToEntered(socket)
+    emit(socket, roomEvent(makeRoom()))
+    emit(socket, roomEvent(makeEmptyRoom()))
+
+    const panel = within(screen.getByLabelText('방'))
+    expect(panel.getByRole('heading', { name: '좁은 골목' })).toBeInTheDocument()
+    expect(panel.queryByRole('heading', { name: '무한의 광장' })).not.toBeInTheDocument()
+    // 갱신은 델타가 아니라 교체다 — 이전 방의 출구·사물이 남지 않는다.
+    expect(panel.getByRole('button', { name: '남' })).toBeInTheDocument()
+    expect(panel.queryByRole('button', { name: '북' })).not.toBeInTheDocument()
+    expect(panel.queryByLabelText('사물')).not.toBeInTheDocument()
+  })
+
+  it('renders the room panel on the resumed path as well', () => {
+    const socket = makeFakeSocket()
+    render(<App socketFactory={() => socket} />)
+
+    driveToResumed(socket)
+    emit(socket, roomEvent(makeRoom()))
+
+    expect(screen.getByText('재접속됨')).toBeInTheDocument()
+    const panel = within(screen.getByLabelText('방'))
+    expect(panel.getByRole('heading', { name: '무한의 광장' })).toBeInTheDocument()
+  })
+
+  it('omits the room panel while no room has been received yet (room === null)', () => {
+    const socket = makeFakeSocket()
+    render(<App socketFactory={() => socket} />)
+
+    // 서버는 미해소 방에서 world:room 발화를 생략한다(스펙 §3.4) — 그 구간에도 셸은 정상이어야 한다.
+    driveToEntered(socket)
+
+    expect(screen.queryByLabelText('방')).not.toBeInTheDocument()
+    expect(screen.getByRole('list', { name: '이벤트 로그' })).toBeInTheDocument()
+    expect(screen.getByLabelText('명령')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '보내기' })).toBeInTheDocument()
   })
 })

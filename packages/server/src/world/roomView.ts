@@ -1,0 +1,105 @@
+import type { RoomNode, ServerEvent } from 'shared'
+import { hasFlag, XSECRT, XINVIS, XNOSEE } from './door.js'
+import { F_ISSET, OHIDDN, OSCENE, OINVIS, MHIDDN, MINVIS } from './hexFlags.js'
+
+/**
+ * 방 표시 투영 — `RoomNode`(라이브 그래프 노드)를 클라이언트 표시용 뷰로 거르는 순수 함수.
+ *
+ * oracle `legacy/muhan/src/room.c` 방 표시 루틴 + `object.c:174 list_obj` 이식: 방을 볼 때
+ * 숨김 아이템(OHIDDN·OSCENE·OINVIS)·숨김 크리처(MHIDDN·MINVIS)·죽은 개체·비밀 출구
+ * (XSECRT·XINVIS·XNOSEE)는 목록에 나오지 않는다.
+ *
+ * **표시 필터 ≠ 통행 게이트(의도된 비대칭)**: 여기서 제외한 XSECRT/XINVIS 출구도 `tryMove`의
+ * 출구 해석(XNOSEE만 제외)은 계속 통행시킨다 — 비밀 출구는 목록에서 사라지되 방향을 직접
+ * 입력하면 지나갈 수 있는 오라클 동작이다. 일관성 목적으로 `tryMove`를 고치지 않는다.
+ *
+ * **관찰자 비의존**: 투명체 감지(PDINVI) 보유자가 숨김 개체를 보는 오라클 예외는 관찰자 상태를
+ * 요구하므로 이 함수의 범위 밖이다(후속 항목). 관찰자를 인자로 받지 않고 PDINVI 미보유 플레이어
+ * 기준(오라클 기본 경로)으로 무조건 제외한다. 본인 제외도 하지 않는다 — 방 점유자 전원을 싣고
+ * 본인 필터는 클라이언트가 수행한다(스펙 §4).
+ *
+ * ## ⚠ 관찰자 비의존이 봉인한 두 게이트 — 배선 토픽이 먼저 여기를 열어야 한다
+ * 오라클 `room.c` 방 표시는 이 함수가 구현하지 않은 게이트를 둘 더 갖는다. 지금은 **입력 자체가
+ * 도달 불가**라 누출이 없지만, 아래 전제가 깨지는 순간 조용히 새기 시작한다 — 그때 이 함수를 함께
+ * 고치지 않으면 회귀 테스트가 잡지 못한다(누락된 필터는 실패가 아니라 과다 노출로 나타난다).
+ *
+ * 1. **점유자 은신·투명 필터 부재** — `room.c:637` 표시 루틴은 `PHIDDN`(은신)·`PINVIS`(투명, PDINVI
+ *    보유자는 예외 통과)·`PDMINV`(DM 투명) 플레이어를 제외한다. 이 함수의 `occupants`는 이름이
+ *    해소되면 무조건 싣는다. 아이템(`isItemHidden`)·크리처(`isCreatureHidden`)에 대칭 필터가 있는
+ *    것과 달리 점유자에만 없다는 점이 함정이다. 현재 도달 불가인 근거: `PHIDDN`·`PDMINV`는
+ *    `character/flags.ts`의 파티션 표상 영속 경로가 없어 `composeCharacterFlags`가 영원히 0을
+ *    돌려주고, `PINVIS`는 `buffs`(SINVIS)에서 파생되나 `magic/`이 `ws/`·부트스트랩 어디에서도
+ *    import되지 않아 라이브 세션에 시전 명령이 없다(`clientCommandSchema`에 시전 커맨드 부재).
+ * 2. **광원·실명 게이트 부재** — `room.c:540`은 어두운 방에서 광원이 없거나 관찰자가 `PBLIND`면
+ *    이름·설명·출구·내용물 **전부**를 숨기고 "너무 어두워서 볼 수가 없습니다."만 출력한다. 이 포트는
+ *    `RDARK`·`has_light`를 어디에도 모델링하지 않았고(`packages/`·`data/world/` 전수 grep 0건),
+ *    `PBLIND`는 `statusEffects`에서 파생되나 `combat/` 역시 라이브 배선이 없다. 광원 서브시스템을
+ *    이식하는 토픽이 이 함수의 반환 계약(무조건 전량 노출)을 함께 재검토해야 한다.
+ *
+ * 두 게이트 모두 관찰자 캐릭터를 투영 인자로 요구하므로, 여는 순간 `world:room`이 방 단위 fan-out
+ * 캐시가 아니라 수신자별 페이로드가 된다 — 배선 전에 설계 결정이 선행돼야 한다.
+ *
+ * 두 flags 표현이 섞인다: 출구는 바이트당 한 원소인 `number[]`라 `door.hasFlag`, 아이템·크리처는
+ * 16자 hex string이라 `hexFlags.F_ISSET`을 쓴다.
+ */
+
+/**
+ * 방 표시 뷰 — shared `world:room` 와이어 계약에서 discriminator만 뺀 파생 타입이다. 수기 재선언을
+ * 두지 않아 스키마-투영 드리프트가 타입 에러로 즉시 드러난다(계약에 필드가 늘면 이 함수가 깨진다).
+ * `shortDesc`는 계약에 없다 — 2341방 중 2327방이 빈 문자열이라 싣지 않는다(스펙 §3.1).
+ */
+export type RoomView = Omit<Extract<ServerEvent, { type: 'world:room' }>, 'type'>
+
+/** 방 표시에서 감추는 출구 비트(XSECRT 비밀·XINVIS 투명·XNOSEE 불가시)가 하나라도 있으면 true. */
+function isExitHidden(flags: number[]): boolean {
+  return hasFlag(flags, XSECRT) || hasFlag(flags, XINVIS) || hasFlag(flags, XNOSEE)
+}
+
+/** 방 바닥 목록에서 감추는 아이템 비트(OHIDDN·OSCENE·OINVIS — oracle object.c:174 list_obj). */
+function isItemHidden(flags: string): boolean {
+  return F_ISSET(flags, OHIDDN) || F_ISSET(flags, OSCENE) || F_ISSET(flags, OINVIS)
+}
+
+/** 방 표시에서 감추는 크리처 비트(MHIDDN·MINVIS). 생존 판정(hpcur)은 별개라 여기 넣지 않는다. */
+function isCreatureHidden(flags: string): boolean {
+  return F_ISSET(flags, MHIDDN) || F_ISSET(flags, MINVIS)
+}
+
+/**
+ * 방 노드를 표시용 뷰로 투영한다. 입력 `room`과 그 하위 배열·객체를 변형하지 않고 새 배열·새
+ * 객체만 만든다(프로젝트 immutability 규칙).
+ *
+ * @param room 투영할 라이브 방 노드
+ * @param resolveCharacterName characterId → 표시 이름 해소자. `undefined`(미접속·미해소)나 빈
+ *   문자열을 돌려준 점유자는 목록에서 빠진다 — 와이어 계약이 `name`에 최소 1자를 요구한다.
+ */
+export function projectRoomView(
+  room: RoomNode,
+  resolveCharacterName: (characterId: string) => string | undefined,
+): RoomView {
+  const occupants: RoomView['occupants'] = []
+  for (const characterId of room.occupants) {
+    const name = resolveCharacterName(characterId)
+    if (name) occupants.push({ characterId, name })
+  }
+
+  return {
+    roomId: room.roomId,
+    // 빈 문자열도 그대로 옮긴다 — 표시 fallback('이름 없는 곳'·'설명이 없다.')은 표시 계층 소유다.
+    name: room.name,
+    longDesc: room.longDesc,
+    exits: room.exits.filter((exit) => !isExitHidden(exit.flags)).map((exit) => exit.name),
+    occupants,
+    // `contains`(컨테이너 중첩 아이템)로 재귀하지 않는다 — 오라클 방 표시는 바닥 오브젝트만 나열한다.
+    items: room.items
+      .filter((item) => !isItemHidden(item.flags))
+      .map((item) => ({ instanceId: item.instanceId, name: item.name })),
+    creatures: room.creatures
+      .filter((creature) => !isCreatureHidden(creature.flags) && creature.hpcur > 0)
+      .map((creature) => ({
+        instanceId: creature.instanceId,
+        name: creature.name,
+        level: creature.level,
+      })),
+  }
+}
