@@ -32,5 +32,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # 전체 검증보다 먼저 돌린다. 근거는 두 가지다.
+      #  - 이 스크립트는 tsconfig.base.json·eslint.config.js·packages/shared/src/를 실제로 변조했다가
+      #    복원한다. 복원에 실패하면 non-zero로 끊어 오염된 트리에서 build가 돌지 않게 막는다.
+      #  - 계약이 깨진 런에 전체 빌드 시간을 쓰지 않는다 (fail-fast).
+      # 런 간 turbo 캐시를 도입하면 "계약 파손 → 잘못된 cache hit → 태스크 미실행"이라는 근거가
+      # 추가된다. 현재 job은 캐시를 유지하지 않아 콜드 상태로 시작하므로 그 경로는 아직 없다.
+      # 실패는 job을 중단시킨다 — 기본 동작을 그대로 둔다.
+      - name: Verify turbo hash contract
+        run: node scripts/verify-turbo-hash.mjs
+
       - name: Build, type-check, lint, test
         run: pnpm turbo run build type-check lint test

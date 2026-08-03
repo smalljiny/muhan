@@ -16,7 +16,7 @@
 muhan/
 ├── package.json            # 루트(private, turbo run 위임 스크립트, packageManager 핀)
 ├── pnpm-workspace.yaml     # packages/* + catalog 버전 핀
-├── turbo.json              # 태스크 파이프라인(build/type-check/lint/test)
+├── turbo.json              # 태스크 파이프라인(transit/build/type-check/lint/test) + globalDependencies
 ├── tsconfig.base.json      # 공유 컴파일러 옵션
 ├── eslint.config.js        # flat config 단일 루트
 ├── .prettierrc.json        # prettier 포맷 설정
@@ -24,6 +24,8 @@ muhan/
 ├── vitest.config.ts        # projects + 루트 커버리지 임계
 ├── .gitignore              # graphify·.venv·node_modules·dist·.turbo·coverage
 ├── .github/workflows/ci.yml
+├── scripts/
+│   └── verify-turbo-hash.mjs   # 해시 계약 회귀 검증(CI blocking 스텝)
 ├── data/world/             # 기존 산출물(정본, 이동 없음)
 └── packages/
     ├── shared/   # 공유 단일 출처 타입 + world 로더
@@ -92,11 +94,40 @@ override는 transitive 버전만 바꾸므로 애플리케이션 소스는 무�
 
 루트 `package.json` 스크립트는 `turbo run <task>`로 위임한다. `turbo.json`이 파이프라인을 정의한다:
 
+- `globalDependencies`: `["tsconfig.base.json", "eslint.config.js"]`. 두 파일은 전 패키지의 태스크 결과를 바꾸면서 어느 패키지 디렉터리에도 속하지 않아, 명시하지 않으면 어떤 해시에도 들어가지 않는다.
+- `transit`: `dependsOn: ["^transit"]`. 어느 `package.json`에도 없는 이름이라 **실행되는 스크립트가 없는 해시 전용 노드**다(Transit Node).
 - `build`: `dependsOn: ["^build"]`(의존 패키지 먼저), `outputs: ["dist/**"]`.
-- `type-check`·`lint`: `dependsOn: []`(독립).
+- `type-check`·`lint`: `dependsOn: ["transit"]`.
 - `test`: `dependsOn: ["^build"]`, `outputs: ["coverage/**"]`. vitest는 워크스페이스 패키지(`shared`)를 `exports`로 `dist/`에서 해석하므로, `test` 전에 의존 패키지를 빌드해야 stale/부재 `dist`로 인한 clean-CI 실패를 막는다(E2-1이 `[]`→`["^build"]`로 정정). `type-check`는 tsconfig `paths`로 `shared/src`를 직접 읽어 이 의존이 불필요하다.
 
-로컬·CI 모두 증분 캐시로 미변경 패키지 태스크를 스킵한다(`>>> FULL TURBO`). 원격 캐시는 미도입.
+turbo는 태스크마다 **global hash**(turbo.json 정의·lockfile·`globalDependencies`)와 **package hash**(패키지 디렉터리 내 추적 파일 + `dependsOn` 상위 태스크 해시)를 합성하고, 둘 중 하나만 달라도 cache miss가 난다. `globalDependencies`는 앞쪽에, `transit`은 뒤쪽에 간선을 하나씩 추가한다.
+
+`type-check`·`lint`가 `dependsOn: []`이면 각 패키지 해시가 자기 디렉터리 안만 보므로, `shared` 소스가 바뀌어도 `server`·`client` 해시가 그대로여서 **실행되지 않은 태스크가 통과로 집계된다**. `transit`은 `^transit`로 패키지 의존 그래프를 따라 해시 간선을 만들되 실행할 스크립트가 없어, 해시에는 상위 패키지가 반영되면서 실행은 병렬로 남는다.
+
+```
+shared#transit ──▶ server#transit ──▶ server#type-check
+               └─▶ client#transit ──▶ client#type-check
+                   (실행 없음, 해시만)      (셋이 동시 실행)
+```
+
+`^type-check` 직접 의존도 같은 정확성을 주지만 `shared:type-check` 완료를 기다리게 만든다. 이 차이는 해시에 나타나지 않으므로 아래 검증 스크립트가 `dependsOn` 형태를 별도로 단정한다.
+
+`globalDependencies`는 `eslint.config.js` 한 줄 변경으로 `build`·`test`까지 무효화한다. global hash의 정의상 불가피하며, 규칙 파일 변경 빈도가 낮아 비용을 수용한다. 루트 `vitest.config.ts`는 `turbo run test` 경로에서 로드되지 않아 제외한다 — 넣으면 결과가 같은 변경에도 전 태스크가 miss된다.
+
+로컬·CI 모두 증분 캐시로 미변경 패키지 태스크를 스킵한다(`>>> FULL TURBO`). 캐시는 worktree 간 공유된다(turbo 2.x 기본, `cacheDir` 미설정) — 전제는 "해시가 같으면 산출물은 교환 가능"이며 위 두 간선이 그 전제를 성립시킨다. 원격 캐시는 미도입.
+
+### 해시 계약 검증 (`scripts/verify-turbo-hash.mjs`)
+
+위 계약은 설정 한 줄로 조용히 깨질 수 있고, 깨진 상태에서도 모든 태스크가 녹색으로 보인다. `scripts/verify-turbo-hash.mjs`가 `turbo run --dry=json` 출력으로 두 축을 단정한다.
+
+- **해시 축** — 프로브로 파일을 실제로 변조한 전후 해시를 비교한다. Probe A(`shared`에 신규 소스 파일)는 의존 패키지 전파(CHANGED)와 비의존 패키지 격리(`@muhan/port`가 SAME)를 **양방향으로** 본다. 한쪽만 보면 "전부 CHANGED"로 보고하는 구현도 통과하므로 격리 단정이 negative control 역할을 한다. Probe B는 `globalDependencies` 항목마다 하나씩 생겨 전 태스크 전파를 본다.
+- **의존 형태 축** — 각 태스크의 `resolvedTaskDefinition.dependsOn`을 계약 표(`build`·`test`는 `["^build"]`, `type-check`·`lint`는 `["transit"]`)와 대조한다. 해시 비교가 보지 못하는 병렬성 축이다.
+
+검증 대상은 `turbo.json`에서 파생한다 — 실행할 태스크는 `tasks` 키(`transit` 제외), 프로브 대상은 `globalDependencies`. 스크립트에 목록을 따로 두면 새 태스크나 새 공용 설정이 검증 밖에서 태어나 같은 구멍이 재발한다. 오타 난 `globalDependencies` 항목은 turbo가 조용히 무시하므로 존재 확인으로 잡는다. 기대 taskId 14개만은 손으로 유지한다 — 패키지가 늘었을 때 그 태스크가 전파 대상인지 격리 대상인지는 사람이 정할 계약이고, 자동 파생하면 위 격리 단정이 함께 사라진다.
+
+프로브가 워킹 트리를 변조하므로 4중 보호를 둔다: (1) 예약 프로브 경로의 잔재를 미추적 + 내용 일치일 때만 자가 치유하고, (2) 추적 파일 프로브 대상이 이미 더티면 아무것도 변조하지 않고 종료하며, (3) `finally`·`process.on('exit')`·SIGINT/SIGTERM/SIGHUP 어느 경로로 빠져나가도 복원이 돌고, (4) 종료 직전 `git status --porcelain`을 시작 시점과 대조해 스스로 검사한다. 프로브 대상이 심볼릭 링크면 저장소 밖 파일을 변조하게 되므로 중단한다. 복원에 실패하면 `git checkout --` 복구 명령을 출력한다 — 프로세스가 죽으면 원본 바이트의 유일한 사본도 사라져 git이 유일한 복구 수단이다.
+
+종료 코드: `0` 전 프로브 통과, `1` 단정 실패·계약 파손·사후 검사 실패, `2` 사전 차단(더티 트리·예약 경로 오염·설정 형상 문제), `128 + signum` 시그널 종료.
 
 ### TypeScript
 
@@ -126,7 +157,9 @@ prettier는 포맷 전용으로 분리(`.prettierrc.json` + `.prettierignore`).
 
 ### CI
 
-`.github/workflows/ci.yml` 단일 워크플로우. `push`(develop·main)·`pull_request` 트리거, `permissions: contents: read`(최소 권한). 스텝: checkout → `pnpm/action-setup@v4`(버전은 `packageManager` 핀 단일 출처) → `setup-node@v4`(node 24, `cache: pnpm`) → `pnpm install --frozen-lockfile` → `pnpm turbo run build type-check lint test`. Turborepo 로컬 캐시로 미변경 태스크를 스킵한다.
+`.github/workflows/ci.yml` 단일 워크플로우. `push`(develop·main)·`pull_request` 트리거, `permissions: contents: read`(최소 권한). 스텝: checkout → `pnpm/action-setup@v4`(버전은 `packageManager` 핀 단일 출처) → `setup-node@v4`(node 24, `cache: pnpm`) → `pnpm install --frozen-lockfile` → `node scripts/verify-turbo-hash.mjs` → `pnpm turbo run build type-check lint test`. Turborepo 로컬 캐시로 미변경 태스크를 스킵한다.
+
+해시 계약 검증은 전체 검증보다 **먼저** 돌고 blocking이다(`continue-on-error` 미사용). 근거 두 가지 — 스크립트가 추적 파일을 변조했다 복원하므로 복원 실패 시 오염된 트리에서 build가 도는 것을 막아야 하고, 계약이 깨진 런에 전체 빌드 시간을 쓸 이유가 없다. 현재 job은 런 간 turbo 캐시를 유지하지 않아 콜드로 시작하므로 "계약 파손 → 잘못된 cache hit → 태스크 미실행" 경로는 CI에 아직 없다 — 이 게이트가 닫는 것은 **로컬 검증의 신뢰성**이다. CI에 캐시를 들이면 그 근거가 추가된다.
 
 ### gitignore
 
@@ -138,4 +171,8 @@ prettier는 포맷 전용으로 분리(`.prettierrc.json` + `.prettierignore`).
 - 서버는 `/health` 최소 엔드포인트 + 부팅만 제공한다. 실제 Fastify 라우트·플러그인·`@fastify/websocket` 배선은 E3.
 - `client`는 빈 앱 스켈레톤이며 UI·상태관리는 별도 프론트엔드 토픽이다.
 - `port`는 순수 JS를 유지한다(TS 전환 안 함).
-- Turborepo 원격 캐시·Redis·배포/Docker/prod 인프라는 범위 밖이다.
+- Turborepo 원격 캐시·Redis·배포/Docker/prod 인프라는 범위 밖이다. CI에 turbo 캐시를 도입하지 않는다 — fresh 체크아웃 전량 실행을 유지한다.
+- worktree 간 캐시 공유는 `cacheDir` 격리로 차단하지 않는다. 공유 차단은 오탐을 고치는 게 아니라 가리는 것이고, 병렬 worktree가 표준인 이 저장소에서 재실행 비용만 남는다. 해시가 정확해진 뒤에도 오탐이 관측되면 그때 별도 이슈로 다룬다.
+- `TURBO_FORCE=1` 강제 실행·replay 경로 검출은 쓰지 않는다. 해시가 정확하면 cache hit은 정당한 통과이고, 다른 worktree 경로의 replay는 정상 동작이라 상시 경고가 오경보가 된다.
+- `inputs` 세밀화로 캐시 적중률을 높이는 것은 다루지 않는다 — 해시 정확성 주제이지 성능 주제가 아니다.
+- 루트 `scripts/`는 `turbo run lint`·`type-check`의 대상이 아니라 `verify-turbo-hash.mjs`는 정적 검사를 받지 않는다. 실질 보호는 CI가 매 런 실제로 실행한다는 사실뿐이다(이슈 #135).
