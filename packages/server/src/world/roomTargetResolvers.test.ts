@@ -131,6 +131,21 @@ describe('resolveRoomCreature — 매칭 규칙은 순수 매처에 위임한다
 
     expect(room.creatures.map((c) => c.instanceId)).toEqual(before)
   })
+
+  // 알려진 divergence(모듈 헤더 참조) — 오라클 `add_crt_rom`(room.c:246-261)은 first_mon에 strcmp
+  // 이름 정렬로 삽입하지만 이 포트의 스폰·리스폰·소환은 전부 `room.creatures.push`다. 해소자는 배열
+  // 순서를 그대로 서수로 쓰며 정렬하지 않는다 — 누가 `.sort()`를 넣으면 이 테스트가 깨지고, 그때
+  // EUC-KR collation 이식 여부를 의식적으로 결정하게 된다. (플레이어 쪽은 아래 별도 케이스가 잡는다.)
+  it('서수는 room.creatures 배열 순서를 따른다 — 오라클의 이름 정렬 삽입과 의도적으로 다르다', () => {
+    // 사전순이라면 '고블린'이 '고블린 대장'보다 앞서지만, 배열은 대장이 먼저다.
+    const room = roomWithCreatures(
+      makeCreature('c-boss', '고블린 대장'),
+      makeCreature('c-mob', '고블린'),
+    )
+
+    expect(resolveRoomCreature(room, '고', NO_FLAGS, 1)?.instanceId).toBe('c-boss')
+    expect(resolveRoomCreature(room, '고', NO_FLAGS, 2)?.instanceId).toBe('c-mob')
+  })
 })
 
 describe('createRoomPlayerResolver', () => {
