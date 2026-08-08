@@ -50,6 +50,20 @@ export type ItemInstance = {
    * 콘텐츠(불변). 전투 스탯 등 나머지 object 필드는 아이템 에픽 소관이라 여기에 싣지 않는다(D8).
    */
   flags: string
+  /**
+   * 이름 매칭용 별칭(콘텐츠, 불변) — 원본 `char key[3][20]`을 위생 처리한 배열. 소스
+   * JSON(objects.json / rooms.json `items[]`·중첩 `contains[]`, port `templates.js` OBJ 오프셋
+   * 160)에 존재하며 물질화 시점에 옮긴다(배선은 Story 4 — 이 선언 시점엔 값이 흐르지 않는다).
+   * 빈 슬롯·공백 전용 슬롯은 리더가 드롭하므로 별칭이
+   * 없는 아이템은 `[]`다(`undefined` 아님 — 매처가 두 형상을 분기하지 않도록).
+   *
+   * **선택 필드**로 둔다(required 금지) — `ItemInstance` 인라인 리터럴을 다수 테스트 픽스처가
+   * 흩어서 구성하므로 required면 전 리터럴 컴파일이 깨진다(`CreatureInstance.experience` 선례).
+   *
+   * 소비자는 #120 study 대상 해소다. 아이템 해소자 자체는 아직 미배선이며(스펙 §4 결정),
+   * 대상 매처가 타입 무관이라 #120이 그대로 재사용한다.
+   */
+  keys?: string[]
   contains: ItemInstance[]
 }
 
@@ -126,6 +140,21 @@ export type CreatureInstance = {
    */
   experience?: number
   alignment?: number
+  /**
+   * 이름 매칭용 별칭(콘텐츠, 불변) — 원본 `char key[3][20]`을 위생 처리한 배열. `experience`·
+   * `alignment` 선례처럼 소스 JSON(creatures.json / rooms.json `monsters[]`, port `templates.js`
+   * CRT 오프셋 255)에 이미 존재하며 물질화 시점에 옮긴다(배선은 Story 4 — 이 선언 시점엔 값이
+   * 흐르지 않는다) — embedded 몬스터는 `templateId=null`이라 재조회가 불가능하기 때문이다.
+   * 빈 슬롯·공백 전용 슬롯은 리더가 드롭하므로 별칭이 없는
+   * 크리처는 `[]`다(`undefined` 아님 — 매처가 두 형상을 분기하지 않도록).
+   *
+   * **선택 필드**로 둔다(required 금지) — `CreatureInstance` 인라인 리터럴을 다수 테스트 픽스처가
+   * 흩어서 구성하므로 required면 전 리터럴 컴파일이 깨진다(experience/alignment 선례).
+   *
+   * 소비자는 방 스코프 크리처 해소자(대상 이름 매칭)다. 매처는 `name`과 `keys` 전 원소를 순수
+   * 접두로 검사하므로 `keys` 미보유 후보도 `name` 단독으로 매칭된다.
+   */
+  keys?: string[]
   flags: string
   enemies: string[]
   /**
