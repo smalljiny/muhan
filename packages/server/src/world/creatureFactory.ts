@@ -45,6 +45,10 @@ export type CreatureSource = Pick<
   // materialize가 실값을 옮긴다. Story 7 사망 처리가 킬 경험치·정렬 변동에 읽는다.
   | 'experience'
   | 'alignment'
+  // 이름 매칭용 별칭(Story 4) — creatures.json / rooms.json monsters[]에 항상 존재한다(별칭이
+  // 없으면 빈 배열). CreatureInstance에서 optional이라 Pick 결과도 optional이며, materialize가
+  // 부재 시 빈 배열로 정규화한다.
+  | 'keys'
 >
 
 /**
@@ -103,6 +107,10 @@ function materialize(
     // 두 키를 보유하므로 실값을 채운다(Story 7 킬 경험치·정렬 변동 입력).
     experience: src.experience,
     alignment: src.alignment,
+    // 이름 매칭용 별칭(Story 4) — 소스에서 옮긴다(콘텐츠 불변). 소스에 없어도 빈 배열로
+    // 정규화한다(undefined 금지 — 대상 매처가 두 형상을 분기하지 않도록). 배열은 인스턴스마다
+    // 복사한다 — 같은 템플릿에서 스폰된 전 인스턴스가 한 배열을 공유하지 않게(realm 선례).
+    keys: [...(src.keys ?? [])],
     flags: src.flags,
     enemies: [],
     // inventory는 라이브 가변 배열(scavenge 회수분·Story 5 드롭 출처). 스폰 시 빈 배열이며,

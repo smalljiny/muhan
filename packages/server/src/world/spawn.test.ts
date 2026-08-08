@@ -7,6 +7,7 @@ import {
   loadSpawnTemplates,
   type SpawnTemplate,
 } from './spawn.js'
+import { fromTemplate, defaultCreatureRng } from './creatureFactory.js'
 import { F_ISSET, F_SET, MPERMT } from './hexFlags.js'
 
 function template(over: Partial<SpawnTemplate & { id: number }> = {}): SpawnTemplate & { id: number } {
@@ -187,6 +188,26 @@ describe('respawnPermCreatures — 입장 lazy 리스폰', () => {
     expect(room.creatures[0]?.experience).toBe(300)
     expect(room.creatures[0]?.alignment).toBe(250)
   })
+
+  // Story 4: 별칭 keys도 같은 명시 매핑 chokepoint를 통과해야 한다. keys는 선택 필드라
+  // buildSpawnTemplateIndex에서 누락해도 컴파일이 통과하므로, 이 경로 테스트가 유일한 방어선이다.
+  it('템플릿 경로로 스폰된 몬스터가 별칭 keys를 실어온다(Story 4)', () => {
+    const room = makeRoom({ permMon: [permSlot({ ltime: 0, interval: 100 })] })
+    respawnPermCreatures(room, 200, {
+      templates: buildSpawnTemplateIndex([template({ keys: ['고정몹', '몹'] })]),
+      alloc: createInstanceIdAllocator(),
+    })
+    expect(room.creatures[0]?.keys).toEqual(['고정몹', '몹'])
+  })
+
+  it('템플릿에 keys가 없어도 스폰된 몬스터의 keys는 빈 배열이다(undefined 아님)', () => {
+    const room = makeRoom({ permMon: [permSlot({ ltime: 0, interval: 100 })] })
+    respawnPermCreatures(room, 200, {
+      templates: idx(), // template() 기본값은 keys 미보유
+      alloc: createInstanceIdAllocator(),
+    })
+    expect(room.creatures[0]?.keys).toEqual([])
+  })
 })
 
 describe('buildSpawnTemplateIndex — 명시 매핑 chokepoint', () => {
@@ -194,6 +215,11 @@ describe('buildSpawnTemplateIndex — 명시 매핑 chokepoint', () => {
     const t = buildSpawnTemplateIndex([template({ experience: 42, alignment: -70 })]).get(123)
     expect(t?.experience).toBe(42)
     expect(t?.alignment).toBe(-70)
+  })
+
+  it('별칭 keys를 소스에서 인덱스로 통과시킨다(Story 4, 명시 매핑 누락 방지)', () => {
+    const t = buildSpawnTemplateIndex([template({ keys: ['별칭'] })]).get(123)
+    expect(t?.keys).toEqual(['별칭'])
   })
 })
 
@@ -268,5 +294,14 @@ describe('loadSpawnTemplates — data/world/creatures.json', () => {
     const c0 = templates.get(0) // 파수꾼: 정본 experience=300, alignment=250
     expect(c0?.experience).toBe(300)
     expect(c0?.alignment).toBe(250)
+  })
+
+  it('별칭 keys를 creatures.json에서 담고 fromTemplate 물질화까지 전파한다(Story 4)', () => {
+    const templates = loadSpawnTemplates()
+    expect(templates.get(0)?.keys).toEqual(['파수꾼']) // 정본 별칭
+    // 실 스폰 경로(인덱스 → fromTemplate)를 그대로 통과시켜 인스턴스까지 도달하는지 고정한다.
+    const c = fromTemplate(0, 50, 0, defaultCreatureRng, templates)
+    expect(c?.name).toBe('파수꾼')
+    expect(c?.keys).toEqual(['파수꾼'])
   })
 })
