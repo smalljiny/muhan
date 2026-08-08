@@ -74,12 +74,24 @@ export {
   SPELL_CATALOG,
   OSPELL_GRID,
   spellByNo,
+  spellByName,
   ospellOf,
   type Realm,
   type SpellFamily,
   type SpellEntry,
   type OspellEntry,
 } from './magic/catalog.js'
+
+// 오라클 이름 매칭 규칙 2종의 순수 이식 — 서로 다른 규칙이라 통합하지 않는다.
+// matchTarget: EQUAL(mtype.h:579) 4필드 순수 접두 + 서수 선택, 완전일치 특례·모호 거부 없음.
+// matchSpellName: magic1.c:49-70 완전일치 우선(리셋+즉시 종료) + 유일 접두 확정 + 모호 거부.
+// 가시성 게이트·자기 제외는 매처가 갖지 않는다 — 방 스코프 해소자(#121) 책임이다.
+export { matchTarget, type NameMatchable } from './naming/matchTarget.js'
+export {
+  matchSpellName,
+  type SpellNameEntry,
+  type SpellNameMatch,
+} from './naming/matchSpellName.js'
 
 export { emptySpellStore, isKnown, setKnown, SPELL_STORE_BYTES } from './magic/spellStore.js'
 export {
