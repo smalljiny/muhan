@@ -2,7 +2,16 @@ import { describe, it, expect, vi } from 'vitest'
 import type { Character, RoomNode, ServerEvent } from 'shared'
 import { createLiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
 import { defaultFleeRng } from '../world/tryMove.js'
-import { makeExitTo, makeItem, makeCreature, makeRoom as makeRoomBase } from '../world/roomFixtures.testutil.js'
+import {
+  makeExitTo,
+  makeItem,
+  makeCreature,
+  makeRoom as makeRoomBase,
+  flagsHex,
+  NO_FLAGS,
+} from '../world/roomFixtures.testutil.js'
+import { MINVIS, PDINVI } from '../world/hexFlags.js'
+import { resolveRoomCreature } from '../world/roomTargetResolvers.js'
 import { createConnectionContext, type ConnectionContext } from './connection.js'
 import { createSessionRegistry } from './sessionRegistry.js'
 import { createCommandRegistry } from './router.js'
@@ -204,6 +213,76 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
 
     expect(wiring.resolveRoom('char-1')).toBe(room)
     expect(wiring.resolveRoom('unknown')).toBeUndefined()
+  })
+})
+
+/**
+ * 방 스코프 대상 해소자 2종 노출 — 규칙 본체(가시성 게이트·매칭)는 `world/roomTargetResolvers.ts`가
+ * 소유하고 여기서는 **노출·공유**만 검증한다.
+ *
+ * 클로저가 포획한 바인딩의 참조 동일성은 밖에서 관측할 수 없다(플레이어 해소자가 어떤 이름 해소자를
+ * 품었는지 `toBe`로 볼 방법이 없다). 그래서 세 갈래로 나눠 증명한다 — (1) 팩토리 단위 테스트가 주입
+ * 해소자에만 위임함을 spy로 고정하고(roomTargetResolvers.test.ts), (2) 두 world:room 생산자의 참조
+ * 동일성은 위 '#3' 케이스가 고정하며, (3) 여기서는 플레이어 해소자가 **같은 레지스트리 인스턴스**를
+ * 배후에 둔다는 것(백킹 스토어 미분기)을 spy로 고정한다.
+ */
+describe('방 스코프 대상 해소자 노출 (크리처·플레이어)', () => {
+  it('resolveRoomCreature은 모듈 순수 함수를 그대로 노출한다(재생성 없음)', () => {
+    const h = makeBundle(new Map<number, RoomNode>([[3, makeRoom(3)]]))
+
+    const wiring = createLiveWorldWiring(h.bundle)
+
+    expect(wiring.resolveRoomCreature).toBe(resolveRoomCreature)
+  })
+
+  it('노출된 크리처 해소자가 방 크리처를 가시성 게이트와 함께 해소한다', () => {
+    const room = makeRoom(3, [], [], {
+      creatures: [
+        makeCreature('c-invis', '유령', { flags: flagsHex(MINVIS) }),
+        makeCreature('c-plain', '유령'),
+      ],
+    })
+    const h = makeBundle(new Map<number, RoomNode>([[3, room]]))
+
+    const wiring = createLiveWorldWiring(h.bundle)
+
+    expect(wiring.resolveRoomCreature(room, '유령', NO_FLAGS)?.instanceId).toBe('c-plain')
+    expect(wiring.resolveRoomCreature(room, '유령', flagsHex(PDINVI))?.instanceId).toBe('c-invis')
+  })
+
+  it('노출된 플레이어 해소자가 점유자 이름 접두·서수로 characterId를 해소한다', () => {
+    const room = makeRoom(3, ['char-1', 'char-2'])
+    const h = makeBundle(new Map<number, RoomNode>([[3, room]]))
+    h.liveRegistry.register({ character: makeCharacter('char-1', 3) })
+    h.liveRegistry.register({ character: { ...makeCharacter('char-2', 3), name: '테이' } })
+
+    const wiring = createLiveWorldWiring(h.bundle)
+
+    expect(wiring.resolveRoomPlayer(room, '테스')).toBe('char-1')
+    expect(wiring.resolveRoomPlayer(room, '테', 2)).toBe('char-2')
+    expect(wiring.resolveRoomPlayer(room, '없는이름')).toBeUndefined()
+  })
+
+  it('플레이어 해소자는 world:room 생산자와 같은 레지스트리 인스턴스를 배후에 둔다(#3)', () => {
+    const room = makeRoom(3, ['char-1'])
+    const h = makeBundle(new Map<number, RoomNode>([[3, room]]))
+    h.liveRegistry.register({ character: makeCharacter('char-1', 3) })
+    const getSpy = vi.spyOn(h.liveRegistry, 'get')
+
+    const wiring = createLiveWorldWiring(h.bundle)
+
+    // 두 경로 각각이 같은 spy에 도달한다 — 해소자가 자체 레지스트리/캐시를 갖지 않는다. 전역 호출
+    // 시퀀스를 통째로 단정하지 않는다(다른 소비자가 조회를 추가하면 무관한 이유로 깨진다) — 각 호출
+    // 전후의 증분만 본다.
+    const beforeName = getSpy.mock.calls.length
+    wiring.liveWorldBinding.resolveCharacterName('char-1')
+    expect(getSpy.mock.calls.length).toBe(beforeName + 1)
+
+    const beforePlayer = getSpy.mock.calls.length
+    expect(wiring.resolveRoomPlayer(room, '테')).toBe('char-1')
+    expect(getSpy.mock.calls.length).toBe(beforePlayer + 1)
+    expect(getSpy).toHaveBeenCalledWith('char-1')
+    getSpy.mockRestore()
   })
 })
 
