@@ -135,7 +135,7 @@ describe('resolveRoomCreature — 매칭 규칙은 순수 매처에 위임한다
   // 알려진 divergence(모듈 헤더 참조) — 오라클 `add_crt_rom`(room.c:246-261)은 first_mon에 strcmp
   // 이름 정렬로 삽입하지만 이 포트의 스폰·리스폰·소환은 전부 `room.creatures.push`다. 해소자는 배열
   // 순서를 그대로 서수로 쓰며 정렬하지 않는다 — 누가 `.sort()`를 넣으면 이 테스트가 깨지고, 그때
-  // EUC-KR collation 이식 여부를 의식적으로 결정하게 된다. (플레이어 쪽은 아래 별도 케이스가 잡는다.)
+  // EUC-KR collation 이식 여부를 의식적으로 결정하게 된다(#137). (플레이어 쪽은 아래 별도 케이스가 잡는다.)
   it('서수는 room.creatures 배열 순서를 따른다 — 오라클의 이름 정렬 삽입과 의도적으로 다르다', () => {
     // 사전순이라면 '고블린'이 '고블린 대장'보다 앞서지만, 배열은 대장이 먼저다.
     const room = roomWithCreatures(
@@ -178,7 +178,7 @@ describe('createRoomPlayerResolver', () => {
   // 알려진 divergence(모듈 헤더 참조) — 오라클 `add_ply_rom`(room.c:58-72)은 first_ply에 strcmp
   // 이름 정렬로 삽입하므로 서수가 사전순이다. 이 포트는 도착 순서를 쓴다. EUC-KR strcmp 순서는
   // JS 문자열 비교로 재현되지 않아 정렬을 넣지 않았고, 그 선택을 여기서 고정한다 — 누가 `.sort()`를
-  // 넣으면 이 테스트가 깨지고, 그때 collation 이식 여부를 의식적으로 결정하게 된다.
+  // 넣으면 이 테스트가 깨지고, 그때 collation 이식 여부를 의식적으로 결정하게 된다(#137).
   it('서수는 도착 순서를 따른다 — 오라클의 이름 정렬 삽입과 의도적으로 다르다', () => {
     const resolve = createRoomPlayerResolver(resolveName)
     // 사전순이라면 '테스토스'(char-1)보다 '테이'(char-2)가 앞설 수 있으나, 도착 순서는 char-2가 먼저다.
