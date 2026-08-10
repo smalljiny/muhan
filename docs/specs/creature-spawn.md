@@ -37,6 +37,8 @@ E4 월드 상태 엔진의 세 번째 토픽이다. E4-1a(`runtime-foundation.md
 
 전투 콘텐츠 필드(불변, 물질화 시점 소스 JSON에서 전이)로 `armor`·`thaco`·`ndice`·`sdice`·`pdice`([combat.md](combat.md) operand)와 마법 read 필드(`realm`·`spells`·`class`·`intelligence`·`piety`)가 있고, [combat.md](combat.md) 사망 분배(`distributeCreatureDeath`)가 읽는 `experience`·`alignment`를 **선택 필드**로 담는다(`befuddledUntil`/`charmedUntil` 선택 관례 — 인라인 리터럴 blast-radius 회피, 소스 JSON은 항상 실값 보유). 물질화(`creatureFactory.ts`)는 두 필드를 소스에서 복사하고, template 스폰 경로는 `buildSpawnTemplateIndex`(`spawn.ts`) 명시 매핑이 두 필드를 전파한다(embedded·template 양 경로 충실).
 
+이름 매칭용 별칭 `keys?: string[]`도 같은 선택 필드 관례를 따른다(원본 `char key[3][20]`, CRT 오프셋 255). 소비자는 방 스코프 크리처 해소자이며 규칙 정본은 [`name-matching.md`](name-matching.md)다. **물질화 경로가 전부 필드 선택 복사라 타입만 추가하면 값이 아무 데서도 채워지지 않고, `keys?`가 optional인 탓에 컴파일도 통과하는 조용한 결손이 된다** — `creatureFactory.ts`(embedded)·`buildSpawnTemplateIndex`(template)·`server/src/world/worldGraph.ts`(방 로드) 세 지점 모두에 명시 전파가 필요하다. 프로덕션 리더·물질화는 별칭이 없어도 `[]`를 채운다(`undefined` 금지 — 매처가 두 형상을 분기하지 않도록).
+
 ### `RoomNode` 스폰 필드 (G3)
 
 `RoomNode`에 라이브 `creatures: CreatureInstance[]`(가변)와 스폰 정의 필드를 추가한다:
@@ -48,6 +50,8 @@ E4 월드 상태 엔진의 세 번째 토픽이다. E4-1a(`runtime-foundation.md
 ### converter 확장 (`packages/port`)
 
 `parseRoom.js`·`convertWorld.js`가 방 레벨 스폰 필드를 emit한다. `perm_mon` 오프셋은 C oracle(`mstruct.h:154`)로 **@216 확정**(`random@192`·`traffic@212`는 기존). converter는 로더가 실제 소비하는 번들 `rooms.json`·`meta.json`을 emit하며, embedded 몬스터는 `templates.js readCreature` 재사용으로 전체 1184B 필드를 인라인 추출한다(빌더 커스터마이즈 스탯이 템플릿과 달라 링크 재구성 불가). 재변환은 멱등·orphan 제외 규칙 유지.
+
+별칭 `key[3][20]` 추출도 두 리더(`templates.js` OBJ 160·CRT 255, `parseRoom.js` 자체 오프셋 테이블)에 함께 들어간다. 방 embedded 개체는 `templateId=null`이라 템플릿 재조회가 불가능하므로 `parseRoom.js` 쪽을 빼면 같은 몬스터가 방마다 별칭 유무가 갈린다. 위생 규칙(공백 전용 슬롯 드롭·20B 절단·U+FFFD 보존)은 [`name-matching.md`](name-matching.md) §별칭 추출 위생.
 
 ### `events.json` (invasion 데이터 정의)
 

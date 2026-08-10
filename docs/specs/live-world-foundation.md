@@ -22,6 +22,7 @@ walking-skeleton 완결 조건은 **입장 → 저장된 방 배치 → 이동 �
 | `server/src/ws/liveWorldBinding.ts` | ws | FSM이 소비하는 `SessionLiveWorld`(hydrate/place/roomSummary) 조립. |
 | `server/src/ws/liveSessionLifecycleAdapter.ts` | ws | 세션 종결 시 `markDirty` → `release` 수렴하는 실 `SessionLifecyclePort`. |
 | `server/src/ws/liveWorldWiring.ts` | ws | 부트 의존 묶음을 진입·이동·수명·방 채널 seam으로 파생하는 조립 팩토리. |
+| `server/src/world/roomTargetResolvers.ts` | world | 방 스코프 크리처·플레이어 이름 해소자 + `find_crt` 가시성 게이트. 정본은 [`name-matching.md`](name-matching.md). |
 
 레이어 방향은 ws → world 단방향이다. 세션 수명 어댑터는 도메인 상태를 변이하지만 **세션 종결이라는 transport 수명 이벤트에 반응하는 ws 관심사**이므로 포트·no-op 형제와 같은 `ws/`에 둔다. `world/`에 두면 도메인이 ws 포트를 역참조해 레이어링이 뒤집힌다.
 
@@ -113,6 +114,11 @@ fan-out 대상 결정은 `createRoomChannelAdapter`(발화자 현재 방의 occu
 
 `resolveCharacterName: (characterId) => string | undefined`도 같은 규약을 따른다 — 팩토리가 `bundle.liveRegistry.get(id)?.character.name`으로 클로저를 **1회 생성해** `liveWorldBinding`과 `moveDeps`에 같은 참조를 넘긴다(테스트가 참조 동일성으로 단정). 레지스트리를 통째로 넘기지 않고 해소자 하나만 주입해 바인딩이 레지스트리 전 표면에 의존하지 않게 한다.
 
+**방 스코프 대상 해소자 2종**(`resolveRoomCreature`·`resolveRoomPlayer`)이 `resolveCharacterName`의 역방향 형제로 함께 노출된다 — 저쪽이 id→이름이면 이쪽은 이름→대상이다. 규칙 본체는 [`name-matching.md`](name-matching.md)가 소유하고 여기서는 배선만 한다.
+
+- `resolveRoomCreature`는 의존이 없어 모듈 함수를 그대로 싣는다(참조가 곧 단일 인스턴스). 관찰자 flags는 **호출 인자**이지 배선 원재료가 아니다 — 호출부가 `composeCharacterFlags(character, now)`로 합성해 넘기므로 `now` 의존성이 순수 해소자 밖에 남는다.
+- `resolveRoomPlayer`는 위 `resolveCharacterName` **인스턴스를 재사용해** 1회 생성한다(불변식 확장). 새로 만들면 지목 경로가 두 `world:room` 생산자와 다른 클로저를 배후에 두게 되어 "보이는 이름"과 "지목되는 이름"이 갈린다. 테스트가 행동 동등이 아닌 **객체 동일성**으로 이를 잡는다.
+
 ### 방 뷰 투영 (`world/roomView.ts`)
 
 `projectRoomView(room, resolveCharacterName)`가 `RoomNode`를 `world:room` 표시 페이로드로 거르는 **순수 함수**다. 정본은 [`movement-rooms.md`](movement-rooms.md) §방 표시 가시성 필터.
@@ -138,4 +144,5 @@ fan-out 대상 결정은 `createRoomChannelAdapter`(발화자 현재 방의 occu
 ## 관련 문서
 
 - 선행: [`movement-rooms.md`](movement-rooms.md), [`runtime-foundation.md`](runtime-foundation.md), [`session-lifecycle.md`](session-lifecycle.md), [`freechat-permission-seam.md`](freechat-permission-seam.md), [`transport-protocol.md`](transport-protocol.md), [`persistence.md`](persistence.md), [`save-policy.md`](save-policy.md)
+- 파생: [`name-matching.md`](name-matching.md)(방 스코프 이름 해소자 — 본 팩토리가 배선)
 - 후속: 규칙 명령 배선(#106), 소셜·채널 전역 fan-out(#37), 프론트엔드 월드뷰(#60)

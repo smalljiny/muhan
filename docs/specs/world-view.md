@@ -86,6 +86,17 @@ WsClientSnapshot
 
 본인 제외를 클라가 맡는 이유: 서버가 수신자별로 페이로드를 달리하면 방 단위 fan-out 캐시가 불가능해진다.
 
+**표시 경로와 지목 경로는 가시성 게이트가 다르다.** 이름으로 대상을 지목하는 경로가 [`name-matching.md`](name-matching.md)로 신설되면서 두 경로가 비대칭이 됐고, 이는 오라클을 그대로 따른 결과다.
+
+| 게이트 | 표시(`roomView`) | 지목(`find_crt`) |
+|---|---|---|
+| `MINVIS`(크리처 투명) | 거름 | 거름 (관찰자 `PDINVI` 보유 시 통과) |
+| `MHIDDN`(크리처 은신) | 거름 | **거르지 않음** — `find_crt`에 없다 |
+| 사망(`hpcur <= 0`) | 거름 | 거르지 않음 (제거는 `creatureDeath` 소유) |
+| 플레이어 `PHIDDN`·`PINVIS` | 미구현 (#129) | 미구현 (#129) |
+
+즉 **숨은 크리처는 방 목록에 안 보여도 이름으로는 지목된다**. 오라클 그대로이므로 여기서 맞추지 않는다. 플레이어 가시성은 두 경로가 같은 관찰자 인자 설계를 공유해야 하므로 #129가 표시·지목을 함께 연다.
+
 ### 표시 안전
 
 서버발 문자열(`name`·`longDesc`·`occupants[].name`·`items[].name`·`creatures[].name`)은 전부 React 텍스트 노드로만 렌더한다. `dangerouslySetInnerHTML`·`innerHTML`·`insertAdjacentHTML` 경로를 만들지 않으며(`packages/client/src` 전체 grep 0건), `<script>alert(1)</script>` 페이로드가 텍스트로 노출되고 `querySelector('script')`가 `null`임을 테스트가 단정한다.
@@ -109,5 +120,6 @@ WsClientSnapshot
 ## 관련 문서
 
 - 선행: [`live-world-foundation.md`](live-world-foundation.md)(라이브 상태원·`tryMove` 결선) · [`movement-rooms.md`](movement-rooms.md)(월드 그래프·문 상태머신·가시성 필터) · [`transport-protocol.md`](transport-protocol.md)(와이어 계약·버전 협상)
+- 지목 경로: [`name-matching.md`](name-matching.md)(표시와 다른 가시성 게이트 — 위 대조표)
 - 클라이언트 선례: [`transport-shell.md`](transport-shell.md)(E9) · [`session-entry.md`](session-entry.md)(E10)
 - 이슈: **#60**(E11 본 계층) · **#116**(이동 방송·점유자 델타) · **#99**(몬스터 tick) · **#120**(아이템 라이브화) · **#61**(E12 스탯·전투·인벤 패널)
