@@ -6,6 +6,7 @@ import {
   REALM,
   SPELL_NO,
   spellByNo,
+  spellByName,
   ospellOf,
   type SpellEntry,
   type SpellFamily,
@@ -201,6 +202,21 @@ describe('spellByNo 조회', () => {
   it('범위 밖 spellNo는 undefined를 반환한다', () => {
     expect(spellByNo(56)).toBeUndefined()
     expect(spellByNo(-1)).toBeUndefined()
+  })
+})
+
+describe('spellByName 조회 — 카탈로그 바인딩', () => {
+  it('완전일치 주문명을 확정한다', () => {
+    expect(spellByName('은둔법')).toEqual({ kind: 'found', spellNo: SPELL_NO.SINVIS })
+    expect(spellByName('은둔감지술')).toEqual({ kind: 'found', spellNo: SPELL_NO.SDINVI })
+  })
+
+  it('접두가 여러 주문에 걸리면 모호 거부한다', () => {
+    expect(spellByName('은둔')).toEqual({ kind: 'ambiguous' })
+  })
+
+  it('카탈로그에 없는 이름은 못 찾음이다', () => {
+    expect(spellByName('없는주문이름')).toEqual({ kind: 'notFound' })
   })
 })
 

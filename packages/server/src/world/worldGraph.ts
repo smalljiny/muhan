@@ -9,6 +9,7 @@ type RawItem = {
   description: string
   value: number
   flags?: string
+  keys?: string[]
   contains: RawItem[]
 }
 // embedded 몬스터는 T2.0 이후 완전한 creature 필드를 담는다(CreatureSource + rom_num·inventory 등).
@@ -65,6 +66,10 @@ function toItemInstance(raw: RawItem, roomId: number, path: string): ItemInstanc
     // flags는 scavenge 제외 판정용 hex string(D8). 합성 픽스처 등 raw.flags 부재 시 all-zero로
     // 기본값(플래그 없음=회수 가능)을 준다 — 타입은 항상 string 계약을 유지한다.
     flags: raw.flags ?? '0000000000000000',
+    // 이름 매칭용 별칭(Story 4). flags 선례처럼 합성 픽스처 등 raw.keys 부재 시 빈 배열로
+    // 정규화한다 — 타입은 항상 string[] 계약을 유지한다(undefined 금지). 배열은 복사한다 —
+    // 노드가 폐기될 raw 번들과 공유하지 않게(exit flags·random 복사 관례와 정합).
+    keys: [...(raw.keys ?? [])],
     contains: raw.contains.map((child, i) => toItemInstance(child, roomId, `${path}.${i}`)),
   }
 }

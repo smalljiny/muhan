@@ -241,6 +241,7 @@ describe('distributeCreatureDeath', () => {
           description: '',
           value: 250,
           flags: '',
+          keys: [],
           contains: [],
         },
       ])
@@ -264,6 +265,7 @@ describe('distributeCreatureDeath', () => {
           description: '',
           value: 100,
           flags: '',
+          keys: [],
           contains: [],
         },
       ])
@@ -300,6 +302,7 @@ describe('distributeCreatureDeath', () => {
           description: '',
           value: 50,
           flags: '',
+          keys: [],
           contains: [],
         },
       ])
@@ -321,6 +324,7 @@ describe('distributeCreatureDeath', () => {
           description: '',
           value: 30,
           flags: '',
+          keys: [],
           contains: [],
         },
       ])

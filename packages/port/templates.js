@@ -31,10 +31,26 @@ function cstr(b, s, max) { let e = s; const lim = s + max; while (e < lim && b[e
 function hexToNul(b, s, max) { let e = s; const lim = s + max; while (e < lim && b[e] !== 0) e++; return b.subarray(s, e).toString('hex'); }
 function hexFixed(b, s, n) { return b.subarray(s, s + n).toString('hex'); }
 
+/*
+ * `char key[3][20]` 별칭 슬롯 추출. start는 key 배열의 **절대** 오프셋(base + OBJ/CRT.key).
+ * 위생 규칙: 각 슬롯을 trim하고, 빈 슬롯은 배열에서 제외한다. 보관값은 trim된 문자열이다
+ * (선행 공백이 남으면 접두 매칭이 깨진다). cstr이 NUL 종단·20B 필드 경계를 이미 처리한다.
+ * 정규화·치환은 하지 않는다 — EUC-KR 디코드 실패로 생긴 U+FFFD도 그대로 보존한다(D3).
+ */
+function readKeys(b, start) {
+  const keys = [];
+  for (let i = 0; i < 3; i++) {
+    const k = cstr(b, start + i * 20, 20).trim();
+    if (k) keys.push(k);
+  }
+  return keys;
+}
+
 function readObject(b, base = 0) {
   const o = (k) => base + OBJ[k];
   return {
     name: cstr(b, o('name'), 80), description: cstr(b, o('description'), 80),
+    keys: readKeys(b, o('key')),
     value: b.readInt32LE(o('value')), weight: b.readInt16LE(o('weight')),
     type: b.readInt8(o('type')), adjustment: b.readInt8(o('adjustment')),
     shotsmax: b.readInt16LE(o('shotsmax')), shotscur: b.readInt16LE(o('shotscur')),
@@ -50,6 +66,7 @@ function readCreature(b, base = 0) {
   const c = (k) => base + CRT[k];
   return {
     name: cstr(b, c('name'), 80), description: cstr(b, c('description'), 80), talk: cstr(b, c('talk'), 80),
+    keys: readKeys(b, c('key')),
     level: b.readUInt8(c('level')), type: b.readInt8(c('type')), class: b.readInt8(c('class')),
     race: b.readInt8(c('race')), numwander: b.readInt16LE(c('numwander')),
     alignment: b.readInt16LE(c('alignment')),
@@ -94,7 +111,7 @@ function lineCrt(b, base, i) {
     `flagshex=${hexFixed(b, c('flags'), 8)} spellshex=${hexFixed(b, c('spells'), 16)}`;
 }
 
-module.exports = { readObject, readCreature, SZ, OBJ, CRT };
+module.exports = { readObject, readCreature, readKeys, SZ, OBJ, CRT };
 
 // CLI: node templates.js obj|crt <file> [count]  → 정규 라인 출력
 if (require.main === module) {

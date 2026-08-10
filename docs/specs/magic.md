@@ -63,6 +63,8 @@ OspellEntry { spellNo, realm, mp, ndice, sdice, pdice, bonusType }
 
 `spellByNo(n)`·`ospellOf(n)`은 모듈 로드 시 1회 빌드하는 `ReadonlyMap` 기반 O(1) 조회다(cast는 per-round hot path라 선형 탐색 금지). 카탈로그 밖 번호는 `undefined`를 반환한다. 카탈로그의 offensive 집합 === `OSPELL_GRID` 집합이 테스트로 고정돼(`catalog.test.ts`), `ospellOf(n)===undefined`는 `!offensive`와 동치다.
 
+`spellByName(query)`는 한글 주문명 조회이며 `{kind:'found'|'ambiguous'|'notFound'}`를 돌려준다. 매칭 규칙 본체(완전일치 리셋·즉시 종료·접두 누적·모호 거부)는 `naming/matchSpellName`이 단독 소유하고 여기서는 `SPELL_CATALOG`를 바인딩해 **호출만** 한다 — 정본은 [`name-matching.md`](name-matching.md). `SPELL_BY_NO`처럼 완전일치 이름 인덱스를 두고 앞질러 반환하면 오라클 규칙의 절반을 이 모듈에 복제하는 셈이라 두지 않는다. 번호 조회와 달리 이름 조회는 hot path가 아니다(명령 입력 경로, 라운드당 최대 1회)이고 카탈로그는 56행 정적 테이블이다. 순회 순서는 `SPELL_CATALOG` 선언 순서 = 오라클 `spllist` 배열 순서지만, 결과는 순서에 독립이다(모호는 거부, 유일 접두는 순서 무관).
+
 ## 동작
 
 ### effect/delivery 분리
@@ -179,5 +181,6 @@ combat `createCombatTick`의 `castSpell?` 의존에 `crtSpell`을 주입한다. 
 
 - oracle: `docs/notes/game-analysis-20260625/a6-magic.md`(§1~4·§10), `legacy/muhan/src/magic1.c`(offensive_spell)·`magic8.c`(spell_fail)·`update.c:654`(crt_spell)·`global.c:571-659`(spllist·ospell)
 - 의존 스펙: [combat.md](combat.md)(`CastSpellSeam`·death seam·`CreatureInstance` operand) · [stats-core.md](stats-core.md)(파생 스탯·`bonusOf`) · [progression.md](progression.md)(MP 재생 — #84는 소비만) · [golden-fixture-harness.md](golden-fixture-harness.md)(오라클 fixture 규약)
+- 이름 조회: [name-matching.md](name-matching.md)(`spellByName` 규칙 본체 — 완전일치 우선·모호 거부)
 - 확장 계층: [magic-progression.md](magic-progression.md)(E6b-2 #85 — spell store·학습·성장·타이머·비-offensive effect·몬스터 self-heal)
 - 후속: #86(E6d-1 아이템 delivery) · #99(combat production boot 배선) · #100(전사계 spell_fail 배선) · #106(라이브 command 라우팅) · #108(self-heal healer-class 게이트)

@@ -57,6 +57,10 @@ export function buildSpawnTemplateIndex(raw: readonly RawCreatureTemplate[]): Sp
       // 여기서 누락하면 fromTemplate 물질화가 undefined를 실어 Story 7 분배가 값을 못 읽는다.
       experience: c.experience,
       alignment: c.alignment,
+      // 이름 매칭용 별칭(Story 4) — creatures.json 소스에서 옮긴다. keys는 선택 필드라 여기서
+      // 누락해도 컴파일이 통과하므로, 템플릿 스폰 경로 회귀 테스트가 유일한 방어선이다.
+      // 배열은 복사한다 — 이 인덱스는 폐기될 raw 번들과 분리한다는 위 계약을 따른다.
+      keys: [...(c.keys ?? [])],
       flags: c.flags,
       numwander: c.numwander,
     })

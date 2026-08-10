@@ -78,6 +78,26 @@ describe('fromEmbedded', () => {
     expect(c.alignment).toBe(-50)
   })
 
+  it('별칭 keys를 소스에서 물질화한다(Story 4 embedded 경로)', () => {
+    const named: CreatureSource = { ...thief, keys: ['좀도둑', '도둑'] }
+    expect(fromEmbedded(named, 135, 0).keys).toEqual(['좀도둑', '도둑'])
+  })
+
+  it('소스에 keys가 없으면 빈 배열이다(undefined 아님 — 매처 분기 방지)', () => {
+    // thief 픽스처는 keys를 갖지 않는다. 정본 JSON은 별칭 없는 크리처도 []를 실어 이 분기를
+    // 타지 않으므로, `?? []` 계약은 이 합성 소스가 유일한 방어선이다.
+    expect(fromEmbedded(thief, 135, 0).keys).toEqual([])
+  })
+
+  it('keys는 소스와 독립 배열이다(공유 참조 aliasing 없음 — realm 선례)', () => {
+    // 같은 템플릿에서 스폰된 전 인스턴스가 인덱스 엔트리의 배열 하나를 공유하면, 향후 별칭
+    // 변형이 템플릿과 전 스폰을 동시에 오염시킨다. 값 동등(toEqual)만으론 못 잡으므로 참조를 고정한다.
+    const src: CreatureSource = { ...thief, keys: ['좀도둑'] }
+    const a = fromEmbedded(src, 135, 0)
+    expect(a.keys).not.toBe(src.keys)
+    expect(a.keys).not.toBe(fromEmbedded(src, 135, 1).keys)
+  })
+
   it('realm은 소스에 없어 [0,0,0,0] 상수 기본값으로 설정한다(전 몬스터 realm=0, #85 소관)', () => {
     const c = fromEmbedded(thief, 135, 0)
     expect(c.realm).toEqual([0, 0, 0, 0])
@@ -131,6 +151,11 @@ describe('fromTemplate', () => {
     // 사망 분배 읽기 필드도 템플릿 소스에서 물질화된다(Story 6).
     expect(c?.experience).toBe(300)
     expect(c?.alignment).toBe(-50)
+  })
+
+  it('별칭 keys를 템플릿 소스에서 물질화한다(Story 4 템플릿 경로)', () => {
+    const named = new Map<number, CreatureSource>([[7, { ...thief, keys: ['좀도둑'] }]])
+    expect(fromTemplate(7, 200, 0, defaultCreatureRng, named)?.keys).toEqual(['좀도둑'])
   })
 
   it('알 수 없는 templateId면 undefined를 반환한다', () => {

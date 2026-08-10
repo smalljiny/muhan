@@ -93,6 +93,9 @@ function makeGoldDrop(dead: CreatureInstance): ItemInstance {
     description: '',
     value: dead.gold,
     flags: '',
+    // 별칭은 원본 소스가 없는 합성 아이템이라 비어 있다. `[]`로 채워 "keys는 항상 배열"
+    // 계약(shared worldGraph.ts)을 유지한다 — 매처가 undefined 형상을 분기하지 않도록.
+    keys: [],
     contains: [],
   }
 }

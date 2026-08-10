@@ -21,6 +21,8 @@
  * 조회 함수만 노출한다. 학습·성장 write는 후속 Story의 책임이다(완료 기준 5).
  */
 
+import { matchSpellName, type SpellNameMatch } from '../naming/matchSpellName.js'
+
 /** 마법 realm — mtype.h:142-145. 값은 C osp_t.realm 바이트와 일치한다. */
 export const REALM = {
   EARTH: 1,
@@ -325,4 +327,18 @@ export function spellByNo(spellNo: number): SpellEntry | undefined {
 /** spellNo로 ospell 격자 엔트리를 조회한다. 공격주문이 아니면 undefined. */
 export function ospellOf(spellNo: number): OspellEntry | undefined {
   return OSPELL_BY_NO.get(spellNo)
+}
+
+/**
+ * 한글 주문명으로 카탈로그를 조회한다 — `SPELL_CATALOG`를 바인딩한 얇은 래퍼다.
+ *
+ * 매칭 규칙 본체(완전일치 리셋·즉시 종료·접두 누적·모호 거부)는 `naming/matchSpellName`이
+ * 단독 소유하고 여기서는 **호출만** 한다. `SPELL_BY_NO`처럼 완전일치 이름 인덱스를 두고
+ * 앞질러 반환하면 오라클 규칙의 절반을 이 모듈에 복제하는 셈이라 두지 않는다 —
+ * 카탈로그는 56행 정적 테이블이고 조회는 명령 입력 경로(라운드당 최대 1회)다.
+ *
+ * 순회 순서는 `SPELL_CATALOG` 선언 순서 = 오라클 `spllist` 배열 순서다.
+ */
+export function spellByName(query: string): SpellNameMatch {
+  return matchSpellName(SPELL_CATALOG, query)
 }

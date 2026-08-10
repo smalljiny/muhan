@@ -61,6 +61,17 @@ describe('loadWorldGraph — 실제 번들', () => {
     expect(pouch?.value).toBe(2000)
     // D8: scavenge 제외 판정용 object flags(hex string) 전파. 돈주머니는 0300(OPERMT|OHIDDN).
     expect(pouch?.flags).toBe('0300000000000000')
+    // Story 4: 별칭 keys를 rooms.json items[]에서 전파한다.
+    expect(pouch?.keys).toEqual(['돈주머니', '숨겨진'])
+  })
+
+  it('컨테이너 중첩 contains[]의 별칭 keys도 전파한다(방1079 사물함)', () => {
+    const graph = loadWorldGraph()
+    const locker = graph.get(1079)?.items.find((i) => i.name === '사물함')
+    expect(locker?.keys).toEqual(['사물함'])
+    const axe = locker?.contains.find((i) => i.name === '나무꾼 도끼')
+    expect(axe).toBeDefined()
+    expect(axe?.keys).toEqual(['도끼', '나무꾼'])
   })
 
   it('그래프 전체에서 instanceId가 유일하다(중첩 contains 포함)', () => {
@@ -96,7 +107,7 @@ describe('loadWorldGraph — 실제 번들', () => {
     const pouch = room50.items.find((i) => i.name === '숨겨진 돈주머니')
     // 아이템에 objnum/type 같은 템플릿 필드가 새지 않았다.
     expect(Object.keys(pouch ?? {}).sort()).toEqual(
-      ['contains', 'description', 'flags', 'instanceId', 'name', 'value'].sort(),
+      ['contains', 'description', 'flags', 'instanceId', 'keys', 'name', 'value'].sort(),
     )
   })
 
@@ -126,6 +137,8 @@ describe('loadWorldGraph — 실제 번들', () => {
     expect(thief.ndice).toBe(1)
     expect(thief.sdice).toBe(5)
     expect(thief.pdice).toBe(0)
+    // Story 4: 별칭 keys도 같은 경로로 방 노드 creatures[]까지 도달한다.
+    expect(thief.keys).toEqual(['좀도둑'])
   })
 
   it('rooms.json 번들의 스폰 필드를 RoomNode에 싣는다(방135 traffic·random·permMon)', () => {
@@ -208,6 +221,16 @@ describe('loadWorldGraph — fixture worldRoot 오버라이드', () => {
       expect(coin?.instanceId).toBeTruthy()
       // 중첩 아이템 id가 부모와 구별된다.
       expect(coin?.instanceId).not.toBe(box?.instanceId)
+    })
+  })
+
+  it('raw 아이템에 keys가 없으면 빈 배열이다(undefined 아님 — 중첩 포함)', () => {
+    // fixtureRooms의 상자·금화는 keys를 갖지 않는다. 정본 JSON은 별칭 없는 아이템도 []를
+    // 실으므로, `?? []` 계약은 이 합성 픽스처가 유일한 방어선이다.
+    withFixtureWorld(fixtureRooms, (root) => {
+      const box = loadWorldGraph(root).get(1)?.items.find((i) => i.name === '상자')
+      expect(box?.keys).toEqual([])
+      expect(box?.contains[0]?.keys).toEqual([])
     })
   })
 

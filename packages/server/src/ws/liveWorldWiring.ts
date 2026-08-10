@@ -5,6 +5,12 @@ import {
   createMarkCharacterDirty,
   type MarkCharacterDirty,
 } from '../world/markCharacterDirty.js'
+import {
+  createRoomPlayerResolver,
+  resolveRoomCreature,
+  type RoomCreatureResolver,
+  type RoomPlayerResolver,
+} from '../world/roomTargetResolvers.js'
 import { defaultFleeRng, type MoveActor, type TryMoveDeps } from '../world/tryMove.js'
 import type { MoveHandlerDeps } from './handlers/move.js'
 import type { TrainHandlerDeps } from './handlers/train.js'
@@ -28,6 +34,8 @@ import type { ConnectionContext } from './connection.js'
  * 종료 정리(lifecyclePort.release)·발화자 방 해소(resolveRoom)가 **동일 인스턴스**를 배후에 둬야 상태가
  * 분기하지 않는다. 팩토리가 entry를 1회 생성해 네 소비자에 같은 참조를 전달한다. 같은 이유로 점유자 이름
  * 해소자(resolveCharacterName)도 1회 생성해 진입·이동 두 world:room 생산자가 같은 참조를 공유한다.
+ * 방 스코프 플레이어 해소자(resolveRoomPlayer)는 그 이름 해소자를 **재사용해** 1회 생성한다 — 지목 경로가
+ * 표시 경로와 다른 클로저를 배후에 두면 "보이는 이름"과 "지목되는 이름"이 갈린다.
  *
  * 이 불변식은 **이 팩토리를 거친 묶음 파생 경로에 한정**된다. `plugin.ts`가 진입 seam을
  * `liveWorld ?? wiring?.liveWorldBinding`로 해소하므로, 호출자가 `liveWorld`와 `liveWorldDeps`를 함께
@@ -80,6 +88,17 @@ export interface LiveWorldWiring {
   readonly markCharacterDirty: MarkCharacterDirty
   /** 발화자(characterId) 현재 방 해소자 — 방 채널 어댑터가 fan-out 대상 방을 얻는 데 쓴다. */
   readonly resolveRoom: (characterId: string) => RoomNode | undefined
+  /**
+   * 방 스코프 크리처 해소자(이름·별칭 접두 + 서수 + `find_crt` 가시성 게이트). 의존이 없는 순수 함수라
+   * 모듈 함수를 그대로 싣는다 — 관찰자 flags는 호출 인자이지 배선 원재료가 아니다(#121이 합성해 넘긴다).
+   */
+  readonly resolveRoomCreature: RoomCreatureResolver
+  /**
+   * 방 스코프 플레이어 해소자(점유자 표시 이름 접두 + 서수 → characterId). 아래 이름 해소자
+   * (`resolveCharacterName`)를 **재사용해 1회 생성**한다(#3) — 새로 만들면 지목 경로가 두 world:room
+   * 생산자와 다른 해소자를 배후에 두게 되어 이름 규칙이 갈릴 수 있다.
+   */
+  readonly resolveRoomPlayer: RoomPlayerResolver
 }
 
 /**
@@ -109,6 +128,10 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
   // 공유한다(#3). 두 번 만들면 두 발화 경로가 서로 다른 클로저를 쓰게 되어 나중에 해소 규칙이 갈릴 수 있다.
   const resolveCharacterName = (characterId: string): string | undefined =>
     bundle.liveRegistry.get(characterId)?.character.name
+
+  // 방 스코프 플레이어 해소자 — 위 이름 해소자를 감싸 **1회 생성**한다(#3의 확장). 지목 경로가 표시
+  // 경로(world:room 두 생산자)와 같은 클로저를 배후에 둬야 "보이는 이름"과 "지목되는 이름"이 갈리지 않는다.
+  const resolveRoomPlayer = createRoomPlayerResolver(resolveCharacterName)
 
   const liveWorldBinding: LiveWorldBinding = {
     entry,
@@ -157,7 +180,17 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     markCharacterDirty,
   }
 
-  return { liveWorldBinding, moveDeps, trainDeps, lifecyclePort, resolveRoom, markCharacterDirty }
+  return {
+    liveWorldBinding,
+    moveDeps,
+    trainDeps,
+    lifecyclePort,
+    resolveRoom,
+    markCharacterDirty,
+    // 크리처 해소자는 의존이 없어 모듈 함수를 그대로 노출한다(재생성 없음 — 참조가 곧 단일 인스턴스).
+    resolveRoomCreature,
+    resolveRoomPlayer,
+  }
 }
 
 /** assembleRoomChannelPort 의존 seam — 발화자 방 해소자 + 세션 색인 + 소켓 해소자 + 안전 전송. */
