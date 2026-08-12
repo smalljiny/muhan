@@ -78,6 +78,7 @@ function makeBundle(): BundleHarness {
     worldGraph,
     liveRegistry,
     characterRepo: { findById: vi.fn(() => Promise.resolve(null)) },
+    objectTemplates: new Map(),
     markDirty,
     currentHour: () => 12,
     onRoomEntered: vi.fn(),
@@ -203,6 +204,7 @@ function makeEvictHarness(): EvictHarness {
     worldGraph,
     liveRegistry,
     characterRepo: { findById: vi.fn(() => Promise.resolve(character)) },
+    objectTemplates: new Map(),
     markDirty,
     currentHour: () => 12, // 이동 시간 게이트 통과(밤 게이트 회피)
     onRoomEntered: vi.fn(),

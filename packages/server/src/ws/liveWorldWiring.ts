@@ -1,4 +1,5 @@
 import type { Character, RoomNode, ServerEvent } from 'shared'
+import type { ObjectTemplateIndex } from '../items/objectTemplate.js'
 import { createLiveCharacterEntry, type EntryLogger } from '../world/liveCharacterEntry.js'
 import type { LiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
 import {
@@ -56,6 +57,14 @@ export interface LiveWorldWiringBundle {
   readonly liveRegistry: LiveCharacterRegistry
   /** 캐릭터 문서 로더 — hydrate가 소비한다. */
   readonly characterRepo: { findById(id: string): Promise<Character | null> }
+  /**
+   * object 템플릿 인덱스(objnum → 템플릿). boot가 `loadObjectTemplates()`로 **1회** 만들어 싣는다 —
+   * objects.json은 부팅 시 고정 콘텐츠라 세션·명령마다 다시 읽을 이유가 없고, 모든 소비자가 같은
+   * 참조를 봐야 이름·스탯 해소가 갈리지 않는다(#3 단일 공유 불변식의 확장).
+   *
+   * 소비자는 인스턴스↔템플릿 결합과 인벤 스코프 이름 해소(#120)다.
+   */
+  readonly objectTemplates: ObjectTemplateIndex
   /** 변경 엔티티 side registry 기록 — 이동 write-behind·종료 수렴이 소비한다(실 flush는 저장 스케줄러). */
   readonly markDirty: (collection: string, id: string, snapshot: unknown) => void
   /** 현재 게임시각(0~23) — 이동 시간 게이트가 소비한다(gameTime.currentHour 주입). */

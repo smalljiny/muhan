@@ -208,6 +208,10 @@ function buildHarness(): LiveWorldHarness {
     worldGraph,
     liveRegistry,
     characterRepo: { findById: (id) => characterRepo.findById(id) },
+    // 이 하네스의 다른 의존과 같이 합성으로 둔다 — 아직 소비자가 없고, 이 파일은 bundle 리터럴을
+    // 자체 구성하므로 boot가 무엇을 실었는지는 여기서 검출되지 않는다. 필수 필드 type-check는
+    // 필드 존재만 증명하고 값의 정합성은 증명하지 못한다 — 실 검출자는 정본 인덱스를 싣는 study e2e다.
+    objectTemplates: new Map(),
     markDirty: (collection, id, snapshot) => saveEngine.markDirty(collection, id, snapshot),
     currentHour: () => 12, // pass-move 시간 게이트 통과(밤 게이트 회피)
     onRoomEntered: vi.fn(),

@@ -24,6 +24,7 @@ function makeTemplate(overrides: Partial<ObjectTemplate> = {}): ObjectTemplate {
   return {
     objnum: 100,
     name: 'test-item',
+    keys: [],
     type: 5,
     value: 50,
     weight: 10,

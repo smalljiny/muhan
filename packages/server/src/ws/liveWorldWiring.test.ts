@@ -93,6 +93,7 @@ function makeBundle(worldGraph: Map<number, RoomNode>, character?: Character): B
     worldGraph,
     liveRegistry,
     characterRepo: { findById },
+    objectTemplates: new Map(),
     markDirty,
     currentHour: () => 12,
     onRoomEntered,
