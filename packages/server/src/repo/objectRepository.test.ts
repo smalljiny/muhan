@@ -64,19 +64,67 @@ describe('ObjectRepository (integration)', () => {
     await repo.insert(bank)
 
     const ownedByCharA = await repo.findByOwner({ type: 'character', id: 'char-A' })
-    expect(ownedByCharA.map((o) => o._id).sort()).toEqual(['a1', 'a2'])
+    // .sort()를 걸지 않는다 — findByOwner가 이미 _id 오름차순을 계약으로 보장하므로,
+    // 여기서 재정렬하면 계약이 깨져도 이 테스트가 통과해 버린다.
+    expect(ownedByCharA.map((o) => o._id)).toEqual(['a1', 'a2'])
 
     const ownedByBank = await repo.findByOwner({ type: 'bank', id: 'bank-A' })
     expect(ownedByBank.map((o) => o._id)).toEqual(['k1'])
   })
 
-  it('init() 후 owner.type + owner.id를 덮는 인덱스가 존재한다', async () => {
+  /**
+   * OQ2 결정성 — 서수는 플레이어가 관측하는 동작이므로 조회 순서가 계약이어야 한다.
+   * Mongo 자연 순서는 계약이 아니라(문서 이동·재사용 공간에 따라 바뀔 수 있다) `_id` 오름차순으로
+   * 고정한다. 오라클 이름 사전순과의 divergence는 `world/liveCharacterEntry.ts` 헤더가 소유한다.
+   */
+  it('findByOwner는 _id 오름차순으로 정렬된 결정적 순서를 반환한다', async () => {
+    // 삽입 순서를 역순으로 둬 자연 순서와 정렬 결과가 갈리게 만든다(비-vacuous).
+    await repo.insert(makeObject({ _id: 'c', owner: { type: 'character', id: 'char-A' } }))
+    await repo.insert(makeObject({ _id: 'a', owner: { type: 'character', id: 'char-A' } }))
+    await repo.insert(makeObject({ _id: 'b', owner: { type: 'character', id: 'char-A' } }))
+
+    const found = await repo.findByOwner({ type: 'character', id: 'char-A' })
+
+    expect(found.map((o) => o._id)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('같은 소유자를 2회 조회하면 동일한 순서를 반환한다(OQ2 결정성)', async () => {
+    await repo.insert(makeObject({ _id: 'z', owner: { type: 'character', id: 'char-A' } }))
+    await repo.insert(makeObject({ _id: 'm', owner: { type: 'character', id: 'char-A' } }))
+    await repo.insert(makeObject({ _id: 'k', owner: { type: 'character', id: 'char-A' } }))
+
+    const first = await repo.findByOwner({ type: 'character', id: 'char-A' })
+    const second = await repo.findByOwner({ type: 'character', id: 'char-A' })
+
+    expect(second.map((o) => o._id)).toEqual(first.map((o) => o._id))
+    expect(first.map((o) => o._id)).toEqual(['k', 'm', 'z'])
+  })
+
+  it('init() 후 owner.type + owner.id + _id를 덮는 인덱스가 존재한다', async () => {
     await repo.init()
     const indexes = await db.collection('objects').indexes()
     const hasOwnerIndex = indexes.some(
-      (idx) => idx.key['owner.type'] !== undefined && idx.key['owner.id'] !== undefined,
+      (idx) =>
+        idx.key['owner.type'] !== undefined &&
+        idx.key['owner.id'] !== undefined &&
+        idx.key['_id'] !== undefined,
     )
     expect(hasOwnerIndex).toBe(true)
+  })
+
+  it('init()은 신 인덱스의 prefix인 구 owner 인덱스를 남기지 않는다(잉여 유지비용 차단)', async () => {
+    // 구 형상을 먼저 만들어 두고 init()이 정리하는지 본다 — 이미 init()을 돌린 DB의 상황이다.
+    await db.collection('objects').createIndex({ 'owner.type': 1, 'owner.id': 1 })
+
+    await repo.init()
+
+    const names = (await db.collection('objects').indexes()).map((idx) => idx.name)
+    expect(names).not.toContain('owner.type_1_owner.id_1')
+  })
+
+  it('init()은 멱등하다 — 구 인덱스가 없어도 IndexNotFound를 삼킨다', async () => {
+    await repo.init()
+    await expect(repo.init()).resolves.toBeUndefined()
   })
 
   it('잘못된 문서(type 범위 밖)는 경계 검증으로 거부한다', async () => {

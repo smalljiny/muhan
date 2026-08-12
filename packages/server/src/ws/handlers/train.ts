@@ -85,9 +85,11 @@ export function createTrainHandler(deps: TrainHandlerDeps): CommandHandler {
       return makeErrorEvent('rule_rejected', REJECT_MESSAGES[result.reason], command.id)
     }
 
-    // (6) 성공 — 라이브 엔트리를 새 Character로 교체한 뒤 성장 결과를 통지한다.
+    // (6) 성공 — 라이브 엔트리의 character만 교체한 뒤 성장 결과를 통지한다.
+    //     `{ ...live }`로 나머지 필드(인벤토리)를 그대로 옮긴다 — 새 객체를 통째로 만들면 진입에서
+    //     1회 적재한 인벤이 조용히 사라지고, 이 토픽 범위에는 그것을 되돌릴 경로가 없다.
     //     stats는 참조 그대로 싣는다(map/spread는 5-튜플을 number[]로 넓혀 와이어 계약을 깬다).
-    deps.liveRegistry.register({ character: result.character })
+    deps.liveRegistry.register({ ...live, character: result.character })
     return {
       type: 'progress:trained',
       level: result.character.level,

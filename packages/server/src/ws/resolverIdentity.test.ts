@@ -28,7 +28,10 @@ describe('resolveRoomPlayer 배선 — 이름 해소자 인스턴스 공유 (불
     const bundle: LiveWorldWiringBundle = {
       worldGraph: new Map<number, RoomNode>(),
       liveRegistry: createLiveCharacterRegistry(),
-      characterRepo: { findById: vi.fn(() => Promise.resolve(null)) },
+      characterRepo: {
+        findById: vi.fn(() => Promise.resolve(null)),
+        hydrateInventory: vi.fn(() => Promise.resolve([])),
+      },
       objectTemplates: new Map(),
       markDirty: vi.fn(),
       currentHour: () => 12,

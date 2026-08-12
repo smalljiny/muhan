@@ -1,4 +1,4 @@
-import type { Character } from 'shared'
+import type { Character, ObjectInstance } from 'shared'
 
 /**
  * 라이브 캐릭터 상태 레지스트리 — character._id 키의 인메모리 저장소.
@@ -19,9 +19,17 @@ import type { Character } from 'shared'
  * character.ts:64)로 역참조하고 별도 `accountId` 필드를 복제하지 않는다(같은 값의 출처가 둘이 되어
  * 분기하는 것을 구조적으로 막는다). `character`는 라이브 가변 문서로, 이 토픽은 `currentRoom`만
  * in-place 갱신하고 HP/MP/spells/realm 등 나머지 필드는 로드되나 dormant다.
+ *
+ * `inventory`는 소유 오브젝트 인스턴스의 라이브 사본이다. **필수 필드로 둔다** — optional이면
+ * 적재를 빠뜨린 엔트리가 조용히 "빈 인벤"으로 관측되어, 소지품이 있는 캐릭터가 아무것도 못 찾는
+ * 상태가 타입 검사를 통과한다. 필수로 두면 엔트리를 만드는 모든 경로가 인벤 출처를 진술하게 된다.
+ *
+ * 인스턴스만 담고 템플릿(objmon 스탯·이름)은 담지 않는다 — 결합은 `items/objectPairing`이
+ * `objnum`으로 그때그때 수행한다(같은 값의 출처가 둘로 갈리지 않게 한다).
  */
 export interface LiveCharacter {
   readonly character: Character
+  readonly inventory: readonly ObjectInstance[]
 }
 
 /**

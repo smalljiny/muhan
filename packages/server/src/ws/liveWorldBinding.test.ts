@@ -129,7 +129,7 @@ describe('buildRoomSummary', () => {
 describe('buildSessionLiveWorld', () => {
   it('hydrate/place는 진입 코어에 위임하고 roomSummary는 월드 그래프에서 파생한다', async () => {
     const character = { _id: 'char-1', currentRoom: 12 } as unknown as Character
-    const live: LiveCharacter = { character }
+    const live: LiveCharacter = { character, inventory: [] }
     const hydrate = vi.fn(() => Promise.resolve(live))
     const place = vi.fn()
     const entry: LiveCharacterEntry = { hydrate, place, release: vi.fn() }

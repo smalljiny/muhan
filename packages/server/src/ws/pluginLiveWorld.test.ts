@@ -72,12 +72,15 @@ function makeBundle(): BundleHarness {
   const room = makeRoom(1, ['char-1'])
   const worldGraph = new Map<number, RoomNode>([[1, room]])
   const liveRegistry = createLiveCharacterRegistry()
-  liveRegistry.register({ character: makeCharacter('char-1', 1) })
+  liveRegistry.register({ character: makeCharacter('char-1', 1), inventory: [] })
   const markDirty = vi.fn()
   const bundle: LiveWorldWiringBundle = {
     worldGraph,
     liveRegistry,
-    characterRepo: { findById: vi.fn(() => Promise.resolve(null)) },
+    characterRepo: {
+      findById: vi.fn(() => Promise.resolve(null)),
+      hydrateInventory: vi.fn(() => Promise.resolve([])),
+    },
     objectTemplates: new Map(),
     markDirty,
     currentHour: () => 12,
@@ -197,13 +200,16 @@ function makeEvictHarness(): EvictHarness {
   ])
 
   const liveRegistry = createLiveCharacterRegistry()
-  liveRegistry.register({ character })
+  liveRegistry.register({ character, inventory: [] })
 
   const markDirty = vi.fn()
   const bundle: LiveWorldWiringBundle = {
     worldGraph,
     liveRegistry,
-    characterRepo: { findById: vi.fn(() => Promise.resolve(character)) },
+    characterRepo: {
+      findById: vi.fn(() => Promise.resolve(character)),
+      hydrateInventory: vi.fn(() => Promise.resolve([])),
+    },
     objectTemplates: new Map(),
     markDirty,
     currentHour: () => 12, // 이동 시간 게이트 통과(밤 게이트 회피)

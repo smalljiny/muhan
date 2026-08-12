@@ -1,7 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import { WebSocket } from 'ws'
-import { PROTOCOL_VERSION, neededExp, type Character, type RoomNode, type ServerEvent } from 'shared'
+import {
+  PROTOCOL_VERSION,
+  neededExp,
+  type Character,
+  type ObjectInstance,
+  type RoomNode,
+  type ServerEvent,
+} from 'shared'
 import { buildApp } from '../app.js'
 import { goldToTrain } from '../progression/train.js'
 import { trainingFlagsForClass } from '../progression/train.testutil.js'
@@ -123,6 +130,11 @@ function makeExit(name: string, targetRoomId: number): RoomNode['exits'][number]
  */
 interface FakeCharacterRepo {
   findById: ReturnType<typeof vi.fn<(id: string) => Promise<Character | null>>>
+  /**
+   * 인벤 적재 경로. 이 스위트의 시나리오(이동·채팅·연마)는 소지품을 읽지 않아 빈 배열을 돌려주되,
+   * findById와 같이 vi.fn으로 감싸 재접속 시 **재로드가 없음**을 호출수로 단언한다.
+   */
+  hydrateInventory: ReturnType<typeof vi.fn<(id: string) => Promise<ObjectInstance[]>>>
   /** id → 마지막 flush patch. SaveEngine dispatch가 characters.updateById로 호출한다. */
   readonly updates: Map<string, Partial<Character>>
   updateById(id: string, patch: Partial<Character>): Promise<void>
@@ -135,6 +147,7 @@ function makeCharacterRepo(seed: Character[]): FakeCharacterRepo {
     findById: vi.fn<(id: string) => Promise<Character | null>>((id) =>
       Promise.resolve(store.get(id) ?? null),
     ),
+    hydrateInventory: vi.fn<(id: string) => Promise<ObjectInstance[]>>(() => Promise.resolve([])),
     updates,
     updateById(id, patch) {
       updates.set(id, patch)
@@ -207,7 +220,10 @@ function buildHarness(): LiveWorldHarness {
   const bundle: LiveWorldWiringBundle = {
     worldGraph,
     liveRegistry,
-    characterRepo: { findById: (id) => characterRepo.findById(id) },
+    characterRepo: {
+      findById: (id) => characterRepo.findById(id),
+      hydrateInventory: (id) => characterRepo.hydrateInventory(id),
+    },
     // 이 하네스의 다른 의존과 같이 합성으로 둔다 — 아직 소비자가 없고, 이 파일은 bundle 리터럴을
     // 자체 구성하므로 boot가 무엇을 실었는지는 여기서 검출되지 않는다. 필수 필드 type-check는
     // 필드 존재만 증명하고 값의 정합성은 증명하지 못한다 — 실 검출자는 정본 인덱스를 싣는 study e2e다.
@@ -451,6 +467,11 @@ describe('라이브 월드 end-to-end (실 소켓 2세션)', () => {
       h.characterRepo.findById.mock.calls.filter((call) => call[0] === CHAR_A).length
     expect(findByIdCallsForA()).toBe(1)
 
+    // 인벤 적재도 같은 기준선을 갖는다 — 진입당 정확히 1회(OQ3 왕복 상한).
+    const inventoryCallsForA = (): number =>
+      h.characterRepo.hydrateInventory.mock.calls.filter((call) => call[0] === CHAR_A).length
+    expect(inventoryCallsForA()).toBe(1)
+
     // transient close — 소켓만 닫으면 link-dead로 표시되고 라이브 엔트리는 grace 동안 살아 있다.
     clientA.close()
     await waitFor(() => h.app.wsSessionRegistry.get(CHAR_A)?.link === 'link-dead')
@@ -466,6 +487,8 @@ describe('라이브 월드 end-to-end (실 소켓 2세션)', () => {
 
     // 재접속은 재로드하지 않는다 — findById 호출수가 초기값(캐릭터당 1)으로 불변이다.
     expect(findByIdCallsForA()).toBe(1)
+    // 인벤도 재적재하지 않는다 — 두 벌이 생기지 않고 최초 적재분이 그대로 유지된다(D-G 1).
+    expect(inventoryCallsForA()).toBe(1)
     // 라이브 레지스트리의 단일 출처(currentRoom)도 도착 방을 유지한다.
     expect(h.app.wsSessionRegistry.get(CHAR_A)?.link).toBe('live')
   })

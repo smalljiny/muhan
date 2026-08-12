@@ -63,7 +63,7 @@ function makeCharacter(currentRoom: number): Character {
 }
 
 function makeLive(currentRoom: number): LiveCharacter {
-  return { character: makeCharacter(currentRoom) }
+  return { character: makeCharacter(currentRoom), inventory: [] }
 }
 
 // tryMoveDeps 조립기 — 방 Map + vi.fn seam. resolveRoom을 spy로 둬 "tryMove 미호출"을 간접 검증한다

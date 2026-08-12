@@ -65,7 +65,10 @@ function setup(loadRoom: number) {
   const onRoomEntered = vi.fn()
   const onRoomLeft = vi.fn()
   const entry = createLiveCharacterEntry({
-    characterRepo: { findById: vi.fn(() => Promise.resolve(character)) },
+    characterRepo: {
+      findById: vi.fn(() => Promise.resolve(character)),
+      hydrateInventory: vi.fn(() => Promise.resolve([])),
+    },
     liveRegistry: registry,
     resolveRoom: (id: number) => rooms.get(id),
     onRoomEntered,

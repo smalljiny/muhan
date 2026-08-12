@@ -88,11 +88,12 @@ function makeBundle(worldGraph: Map<number, RoomNode>, character?: Character): B
   const onRoomLeft = vi.fn()
   const warn = vi.fn()
   const findById = vi.fn((_id: string) => Promise.resolve(character ?? null))
+  const hydrateInventory = vi.fn((_id: string) => Promise.resolve([]))
 
   const bundle: LiveWorldWiringBundle = {
     worldGraph,
     liveRegistry,
-    characterRepo: { findById },
+    characterRepo: { findById, hydrateInventory },
     objectTemplates: new Map(),
     markDirty,
     currentHour: () => 12,
@@ -152,7 +153,7 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
     const wiring = createLiveWorldWiring(h.bundle)
 
     // entry로 배치 → 방 점유·레지스트리 등록(liveWorldBinding·lifecyclePort가 공유하는 단일 entry).
-    wiring.liveWorldBinding.entry.place({ character })
+    wiring.liveWorldBinding.entry.place({ character, inventory: [] })
     expect(room.occupants.has('char-1')).toBe(true)
     expect(h.liveRegistry.has('char-1')).toBe(true)
 
@@ -196,7 +197,7 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
 
   it('resolveCharacterName은 registry 등록 캐릭터 이름을 주고 미등록 id에는 undefined를 준다', () => {
     const h = makeBundle(new Map<number, RoomNode>([[3, makeRoom(3)]]))
-    h.liveRegistry.register({ character: makeCharacter('char-1', 3) })
+    h.liveRegistry.register({ character: makeCharacter('char-1', 3), inventory: [] })
 
     const wiring = createLiveWorldWiring(h.bundle)
 
@@ -208,7 +209,7 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
     const room = makeRoom(7, ['char-1'])
     const worldGraph = new Map<number, RoomNode>([[7, room]])
     const h = makeBundle(worldGraph)
-    h.liveRegistry.register({ character: makeCharacter('char-1', 7) })
+    h.liveRegistry.register({ character: makeCharacter('char-1', 7), inventory: [] })
 
     const wiring = createLiveWorldWiring(h.bundle)
 
@@ -254,8 +255,11 @@ describe('방 스코프 대상 해소자 노출 (크리처·플레이어)', () =
   it('노출된 플레이어 해소자가 점유자 이름 접두·서수로 characterId를 해소한다', () => {
     const room = makeRoom(3, ['char-1', 'char-2'])
     const h = makeBundle(new Map<number, RoomNode>([[3, room]]))
-    h.liveRegistry.register({ character: makeCharacter('char-1', 3) })
-    h.liveRegistry.register({ character: { ...makeCharacter('char-2', 3), name: '테이' } })
+    h.liveRegistry.register({ character: makeCharacter('char-1', 3), inventory: [] })
+    h.liveRegistry.register({
+      character: { ...makeCharacter('char-2', 3), name: '테이' },
+      inventory: [],
+    })
 
     const wiring = createLiveWorldWiring(h.bundle)
 
@@ -267,7 +271,7 @@ describe('방 스코프 대상 해소자 노출 (크리처·플레이어)', () =
   it('플레이어 해소자는 world:room 생산자와 같은 레지스트리 인스턴스를 배후에 둔다(#3)', () => {
     const room = makeRoom(3, ['char-1'])
     const h = makeBundle(new Map<number, RoomNode>([[3, room]]))
-    h.liveRegistry.register({ character: makeCharacter('char-1', 3) })
+    h.liveRegistry.register({ character: makeCharacter('char-1', 3), inventory: [] })
     const getSpy = vi.spyOn(h.liveRegistry, 'get')
 
     const wiring = createLiveWorldWiring(h.bundle)
@@ -299,7 +303,7 @@ describe('world:room 두 생산자 페이로드 동일성 (진입 vs 이동)', (
     })
     const worldGraph = new Map<number, RoomNode>([[100, roomA], [200, roomB]])
     const h = makeBundle(worldGraph)
-    h.liveRegistry.register({ character: makeCharacter('char-1', 100) })
+    h.liveRegistry.register({ character: makeCharacter('char-1', 100), inventory: [] })
 
     const wiring = createLiveWorldWiring(h.bundle)
     const handler = createMoveHandler(wiring.moveDeps)
@@ -376,9 +380,9 @@ describe('assembleRoomChannelPort (#6 채팅 전파 — wiring 레벨)', () => {
     const roomB = makeRoom(2, ['char-b1'])
     const worldGraph = new Map<number, RoomNode>([[1, roomA], [2, roomB]])
     const h = makeBundle(worldGraph)
-    h.liveRegistry.register({ character: makeCharacter('char-a1', 1) })
-    h.liveRegistry.register({ character: makeCharacter('char-a2', 1) })
-    h.liveRegistry.register({ character: makeCharacter('char-b1', 2) })
+    h.liveRegistry.register({ character: makeCharacter('char-a1', 1), inventory: [] })
+    h.liveRegistry.register({ character: makeCharacter('char-a2', 1), inventory: [] })
+    h.liveRegistry.register({ character: makeCharacter('char-b1', 2), inventory: [] })
     const wiring = createLiveWorldWiring(h.bundle)
 
     const sessionRegistry = createSessionRegistry()
@@ -460,7 +464,7 @@ describe('assembleRoomChannelPort (#6 채팅 전파 — wiring 레벨)', () => {
     const roomA = makeRoom(1, ['char-a1', 'char-ghost'])
     const worldGraph = new Map<number, RoomNode>([[1, roomA]])
     const h = makeBundle(worldGraph)
-    h.liveRegistry.register({ character: makeCharacter('char-a1', 1) })
+    h.liveRegistry.register({ character: makeCharacter('char-a1', 1), inventory: [] })
     const wiring = createLiveWorldWiring(h.bundle)
 
     const sessionRegistry = createSessionRegistry()
@@ -490,7 +494,7 @@ describe('assembleRoomChannelPort (#6 채팅 전파 — wiring 레벨)', () => {
     const roomA = makeRoom(1, ['char-a1', 'char-dropped'])
     const worldGraph = new Map<number, RoomNode>([[1, roomA]])
     const h = makeBundle(worldGraph)
-    h.liveRegistry.register({ character: makeCharacter('char-a1', 1) })
+    h.liveRegistry.register({ character: makeCharacter('char-a1', 1), inventory: [] })
     const wiring = createLiveWorldWiring(h.bundle)
 
     const sessionRegistry = createSessionRegistry()

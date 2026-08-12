@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import { neededExp, serverEventSchema, type Character, type RoomNode } from 'shared'
+import {
+  neededExp,
+  serverEventSchema,
+  type Character,
+  type ObjectInstance,
+  type RoomNode,
+} from 'shared'
 import { setFlag } from '../../world/door.js'
 import { RTRAIN, goldToTrain } from '../../progression/train.js'
 import { trainingFlagsForClass } from '../../progression/train.testutil.js'
@@ -94,15 +100,26 @@ function makeSuccessChar(overrides: Partial<Character> = {}): Character {
   })
 }
 
-/** 핸들러 deps 조립기 — 라이브 엔트리·방을 주입하고 markCharacterDirty spy를 노출한다. */
+/**
+ * 핸들러 deps 조립기 — 라이브 엔트리·방을 주입하고 markCharacterDirty spy를 노출한다.
+ *
+ * `live.inventory`는 생략 가능하다(기본 빈 인벤). 연마는 소지품을 읽지도 쓰지도 않으므로 대부분의
+ * 케이스가 인벤을 진술할 이유가 없고, 인벤 보존 회귀 테스트만 명시적으로 채워 넣는다.
+ */
 function makeDeps(options: {
-  live?: LiveCharacter
+  live?: { character: Character; inventory?: readonly ObjectInstance[] }
   room?: RoomNode
   registry?: ReturnType<typeof createLiveCharacterRegistry>
 }) {
   const markDirty = vi.fn()
   const registry = options.registry ?? createLiveCharacterRegistry()
-  if (options.live !== undefined) registry.register(options.live)
+  if (options.live !== undefined) {
+    const live: LiveCharacter = {
+      character: options.live.character,
+      inventory: options.live.inventory ?? [],
+    }
+    registry.register(live)
+  }
   const resolveRoom = vi.fn((_characterId: string) => options.room)
   return {
     markDirty,
@@ -403,5 +420,35 @@ describe('createCommandRegistry — progress:train 조건부 등록', () => {
     // 라이브 단일 출처도 상승한 level·차감된 gold를 보유한다.
     expect(liveRegistry.get('char-1')?.character.level).toBe(SUCCESS_LEVEL + 1)
     expect(liveRegistry.get('char-1')?.character.gold).toBe(0)
+  })
+
+  /**
+   * 인벤 보존 회귀 — 엔트리 교체는 **character만** 갈아끼워야 한다.
+   *
+   * 핸들러가 `register({ character })`처럼 새 객체를 통째로 만들면 인벤이 조용히 사라진다. 진입에서
+   * 한 번만 적재하는 설계라 그 손실을 되돌릴 경로가 없다(다음 재접속까지 빈손이 된다).
+   */
+  it('연마 성공 후에도 라이브 엔트리의 인벤토리가 유실되지 않는다', () => {
+    const book: ObjectInstance = {
+      _id: 'obj-book',
+      objnum: 42,
+      type: 7,
+      owner: { type: 'character', id: 'char-1' },
+      slot: null,
+      equipped: false,
+      value: 100,
+      shotscur: 0,
+      schemaVersion: 1,
+    }
+    const { deps, registry: liveRegistry } = makeDeps({
+      live: { character: makeSuccessChar(), inventory: [book] },
+      room: makeRoom(1, trainingFlagsForClass(1)),
+    })
+    const registry = createCommandRegistry(testChannelPort, { train: deps })
+
+    const result = dispatch(registry, { type: 'progress:train' }, actor, testPermission)
+    expect(result.event).toMatchObject({ type: 'progress:trained' })
+
+    expect(liveRegistry.get('char-1')?.inventory).toEqual([book])
   })
 })

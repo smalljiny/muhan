@@ -1434,7 +1434,10 @@ function makeRoomView(
 describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', () => {
   it('배치(entry): enterWorld→place→session:entered→world:room 순서로 발화하고 place는 1회, world:room은 exit 이름을 싣는다', async () => {
     const R = 501
-    const live: LiveCharacter = { character: makeLiveCharacter(SEED_CHARACTER_ID, R) }
+    const live: LiveCharacter = {
+      character: makeLiveCharacter(SEED_CHARACTER_ID, R),
+      inventory: [],
+    }
     const order: string[] = []
     const events: ServerEvent[] = []
     const place = vi.fn(() => void order.push('place'))
@@ -1485,7 +1488,7 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
     const onRoomEntered = vi.fn()
     const onRoomLeft = vi.fn()
     const entry = createLiveCharacterEntry({
-      characterRepo: { findById },
+      characterRepo: { findById, hydrateInventory: vi.fn(() => Promise.resolve([])) },
       liveRegistry: registry,
       resolveRoom: (id) => rooms.get(id),
       onRoomEntered,
@@ -1494,7 +1497,7 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
     })
 
     // 옛 세션이 이미 캐릭터를 방에 배치해 둔 상태(registry+occupants 점유).
-    entry.place({ character })
+    entry.place({ character, inventory: [] })
     expect(room.occupants.has(SEED_CHARACTER_ID)).toBe(true)
     // 사전 배치 카운트를 지워, 이번 재로그인 흐름의 hook 호출만 관측한다.
     onRoomEntered.mockClear()
@@ -1552,7 +1555,7 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
     const findById = vi.fn(() => Promise.resolve(character))
     const onRoomEntered = vi.fn()
     const entry = createLiveCharacterEntry({
-      characterRepo: { findById },
+      characterRepo: { findById, hydrateInventory: vi.fn(() => Promise.resolve([])) },
       liveRegistry: registry,
       resolveRoom: (id) => rooms.get(id),
       onRoomEntered,
@@ -1561,7 +1564,7 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
     })
 
     // 이미 등록·배치된 상태(link-dead 세션의 라이브 엔트리 잔존).
-    entry.place({ character })
+    entry.place({ character, inventory: [] })
     onRoomEntered.mockClear()
 
     const events: ServerEvent[] = []
@@ -1603,7 +1606,10 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
 
   it('close-race: hydrate await 뒤 isClosed면 enterWorld·place 없이 bail한다(hydrate는 부수효과 없음)', async () => {
     const R = 999
-    const live: LiveCharacter = { character: makeLiveCharacter(SEED_CHARACTER_ID, R) }
+    const live: LiveCharacter = {
+      character: makeLiveCharacter(SEED_CHARACTER_ID, R),
+      inventory: [],
+    }
     const events: ServerEvent[] = []
     const hydrate = vi.fn(() => Promise.resolve(live))
     const place = vi.fn()
@@ -1635,7 +1641,7 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
 
   it('create 완주 경로도 hydrate→place→world:room을 배선한다(양 진입점 대칭)', async () => {
     const R = 601
-    const created: LiveCharacter = { character: makeLiveCharacter('char-1', R) }
+    const created: LiveCharacter = { character: makeLiveCharacter('char-1', R), inventory: [] }
     const events: ServerEvent[] = []
     const place = vi.fn()
     const hydrate = vi.fn(() => Promise.resolve(created))

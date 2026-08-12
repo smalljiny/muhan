@@ -1,4 +1,4 @@
-import type { Character, RoomNode, ServerEvent } from 'shared'
+import type { Character, ObjectInstance, RoomNode, ServerEvent } from 'shared'
 import type { ObjectTemplateIndex } from '../items/objectTemplate.js'
 import { createLiveCharacterEntry, type EntryLogger } from '../world/liveCharacterEntry.js'
 import type { LiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
@@ -55,8 +55,14 @@ export interface LiveWorldWiringBundle {
   readonly worldGraph: Map<number, RoomNode>
   /** 라이브 캐릭터 레지스트리(단일 인스턴스). entry·moveDeps·lifecyclePort·resolveRoom이 공유한다. */
   readonly liveRegistry: LiveCharacterRegistry
-  /** 캐릭터 문서 로더 — hydrate가 소비한다. */
-  readonly characterRepo: { findById(id: string): Promise<Character | null> }
+  /**
+   * 캐릭터 문서·인벤토리 로더 — hydrate가 소비한다. 두 조회가 한 진입에서 함께 일어나므로 seam도
+   * 하나로 묶는다(`CharacterRepository`가 두 메서드를 모두 갖는다 — boot는 인스턴스를 그대로 싣는다).
+   */
+  readonly characterRepo: {
+    findById(id: string): Promise<Character | null>
+    hydrateInventory(id: string): Promise<ObjectInstance[]>
+  }
   /**
    * object 템플릿 인덱스(objnum → 템플릿). boot가 `loadObjectTemplates()`로 **1회** 만들어 싣는다 —
    * objects.json은 부팅 시 고정 콘텐츠라 세션·명령마다 다시 읽을 이유가 없고, 모든 소비자가 같은
