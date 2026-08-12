@@ -76,7 +76,7 @@ async function boot(): Promise<void> {
   const saveLogger: SaveLogger = {
     error: (context, message) => app.log.error(context, message),
   }
-  const saveEngine = new SaveEngine(characters, bank, world, saveLogger)
+  const saveEngine = new SaveEngine(characters, bank, world, objects, saveLogger)
 
   // 1Hz 중앙 월드 틱. worldClock·worldRuntime를 buildApp 전에 조립한다(묶음 원재료). now 도메인 단일 출처로
   // worldClock.currentTick()을 훅 now에 주입한다 — onRoomEntered activate/respawn now가 creatureTick tickSec와

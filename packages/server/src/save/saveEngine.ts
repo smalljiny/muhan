@@ -4,10 +4,25 @@
  *
  * 조립 구조:
  *   DirtyTracker(변경 레지스트리) ─drain─▶ SaveScheduler(주기 flush) ─enqueue─▶ AsyncWriteQueue
- *   ─dispatch─▶ collection별 repo 어댑터(characters·bankAccounts→updateById, roomStates→upsert).
+ *   ─dispatch─▶ collection별 repo 어댑터(characters·bankAccounts→updateById, roomStates→upsert,
+ *   objectDeletions→deleteById).
  *   clock·interval은 선택 주입(테스트 FakeClock, 기본 120초). AsyncWriteQueue에는 **실 logger를
  *   주입**한다(NOOP 아님) — 미주입 시 permanent·재시도소진 실패가 무흔적 폐기되므로 데이터
  *   무결성상 필수다.
+ *
+ * write 시도 순서 계약(호출처가 의존해도 되는 보장):
+ *   같은 flush 안에서는 **markDirty 호출 순서가 곧 write 시도 순서**다. 근거는 두 층이다 —
+ *   (1) DirtyTracker가 `Map`이라 `collection:id` 키의 삽입 순서를 보존한 채 drain하고,
+ *   (2) AsyncWriteQueue가 단일 워커·FIFO라 pending을 하나씩 순차로 write한다.
+ *   따라서 서로 다른 컬렉션에 걸친 두 write의 상대 순서를 호출처가 정할 수 있다. 예: 주문 학습
+ *   (`characters`)을 먼저, 비법서 삭제(`objectDeletions`)를 나중에 마킹하면 시도 순서도 그렇게 된다.
+ *   **보장 범위**: 이것은 시도 순서일 뿐 원자성이 아니다. 앞 write가 성공하고 뒤 write가 재시도
+ *   소진으로 폐기되면 한쪽만 영속된다. 컬렉션 간 트랜잭션은 이 계층이 제공하지 않으므로, 호출처는
+ *   손실 방향이 덜 해로운 쪽을 뒤에 두는 방식으로 순서를 정한다.
+ *   **적용 조건**: 이 보장은 두 키가 **모두 해당 flush에서 처음 마킹될 때**만 성립한다. 코얼레싱은
+ *   같은 키 재-mark 시 값만 갱신하고 **최초 삽입 위치**를 유지하므로(Map 시맨틱), 한쪽 키가 이전
+ *   flush부터 pending이면 나중에 마킹된 키가 뒤로 간다. 큐 capacity 포화로 `enqueue`가 블록되는
+ *   경우도 같은 이유로 상대 순서가 어긋날 수 있다.
  *
  * saveNow evict 근거(핵심 correctness — write-loss 봉쇄):
  *   `markDirty(K, snap_old)` 후 `saveNow(K, snap_new)`가 즉시 최신값을 쓰면, stale snap_old가
@@ -43,6 +58,7 @@ import type { Character, BankAccount, RoomState } from 'shared'
 import type { CharacterRepository } from '../repo/characterRepository.js'
 import type { BankRepository } from '../repo/bankRepository.js'
 import type { WorldRepository } from '../repo/worldRepository.js'
+import type { ObjectRepository } from '../repo/objectRepository.js'
 import { DirtyTracker } from './dirtyTracker.js'
 import {
   AsyncWriteQueue,
@@ -50,6 +66,7 @@ import {
   type DispatchMap,
 } from './asyncWriteQueue.js'
 import { SaveScheduler, type SchedulerClock } from './saveScheduler.js'
+import { OBJECT_DELETIONS_COLLECTION } from './markObjectDeleted.js'
 import type { SaveLogger } from './logger.js'
 
 /**
@@ -102,6 +119,7 @@ export class SaveEngine {
     characterRepo: CharacterRepository,
     bankRepo: BankRepository,
     worldRepo: WorldRepository,
+    objectRepo: ObjectRepository,
     logger: SaveLogger,
     options: SaveEngineOptions = {},
   ) {
@@ -115,12 +133,29 @@ export class SaveEngine {
     // id가 어긋나면 markDirty 코얼레싱과 saveNow evict가 잘못된 키를 대상으로 삼는다.
     // characters·bankAccounts는 patch로 갱신하므로 불변 `_id`를 벗겨 전체 문서 스냅샷도 안전하게
     // 수용한다. roomStates는 upsert가 전체 RoomState를 요구하므로 벗기지 않는다.
+    //
+    // 컬렉션 키가 `objects`가 아니라 `objectDeletions`인 이유: 어댑터는 collection당 **하나**이고
+    // 삭제와 갱신은 같은 (id, snapshot)에 대해 서로 다른 write다. 키를 `objects`로 두면 후속 토픽이
+    // objects 갱신 어댑터를 추가할 때 삭제 어댑터를 밀어내야 한다. 삭제 전용 키로 분리하면 갱신
+    // 어댑터가 `objects` 키로 나란히 들어온다.
+    // **한계(설계상 수용)**: 두 키가 다르므로 같은 오브젝트 id의 갱신과 삭제는 코얼레싱되지 않는다.
+    // 둘 다 마킹되면 각각 별개 job으로 남아 markDirty 호출 순서대로 시도되고(위 "write 시도 순서
+    // 계약"), 갱신이 삭제 뒤에 오면 DocumentNotFoundError로 permanent 폐기된다. 두 write를 한 키로
+    // 합쳐야 할 만큼 이 조합이 흔해지면 그때 단일 `objects` 어댑터 + 툼스톤 분기로 통합한다.
+    //
+    // ⚠ dispatch 키는 **write 라우트 id**이지 Mongo 컬렉션명이 아니다. `objectDeletions`는 실재하는
+    // 컬렉션이 아니라 objects 삭제 라우트다 — 실패 로그의 `collection` 필드에 이 값이 찍히므로
+    // 장애 조사 시 Mongo에서 같은 이름을 찾지 말 것.
     this.dispatch = {
       characters: (id, snapshot) =>
         characterRepo.updateById(id, stripImmutableId(snapshot) as Partial<Omit<Character, '_id'>>),
       bankAccounts: (id, snapshot) =>
         bankRepo.updateById(id, stripImmutableId(snapshot) as Partial<Omit<BankAccount, '_id'>>),
       roomStates: (_id, snapshot) => worldRepo.upsert(snapshot as RoomState),
+      // 삭제는 id만으로 결정되므로 snapshot을 쓰지 않는다(툼스톤은 markObjectDeleted 참조).
+      // 계산 키를 쓰는 이유는 컴파일 안전이 아니라(DispatchMap이 Record<string, …>라 상수를 써도
+      // 오타는 안 잡힌다) **seam과 맵이 같은 리터럴을 공유**하게 하기 위해서다.
+      [OBJECT_DELETIONS_COLLECTION]: (id: string) => objectRepo.deleteById(id),
     }
     this.tracker = new DirtyTracker()
     // 실 logger 주입(NOOP 아님) — 무흔적 폐기 방지.

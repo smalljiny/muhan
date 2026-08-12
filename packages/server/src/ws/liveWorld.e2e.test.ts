@@ -21,6 +21,7 @@ import { FakeClock } from '../util/clock.testutil.js'
 import type { CharacterRepository } from '../repo/characterRepository.js'
 import type { BankRepository } from '../repo/bankRepository.js'
 import type { WorldRepository } from '../repo/worldRepository.js'
+import type { ObjectRepository } from '../repo/objectRepository.js'
 import type { LiveWorldWiringBundle } from './liveWorldWiring.js'
 import {
   startTestServer,
@@ -207,10 +208,12 @@ function buildHarness(): LiveWorldHarness {
   // shutdown()의 직접 flush가 tracker 잔여를 큐로 넘겨 fake repo.updateById로 write한다.
   const bankStub = {} as unknown as BankRepository
   const worldStub = {} as unknown as WorldRepository
+  const objectStub = {} as unknown as ObjectRepository
   const saveEngine = new SaveEngine(
     characterRepo as unknown as CharacterRepository,
     bankStub,
     worldStub,
+    objectStub,
     NOOP_LOGGER,
     { clock: new FakeClock(), queueOptions: { sleep: () => Promise.resolve() } },
   )
