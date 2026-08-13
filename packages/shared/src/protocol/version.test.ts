@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { PROTOCOL_VERSION } from './version.js'
 
 describe('PROTOCOL_VERSION', () => {
-  it('현재 와이어 프로토콜 버전은 4이다', () => {
-    expect(PROTOCOL_VERSION).toBe(4)
+  it('현재 와이어 프로토콜 버전은 5이다', () => {
+    expect(PROTOCOL_VERSION).toBe(5)
   })
 
   it('단조 증가 정수 상수다', () => {
