@@ -113,6 +113,12 @@ export {
 } from './objectPairing.js'
 
 export {
+  // 인벤 스코프 이름 해소자(오라클 study 2단 탐색 — find_obj 인벤 → ready 착용 스캔)
+  resolveCarriedObject,
+  type CarriedObjectResolver,
+} from './carriedTargetResolver.js'
+
+export {
   // 방어구 착용 다층 게이트·슬롯 배치(오라클 command3.c wear)
   wearGate,
   // 무기 장착(ready)·쥠(hold) 다층 게이트(오라클 command3.c ready/hold)
