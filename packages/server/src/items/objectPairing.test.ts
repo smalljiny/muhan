@@ -1,54 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import type { ObjectInstance } from 'shared'
 import { pairObject, pairObjects } from './objectPairing.js'
 import { projectEquipStats, type EquippedPair } from './equipStats.js'
-import type { ObjectTemplate, ObjectTemplateIndex } from './objectTemplate.js'
-
-/** 테스트용 ObjectInstance 팩토리 — 스키마 shape를 정확히 만족한다. */
-function makeInstance(overrides: Partial<ObjectInstance> = {}): ObjectInstance {
-  return {
-    _id: 'obj-1',
-    objnum: 100,
-    type: 5,
-    owner: { type: 'character', id: 'char-1' },
-    slot: null,
-    equipped: false,
-    value: 50,
-    shotscur: 0,
-    schemaVersion: 1,
-    ...overrides,
-  }
-}
-
-/** 테스트용 ObjectTemplate 팩토리 — 필요한 스탯만 넘기고 나머지는 기본값. */
-function makeTemplate(overrides: Partial<ObjectTemplate> = {}): ObjectTemplate {
-  return {
-    objnum: 100,
-    name: 'test-item',
-    keys: [],
-    type: 5,
-    value: 50,
-    weight: 10,
-    adjustment: 0,
-    shotsmax: 0,
-    ndice: 0,
-    sdice: 0,
-    pdice: 0,
-    armor: 0,
-    wearflag: 0,
-    magicpower: 0,
-    magicrealm: 0,
-    special: 0,
-    questnum: 0,
-    flags: '0',
-    ...overrides,
-  }
-}
-
-/** 템플릿 배열로 objnum 인덱스를 만든다. */
-function makeIndex(templates: readonly ObjectTemplate[]): ObjectTemplateIndex {
-  return new Map(templates.map((t) => [t.objnum, t]))
-}
+import {
+  makeObjectInstance as makeInstance,
+  makeObjectTemplate as makeTemplate,
+  makeTemplateIndex as makeIndex,
+} from './objectFixtures.testutil.js'
 
 describe('pairObject', () => {
   it('objnum으로 템플릿이 해소되면 {instance, template} 쌍을 반환한다', () => {

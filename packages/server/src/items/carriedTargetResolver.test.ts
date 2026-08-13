@@ -1,61 +1,18 @@
 import { describe, it, expect } from 'vitest'
-import type { ObjectInstance } from 'shared'
 import { OINVIS, PDINVI } from '../world/hexFlags.js'
 import { flagsHex, NO_FLAGS } from '../world/roomFixtures.testutil.js'
 import { resolveCarriedObject } from './carriedTargetResolver.js'
-import type { ObjectTemplate, ObjectTemplateIndex } from './objectTemplate.js'
+import {
+  makeObjectInstance as makeInstance,
+  makeObjectTemplate as makeTemplate,
+  makeTemplateIndex as makeIndex,
+} from './objectFixtures.testutil.js'
 import { MAXWEAR } from './taxonomy.js'
 
 /** OINVIS(비트 2)만 세팅된 object flags. */
 const INVIS_FLAGS = flagsHex(OINVIS)
 /** PDINVI(비트 21, 투명 감지)만 세팅된 관찰자 P-flags. */
 const DETECT_INVIS = flagsHex(PDINVI)
-
-/** 테스트용 ObjectInstance 팩토리 — 스키마 shape를 정확히 만족한다(objectPairing.test 선례). */
-function makeInstance(overrides: Partial<ObjectInstance> = {}): ObjectInstance {
-  return {
-    _id: 'obj-1',
-    objnum: 100,
-    type: 5,
-    owner: { type: 'character', id: 'char-1' },
-    slot: null,
-    equipped: false,
-    value: 50,
-    shotscur: 0,
-    schemaVersion: 1,
-    ...overrides,
-  }
-}
-
-/** 테스트용 ObjectTemplate 팩토리 — 필요한 필드만 넘기고 나머지는 기본값. */
-function makeTemplate(overrides: Partial<ObjectTemplate> = {}): ObjectTemplate {
-  return {
-    objnum: 100,
-    name: 'test-item',
-    keys: [],
-    type: 5,
-    value: 50,
-    weight: 10,
-    adjustment: 0,
-    shotsmax: 0,
-    ndice: 0,
-    sdice: 0,
-    pdice: 0,
-    armor: 0,
-    wearflag: 0,
-    magicpower: 0,
-    magicrealm: 0,
-    special: 0,
-    questnum: 0,
-    flags: NO_FLAGS,
-    ...overrides,
-  }
-}
-
-/** 템플릿 배열로 objnum 인덱스를 만든다. */
-function makeIndex(templates: readonly ObjectTemplate[]): ObjectTemplateIndex {
-  return new Map(templates.map((t) => [t.objnum, t]))
-}
 
 /**
  * 대부분의 케이스가 공유하는 기본 인덱스 — objnum 2 = `비법서` 하나.

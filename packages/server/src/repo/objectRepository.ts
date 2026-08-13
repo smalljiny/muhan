@@ -8,11 +8,6 @@ const COLLECTION_NAME = 'objects'
 // strictObject의 .partial()은 존재 필드만 검증하고 unknown 키는 여전히 거부한다.
 const objectPatchSchema = objectSchema.partial()
 
-/** Mongo IndexNotFound(코드 27) 판별 — dropIndex의 "없으면 무시"에만 쓴다. */
-function isIndexNotFound(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && 'code' in err && err.code === 27
-}
-
 /**
  * 영속 오브젝트 인스턴스 저장소.
  *
@@ -39,17 +34,14 @@ export class ObjectRepository implements IRepository<ObjectInstance> {
    *
    * `_id`를 뒤에 붙이는 이유는 `findByOwner`의 `sort({ _id: 1 })`을 인덱스가 그대로 제공하게
    * 하기 위해서다 — 없으면 IXSCAN 뒤에 blocking in-memory SORT 스테이지가 붙는다.
+   *
+   * 구 인덱스 `{owner.type, owner.id}`는 신 인덱스의 순수 prefix라 잉여지만 **여기서 드롭하지
+   * 않는다**. 부팅 경로의 `dropIndex`는 (a) 롤링 배포 중 구버전 인스턴스가 다시 만들고 신버전이
+   * 다시 지우는 thrash를 만들고, (b) 컬렉션 락을 잡는 DDL을 부팅 임계 경로에 두며, (c) 오퍼레이터가
+   * 진단용으로 만든 인덱스를 조용히 지운다. 정리는 1회성 마이그레이션 소관이다.
    */
   async init(): Promise<void> {
     await this.collection.createIndex({ 'owner.type': 1, 'owner.id': 1, _id: 1 })
-    // 구 인덱스 {owner.type, owner.id}는 신 인덱스의 순수 prefix라 잉여다 — 남겨두면 objects 쓰기마다
-    // 유지 비용만 낸다. createIndex는 키 패턴이 다르면 새로 만들 뿐 구 인덱스를 대체하지 않으므로
-    // 명시적으로 드롭한다. 신규 DB에는 없으므로 IndexNotFound(코드 27)는 삼킨다.
-    try {
-      await this.collection.dropIndex('owner.type_1_owner.id_1')
-    } catch (err) {
-      if (!isIndexNotFound(err)) throw err
-    }
   }
 
   async findById(id: string): Promise<ObjectInstance | null> {

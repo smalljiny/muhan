@@ -118,6 +118,11 @@ function isCarriedVisible(objectFlags: string, observerFlags: string): boolean {
  * 타입 술어를 쓰는 이유는 정렬 비교자에서 `slot`을 `number`로 좁히기 위해서다. 술어 없이
  * `.filter(...).sort((a, b) => (a.slot ?? 0) - ...)`로 쓰면 `?? 0`이 **도달 불가능한 죽은 분기**로
  * 남는다(직전 필터가 null을 이미 제거했다).
+ *
+ * ⚠ `equipped === true`인데 slot이 무효(`null`·음수·`>= MAXWEAR`)인 인스턴스는 여기서도 빠지고
+ * 1단 스캔(`equipped === false` 필터)에서도 빠져 **이름으로 영구히 지목 불가**가 된다. 무로그라
+ * 운영 중 추적 수단이 없다 — 정상 미착용 탈락과 구분해 경고를 내는 것이 후속 과제다.
+ * <!-- 추적 이슈: #143 -->
  */
 function isSlotted(instance: ObjectInstance): instance is ObjectInstance & { slot: number } {
   if (instance.equipped !== true || instance.slot === null) return false

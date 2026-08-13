@@ -3,6 +3,7 @@ import { SPELL_NO, spellByNo, type ObjectInstance } from 'shared'
 import { SpellDispatch } from '../magic/dispatch.js'
 import type { Caster } from '../magic/caster.js'
 import { deliverConsumable } from './consume.js'
+import { makeObjectInstance } from './objectFixtures.testutil.js'
 import { POTION, SCROLL, WAND, ARMOR, MISC } from './taxonomy.js'
 
 /**
@@ -38,19 +39,12 @@ function makeCaster(mp = 30): Caster {
   }
 }
 
+/**
+ * 이 파일의 기본값은 **충전이 남은 물약**이다 — 소비 경로가 `shotscur`를 깎으므로 공용 픽스처의
+ * 중립 기본값(`shotscur: 0`)을 쓰면 케이스마다 소진 상태를 뒤집어야 한다.
+ */
 function makeInstance(overrides: Partial<ObjectInstance> = {}): ObjectInstance {
-  return {
-    _id: 'obj-1',
-    objnum: 100,
-    type: POTION,
-    owner: { type: 'character', id: 'char-1' },
-    slot: null,
-    equipped: false,
-    value: 0,
-    shotscur: 3,
-    schemaVersion: 1,
-    ...overrides,
-  }
+  return makeObjectInstance({ type: POTION, value: 0, shotscur: 3, ...overrides })
 }
 
 describe('deliverConsumable — 카탈로그 판별 전제', () => {

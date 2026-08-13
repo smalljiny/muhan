@@ -112,17 +112,19 @@ describe('ObjectRepository (integration)', () => {
     expect(hasOwnerIndex).toBe(true)
   })
 
-  it('init()은 신 인덱스의 prefix인 구 owner 인덱스를 남기지 않는다(잉여 유지비용 차단)', async () => {
-    // 구 형상을 먼저 만들어 두고 init()이 정리하는지 본다 — 이미 init()을 돌린 DB의 상황이다.
+  it('init()은 구 owner 인덱스를 드롭하지 않는다 — 부팅 경로에 DDL을 두지 않는다', async () => {
+    // 구 형상이 남아 있는 DB(이미 이전 버전으로 init()을 돌린 상황)에서 init()을 돌려도
+    // 기존 인덱스를 건드리지 않아야 한다. 롤링 배포 thrash·부팅 경로 컬렉션 락 차단이 근거다.
     await db.collection('objects').createIndex({ 'owner.type': 1, 'owner.id': 1 })
 
     await repo.init()
 
     const names = (await db.collection('objects').indexes()).map((idx) => idx.name)
-    expect(names).not.toContain('owner.type_1_owner.id_1')
+    expect(names).toContain('owner.type_1_owner.id_1')
+    expect(names).toContain('owner.type_1_owner.id_1__id_1')
   })
 
-  it('init()은 멱등하다 — 구 인덱스가 없어도 IndexNotFound를 삼킨다', async () => {
+  it('init()은 멱등하다 — 반복 호출해도 createIndex가 그대로 성공한다', async () => {
     await repo.init()
     await expect(repo.init()).resolves.toBeUndefined()
   })

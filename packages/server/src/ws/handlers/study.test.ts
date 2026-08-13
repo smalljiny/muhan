@@ -1,9 +1,14 @@
 import { describe, it, expect, vi } from 'vitest'
 import { isKnown, serverEventSchema, type Character, type ObjectInstance } from 'shared'
-import { flagsHex, NO_FLAGS } from '../../world/roomFixtures.testutil.js'
+import { flagsHex } from '../../world/roomFixtures.testutil.js'
 import { OCLSEL, OEVILO } from '../../world/hexFlags.js'
 import { MISC, SCROLL } from '../../items/taxonomy.js'
-import type { ObjectTemplate, ObjectTemplateIndex } from '../../items/objectTemplate.js'
+import type { ObjectTemplate } from '../../items/objectTemplate.js'
+import {
+  makeObjectInstance,
+  makeObjectTemplate,
+  makeTemplateIndex as makeIndex,
+} from '../../items/objectFixtures.testutil.js'
 import { createLiveCharacterRegistry } from '../../world/liveCharacterRegistry.js'
 import type { MarkCharacterDirty } from '../../world/markCharacterDirty.js'
 import type { MarkObjectDeleted } from '../../save/markObjectDeleted.js'
@@ -17,8 +22,9 @@ import type { PermissionPort } from '../permissionPort.js'
  * progress:study 핸들러 스펙 — 소지품 이름 해소(#120)·study() 게이트·비법서 소멸·라이브 교체를
  * 하나의 명령 경로로 배선한다.
  *
- * 픽스처는 items/carriedTargetResolver.test.ts(인스턴스·템플릿 팩토리)와 magic/learning.test.ts
- * (게이트 임계)의 것을 미러링한다 — 같은 값의 출처가 둘이 되면 드리프트한다.
+ * 인스턴스·템플릿 팩토리는 `items/objectFixtures.testutil.ts`(단일 출처)에서 상속하고, 여기서는
+ * study 도메인 기본값("연마 가능한 비법서")만 덮어쓴다. 게이트 임계는 magic/learning.test.ts와
+ * 같은 값을 쓴다.
  */
 
 // ── 픽스처 ───────────────────────────────────────────────────────────────────
@@ -54,51 +60,27 @@ function makeChar(overrides: Partial<Character> = {}): Character {
   }
 }
 
-/** 테스트용 ObjectInstance 팩토리(carriedTargetResolver.test.ts 선례). */
+/** 테스트용 ObjectInstance 팩토리 — 기본값이 곧 "소지 중인 비법서"다. */
 function makeInstance(overrides: Partial<ObjectInstance> = {}): ObjectInstance {
-  return {
+  return makeObjectInstance({
     _id: 'book-1',
     objnum: BOOK_OBJNUM,
     type: SCROLL,
-    owner: { type: 'character', id: 'char-1' },
-    slot: null,
-    equipped: false,
-    value: 50,
-    shotscur: 0,
-    schemaVersion: 1,
     ...overrides,
-  }
+  })
 }
 
 /** 테스트용 ObjectTemplate 팩토리 — 기본값이 곧 "연마 가능한 비법서"다. */
 function makeTemplate(overrides: Partial<ObjectTemplate> = {}): ObjectTemplate {
-  return {
+  return makeObjectTemplate({
     objnum: BOOK_OBJNUM,
     name: '비법서',
-    keys: [],
     type: SCROLL,
-    value: 50,
-    weight: 10,
-    adjustment: 0,
-    shotsmax: 0,
-    // ndice는 레벨 제한이다(0이면 무제한).
-    ndice: 0,
-    sdice: 0,
-    pdice: 0,
-    armor: 0,
-    wearflag: 0,
+    // ndice는 레벨 제한이다(0이면 무제한) — 공용 기본값 0을 그대로 쓴다.
     // magicpower = 주문번호 + 1.
     magicpower: BOOK_SPELL_NO + 1,
-    magicrealm: 0,
-    special: 0,
-    questnum: 0,
-    flags: NO_FLAGS,
     ...overrides,
-  }
-}
-
-function makeIndex(templates: readonly ObjectTemplate[]): ObjectTemplateIndex {
-  return new Map(templates.map((t) => [t.objnum, t]))
+  })
 }
 
 const actor: ActorContext = { accountId: 'acc-1', characterId: 'char-1' }

@@ -2,51 +2,19 @@ import { describe, it, expect } from 'vitest'
 import type { ObjectInstance } from 'shared'
 import { projectEquipStats, type EquippedPair } from './equipStats.js'
 import type { ObjectTemplate } from './objectTemplate.js'
+import { makeObjectInstance, makeObjectTemplate } from './objectFixtures.testutil.js'
 
-/** 테스트용 ObjectInstance 팩토리 — 스키마 shape를 정확히 만족한다. */
+/**
+ * 이 파일의 인스턴스 기본값은 **착용 상태**다 — projectEquipStats가 착용품만 집계하므로
+ * 공용 픽스처의 중립 기본값(`equipped: false`)을 케이스마다 뒤집으면 의도가 흐려진다.
+ */
 function makeInstance(overrides: Partial<ObjectInstance> = {}): ObjectInstance {
-  return {
-    _id: 'obj-1',
-    objnum: 100,
-    type: 5,
-    owner: { type: 'character', id: 'char-1' },
-    slot: null,
-    equipped: true,
-    value: 50,
-    shotscur: 0,
-    schemaVersion: 1,
-    ...overrides,
-  }
-}
-
-/** 테스트용 ObjectTemplate 팩토리 — 필요한 스탯만 넘기고 나머지는 기본값. */
-function makeTemplate(overrides: Partial<ObjectTemplate> = {}): ObjectTemplate {
-  return {
-    objnum: 100,
-    name: 'test-item',
-    keys: [],
-    type: 5,
-    value: 50,
-    weight: 10,
-    adjustment: 0,
-    shotsmax: 0,
-    ndice: 0,
-    sdice: 0,
-    pdice: 0,
-    armor: 0,
-    wearflag: 0,
-    magicpower: 0,
-    magicrealm: 0,
-    special: 0,
-    questnum: 0,
-    flags: '0',
-    ...overrides,
-  }
+  return makeObjectInstance({ equipped: true, ...overrides })
 }
 
 /** 착용 쌍 팩토리. */
 function pair(inst: Partial<ObjectInstance>, tmpl: Partial<ObjectTemplate>): EquippedPair {
-  return { instance: makeInstance(inst), template: makeTemplate(tmpl) }
+  return { instance: makeInstance(inst), template: makeObjectTemplate(tmpl) }
 }
 
 describe('projectEquipStats', () => {
