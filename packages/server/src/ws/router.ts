@@ -3,6 +3,7 @@ import { echoHandler } from './handlers/echo.js'
 import { createChatHandler } from './handlers/chat.js'
 import { createMoveHandler, type MoveHandlerDeps } from './handlers/move.js'
 import { createTrainHandler, type TrainHandlerDeps } from './handlers/train.js'
+import { createStudyHandler, type StudyHandlerDeps } from './handlers/study.js'
 import { readStringField } from './frame.js'
 import { makeErrorEvent } from './serverEvent.js'
 import type { ActorContext } from './actorContext.js'
@@ -34,11 +35,12 @@ export type HandlerRegistry = Map<string, CommandHandler>
 export interface GameCommandDeps {
   readonly move?: MoveHandlerDeps
   readonly train?: TrainHandlerDeps
+  readonly study?: StudyHandlerDeps
 }
 
 /**
- * 기본 명령 레지스트리를 만든다 — 무인증 `debug:echo`와 자유채팅 `chat:message`·`chat:emote`를 배선하고,
- * `deps.move`가 주어지면 `world:move`를, `deps.train`이 주어지면 `progress:train`도 배선한다.
+ * 기본 명령 레지스트리를 만든다 — 무인증 `debug:echo`와 자유채팅 `chat:message`·`chat:emote`를 항상
+ * 배선하고, `GameCommandDeps`의 각 필드가 주어지면 대응 명령을 추가로 배선한다.
  *
  * plain object가 아닌 `Map`을 쓰는 것이 load-bearing이다: `registry.get('__proto__')`는
  * prototype 속성에 도달하지 않고 undefined를 반환해 allowlist 우회를 원천 차단한다.
@@ -47,11 +49,11 @@ export interface GameCommandDeps {
  * 필수 파라미터로 받는다(기본 어댑터 소유·주입은 registerWebsocket 책임). 같은 핸들러 인스턴스를
  * chat:message·chat:emote 두 type에 공유 배선한다(핸들러가 내부에서 type을 narrow한다).
  *
- * `deps`는 조건부 등록 명령의 deps 번들이다(`GameCommandDeps` — 명령 하나당 필드 하나). `deps.move`·
- * `deps.train`은 라이브 레지스트리·방 해소·markDirty가 배선된 환경(실 서버)에서만 주입되며, 주어지면
- * 각각 `world:move`·`progress:train`을 해당 핸들러로 등록한다. 미주입이면 그 명령은 미등록으로 남아
- * dispatch가 unknown_type을 반환한다(방 배치·영속 seam이 아직 없는 컨텍스트에서의 기본 동작). 이
- * 조건부 배선으로 기존 무-deps 호출부(라우터 순수 단위 테스트 등)의 동작이 변하지 않는다.
+ * `deps`는 조건부 등록 명령의 deps 번들이다(`GameCommandDeps` — 명령 하나당 필드 하나. 필드 이름과
+ * 등록되는 명령의 대응은 아래 `if` 블록이 유일한 출처다 — 여기 목록을 복제하면 갈린다). 각 필드는
+ * 라이브 레지스트리·방 해소·markDirty가 배선된 환경(실 서버)에서만 주입된다. 미주입이면 그 명령은
+ * 미등록으로 남아 dispatch가 unknown_type을 반환한다(방 배치·영속 seam이 아직 없는 컨텍스트에서의
+ * 기본 동작). 이 조건부 배선으로 기존 무-deps 호출부(라우터 순수 단위 테스트 등)의 동작이 변하지 않는다.
  *
  * 레지스트리는 의도적으로 `clientCommandSchema`보다 좁은 런타임 디스패치 집합이다. `system:ready`는
  * 스키마에 있으나 핸드셰이크(handleHandshakeFrame)가 `pass` 이전에 소비하므로 여기 등록하지 않는다.
@@ -73,6 +75,9 @@ export function createCommandRegistry(
   }
   if (deps?.train !== undefined) {
     registry.set('progress:train', createTrainHandler(deps.train))
+  }
+  if (deps?.study !== undefined) {
+    registry.set('progress:study', createStudyHandler(deps.study))
   }
   return registry
 }

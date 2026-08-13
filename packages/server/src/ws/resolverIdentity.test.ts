@@ -35,6 +35,8 @@ describe('resolveRoomPlayer 배선 — 이름 해소자 인스턴스 공유 (불
       objectTemplates: new Map(),
       markDirty: vi.fn(),
       currentHour: () => 12,
+      // P-flag 합성 시점 seam(#120 study 경로). 테스트는 고정 틱을 쓴다 — 만료 판정이 시간에 흔들리지 않게.
+      now: () => 0,
       onRoomEntered: vi.fn(),
       onRoomLeft: vi.fn(),
       logger: { warn: vi.fn() },

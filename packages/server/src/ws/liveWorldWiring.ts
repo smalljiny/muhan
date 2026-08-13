@@ -13,8 +13,10 @@ import {
   type RoomPlayerResolver,
 } from '../world/roomTargetResolvers.js'
 import { defaultFleeRng, type MoveActor, type TryMoveDeps } from '../world/tryMove.js'
+import { createMarkObjectDeleted } from '../save/markObjectDeleted.js'
 import type { MoveHandlerDeps } from './handlers/move.js'
 import type { TrainHandlerDeps } from './handlers/train.js'
+import type { StudyHandlerDeps } from './handlers/study.js'
 import { createRoomChannelAdapter } from './roomChannelAdapter.js'
 import { createLiveSessionLifecycleAdapter } from './liveSessionLifecycleAdapter.js'
 import type { LiveWorldBinding } from './liveWorldBinding.js'
@@ -25,7 +27,8 @@ import type { ConnectionContext } from './connection.js'
 
 /**
  * 라이브 월드 조립 팩토리(Story 7) — index.ts가 넘기는 라이브 월드 의존 묶음을 진입 seam(liveWorldBinding)·
- * 이동 seam(moveDeps)·연마 seam(trainDeps)·세션 수명 어댑터(lifecyclePort)·방 해소자(resolveRoom)로 파생한다.
+ * 이동 seam(moveDeps)·연마 seam(trainDeps)·학습 seam(studyDeps)·세션 수명 어댑터(lifecyclePort)·
+ * 방 해소자(resolveRoom)로 파생한다.
  *
  * index.ts boot는 커버리지 제외 배선 코드라, 이 파생 로직을 테스트 가능한 순수 팩토리로 추출하고 index.ts는
  * 묶음 조립·전달만 남긴다(worldRuntime.ts 관례 미러). 팩토리는 transport(소켓·safeSend)를 만지지 않아
@@ -75,6 +78,12 @@ export interface LiveWorldWiringBundle {
   readonly markDirty: (collection: string, id: string, snapshot: unknown) => void
   /** 현재 게임시각(0~23) — 이동 시간 게이트가 소비한다(gameTime.currentHour 주입). */
   readonly currentHour: () => number
+  /**
+   * 현재 절대 틱 — 캐릭터 P-flag 합성(`composeCharacterFlags`)의 시점 기준이다.
+   * boot가 `() => worldClock.currentTick()`을 싣는다. 훅 `now`(onRoomEntered의 activate/respawn)와
+   * **같은 tick 도메인**이어야 만료 판정이 갈리지 않으므로 별도 시계를 만들지 않는다.
+   */
+  readonly now: () => number
   /** 방 진입 훅(활성화 + perm 리스폰) — entry.place·tryMove join 경로가 공유한다. */
   readonly onRoomEntered: (room: RoomNode, actor: MoveActor) => void
   /** 방 퇴장 훅(빈 방 비활성화) — entry.release·tryMove leave 경로가 공유한다. */
@@ -94,6 +103,11 @@ export interface LiveWorldWiring {
    * 신규 원재료 없이 기존 seam 셋의 조합이다 — 묶음(LiveWorldWiringBundle)은 변하지 않는다.
    */
   readonly trainDeps: TrainHandlerDeps
+  /**
+   * progress:study 배선용 학습 의존(라이브 레지스트리·템플릿 인덱스·now·두 영속 마킹 seam).
+   * 신규 원재료는 `now` 하나뿐이고, 나머지는 기존 seam(레지스트리·objectTemplates·markDirty 파생)의 조합이다.
+   */
+  readonly studyDeps: StudyHandlerDeps
   /** 세션 종료 수명 어댑터(markCharacterDirty → release). liveWorldBinding.entry.release와 같은 인스턴스를 배후에 둔다. */
   readonly lifecyclePort: SessionLifecyclePort
   /**
@@ -128,6 +142,15 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
 
   // characters 스냅샷 seam — 1회 생성해 moveDeps·lifecyclePort가 같은 인스턴스를 공유한다(계약 단일화).
   const markCharacterDirty = createMarkCharacterDirty(bundle.markDirty)
+
+  // objectDeletions 삭제 마킹 seam — 같은 이유로 **1회** 생성한다(#3). 삭제 호출처가 늘어도
+  // (버림·소모품 등) 같은 인스턴스를 나눠 쓴다.
+  //
+  // 형제 `markCharacterDirty`와 달리 이 seam은 `LiveWorldWiring` 산출물에 노출하지 않는다. 노출의 효용은
+  // "여러 파생 seam이 같은 인스턴스를 쓴다"를 테스트가 단언할 수 있게 하는 것인데(둘 다 프로덕션에서
+  // `wiring.*`로 직접 읽는 호출자는 없다 — 소비는 전부 파생된 deps를 통한다), 내부 소비자가
+  // studyDeps 하나뿐이면 단언할 대상이 없어 표면만 넓어진다. 두 번째 소비자가 생기면 그때 노출한다.
+  const markObjectDeleted = createMarkObjectDeleted(bundle.markDirty)
 
   // 진입 코어 — 단일 인스턴스로 생성해 liveWorldBinding·lifecyclePort가 공유한다(#3).
   const entry = createLiveCharacterEntry({
@@ -195,10 +218,21 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     markCharacterDirty,
   }
 
+  // 학습 의존 — 방을 읽지 않는다(대상이 소지품 스코프라 방 해소자가 필요 없다). 신규 원재료는 `now`뿐이고,
+  // 두 마킹은 위에서 1회씩 만든 인스턴스를 그대로 싣는다(#3).
+  const studyDeps: StudyHandlerDeps = {
+    liveRegistry: bundle.liveRegistry,
+    objectTemplates: bundle.objectTemplates,
+    now: bundle.now,
+    markCharacterDirty,
+    markObjectDeleted,
+  }
+
   return {
     liveWorldBinding,
     moveDeps,
     trainDeps,
+    studyDeps,
     lifecyclePort,
     resolveRoom,
     markCharacterDirty,

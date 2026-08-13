@@ -88,7 +88,11 @@ async function boot(): Promise<void> {
     error: (context, message) => app.log.error(context, message),
   }
   const worldClock = new WorldClock({ logger: worldTickLogger })
-  const worldRuntime = createWorldRuntime(worldGraph, { now: () => worldClock.currentTick() })
+  // 절대 틱 seam — **1회 생성해 공유**한다(liveWorldWiring #3 불변식의 boot 쪽 적용). worldRuntime 훅
+  // (활성화·리스폰)과 P-flag 합성이 같은 기준선을 봐야 만료 판정이 갈리지 않는데, 두 번 만들면 나중에
+  // 한쪽만 다른 시계로 갈아끼워도 타입·테스트가 잡지 못한다(둘 다 `() => number`다).
+  const now = (): number => worldClock.currentTick()
+  const worldRuntime = createWorldRuntime(worldGraph, { now })
 
   // 라이브 월드 의존 묶음 — buildApp/registerWebsocket이 진입·이동(world:move)·세션 수명·방 채널 어댑터를
   // 파생한다. markDirty는 SaveEngine 메서드라 this 바인딩을 유지하도록 화살표로 감싼다. currentHour·
@@ -102,6 +106,8 @@ async function boot(): Promise<void> {
     objectTemplates,
     markDirty: (collection, id, snapshot) => saveEngine.markDirty(collection, id, snapshot),
     currentHour: gameTime.currentHour,
+    // P-flag 합성 시점 — worldRuntime 훅과 **같은 클로저**를 넘긴다(위 `now` 선언 참조).
+    now,
     onRoomEntered: worldRuntime.onRoomEntered,
     onRoomLeft: worldRuntime.onRoomLeft,
     logger: { warn: (context, message) => app.log.warn(context, message) },
