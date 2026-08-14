@@ -50,7 +50,18 @@
 
 study의 **정렬 게이트는 known-divergence로 미발화**다 — `alignment` 실 값역이 `[0,2]`(생성 인터뷰 1|2 + backfill 중립 sentinel 0)라 `<-100`·`>100` 두 분기가 모두 거짓이고, 현재 어떤 캐릭터도 정렬로 연마를 거부당하지 않는다. 오라클 임계값을 **재조정하지 않는다** — 보존해야 E6 성향 시스템([#123](https://github.com/smalljiny/muhan/issues/123))이 `-1000..+1000`을 도입할 때 코드 변경 없이 발화한다. 같은 성격의 미발화 게이트가 `combat/aggro.ts`·`combat/attackStats.ts`·`items/flags.ts`에도 있다([character-flags.md](character-flags.md)).
 
-study·teach가 읽는 PBLIND·PSILNC의 **영속 입력원은 `characterSchema.statusEffects`**이며, `composeCharacterFlags`가 세 투영을 OR해 소비측이 `F_ISSET`으로 읽는 16자 hex를 만든다([character-flags.md](character-flags.md)). 명령 배선(#119·#120)이 그 합성값을 게이트에 주입한다.
+study·teach가 읽는 PBLIND·PSILNC의 **영속 입력원은 `characterSchema.statusEffects`**이며, `composeCharacterFlags`가 세 투영을 OR해 소비측이 `F_ISSET`으로 읽는 16자 hex를 만든다([character-flags.md](character-flags.md)). `study` 배선(#120)이 그 합성값을 게이트에 주입한다(`teach`는 #119 대기).
+
+### `progress:study` 라이브 배선 (#120)
+
+`ws/handlers/study.ts`가 순수 `study()`를 명령 경로에 얹는다. 핸들러는 게임 규칙을 재구현하지 않고 **조회·합성·사상·마킹**만 한다.
+
+1. 행위자의 라이브 엔트리를 레지스트리에서 꺼낸다(대상 스코프가 행위자 소지품으로 닫힌다 — 오브젝트 id를 와이어로 받지 않으므로 타 캐릭터 오브젝트 접근 경로가 없다).
+2. `resolveCarriedObject`로 `target`·`ordinal`을 인벤 스코프에서 해소한다([`items-equipment.md`](items-equipment.md)). 관찰자 flags는 `composeCharacterFlags(character, now)`로 합성해 넘긴다.
+3. 해소된 쌍의 템플릿을 `study()`에 넘겨 게이트를 평가하고, 실패 갈래를 `Record<Failure, string>`으로 한국어 거부 메시지에 사상해 `error{rule_rejected}`로 답한다.
+4. 성공 시 라이브 엔트리를 `{ ...live, character }`로 교체하고, `markCharacterDirty` → `markObjectDeleted` 순서로 두 write를 마킹한 뒤(순서 계약은 [`save-policy.md`](save-policy.md)) `progress:studied`를 본인에게 1회 발화한다.
+
+정렬 게이트가 미발화이므로(위 divergence) 현재 라이브 경로에서 정렬로 연마가 거부되는 일은 없다.
 
 `teach(caster, target, spellNo)`는 PBLIND → PSILNC → base-class(`CARETAKER`/`MAGE`/`CLERIC`만 통과, `INVINCIBLE`·`SUB_DM`·`DM`은 불가) → 주문 존재(`spellByNo`) → 시전자 지식(`isKnown`) → `spllv` 전수등급 순서로 평가한다. `canTeachSpllv(casterClass, spllv)`는 등급별 최소 클래스를 판정한다: spllv 1(`CLERIC`↑)·2(`MAGE`↑)·3(`INVINCIBLE`↑)·4(`CARETAKER`↑)·5(`SUB_DM`↑). base-class 게이트가 `INVINCIBLE`·`SUB_DM`을 막으므로 spllv 5 주문은 실질 전수 불가한 quirk가 남는다(원작 충실). 통과 시 `setKnown(target.spells, spellNo)`한 새 store를 반환한다.
 
@@ -129,7 +140,7 @@ study·teach가 읽는 PBLIND·PSILNC의 **영속 입력원은 `characterSchema.
 
 이 계층은 **순수 로직 + seam**만 이식한다. 다음은 명시적으로 후속 토픽 소관이다.
 
-- **라이브 command 라우팅**(`cast`/`study`/`teach`/`read`/`drink`/`zap`) → #106.
+- **라이브 command 라우팅** — `study`는 **배선 완료**다(#120, `progress:study`). `cast`(#122)·`teach`(#119)·`read`/`drink`/`zap`(#86)은 여전히 #106 체인 소관이다.
 - **production boot 배선**(effect·crtSpell을 라이브 tick에 조립) → #99.
 - **몬스터 마나 재생**(`mpcur += MAX(1, mpmax/6)`, A6 §9) → #99. 플레이어 마나 재생은 이미 이식됨(#81 `progression.md`).
 - **아이템(scroll/potion/wand) delivery** → #86. 이 계층은 `gated=true`(CAST) effect만 다룬다.

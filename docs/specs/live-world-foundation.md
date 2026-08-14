@@ -30,9 +30,12 @@ walking-skeleton 완결 조건은 **입장 → 저장된 방 배치 → 이동 �
 
 ```ts
 interface LiveCharacter {
-  readonly character: Character   // 라이브 가변 문서
+  readonly character: Character              // 라이브 가변 문서
+  readonly inventory: readonly ObjectInstance[]  // 소지품 인스턴스(#120)
 }
 ```
+
+`inventory`는 세션 진입 시 1회 적재되는 소지품 스냅샷이다(#120). 인스턴스는 **런타임 가변값만** 담고(`shotscur`·`slot`·`equipped`·`owner`) 불변 스탯·이름·별칭은 템플릿이 소유하므로, 소비자는 `items/objectPairing.ts`로 두 참조를 결합해 쓴다([`items-equipment.md`](items-equipment.md)). 갱신은 배열 교체(`{ ...live, inventory }`)로만 하고 in-place 변형하지 않는다 — `character`의 carve-out은 `inventory`로 확장되지 않는다.
 
 **방 위치의 단일 출처는 `character.currentRoom`이며, 별도 방 필드를 두지 않는다.** 같은 원칙을 소유 계정에도 적용해 `character.accountId`(필수 FK)로 역참조하고 복제 필드를 만들지 않는다 — 같은 값의 출처가 둘이 되어 분기하는 것을 구조적으로 막는다. `character` 자체는 immutability 규칙의 **승인된 라이브 carve-out**으로, 이 계층은 `currentRoom`만 in-place 갱신한다.
 
@@ -59,6 +62,9 @@ interface LiveCharacter {
 1. 이미 등록된 엔트리가 있으면 `findById` 없이 그대로 반환한다 — **재접속은 재로드하지 않는다.** 재로드하면 아직 영속되지 않은 라이브 `currentRoom`을 디스크 문서로 덮어쓴다.
 2. 문서가 없으면 던진다.
 3. `currentRoom`이 월드 그래프에서 미해소(orphan/삭제)면 `DEFAULT_START_ROOM = 1`로 교정하고 경고를 남긴다. 캐릭터 생성 기본값(START_ROOM=1)을 미러하는 단일 안전 홈이며, 레벨·종족·소속별 완전한 스폰 정책은 이 계층 범위 밖이다.
+4. `hydrateInventory(characterId)`로 소지품을 적재해 `LiveCharacter.inventory`에 싣는다(#120). 조기 반환 경로(1번)는 이미 인벤을 가진 엔트리를 돌려주므로 재조회하지 않는다.
+
+인벤 적재가 추가하는 DB 왕복은 **세션당 정확히 1회**이며(단위 테스트가 이 상한을 고정해 N+1 유입을 막는다) `owner` 복합 인덱스를 탄다. 조회 실패는 **fail-closed**다 — 예외가 FSM으로 올라가 `error{internal}`로 진입이 거부된다. 빈 인벤으로 degrade하지 않는 이유는 소지품을 조용히 감추는 쪽이 더 나쁘기 때문이다. 소유 object 수 p95 > 50건 또는 hydrate p95 > 200ms가 관측되면 진입 지연 측정 토픽을 연다(구현부 헤더가 이 임계를 소유한다).
 
 `place(live)`는 동기이며 occupants Set을 in-place 변경한다.
 
@@ -106,7 +112,9 @@ fan-out 대상 결정은 `createRoomChannelAdapter`(발화자 현재 방의 occu
 
 ### 조립 (부트 → 팩토리)
 
-부트(`index.ts`)는 원재료 묶음(월드 그래프·레지스트리·characterRepo·markDirty·currentHour·방 진입/퇴장 훅·logger)만 조립해 넘기고, `createLiveWorldWiring`이 진입 바인딩·이동 의존(`moveDeps`)·연마 의존(`trainDeps`)·수명 포트·방 해소자(`resolveRoom`)·`markCharacterDirty` seam을 파생한다. 부트는 커버리지 제외 배선 코드이므로 파생 로직을 테스트 가능한 순수 팩토리로 뽑고 부트에는 묶음 전달만 남긴다. 규칙 명령이 늘어도 **원재료는 늘지 않는다** — 팩토리가 기존 묶음에서 명령별 deps를 파생하므로 부트 계약은 불변이다(train 배선이 이를 실증했다).
+부트(`index.ts`)는 원재료 묶음(월드 그래프·레지스트리·characterRepo·markDirty·currentHour·방 진입/퇴장 훅·logger·오브젝트 템플릿 인덱스·`now`)만 조립해 넘기고, `createLiveWorldWiring`이 진입 바인딩·이동 의존(`moveDeps`)·연마 의존(`trainDeps`)·비법서 연마 의존(`studyDeps`)·수명 포트·방 해소자(`resolveRoom`)·`markCharacterDirty`·`markObjectDeleted` seam을 파생한다. 부트는 커버리지 제외 배선 코드이므로 파생 로직을 테스트 가능한 순수 팩토리로 뽑고 부트에는 묶음 전달만 남긴다.
+
+규칙 명령이 늘어도 원재료는 **거의** 늘지 않는다 — 팩토리가 기존 묶음에서 명령별 deps를 파생하기 때문이다. `train` 배선은 신규 원재료 0건이었고, `study` 배선은 `objectTemplates`(부팅 시 1회 조립하는 템플릿 인덱스)와 `now`(실명 만료 판정 기준 틱) 둘만 더했다. 두 번째 영속 seam인 `markObjectDeleted`는 원재료가 아니라 기존 `bundle.markDirty`에서 파생한다 — `markCharacterDirty`와 같은 규약이다.
 
 `markCharacterDirty`는 원시 `bundle.markDirty`를 1회 감싼 **단일 인스턴스**로, `moveDeps`·`lifecyclePort`·`trainDeps`가 같은 참조를 공유한다(`characters` 스냅샷 계약의 단일화 — [`save-policy.md`](save-policy.md)). `resolveRoom`은 `characterId → 레지스트리 엔트리 → currentRoom → 방` 경로의 by-character 해소자이며, 소비자가 방 채널 조립에 더해 `trainDeps`까지 둘로 늘었다(방 그래프 직접 조회 `roomId → 방`은 별개 해소자다).
 
@@ -134,7 +142,9 @@ fan-out 대상 결정은 `createRoomChannelAdapter`(발화자 현재 방의 occu
 ## 제약사항
 
 - **이동 leave/join 방송 미결선** — `tryMove`의 `broadcastLeave`/`broadcastJoin`은 no-op으로 채운다. 방 채팅 전파는 채널 포트가 소유하고, 이동 통지(누가 들어왔다/나갔다)는 후속 토픽 몫이다.
-- **규칙 명령은 `train` 하나만 배선됨** — 이 foundation 위에 `progress:train`이 얹혔다(디스패처 패턴 확립 + 레벨·경험치·gold·능력치 변이). 나머지 규칙 명령은 여전히 미배선이며 선행 결손이 배선이 아닌 신규 구현을 요구한다: `teach`(#119)·`study`(#120)·`attack`(#121)·`cast`(#122). 인벤·장비는 로드되나 dormant다.
+- **규칙 명령은 `train`·`study` 둘이 배선됨** — 이 foundation 위에 `progress:train`(디스패처 패턴 확립 + 레벨·경험치·gold·능력치 변이)과 `progress:study`(#120 — 소지품 이름 해소 + 주문 지식 변이 + 비법서 소멸)가 얹혔다. 나머지 규칙 명령은 여전히 미배선이며 선행 결손이 배선이 아닌 신규 구현을 요구한다: `teach`(#119)·`attack`(#121)·`cast`(#122). 장비 슬롯 스탯 파이프는 여전히 dormant다(#121).
+- **인벤 서수 기준이 오라클과 다르다** — 오라클 `add_obj_crt`(`legacy/muhan/src/player.c:857-898`)는 EUC-KR `strcmp` 이름 사전순(동명 시 `adjustment` 순) 삽입으로 인벤 순서를 유지하지만, 포트는 `findByOwner`의 `_id` 오름차순이다. KS X 1001 완성형 배열이 Unicode Hangul Syllables 배열과 달라 JS 문자열 비교로 재현되지 않는 것이 원인이며, 방 대상 서수 divergence(#137)와 같은 성격이다. `_id` 정렬은 **결정적 순서를 보장하기 위한 것**이지 오라클 재현이 아니다(Mongo 자연 순서는 계약이 아니라 같은 인벤이 조회마다 다른 서수를 낼 수 있다). 추적 이슈 [#142](https://github.com/smalljiny/muhan/issues/142), 근거는 `world/liveCharacterEntry.ts` 헤더가 소유한다.
+- **인벤 변경의 영속 경로는 삭제뿐** — `study`의 비법서 소멸만 `markObjectDeleted`로 write-behind에 실린다. 착용 토글·`shotscur` 감소·줍기 같은 비-삭제 인벤 변경은 라이브 메모리에만 남고 영속되지 않는다. 해당 명령들이 배선될 때 함께 온다.
 - **`world:room`은 스냅샷이지 델타가 아니다** — E11(#60)이 방 이름·설명·점유자·아이템·크리처를 실어 최소 통지에서 벗어났다. 그러나 발화 시점은 여전히 진입·이동 성공 두 곳뿐이라, 내가 가만히 있는 동안 다른 사람이 들어와도 목록이 갱신되지 않는다. 실시간 입·퇴장 델타는 #116 소관이다.
 - **스폰 정책 미완결** — orphan `currentRoom`은 `DEFAULT_START_ROOM = 1` 단일 폴백으로만 방어한다. 레벨·종족·소속별 시작지 정책은 별도다.
 - **채널 fan-out에 가시성 필터 없음** — 방 채널 fan-out은 occupants 전 멤버 대상이며 발화자 자신도 제외하지 않는다. PINVIS·어둠·투명 필터는 E5 소관이다. (방 **표시**의 가시성 필터는 E11에서 별도로 들어왔다 — [`movement-rooms.md`](movement-rooms.md) §방 표시 가시성 필터. 두 필터는 다른 관심사다.)

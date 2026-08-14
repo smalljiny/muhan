@@ -17,7 +17,7 @@ CP1("걸어볼 수 있는 무한")이 요구하는 "방 설명을 읽고 이동�
 | 파일 | 계층 | 역할 |
 |---|---|---|
 | `shared/src/protocol/events.ts` | shared | `world:room` variant 7필드 계약 |
-| `shared/src/protocol/version.ts` | shared | `PROTOCOL_VERSION = 4` |
+| `shared/src/protocol/version.ts` | shared | `PROTOCOL_VERSION` — 이 계층이 3 → 4 bump를 소유했다(현재값은 [`transport-protocol.md`](transport-protocol.md)가 단일 출처) |
 | `server/src/world/roomView.ts` | server | `projectRoomView` — 가시성 필터 + 이름 해소 순수 함수 |
 | `server/src/world/door.ts` · `hexFlags.ts` | server | 표시 필터용 비트 상수(`XSECRT`/`XINVIS`, `OINVIS`/`MHIDDN`/`MINVIS`) |
 | `server/src/ws/liveWorldWiring.ts` | server | `resolveCharacterName` 단일 인스턴스 파생 |
