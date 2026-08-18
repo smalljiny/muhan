@@ -1101,17 +1101,11 @@
         <div class="debt-body">#100 — 전사계 MMAGIC 캐스터 12종이 <code>spell_fail</code> fizzle 없이 항상 명중합니다. 마나 소비를 <code>spell_fail</code> 前으로 재배치해야 하는데 현 포트는 gate가 pre-consume이라 gate-timing 모델 재검토가 필요합니다. #108 — 비-healer 몬스터 62/195(32%)가 self-heal을 시전합니다.</div>
         <div class="debt-gate">▸ #99 몬스터 tick 배선과 동일 토픽 권장 · CP2~CP3</div>
       </div>
-      <div class="debt-card">
-        <div class="debt-top"><span class="sev">HIGH×4</span><span class="debt-title">devDependency 전이 취약점</span>
-          <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/113">#113</a></div>
-        <div class="debt-body"><code>postcss</code> 8.5.16(경로 순회, fix 8.5.18+) · <code>brace-expansion</code> 1.1.16/2.1.2/5.0.7(DoS, fix 5.0.8). 전부 dev 전이 의존성이라 런타임 번들 밖입니다. 기존 <code>pnpm.overrides</code>가 5.x 계열을 잡지 못하고, brace-expansion은 1.x/2.x 소비자를 5.x로 강제해야 해 eslint 툴체인 호환성 검토가 필요합니다.</div>
-        <div class="debt-gate">▸ 상시 · CP3 이전 · 저위험·소규모</div>
-      </div>
       <div class="debt-card high">
         <div class="debt-top"><span class="sev high">HIGH×12</span><span class="debt-title">의존성 갱신 — pnpm audit HIGH 12건</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/144">#144</a></div>
-        <div class="debt-body">08-14 기준 <code>pnpm audit</code>에서 HIGH 12건·moderate 5건이 잡힙니다. <a href="https://github.com/smalljiny/muhan/issues/113">#113</a>(devDependency 전이 4건)보다 넓은 범위이고 둘은 같은 토픽에서 함께 처리하는 편이 낫습니다.</div>
-        <div class="debt-gate">▸ 상시 · CP3 이전 · #113과 동일 토픽 권장</div>
+        <div class="debt-body"><code>pnpm audit</code>이 6패키지 17건(HIGH 12·moderate 5)을 냅니다 — <code>brace-expansion</code>·<code>fast-uri</code>·<code>js-yaml</code>·<code>nanoid</code>·<code>postcss</code>·<code>undici</code>. <strong>프로덕션 트리에 HIGH 3건</strong>이 있으나(<code>server&gt;fastify</code>의 fast-uri, <code>server&gt;firebase-admin</code> 경유 brace-expansion 2건) 셋 다 도달 불가로 판정했습니다 — Fastify JSON 스키마가 0건이고 glob 패턴에 사용자 입력이 흐르지 않습니다. <strong>기존 <code>pnpm.overrides</code> 3항목이 전부 취약 버전을 목표로 해 무효</strong>입니다(<code>fast-uri@&gt;=3.1.4</code>도 fix가 3.1.5로 올라가며 뚫렸습니다).</div>
+        <div class="debt-gate">▸ 상시 · CP3 이전 · <a href="https://github.com/smalljiny/muhan/issues/113">#113</a> 통합·close (진부분집합)</div>
       </div>
       <div class="debt-card">
         <div class="debt-top"><span class="sev">잠복</span><span class="debt-title">세션 revocation + banned 비강제</span>
@@ -1197,8 +1191,7 @@
     [61,  6, "todo", 610, 342, "E12 캐릭터·전투·인벤 패널", "E6 규칙 이벤트 게이트 — #121·#122가 낳음"],
     [122, 6, "todo", 710, 158, "cast 배선 — 플레이어 시전 진입점", "체인 종단 · 4종 request 디스패치 설계"],
     [62,  7, "todo", 710, 262, "E13 소셜·채팅 UI", "방 채팅 절반 충족 · 채널·귓속말은 E7 게이트"],
-    [113, -1, "dbt", 58,  296, "devDependency 전이 취약점 4건", "postcss · brace-expansion · dev-only"],
-    [144, -1, "dbt", 46,  368, "의존성 갱신 — pnpm audit HIGH 12건", "moderate 5건 동반 · #113과 동일 토픽 권장"],
+    [144, -1, "dbt", 58,  296, "의존성 갱신 — pnpm audit 6패키지 17건", "HIGH 12·moderate 5 · 프로덕션 3건은 도달 불가 · #113 통합"],
     [51,  -1, "dbt", 128, 320, "ctx.heartbeat 타이머 이중 소유권", "유지보수 · 게이트 없음"],
     [138, -1, "dbt", 130, 400, "깨끗한 DB에서 e2e 통과 불가", "HIGH · dev 시드가 DB에 없음 · CP1"],
     [43,  -1, "dbt", 128, 96,  "은행 트랜잭션 ↔ write-behind 조정", "계약: 해소 전 은행 명령 배선 금지 · CP2"],
@@ -1212,7 +1205,7 @@
            [32,58],[58,59],[59,60],[34,116],[36,118],[36,123],[36,99],
            [118,119],[118,120],[118,121],[121,122],
            [60,61],[36,61],[34,37],[35,37],[59,62],[37,62]];
-  var D = [[124,36],[138,58],[43,31],[100,99],[108,99],[89,35],[51,32],[113,30],[144,30]];
+  var D = [[124,36],[138,58],[43,31],[100,99],[108,99],[89,35],[51,32],[144,30]];
 
   var MS_NAME = ["M0 역설계·분석", "M1 서버 기반", "M2 월드·계정", "M3 규칙 코어",
                  "M4 접속 셸", "M5 걷기", "M6 싸우기", "M7 어울리기"];
