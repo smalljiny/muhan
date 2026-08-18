@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest'
 import type { Db } from 'mongodb'
-import type { BankAccount, Character, RoomState } from 'shared'
+import type { BankAccount, Character, ObjectInstance, RoomState } from 'shared'
 import { SaveEngine } from './saveEngine.js'
 import { NOOP_LOGGER } from './logger.js'
 import { CharacterRepository } from '../repo/characterRepository.js'
@@ -9,6 +9,7 @@ import { WorldRepository } from '../repo/worldRepository.js'
 import { ObjectRepository } from '../repo/objectRepository.js'
 import { createMongoTestDb, type MongoTestDb } from '../repo/mongoTestDb.testutil.js'
 import { createMarkCharacterDirty } from '../world/markCharacterDirty.js'
+import { createMarkObjectDeleted } from './markObjectDeleted.js'
 import { FakeClock } from '../util/clock.testutil.js'
 
 /** 즉시 resolve backoff sleep. */
@@ -50,6 +51,21 @@ function makeBank(overrides: Partial<BankAccount> = {}): BankAccount {
   }
 }
 
+function makeObject(overrides: Partial<ObjectInstance> = {}): ObjectInstance {
+  return {
+    _id: 'obj-1',
+    objnum: 1,
+    type: 1,
+    owner: { type: 'character', id: 'char-1' },
+    slot: null,
+    equipped: false,
+    value: 10,
+    shotscur: 0,
+    schemaVersion: 1,
+    ...overrides,
+  }
+}
+
 function makeRoomState(overrides: Partial<RoomState> = {}): RoomState {
   return {
     roomId: 1,
@@ -66,10 +82,11 @@ describe('SaveEngine (integration)', () => {
   let charRepo: CharacterRepository
   let bankRepo: BankRepository
   let worldRepo: WorldRepository
+  let objectRepo: ObjectRepository
   let clock: FakeClock
 
   function makeEngine(): SaveEngine {
-    return new SaveEngine(charRepo, bankRepo, worldRepo, NOOP_LOGGER, {
+    return new SaveEngine(charRepo, bankRepo, worldRepo, objectRepo, NOOP_LOGGER, {
       clock,
       queueOptions: { sleep: immediate },
     })
@@ -79,6 +96,7 @@ describe('SaveEngine (integration)', () => {
     harness = await createMongoTestDb('muhan_save_engine_test')
     db = harness.db
     const objects = new ObjectRepository(db)
+    objectRepo = objects
     charRepo = new CharacterRepository(db, objects)
     bankRepo = new BankRepository(db, objects)
     worldRepo = new WorldRepository(db)
@@ -95,6 +113,7 @@ describe('SaveEngine (integration)', () => {
     await db.collection('characters').deleteMany({})
     await db.collection('bankAccounts').deleteMany({})
     await db.collection('roomStates').deleteMany({})
+    await db.collection('objects').deleteMany({})
     clock = new FakeClock()
     vi.clearAllMocks()
   })
@@ -230,6 +249,61 @@ describe('SaveEngine (integration)', () => {
     expect(persisted?.deletedAt).toBeInstanceOf(Date)
     // 재로그인 차단 불변식: 삭제 캐릭터가 계정 목록에 복귀하지 않는다.
     expect(await charRepo.findByAccount('acc-1')).toEqual([])
+  })
+
+  it('CC#7 — markObjectDeleted→flush가 실 Mongo에서 objects 문서를 삭제한다', async () => {
+    // 삭제 어댑터가 실제로 deleteById에 닿는지를 실 Mongo 경계로 관통 검증한다. 스텁 spy만으로는
+    // 컬렉션 키 오타·id 전달 누락이 검출되지 않는다.
+    await objectRepo.insert(makeObject({ _id: 'obj-1' }))
+    const engine = makeEngine()
+    engine.start()
+
+    const markObjectDeleted = createMarkObjectDeleted((collection, id, snapshot) =>
+      engine.markDirty(collection, id, snapshot),
+    )
+    markObjectDeleted('obj-1')
+    await engine.shutdown()
+
+    expect(await objectRepo.findById('obj-1')).toBeNull()
+  })
+
+  it('CC#8 — OQ1 순서: characters 갱신이 objectDeletions 삭제보다 먼저 커밋된다(같은 flush)', async () => {
+    // 연마 성공 경로의 두 write가 한 flush에 실릴 때의 시도 순서를 실 Mongo로 고정한다.
+    // 순서가 뒤집히면 "책 소멸 + 주문 미학습"(유일한 실손실) 방향의 노출 창이 넓어진다.
+    await charRepo.insert(makeCharacter({ _id: 'char-1', schemaVersion: 5 }))
+    await objectRepo.insert(makeObject({ _id: 'obj-1' }))
+    // 실 repo 메서드를 통과시키면서(spyOn 기본 동작) 커밋 순서만 기록한다.
+    const committed: string[] = []
+    const updateSpy = vi.spyOn(charRepo, 'updateById')
+    const deleteSpy = vi.spyOn(objectRepo, 'deleteById')
+    updateSpy.mockImplementation(async (id, patch) => {
+      await CharacterRepository.prototype.updateById.call(charRepo, id, patch)
+      committed.push('characters')
+    })
+    deleteSpy.mockImplementation(async (id) => {
+      await ObjectRepository.prototype.deleteById.call(objectRepo, id)
+      committed.push('objectDeletions')
+    })
+
+    try {
+      const engine = makeEngine()
+      engine.start()
+
+      engine.markDirty('characters', 'char-1', { spells: new Array<number>(16).fill(1) })
+      createMarkObjectDeleted((collection, id, snapshot) =>
+        engine.markDirty(collection, id, snapshot),
+      )('obj-1')
+      await engine.shutdown()
+    } finally {
+      updateSpy.mockRestore()
+      deleteSpy.mockRestore()
+    }
+
+    // 시도·커밋 순서가 markDirty 호출 순서와 같다(단일 워커 FIFO 계약).
+    expect(committed).toEqual(['characters', 'objectDeletions'])
+    // 두 write 모두 실제로 반영됐다 — 순서 단언이 vacuous하지 않음을 보장하는 대조 앵커.
+    expect((await charRepo.findById('char-1'))?.spells[0]).toBe(1)
+    expect(await objectRepo.findById('obj-1')).toBeNull()
   })
 
   it('shutdown 후 남은 pending이 없다(drain 완료)', async () => {

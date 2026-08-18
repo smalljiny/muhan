@@ -3,6 +3,16 @@ import { freeTextPayloadSchema, CHAT_TEXT_MAX, CHAT_TARGET_MAX } from './payload
 import { characterSummarySchema, promptKindSchema, promptOptionSchema } from './session.js'
 
 /**
+ * 주문 지식 비트마스크의 바이트 폭 — `progress:studied`의 `spells` 길이와 `spellNo` 상한이 함께 파생한다.
+ *
+ * 값 자체는 `magic/spellStore.ts`의 `SPELL_STORE_BYTES`·`schema/character.ts`의 `spells`와 같지만
+ * **import하지 않고 여기 따로 선언한다** — 프로토콜은 도메인·영속 모듈과 별개이고, 와이어 계약은
+ * 도메인 상수가 움직였다고 따라 움직이면 안 된다(움직이면 version bump 대상이다). 대신 형상이
+ * 어긋나면 교차 테스트(events.test.ts)가 잡는다.
+ */
+const SPELL_MASK_BYTES = 16
+
+/**
  * 오류 코드 열거 — error 이벤트가 싣는 기계 판독용 사유의 단일 출처.
  *
  * handshake_required(핸드셰이크 전 명령 수신), unknown_type(미지 discriminator),
@@ -136,6 +146,32 @@ export const serverEventSchema = z.discriminatedUnion('type', [
     mpCurrent: z.int().min(0),
     stats: z.tuple([z.int(), z.int(), z.int(), z.int(), z.int()]),
     prestige: z.enum(['invincible', 'caretaker', 'none']),
+  }),
+  // 학습 성공 통지 — study()가 확정한 주문 습득 결과를 본인에게 1회 발화한다. progress:trained 선례대로
+  // correlationId를 싣지 않는다(상태 이벤트 — 거부만 error로 상관 키를 반향한다).
+  //
+  // spells는 characterSchema.spells와 **같은 형상을 따로 선언한 것**이다 — 프로토콜은 schema/(영속·도메인)와
+  // 별개 모듈이라 파생하지 않는다(transport-protocol.md). 그래서 형상 일치는 이 파일이 아니라 두 스키마를
+  // 함께 import하는 교차 테스트(events.test.ts)가 보장한다. 이 주석만으로는 아무것도 강제되지 않는다.
+  //
+  // consumedObjectId는 study가 바꾸는 **두 번째 상태**다. progress:trained가 세운 원칙("그 연산이 실제로
+  // 바꾸는 필드를 싣는다")을 따르면, 주문 비트만 싣고 사라진 비법서를 빼는 것은 자기 연산을 절반만
+  // 보고하는 것이다. 특정 클라 소비자를 전제하지 않는다 — 인벤 패널(E12/E13)이 어떤 모양으로 오든
+  // 이 근거는 유효하다. 다만 그 토픽이 인벤 변경 신호를 따로 세우면 경로가 둘이 되므로, 그때 어느 쪽을
+  // 정본으로 삼을지 정해야 한다.
+  //
+  // spellName은 표시용 주문 이름이다. spellNo로 카탈로그를 찾으면 대개 파생되지만(spellByNo), 카탈로그는
+  // 0~55만 담고 spellNo 값역은 [0,127]이라 카탈로그 밖 주문에서는 파생이 불가능하다. 서버가 실어 보낸다.
+  z.strictObject({
+    type: z.literal('progress:studied'),
+    // 상한은 16바이트 = 128비트에서 파생한다(비트 f = 주문번호 f). 손으로 계산한 127을 적지 않는다.
+    spellNo: z
+      .int()
+      .min(0)
+      .max(SPELL_MASK_BYTES * 8 - 1),
+    spellName: z.string().min(1),
+    spells: z.array(z.int().min(0).max(255)).length(SPELL_MASK_BYTES),
+    consumedObjectId: z.string().min(1),
   }),
 ])
 

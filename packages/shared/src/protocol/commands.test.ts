@@ -349,6 +349,89 @@ describe('clientCommandSchema (client→server 봉투)', () => {
     })
   })
 
+  describe('progress:study', () => {
+    it('target만 있으면 통과한다 (ordinal·id 생략)', () => {
+      const parsed = clientCommandSchema.safeParse({ type: 'progress:study', target: '비법서' })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'progress:study') {
+        expect(parsed.data.target).toBe('비법서')
+        expect(parsed.data.ordinal).toBeUndefined()
+        expect(parsed.data.id).toBeUndefined()
+      }
+    })
+
+    it('target + ordinal + id가 있으면 통과한다', () => {
+      const parsed = clientCommandSchema.safeParse({
+        type: 'progress:study',
+        target: '비법서',
+        ordinal: 2,
+        id: 's1',
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'progress:study') {
+        expect(parsed.data.ordinal).toBe(2)
+        expect(parsed.data.id).toBe('s1')
+      }
+    })
+
+    it('target이 누락되면 거부한다 (인자 필수 — progress:train과 다르다)', () => {
+      expect(clientCommandSchema.safeParse({ type: 'progress:study' }).success).toBe(false)
+    })
+
+    it('target이 빈 문자열이면 거부한다', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'progress:study', target: '' }).success,
+      ).toBe(false)
+    })
+
+    it('target이 상한(32)을 넘으면 거부한다 (world:move.direction 선례의 입력 위생)', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'progress:study', target: 'ㄱ'.repeat(33) }).success,
+      ).toBe(false)
+      // 상한 이내는 통과한다(경계값).
+      expect(
+        clientCommandSchema.safeParse({ type: 'progress:study', target: 'ㄱ'.repeat(32) }).success,
+      ).toBe(true)
+    })
+
+    // 서수 하한 1이 해소자의 ordinal 0 갈래를 라이브에서 도달 불가로 만든다
+    // (server/src/items/carriedTargetResolver.ts 헤더의 반대편 기록 참조).
+    it('ordinal 0을 거부한다 (하한 1 — 해소자 0 갈래 차단)', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'progress:study', target: '비법서', ordinal: 0 })
+          .success,
+      ).toBe(false)
+      // 하한 경계는 통과한다.
+      expect(
+        clientCommandSchema.safeParse({ type: 'progress:study', target: '비법서', ordinal: 1 })
+          .success,
+      ).toBe(true)
+    })
+
+    it('ordinal이 상한(99)을 넘거나 정수가 아니면 거부한다', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'progress:study', target: '비법서', ordinal: 100 })
+          .success,
+      ).toBe(false)
+      expect(
+        clientCommandSchema.safeParse({ type: 'progress:study', target: '비법서', ordinal: 1.5 })
+          .success,
+      ).toBe(false)
+      // 상한 경계는 통과한다.
+      expect(
+        clientCommandSchema.safeParse({ type: 'progress:study', target: '비법서', ordinal: 99 })
+          .success,
+      ).toBe(true)
+    })
+
+    it('알 수 없는 키를 거부한다 (strict)', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'progress:study', target: '비법서', extra: true })
+          .success,
+      ).toBe(false)
+    })
+  })
+
   it('event 전용 type(system:hello)을 거부한다', () => {
     expect(
       clientCommandSchema.safeParse({ type: 'system:hello', protocolVersion: 1 }).success,

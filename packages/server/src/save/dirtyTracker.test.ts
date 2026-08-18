@@ -19,6 +19,26 @@ describe('DirtyTracker', () => {
     expect(drained[0]).toEqual({ collection: 'characters', id: 'char-1', snapshot: { v: 3 } })
   })
 
+  /**
+   * 코얼레싱은 값만 갱신하고 **최초 삽입 위치를 보존한다**(Map 의미론). drain 순서가 곧 write 시도
+   * 순서이므로, 이 성질이 깨지면 "먼저 마킹한 키가 먼저 write된다"는 계약이 재-mark가 끼는 순간
+   * 조용히 무너진다 — `save/saveEngine.ts` 헤더의 순서 계약이 이것에 기대고 있고, study 핸들러의
+   * characters→objectDeletions 순서가 세션 종료의 characters 재-mark를 지나서도 살아남는 근거다.
+   *
+   * 이 사실을 여기서 고정하지 않으면 유일한 감시자가 실 소켓 e2e(가장 느리고 간접적인 층)가 된다.
+   */
+  it('재-mark는 값만 갱신하고 최초 삽입 위치를 유지한다(drain 순서 = write 시도 순서)', () => {
+    tracker.markDirty('characters', 'char-1', { v: 1 })
+    tracker.markDirty('objectDeletions', 'obj-9', { deleted: true })
+    // characters 재-mark — 최신 삽입이라고 뒤로 밀리면 안 된다.
+    tracker.markDirty('characters', 'char-1', { v: 2 })
+
+    const drained = tracker.drain()
+
+    expect(drained.map((e) => e.collection)).toEqual(['characters', 'objectDeletions'])
+    expect(drained[0]?.snapshot).toEqual({ v: 2 })
+  })
+
   it('서로 다른 키 M개 markDirty 후 drain하면 M개를 반환하고 size는 0이 된다', () => {
     tracker.markDirty('characters', 'char-1', { gold: 10 })
     tracker.markDirty('bankAccounts', 'char-1', { balance: 500 })

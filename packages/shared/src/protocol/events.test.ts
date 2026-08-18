@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { serverEventSchema, errorCodeSchema } from './events.js'
+import { characterSchema } from '../schema/character.js'
 
 describe('errorCodeSchema', () => {
   it.each(['handshake_required', 'unknown_type', 'bad_payload', 'internal'])(
@@ -331,18 +332,13 @@ describe('serverEventSchema (server→client 봉투)', () => {
     })
 
     // 7필드 전량이 required다 — 하나라도 빠지면 거부한다.
-    it.each([
-      'roomId',
-      'name',
-      'longDesc',
-      'exits',
-      'occupants',
-      'items',
-      'creatures',
-    ] as const)('%s가 없으면 거부한다 (required)', (key) => {
-      const { [key]: _omitted, ...without } = baseRoom
-      expect(serverEventSchema.safeParse(without).success).toBe(false)
-    })
+    it.each(['roomId', 'name', 'longDesc', 'exits', 'occupants', 'items', 'creatures'] as const)(
+      '%s가 없으면 거부한다 (required)',
+      (key) => {
+        const { [key]: _omitted, ...without } = baseRoom
+        expect(serverEventSchema.safeParse(without).success).toBe(false)
+      },
+    )
 
     // 표시 이름은 최소 1자다 — 빈 문자열은 "미해소 점유자" 신호라 와이어에 오르면 안 된다.
     // 식별자(characterId·instanceId)도 빈 문자열을 거부한다.
@@ -530,9 +526,9 @@ describe('serverEventSchema (server→client 봉투)', () => {
     })
 
     it('stats는 정확히 5-튜플이다 (4개·6개는 거부)', () => {
-      expect(
-        serverEventSchema.safeParse({ ...validTrained, stats: [1, 2, 3, 4] }).success,
-      ).toBe(false)
+      expect(serverEventSchema.safeParse({ ...validTrained, stats: [1, 2, 3, 4] }).success).toBe(
+        false,
+      )
       expect(
         serverEventSchema.safeParse({ ...validTrained, stats: [1, 2, 3, 4, 5, 6] }).success,
       ).toBe(false)
@@ -558,13 +554,101 @@ describe('serverEventSchema (server→client 봉투)', () => {
     })
 
     it('correlationId를 싣지 않는다 (상태 이벤트 — world:room 선례, strict)', () => {
-      expect(
-        serverEventSchema.safeParse({ ...validTrained, correlationId: 'c1' }).success,
-      ).toBe(false)
+      expect(serverEventSchema.safeParse({ ...validTrained, correlationId: 'c1' }).success).toBe(
+        false,
+      )
     })
 
     it('알 수 없는 키를 거부한다 (strict)', () => {
       expect(serverEventSchema.safeParse({ ...validTrained, extra: true }).success).toBe(false)
+    })
+  })
+
+  describe('progress:studied', () => {
+    /** 학습 성공 통지의 최소 유효 payload. 각 케이스가 필요한 필드만 덮어쓴다. */
+    const validStudied = {
+      type: 'progress:studied',
+      spellNo: 7,
+      spellName: '화염구',
+      // characterSchema.spells와 동일한 형상 — uint8[16] = 128비트 주문 지식 비트마스크.
+      spells: [128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      consumedObjectId: 'obj-1',
+    }
+
+    it('전 필드가 채워지면 통과한다', () => {
+      const parsed = serverEventSchema.safeParse(validStudied)
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'progress:studied') {
+        expect(parsed.data.spellNo).toBe(7)
+        expect(parsed.data.spellName).toBe('화염구')
+        expect(parsed.data.spells).toHaveLength(16)
+        expect(parsed.data.consumedObjectId).toBe('obj-1')
+      }
+    })
+
+    /** 첫 원소만 갈아끼운 길이 16 비트마스크 — 원소 값역 케이스의 입력. */
+    const withFirstSpellByte = (value: number): number[] => [
+      value,
+      ...new Array<number>(15).fill(0),
+    ]
+
+    // 거부 케이스는 형식이 같아 표로 묶는다(world:room·progress:trained 선례).
+    // spells 길이 16은 characterSchema.spells와의 드리프트 차단이고, spellNo 상한 127은
+    // 그 16바이트 = 128비트에서 나온다(비트 f = 주문번호 f).
+    it.each([
+      ['spells 길이 15', { spells: new Array<number>(15).fill(0) }],
+      ['spells 길이 17', { spells: new Array<number>(17).fill(0) }],
+      ['spells 원소 -1', { spells: withFirstSpellByte(-1) }],
+      ['spells 원소 256', { spells: withFirstSpellByte(256) }],
+      ['spells 원소 1.5(비정수)', { spells: withFirstSpellByte(1.5) }],
+      ['spellNo -1', { spellNo: -1 }],
+      ['spellNo 128', { spellNo: 128 }],
+      ['spellNo 1.5(비정수)', { spellNo: 1.5 }],
+      ['spellName 빈 문자열', { spellName: '' }],
+      ['consumedObjectId 빈 문자열', { consumedObjectId: '' }],
+      // 상태 이벤트라 상관 키를 싣지 않는다(progress:trained 선례) — strict가 막는다.
+      ['correlationId 동승', { correlationId: 'c1' }],
+      ['알 수 없는 키', { extra: true }],
+    ])('%s이면 거부한다', (_label, patch) => {
+      expect(serverEventSchema.safeParse({ ...validStudied, ...patch }).success).toBe(false)
+    })
+
+    it('경계값은 통과한다 (spellNo 0·127, spells 원소 0·255)', () => {
+      expect(serverEventSchema.safeParse({ ...validStudied, spellNo: 0 }).success).toBe(true)
+      expect(serverEventSchema.safeParse({ ...validStudied, spellNo: 127 }).success).toBe(true)
+      const zeroByte = { ...validStudied, spells: withFirstSpellByte(0) }
+      const maxByte = { ...validStudied, spells: withFirstSpellByte(255) }
+      expect(serverEventSchema.safeParse(zeroByte).success).toBe(true)
+      expect(serverEventSchema.safeParse(maxByte).success).toBe(true)
+    })
+
+    it('필수 필드가 빠지면 거부한다', () => {
+      const { consumedObjectId: _consumed, ...withoutConsumed } = validStudied
+      expect(serverEventSchema.safeParse(withoutConsumed).success).toBe(false)
+    })
+
+    /**
+     * 영속 스키마와의 형상 드리프트 차단 — 와이어 `spells`는 `characterSchema.spells`를 파생하지 않고
+     * 따로 선언하므로(프로토콜은 schema/와 별개 모듈), **두 스키마를 함께 검사하는 이 테스트만이**
+     * 형상 일치를 실제로 강제한다. 리터럴 16을 리터럴 16과 대조하는 테스트는 이 보장을 주지 못한다.
+     *
+     * 같은 입력 집합을 양쪽에 통과시켜 accept/reject가 일치하는지 본다 — 한쪽 폭이 바뀌면 갈라진다.
+     */
+    it('spells 형상이 characterSchema.spells와 일치한다 (드리프트 차단)', () => {
+      const spellsField = characterSchema.shape.spells
+      const cases: readonly number[][] = [
+        new Array<number>(15).fill(0),
+        new Array<number>(16).fill(0),
+        new Array<number>(17).fill(0),
+        withFirstSpellByte(255),
+        withFirstSpellByte(256),
+        withFirstSpellByte(-1),
+      ]
+
+      for (const spells of cases) {
+        const wireAccepts = serverEventSchema.safeParse({ ...validStudied, spells }).success
+        expect(wireAccepts).toBe(spellsField.safeParse(spells).success)
+      }
     })
   })
 

@@ -12,6 +12,7 @@ import { BankRepository } from './repo/bankRepository.js'
 import { WorldRepository } from './repo/worldRepository.js'
 import { SaveEngine } from './save/saveEngine.js'
 import type { SaveLogger } from './save/logger.js'
+import { loadObjectTemplates } from './items/objectTemplate.js'
 import { loadWorldGraph } from './world/worldGraph.js'
 import { WorldClock, type WorldTickLogger } from './world/worldClock.js'
 import { createGameTime } from './world/gameTime.js'
@@ -59,6 +60,9 @@ async function boot(): Promise<void> {
   // 정본 방 번들을 인메모리 그래프로 로드한다(부팅 스코프에 보관). 템플릿·리스폰은 E4 범위.
   const worldGraph = loadWorldGraph()
 
+  // 정본 object 템플릿 인덱스를 1회 로드한다(근거: LiveWorldWiringBundle.objectTemplates doc).
+  const objectTemplates = loadObjectTemplates()
+
   // 라이브 캐릭터 레지스트리·게임시각을 만든다 — 라이브 월드 의존 묶음(Story 7)의 원재료다. 레지스트리는
   // 단일 인스턴스로 진입 코어·이동·수명 어댑터·발화자 방 해소자가 공유한다(#3).
   const liveRegistry = createLiveCharacterRegistry()
@@ -72,7 +76,7 @@ async function boot(): Promise<void> {
   const saveLogger: SaveLogger = {
     error: (context, message) => app.log.error(context, message),
   }
-  const saveEngine = new SaveEngine(characters, bank, world, saveLogger)
+  const saveEngine = new SaveEngine(characters, bank, world, objects, saveLogger)
 
   // 1Hz 중앙 월드 틱. worldClock·worldRuntime를 buildApp 전에 조립한다(묶음 원재료). now 도메인 단일 출처로
   // worldClock.currentTick()을 훅 now에 주입한다 — onRoomEntered activate/respawn now가 creatureTick tickSec와
@@ -84,7 +88,11 @@ async function boot(): Promise<void> {
     error: (context, message) => app.log.error(context, message),
   }
   const worldClock = new WorldClock({ logger: worldTickLogger })
-  const worldRuntime = createWorldRuntime(worldGraph, { now: () => worldClock.currentTick() })
+  // 절대 틱 seam — **1회 생성해 공유**한다(liveWorldWiring #3 불변식의 boot 쪽 적용). worldRuntime 훅
+  // (활성화·리스폰)과 P-flag 합성이 같은 기준선을 봐야 만료 판정이 갈리지 않는데, 두 번 만들면 나중에
+  // 한쪽만 다른 시계로 갈아끼워도 타입·테스트가 잡지 못한다(둘 다 `() => number`다).
+  const now = (): number => worldClock.currentTick()
+  const worldRuntime = createWorldRuntime(worldGraph, { now })
 
   // 라이브 월드 의존 묶음 — buildApp/registerWebsocket이 진입·이동(world:move)·세션 수명·방 채널 어댑터를
   // 파생한다. markDirty는 SaveEngine 메서드라 this 바인딩을 유지하도록 화살표로 감싼다. currentHour·
@@ -95,8 +103,11 @@ async function boot(): Promise<void> {
     worldGraph,
     liveRegistry,
     characterRepo: characters,
+    objectTemplates,
     markDirty: (collection, id, snapshot) => saveEngine.markDirty(collection, id, snapshot),
     currentHour: gameTime.currentHour,
+    // P-flag 합성 시점 — worldRuntime 훅과 **같은 클로저**를 넘긴다(위 `now` 선언 참조).
+    now,
     onRoomEntered: worldRuntime.onRoomEntered,
     onRoomLeft: worldRuntime.onRoomLeft,
     logger: { warn: (context, message) => app.log.warn(context, message) },
@@ -116,6 +127,7 @@ async function boot(): Promise<void> {
     liveWorldDeps,
   })
   app.log.info(`world graph loaded: ${worldGraph.size} rooms`)
+  app.log.info(`object templates loaded: ${objectTemplates.size} objects`)
 
   // 저장 스케줄러·월드 틱을 기동한다(구성은 buildApp 전에 끝났고, 여기서는 슬롯 등록·start만 수행한다). 게임시각
   // 진행(150초마다 Time++)·출구 자동 재잠금(매 틱)·크리처 tick·스폰 슬롯을 등록한 뒤 start한다.

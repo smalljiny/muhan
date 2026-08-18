@@ -24,7 +24,7 @@ SaveEngine (부팅 조립, index.ts)
 ├── DirtyTracker         side registry: Map<"collection:id", {collection,id,snapshot}>
 ├── SaveScheduler        주입 clock, 주기 flush(기본 120s) → tracker drain → queue enqueue
 ├── AsyncWriteQueue      bounded, coalescing, 재시도 분류, in-flight evict seam, 비동기 워커
-├── dispatch adapter     collection별 write 매핑(characters·bankAccounts→updateById, roomStates→upsert)
+├── dispatch adapter     collection별 write 매핑(characters·bankAccounts→updateById, roomStates→upsert, objectDeletions→deleteById)
 └── shutdown()           scheduler 정지 → 강제 flush → queue drain
 
 BankTransactionService (bank/, index.ts와 독립 조립)
@@ -101,6 +101,13 @@ bounded 큐 + 비동기 워커가 Mongo write를 게임 틱과 분리해 drain�
 
 - `characters`·`bankAccounts` → `repo.updateById(id, patch)`. patch는 스냅샷에서 불변 `_id`를 벗겨 넘긴다(`stripImmutableId`) — 호출자가 전체 문서 스냅샷을 넘겨도 `$set`에 `_id`가 실려 Mongo immutable 에러가 나는 것을 막는다.
 - `roomStates` → `WorldRepository.upsert(snapshot)`. upsert가 `snapshot.roomId`로 키를 결정하므로 id 인자를 무시한다. 전체 `RoomState`를 요구하므로 `_id`를 벗기지 않는다.
+- `objectDeletions` → `ObjectRepository.deleteById(id)`(#120). 유일한 **삭제** 어댑터이며 스냅샷을 무시하고 id만 쓴다 — 지울 문서에 실을 상태가 없기 때문이다. 이미 없는 문서에 대한 `DocumentNotFoundError`는 **permanent 실패로 분류해 재시도 없이 폐기한다**(삭제는 멱등이라 재시도가 결과를 바꾸지 못한다). collection 이름을 `objects`가 아니라 `objectDeletions`로 둔 것은 의도적이다 — 같은 collection에 갱신 어댑터가 나중에 붙을 때 두 의미가 한 키를 다투지 않게 한다.
+
+**두 write의 순서 계약(#120)** — 비법서 연마는 `characters`(주문 학습)와 `objectDeletions`(책 소멸) 두 write를 낸다. 호출부는 `markCharacterDirty`를 **먼저**, `markObjectDeleted`를 **나중에** 호출한다. `DirtyTracker`가 삽입 순서를 보존하고 `AsyncWriteQueue`가 단일 워커 FIFO라 이 호출 순서가 곧 write 시도 순서다.
+
+재시도 소진 후 한쪽만 영속된 경우 **보상 트랜잭션을 만들지 않는다**. 손실 방향이 비대칭이기 때문이다 — 삭제만 실패하면(책 잔존 + 주문 학습됨) `setKnown`이 멱등이라 재연마가 같은 결과를 내고 그 재연마가 삭제를 다시 마킹해 스스로 수렴한다. `characters`만 실패하는 경우(책 소멸 + 주문 미학습)가 유일한 실손실이라, 순서를 고정해 이 방향의 노출 창을 줄인다. 두 write가 함께 실패하는 흔한 경우(Mongo 장애)는 자기 정합이다.
+
+이 결정을 #43(은행 트랜잭션)과 묶지 않는다 — 실패 모델이 다르다. 은행은 금전 이중 지불이라 자가 치유 수단이 없고, 여기는 재연마 멱등성이 치유를 제공한다. 다중 컬렉션 원자성의 일반 해법(Mongo 트랜잭션 세션 도입)이 필요해지면 #43이 소유한다. 다만 **순서 고정이 막는 것은 두 write 사이의 프로세스 사망뿐**이다 — `characters` write가 영구 실패해도 큐는 job별로 격리돼 계속 진행하므로 삭제는 그대로 실행된다.
 
 ### 은행/금화 트랜잭션 (BankTransactionService)
 

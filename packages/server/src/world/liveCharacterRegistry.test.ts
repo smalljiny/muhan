@@ -33,7 +33,7 @@ function makeCharacter(id: string): Character {
 }
 
 function makeLive(id: string): LiveCharacter {
-  return { character: makeCharacter(id) }
+  return { character: makeCharacter(id), inventory: [] }
 }
 
 describe('createLiveCharacterRegistry', () => {

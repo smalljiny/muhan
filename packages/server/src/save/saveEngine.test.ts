@@ -2,35 +2,42 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { CharacterRepository } from '../repo/characterRepository.js'
 import type { BankRepository } from '../repo/bankRepository.js'
 import type { WorldRepository } from '../repo/worldRepository.js'
+import type { ObjectRepository } from '../repo/objectRepository.js'
 import { DocumentNotFoundError } from '../repo/types.js'
 import { NOOP_LOGGER, type SaveLogger } from './logger.js'
 import { SaveEngine } from './saveEngine.js'
+import { createMarkObjectDeleted } from './markObjectDeleted.js'
 import { FakeClock } from '../util/clock.testutil.js'
 
 /** 백그라운드 워커가 진행하도록 남은 microtask/macrotask를 비운다. */
 const barrier = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
 
-/** repo 스파이 묶음 — SaveEngine에 주입할 최소 fake repo 3종. */
+/** repo 스파이 묶음 — SaveEngine에 주입할 최소 fake repo 4종. */
 interface Spies {
   charUpdate: ReturnType<typeof vi.fn>
   bankUpdate: ReturnType<typeof vi.fn>
   worldUpsert: ReturnType<typeof vi.fn>
+  objectDelete: ReturnType<typeof vi.fn>
   charRepo: CharacterRepository
   bankRepo: BankRepository
   worldRepo: WorldRepository
+  objectRepo: ObjectRepository
 }
 
 function makeSpies(): Spies {
   const charUpdate = vi.fn<(id: string, patch: unknown) => Promise<void>>(() => Promise.resolve())
   const bankUpdate = vi.fn<(id: string, patch: unknown) => Promise<void>>(() => Promise.resolve())
   const worldUpsert = vi.fn<(state: unknown) => Promise<void>>(() => Promise.resolve())
+  const objectDelete = vi.fn<(id: string) => Promise<void>>(() => Promise.resolve())
   return {
     charUpdate,
     bankUpdate,
     worldUpsert,
+    objectDelete,
     charRepo: { updateById: charUpdate } as unknown as CharacterRepository,
     bankRepo: { updateById: bankUpdate } as unknown as BankRepository,
     worldRepo: { upsert: worldUpsert } as unknown as WorldRepository,
+    objectRepo: { deleteById: objectDelete } as unknown as ObjectRepository,
   }
 }
 
@@ -38,7 +45,7 @@ function makeSpies(): Spies {
 const immediate = (): Promise<void> => Promise.resolve()
 
 function makeEngine(spies: Spies, clock: FakeClock, logger: SaveLogger = NOOP_LOGGER): SaveEngine {
-  return new SaveEngine(spies.charRepo, spies.bankRepo, spies.worldRepo, logger, {
+  return new SaveEngine(spies.charRepo, spies.bankRepo, spies.worldRepo, spies.objectRepo, logger, {
     clock,
     queueOptions: { sleep: immediate },
   })
@@ -67,11 +74,18 @@ describe('SaveEngine', () => {
     })
 
     it('생성자 옵션 intervalMs로 간격을 override한다', () => {
-      const engine = new SaveEngine(spies.charRepo, spies.bankRepo, spies.worldRepo, NOOP_LOGGER, {
-        clock,
-        intervalMs: 5_000,
-        queueOptions: { sleep: immediate },
-      })
+      const engine = new SaveEngine(
+        spies.charRepo,
+        spies.bankRepo,
+        spies.worldRepo,
+        spies.objectRepo,
+        NOOP_LOGGER,
+        {
+          clock,
+          intervalMs: 5_000,
+          queueOptions: { sleep: immediate },
+        },
+      )
       engine.start()
       expect(clock.lastMs).toBe(5_000)
     })
@@ -312,6 +326,148 @@ describe('SaveEngine', () => {
       engine.start()
       await expect(engine.shutdown()).resolves.toBeUndefined()
       expect(clock.activeCount).toBe(0)
+    })
+  })
+
+  describe('T4 — objectDeletions 삭제 어댑터', () => {
+    /** 삭제 mark의 툼스톤 스냅샷(markObjectDeleted seam이 싣는 형태와 동일). */
+    const tombstone = (id: string): unknown => ({ _id: id, deleted: true })
+
+    it('markDirty→주기 flush가 objectDeletions를 deleteById로 dispatch한다(id만, snapshot 미사용)', async () => {
+      const engine = makeEngine(spies, clock)
+      engine.markDirty('objectDeletions', 'obj-1', tombstone('obj-1'))
+
+      engine.start()
+      clock.tick()
+      await barrier()
+
+      expect(spies.objectDelete).toHaveBeenCalledTimes(1)
+      expect(spies.objectDelete).toHaveBeenCalledWith('obj-1')
+    })
+
+    it('markObjectDeleted seam→주기 flush 경로로 deleteById가 정확히 1회 호출된다', async () => {
+      // 실 seam을 통과시켜 프로덕션이 실제로 흘리는 형태(컬렉션 리터럴·툼스톤)로 배선을 관통 검증한다
+      // — 직접 markDirty에 넣으면 seam과 dispatch 키가 어긋나도 검출되지 않는다.
+      const engine = makeEngine(spies, clock)
+      const markObjectDeleted = createMarkObjectDeleted((collection, id, snapshot) =>
+        engine.markDirty(collection, id, snapshot),
+      )
+
+      markObjectDeleted('obj-1')
+      engine.start()
+      clock.tick()
+      await barrier()
+
+      expect(spies.objectDelete).toHaveBeenCalledTimes(1)
+      expect(spies.objectDelete).toHaveBeenCalledWith('obj-1')
+    })
+
+    it('같은 id를 여러 번 mark해도 coalescing으로 deleteById가 1회만 호출된다', async () => {
+      const engine = makeEngine(spies, clock)
+      engine.markDirty('objectDeletions', 'obj-1', tombstone('obj-1'))
+      engine.markDirty('objectDeletions', 'obj-1', tombstone('obj-1'))
+
+      engine.start()
+      clock.tick()
+      await barrier()
+
+      expect(spies.objectDelete).toHaveBeenCalledTimes(1)
+    })
+
+    it('OQ1 순서: characters mark 후 objectDeletions mark를 같은 flush로 drain하면 updateById가 deleteById보다 먼저 호출된다', async () => {
+      // 단일 워커 FIFO + DirtyTracker 삽입 순서 보존이라 markDirty 호출 순서가 곧 write 시도 순서다.
+      // 이 순서가 뒤집히면 "책은 지워졌는데 주문은 미학습" 방향의 실손실 노출 창이 넓어진다(OQ1).
+      const engine = makeEngine(spies, clock)
+      engine.markDirty('characters', 'char-1', { spells: [1] })
+      engine.markDirty('objectDeletions', 'obj-1', tombstone('obj-1'))
+
+      engine.start()
+      clock.tick()
+      await barrier()
+
+      expect(spies.charUpdate).toHaveBeenCalledTimes(1)
+      expect(spies.objectDelete).toHaveBeenCalledTimes(1)
+      const charOrder = spies.charUpdate.mock.invocationCallOrder[0] ?? 0
+      const deleteOrder = spies.objectDelete.mock.invocationCallOrder[0] ?? 0
+      expect(charOrder).toBeLessThan(deleteOrder)
+    })
+
+    it('OQ1 실패 격리: 삭제가 4회(1+3) transient 실패해도 characters write는 커밋되고 워커가 살아 다음 job을 처리한다', async () => {
+      spies.objectDelete.mockRejectedValue(new Error('네트워크 일시 실패'))
+      const logger = { error: vi.fn() }
+      const engine = makeEngine(spies, clock, logger)
+
+      engine.markDirty('characters', 'char-1', { spells: [1] })
+      engine.markDirty('objectDeletions', 'obj-1', tombstone('obj-1'))
+
+      engine.start()
+      clock.tick()
+      await barrier()
+
+      // characters write는 삭제 실패와 무관하게 커밋된다(같은 flush, 앞선 job).
+      expect(spies.charUpdate).toHaveBeenCalledWith('char-1', { spells: [1] })
+      // 총 시도 = 1(초기) + MAX_RETRIES(3).
+      expect(spies.objectDelete).toHaveBeenCalledTimes(4)
+      // 재시도 소진은 logger.error 1건으로 기록된다(무흔적 폐기 방지).
+      expect(logger.error).toHaveBeenCalledTimes(1)
+
+      // 워커 생존 — 이후 job이 정상 처리된다.
+      engine.markDirty('bankAccounts', 'bank-1', { gold: 5 })
+      clock.tick()
+      await barrier()
+      expect(spies.bankUpdate).toHaveBeenCalledWith('bank-1', { gold: 5 })
+    })
+
+    it('permanent 분류: 이미 삭제된 id의 DocumentNotFoundError는 재시도 없이 폐기되고 logger.error 1회를 남긴다', async () => {
+      spies.objectDelete.mockRejectedValue(new DocumentNotFoundError('objects', 'obj-1'))
+      const logger = { error: vi.fn() }
+      const engine = makeEngine(spies, clock, logger)
+
+      engine.markDirty('objectDeletions', 'obj-1', tombstone('obj-1'))
+      engine.start()
+      clock.tick()
+      await barrier()
+
+      expect(spies.objectDelete).toHaveBeenCalledTimes(1)
+      expect(logger.error).toHaveBeenCalledTimes(1)
+    })
+
+    it('saveNow(objectDeletions)는 evict-before-write 계약을 따른다(주기 flush가 같은 키를 재-dispatch하지 않는다)', async () => {
+      const engine = makeEngine(spies, clock)
+
+      engine.markDirty('objectDeletions', 'obj-1', tombstone('obj-1'))
+      await engine.saveNow('objectDeletions', 'obj-1', tombstone('obj-1'), 'study')
+
+      engine.start()
+      clock.tick()
+      await barrier()
+
+      expect(spies.objectDelete).toHaveBeenCalledTimes(1)
+      expect(spies.objectDelete).toHaveBeenCalledWith('obj-1')
+    })
+
+    it('saveNow(objectDeletions) 실패는 rethrow하고 reason을 실패 로그에 담는다(fail-loud)', async () => {
+      spies.objectDelete.mockRejectedValue(new DocumentNotFoundError('objects', 'obj-1'))
+      const logger = { error: vi.fn() }
+      const engine = makeEngine(spies, clock, logger)
+
+      await expect(
+        engine.saveNow('objectDeletions', 'obj-1', tombstone('obj-1'), 'study'),
+      ).rejects.toThrow(DocumentNotFoundError)
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ collection: 'objectDeletions', id: 'obj-1', reason: 'study' }),
+        expect.any(String),
+      )
+    })
+
+    it('shutdown이 잔여 objectDeletions mark를 drain해 삭제를 완료한다', async () => {
+      const engine = makeEngine(spies, clock)
+      engine.start()
+      engine.markDirty('objectDeletions', 'obj-7', tombstone('obj-7'))
+
+      await engine.shutdown()
+
+      expect(spies.objectDelete).toHaveBeenCalledWith('obj-7')
     })
   })
 })

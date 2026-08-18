@@ -17,6 +17,8 @@
 | `taxonomy.ts` | object 타입 상수 0~14·`isWeapon(type)`·wearflag 슬롯 상수(BODY=1…WIELD=20, MAXWEAR=20)·`routeWearCommand`·`resolveSlot` |
 | `flags.ts` | object 플래그 비트 상수·게이트 predicate(성별·정렬·직업·크기·저주·결혼·귀속·enchant) + 종족/성별 상수 |
 | `objectTemplate.ts` | `buildObjectTemplateIndex(raw)` → `ReadonlyMap<objnum, ObjectTemplate>`·`loadObjectTemplates(worldRoot?)` 부팅 seam |
+| `objectPairing.ts` | `pairObject`·`pairObjects` — 인스턴스↔템플릿 결합(`EquippedPair` 생성의 단일 출처) |
+| `carriedTargetResolver.ts` | `resolveCarriedObject` — 소지품 스코프 이름·서수 대상 해소(오라클 `find_obj` 2단 스캔) |
 | `equipStats.ts` | `projectEquipStats` — 착용 객체 → `EffectiveStatContext` 기여 필드 compute-on-read 투영 |
 | `wear.ts` | `wearGate`(방어구)·`readyGate`(무기 장착)·`holdGate`(쥠) 다층 게이트 순수 함수 |
 | `enchant.ts` | `randEnchant(rng)` 확률 순수 함수(rng 주입) |
@@ -25,7 +27,7 @@
 
 ### ObjectTemplate (런타임 타입)
 
-`ObjectTemplate`은 objectSchema(인스턴스 문서)와 별개인 런타임 조회 타입이다. `objnum`(=raw `id`)·`name`·`type`·`value`·`weight`·`adjustment`·`shotsmax`·`ndice`·`sdice`·`pdice`·`armor`·`wearflag`·`magicpower`·`magicrealm`·`special`·`questnum`·`flags`를 담는다. 런타임 가변값 `shotscur`와 표시용 `description`은 제외한다. `world/spawn.ts`의 `SpawnTemplateIndex` 관례(필요 필드만 복사해 raw 번들과 분리, `ReadonlyMap` 반환, `loadWorldFile` seam)를 미러링한다.
+`ObjectTemplate`은 objectSchema(인스턴스 문서)와 별개인 런타임 조회 타입이다. `objnum`(=raw `id`)·`name`·`keys`·`type`·`value`·`weight`·`adjustment`·`shotsmax`·`ndice`·`sdice`·`pdice`·`armor`·`wearflag`·`magicpower`·`magicrealm`·`special`·`questnum`·`flags`를 담는다. `keys`는 별칭 배열(예 `["단도","도","단"]`)로, 오라클 `EQUAL`(`mtype.h:579`)이 `name` + `key[0..2]` 4필드를 검사하므로 이름 해소자가 성립하려면 인덱스가 별칭을 실어야 한다. 런타임 가변값 `shotscur`와 표시용 `description`은 제외한다. `world/spawn.ts`의 `SpawnTemplateIndex` 관례(필요 필드만 복사해 raw 번들과 분리, `ReadonlyMap` 반환, `loadWorldFile` seam)를 미러링한다.
 
 `buildObjectTemplateIndex`는 `type > 14`(게시판 엔트리 type 100~120, 18개)를 인덱스에서 제외한다. `data/world/objects.json` 709 엔트리 → 정본 691 엔트리. `flags`는 hex 문자열 비트필드(예 `"0800000000000000"`)로 그대로 보존한다.
 
@@ -79,10 +81,24 @@ flags(hex string) 위에서 `world/hexFlags.js`의 `F_ISSET`으로 비트를 판
 
 `shotscur` 감소·객체 파괴는 이 seam이 수행하지 않는다 — 오라클 drink/readscroll/zap은 spell fn 성공(`if(n)`)일 때만 `shotscur--`하는데(magic1.c:647·476·802), 순수 seam은 핸들러를 실행하지 못해 성공을 관찰할 수 없으므로 감소를 결정할 수 없다. charge 감소·파괴는 effect 성공을 관찰하는 배선 계층 소관이며, 이 seam은 입력 인스턴스를 변형하지 않는다.
 
+### 인스턴스↔템플릿 결합 (`objectPairing.ts`)
+
+인스턴스는 **런타임 가변값만**(`shotscur`·`slot`·`equipped`·`owner`) 담고 불변 스탯·이름·별칭은 템플릿이 소유한다. `pairObject`(단수)·`pairObjects`(복수)가 `objnum`으로 둘을 묶어 `EquippedPair`를 만드는 단일 출처이며, **템플릿 값을 인스턴스에 복사하지 않는다** — 복사하면 같은 값의 출처가 둘로 갈리고 템플릿 데이터가 바뀔 때 저장된 인스턴스가 조용히 stale이 된다. 두 함수 모두 입력의 동일 참조를 그대로 실어 새 쌍 객체만 만든다.
+
+미해소 정책이 둘로 갈린다: 단수형은 `undefined`를 돌려 호출자가 의미를 정하고, 복수형은 **조용히 드롭한다**. 따라서 복수형 경로에서 "템플릿 미해소"는 후보 부재와 구분되지 않는다. 착용 여부 필터는 여기서 하지 않는다 — 결합은 착용·미착용을 구분하지 않는 순수 조회이고 필터는 소비자 책임이다.
+
+### 소지품 대상 해소 (`carriedTargetResolver.ts`)
+
+`resolveCarriedObject(inventory, index, target, observerFlags, ordinal?)`가 오라클 `find_obj`의 **2단 스캔**을 이식한다: 1단은 미착용 소지품, 2단은 착용품(`ready[]` 슬롯 순서)이다. 매칭은 `name` + `keys` 별칭 대조([`name-matching.md`](name-matching.md))이고, 가시성 게이트는 관찰자가 `PDINVI`(투명 감지)를 들면 무조건 통과, 아니면 아이템의 `OINVIS`가 없어야 한다.
+
+서수 기준은 오라클과 divergence가 있다(인벤 순서 근거는 [`live-world-foundation.md`](live-world-foundation.md), 추적 [#142](https://github.com/smalljiny/muhan/issues/142)). 오라클 파서가 서수 미지정 시 `val[1]=1`을 넣으므로(`command1.c:505-580`) 와이어 스키마도 `ordinal`을 `min 1`로 강제한다 — `ordinal === 0` 갈래는 라이브 경로에서 도달 불가하지만 오라클 조건(`!obj_ptr || !val`)을 문자 그대로 이식해 단위 테스트가 그 동작을 고정한다.
+
+2단 스캔 자격은 `equipped === true`이면서 `0 <= slot < MAXWEAR`인 것으로 제한한다(오라클 루프가 그 밖의 번호에 도달할 수 없다). `equipped === true`인데 slot이 무효인 인스턴스는 1단에서도 빠져 **이름으로 지목 불가**가 되며, 이 드롭은 현재 무로그다([#143](https://github.com/smalljiny/muhan/issues/143)).
+
 ## 제약사항
 
 - **스키마 무변경**: characterSchema·objectSchema 무변경, schemaVersion bump 없음. 슬롯(`slot`)·`equipped`는 objectSchema 기존 필드를 사용하고, 인챈트·소각·착용상태 per-instance 영속 필드는 인스턴스화 토픽 소관이다.
-- **배선 유예(Non-goal)**: object 물질화·인벤토리 로딩·룸 배치, WS 명령("입다"/"무장"/"마시다"/"벗다") 파싱·라우팅, 착용 outcome(equipped/burned/bounced)의 실 인벤 이동·객체 파괴, 소비 shotscur 감소(effect 성공 결합), 탈착(remove) 시점 저주 enforcement, rand_enchant per-instance 적용·저장, DB write-back.
+- **배선 유예(Non-goal)** — #120이 일부를 해소했다. **배선됨**: 인벤토리 로딩(세션 진입 시 적재), 템플릿 인덱스 부팅 조립, 소지품 이름 해소, `progress:study`의 객체 파괴(write-behind 삭제). **여전히 유예**: object 물질화·룸 배치, 착용/소비 WS 명령("입다"/"무장"/"마시다"/"벗다") 파싱·라우팅, 착용 outcome(equipped/burned/bounced)의 실 인벤 이동, 소비 shotscur 감소(effect 성공 결합), 탈착(remove) 시점 저주 enforcement, rand_enchant per-instance 적용·저장. 비-삭제 인벤 변경의 write-back 경로는 아직 없다.
 - **재구현 금지 경계**: stats-core는 소비만(computeAc/computeThaco 재구현 금지), magic은 seam 호출만(spell effect 본체 재구현 금지 — magic #84 소유), enchant는 rng 주입(Math.random 직접 호출 금지).
 - **E6 유예 필드 → 명시 입력**: 결혼 상태·수치 정렬·무기 숙련(proficiency[5])·ONEWEV 소유자 일치는 순수 함수의 명시 입력 인자로 받고, Character→입력 어댑터 배선은 유예한다.
 - **경제·은행 범위 밖**: 금화·상점·전당포·수리·소지한도는 [economy.md](economy.md), 은행 물품 보관은 [bank-items.md](bank-items.md)에서 이식(#87). 거래(trade 물물교환)는 유예.

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { type Character } from 'shared'
+import { type Character, type ObjectInstance } from 'shared'
 import type { RoomNode } from 'shared'
 import { createLiveCharacterRegistry, type LiveCharacter } from './liveCharacterRegistry.js'
 import {
@@ -37,6 +37,21 @@ function makeCharacter(id: string, currentRoom = 1): Character {
   }
 }
 
+/** 테스트용 유효 ObjectInstance 팩토리 — objectSchema shape를 정확히 만족한다. */
+function makeObject(id: string): ObjectInstance {
+  return {
+    _id: id,
+    objnum: 100,
+    type: 3,
+    owner: { type: 'character', id: 'char-1' },
+    slot: null,
+    equipped: false,
+    value: 50,
+    shotscur: 0,
+    schemaVersion: 1,
+  }
+}
+
 function makeRoom(roomId: number): RoomNode {
   return {
     roomId,
@@ -57,6 +72,7 @@ function makeRoom(roomId: number): RoomNode {
 type Harness = {
   deps: LiveCharacterEntryDeps
   findById: ReturnType<typeof vi.fn>
+  hydrateInventory: ReturnType<typeof vi.fn>
   onRoomEntered: ReturnType<typeof vi.fn>
   onRoomLeft: ReturnType<typeof vi.fn>
   warn: ReturnType<typeof vi.fn>
@@ -64,26 +80,28 @@ type Harness = {
   registry: ReturnType<typeof createLiveCharacterRegistry>
 }
 
-function makeHarness(character: Character | null): Harness {
+function makeHarness(character: Character | null, inventory: ObjectInstance[] = []): Harness {
   const registry = createLiveCharacterRegistry()
   const rooms = new Map<number, RoomNode>()
   rooms.set(DEFAULT_START_ROOM, makeRoom(DEFAULT_START_ROOM))
   if (character !== null) rooms.set(character.currentRoom, makeRoom(character.currentRoom))
 
   const findById = vi.fn((_id: string) => Promise.resolve(character))
+  // 조회마다 새 배열을 돌려준다(저장소 계약 미러) — 참조 동일성이 아니라 내용·순서로 단언하게 만든다.
+  const hydrateInventory = vi.fn((_id: string) => Promise.resolve([...inventory]))
   const onRoomEntered = vi.fn()
   const onRoomLeft = vi.fn()
   const warn = vi.fn()
 
   const deps: LiveCharacterEntryDeps = {
-    characterRepo: { findById },
+    characterRepo: { findById, hydrateInventory },
     liveRegistry: registry,
     resolveRoom: (roomId: number) => rooms.get(roomId),
     onRoomEntered,
     onRoomLeft,
     logger: { warn },
   }
-  return { deps, findById, onRoomEntered, onRoomLeft, warn, rooms, registry }
+  return { deps, findById, hydrateInventory, onRoomEntered, onRoomLeft, warn, rooms, registry }
 }
 
 describe('createLiveCharacterEntry', () => {
@@ -97,7 +115,7 @@ describe('createLiveCharacterEntry', () => {
     it('사전 등록된 엔트리는 findById 호출 없이 동일 참조를 반환한다(D-G 1)', async () => {
       const character = makeCharacter('char-1')
       h = makeHarness(character)
-      const live: LiveCharacter = { character }
+      const live: LiveCharacter = { character, inventory: [] }
       h.registry.register(live)
 
       const entry = createLiveCharacterEntry(h.deps)
@@ -144,6 +162,81 @@ describe('createLiveCharacterEntry', () => {
     })
   })
 
+  /**
+   * 인벤토리 적재(T3.3) — hydrate의 세 반환 지점 각각에 대한 계약.
+   *
+   * 정상 경로·orphan 폴백은 `hydrateInventory` 결과를 싣고, 조기 반환(등록 엔트리)은 기존 인벤을
+   * 보존하며 저장소를 다시 치지 않는다. 후자를 재로드하면 재접속마다 인벤이 디스크 스냅샷으로
+   * 되돌아가 미영속 라이브 변경(연마로 소모된 비법서 등)이 되살아난다.
+   */
+  describe('hydrate 인벤토리 적재', () => {
+    it('정상 경로는 hydrateInventory 결과를 순서대로 싣는다', async () => {
+      const character = makeCharacter('char-1', 5)
+      h = makeHarness(character, [makeObject('obj-a'), makeObject('obj-b')])
+
+      const entry = createLiveCharacterEntry(h.deps)
+      const result = await entry.hydrate('char-1')
+
+      expect(result.inventory.map((o) => o._id)).toEqual(['obj-a', 'obj-b'])
+      expect(h.hydrateInventory).toHaveBeenCalledWith('char-1')
+    })
+
+    it('orphan 폴백 경로도 인벤토리를 싣는다(방 교정이 인벤 적재를 건너뛰지 않는다)', async () => {
+      const character = makeCharacter('char-1', 9999)
+      h = makeHarness(character, [makeObject('obj-a')])
+      h.rooms.delete(9999)
+
+      const entry = createLiveCharacterEntry(h.deps)
+      const result = await entry.hydrate('char-1')
+
+      expect(result.character.currentRoom).toBe(DEFAULT_START_ROOM)
+      expect(result.inventory.map((o) => o._id)).toEqual(['obj-a'])
+    })
+
+    it('조기 반환(등록 엔트리)은 기존 인벤을 유지하고 hydrateInventory를 호출하지 않는다', async () => {
+      const character = makeCharacter('char-1')
+      // 저장소가 다른 내용을 갖고 있어도 조기 반환은 그것을 읽지 않아야 한다(비-vacuous).
+      h = makeHarness(character, [makeObject('obj-disk')])
+      const liveInventory = [makeObject('obj-live')]
+      h.registry.register({ character, inventory: liveInventory })
+
+      const entry = createLiveCharacterEntry(h.deps)
+      const result = await entry.hydrate('char-1')
+
+      expect(h.hydrateInventory).toHaveBeenCalledTimes(0)
+      expect(result.inventory).toBe(liveInventory)
+    })
+
+    it('1회 hydrate에서 hydrateInventory 호출은 정확히 1회다(OQ3 왕복 상한 — N+1 차단)', async () => {
+      const character = makeCharacter('char-1', 5)
+      h = makeHarness(character, [makeObject('obj-a'), makeObject('obj-b'), makeObject('obj-c')])
+
+      const entry = createLiveCharacterEntry(h.deps)
+      await entry.hydrate('char-1')
+
+      expect(h.hydrateInventory).toHaveBeenCalledTimes(1)
+    })
+
+    it('재접속(D-G 1)은 인벤을 두 벌 만들지 않고 기존 참조를 유지한다', async () => {
+      const character = makeCharacter('char-1', 5)
+      h = makeHarness(character, [makeObject('obj-a')])
+      const entry = createLiveCharacterEntry(h.deps)
+
+      const first = await entry.hydrate('char-1')
+      entry.place(first) // 레지스트리 등록 — 이후 hydrate는 조기 반환 경로로 들어간다
+      const second = await entry.hydrate('char-1')
+
+      expect(second).toBe(first)
+      expect(second.inventory).toBe(first.inventory)
+      expect(second.inventory).toHaveLength(1)
+      expect(h.hydrateInventory).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  // 주석 문자열(오라클 근거·추적 임계·이슈 번호)을 readFileSync로 단언하는 테스트는 두지 않는다 —
+  // 동작이 아니라 산문을 검증해 표기를 다듬으면 깨지고, 반대로 주석만 남고 동작이 사라져도 통과한다.
+  // divergence 추적은 CLAUDE.md '알려진 divergence' 절과 이슈 #142가 소유한다.
+
   describe('place', () => {
     it('occupants에 characterId를 추가하고 onRoomEntered를 add 이후에 호출한다(순서 계약)', () => {
       const character = makeCharacter('char-1', 5)
@@ -157,7 +250,7 @@ describe('createLiveCharacterEntry', () => {
         presentAtHook = room.occupants.has('char-1')
       })
 
-      entry.place({ character })
+      entry.place({ character, inventory: [] })
 
       expect(room.occupants.has('char-1')).toBe(true)
       expect(h.onRoomEntered).toHaveBeenCalledTimes(1)
@@ -171,8 +264,8 @@ describe('createLiveCharacterEntry', () => {
       const room = h.rooms.get(5)!
       const entry = createLiveCharacterEntry(h.deps)
 
-      entry.place({ character })
-      entry.place({ character })
+      entry.place({ character, inventory: [] })
+      entry.place({ character, inventory: [] })
 
       expect(room.occupants.size).toBe(1)
       expect(h.onRoomEntered).toHaveBeenCalledTimes(1)
@@ -185,7 +278,7 @@ describe('createLiveCharacterEntry', () => {
       h = makeHarness(character)
       const room = h.rooms.get(5)!
       const entry = createLiveCharacterEntry(h.deps)
-      entry.place({ character })
+      entry.place({ character, inventory: [] })
 
       // onRoomLeft 호출 시점에 occupants가 이미 비어 있음을 관측한다.
       let occupantsAtHook = -1

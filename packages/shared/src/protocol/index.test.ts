@@ -25,7 +25,7 @@ describe('shared 루트 배럴 re-export', () => {
     expect(characterSummarySchema).toBeDefined()
     expect(promptKindSchema).toBeDefined()
     expect(promptOptionSchema).toBeDefined()
-    expect(PROTOCOL_VERSION).toBe(4)
+    expect(PROTOCOL_VERSION).toBe(5)
   })
 
   it('세션 command·event variant를 루트 배럴로 파싱한다', () => {
