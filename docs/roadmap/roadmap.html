@@ -530,10 +530,10 @@
 
 <div class="wrap">
   <header>
-    <p class="eyebrow">muhan · github issues → roadmap · 2026-08-11 · <strong>develop 6f73463</strong></p>
+    <p class="eyebrow">muhan · github issues → roadmap · 2026-08-18 · <strong>develop bdcd2a2</strong></p>
     <h1>지금 어디에 있나 — 무한 포팅 진행 궤도</h1>
     <p class="lede">1991–93년 Mordor 파생 한국어 MUD "무한"을 Node.js + 웹으로 재구현하는 프로젝트입니다. 에픽 E1~E13과 토픽·부채 이슈에서 파생한 현황입니다. <strong>규칙 엔진의 순수 레이어(전투·마법·진행·스탯·아이템·경제)는 전부 닫혔고, 지금 남은 것은 그 규칙을 살아 있는 세션에 잇는 "배선"입니다.</strong> 크리티컬 패스는 여전히 라이브 명령 배선 체인이지만, <strong>그 헤드였던 <a href="https://github.com/smalljiny/muhan/issues/118">#118</a>이 08-10에 닫히면서 체인 전체가 열렸습니다</strong> — 이제 병목은 선행 이슈가 아니라 각 토픽 내부의 설계 결정입니다.</p>
-    <p class="lede" style="margin-top:8px"><strong>08-11 기준</strong> — 07-30 이후 세 항목이 랜딩했습니다. <a href="https://github.com/smalljiny/muhan/issues/60">#60</a> E11 월드 뷰(PR #128, <code>world:room</code> 7필드 확장 + <code>PROTOCOL_VERSION</code> 3→<strong>4</strong>) · <a href="https://github.com/smalljiny/muhan/issues/126">#126</a> turbo 해시 거짓 통과(PR #136) · <a href="https://github.com/smalljiny/muhan/issues/118">#118</a> 오라클 이름 매처(PR #140 — <code>matchTarget</code>·<code>matchSpellName</code>·<code>spellByName</code>·<code>roomTargetResolvers</code>). <strong>열린 PR 0 · 작업 트리 clean</strong>. 남은 CP1 게이트는 <a href="https://github.com/smalljiny/muhan/issues/116">#116</a>·<a href="https://github.com/smalljiny/muhan/issues/124">#124</a>·<a href="https://github.com/smalljiny/muhan/issues/138">#138</a> 셋이고, E11이 부채 6건(<a href="https://github.com/smalljiny/muhan/issues/129">#129</a>~<a href="https://github.com/smalljiny/muhan/issues/134">#134</a>)을 파생시켰습니다.</p>
+    <p class="lede" style="margin-top:8px"><strong>08-18 기준</strong> — 08-11 이후 한 항목이 랜딩했습니다. <a href="https://github.com/smalljiny/muhan/issues/120">#120</a> 아이템 인스턴스 라이브화 + <code>study</code> 배선(PR #145) — 인벤토리가 세션 진입 시 라이브 상태에 올라가고 <code>progress:study</code>가 순수 규칙 <code>study()</code>에 닿습니다. <code>PROTOCOL_VERSION</code> 4→<strong>5</strong>(<code>ClientCommand</code> 9종 · <code>ServerEvent</code> 12종). <strong>열린 PR 0 · 작업 트리 clean</strong>. 남은 CP1 게이트는 <strong>여전히</strong> <a href="https://github.com/smalljiny/muhan/issues/116">#116</a>·<a href="https://github.com/smalljiny/muhan/issues/124">#124</a>·<a href="https://github.com/smalljiny/muhan/issues/138">#138</a> 셋으로 변화가 없고, 이번 토픽이 부채 2건(<a href="https://github.com/smalljiny/muhan/issues/142">#142</a> 인벤 서수 divergence · <a href="https://github.com/smalljiny/muhan/issues/143">#143</a> 무로그 삼킴)을, 08-14에 <a href="https://github.com/smalljiny/muhan/issues/144">#144</a>(pnpm audit HIGH 12건)가 추가됐습니다.</p>
     <p class="lede" style="margin-top:8px"><strong>릴리스 계획</strong> — <strong>CP1이 첫 릴리스 지점</strong>입니다. 통과 시 릴리스를 내고 <code>develop</code>을 <code>main</code>에 병합합니다. 그때까지 원격에는 <code>develop</code> 하나만 존재하는 것이 정상입니다.</p>
 
     <!-- ══ HERO 다이어그램 ══ -->
@@ -546,7 +546,7 @@
 
       <div class="rail-box">
         <div class="rail" aria-hidden="true"></div>
-        <div class="rail-fill" style="--fill: 53%; --fill-v: 55%;" aria-hidden="true"></div>
+        <div class="rail-fill" style="--fill: 55%; --fill-v: 57%;" aria-hidden="true"></div>
 
         <div class="now-flag" style="--now-x: 50%;" aria-hidden="true">
           <span class="now-pill">지금 여기</span>
@@ -603,11 +603,11 @@
             <div class="st-lbl">걸어볼 수 있는 무한</div>
           </div>
 
-          <div class="st todo">
-            <div class="node">0/8</div>
+          <div class="st wip">
+            <div class="node">1/8</div>
             <div class="st-id">M6</div>
             <div class="st-lbl">싸우기</div>
-            <div class="st-bar"><i style="width:0%"></i></div>
+            <div class="st-bar"><i style="width:13%"></i></div>
           </div>
 
           <div class="st gate locked">
@@ -645,8 +645,8 @@
     <div class="status">
       <div class="s-card past">
         <div class="s-k">방금 끝낸 것</div>
-        <div class="s-t">체인 헤드 해소 + 월드 뷰</div>
-        <p class="s-d"><a href="https://github.com/smalljiny/muhan/issues/118">#118</a> 오라클 이름 매처(PR #140) — <strong>#119·#120·#121·#122 4건의 유일한 blocking이 사라졌습니다</strong>. 함께 <a href="https://github.com/smalljiny/muhan/issues/60">#60</a> E11 월드 뷰(PR #128, <code>PROTOCOL_VERSION</code> 4)와 <a href="https://github.com/smalljiny/muhan/issues/126">#126</a> 검증 거짓 통과(PR #136)가 랜딩했습니다.</p>
+        <div class="s-t">아이템 라이브화 + study 배선</div>
+        <p class="s-d"><a href="https://github.com/smalljiny/muhan/issues/120">#120</a> 아이템 인스턴스 라이브화 + <code>study</code> 배선(PR #145) — <strong>M6 배선 체인의 첫 항목이 닫혔습니다</strong>. 아이템 기반 계층(템플릿 인덱스 boot 조립 · 인벤 hydrate · 인스턴스↔템플릿 결합 · <code>objects</code> 삭제 write-behind)이 함께 서면서 <code>read</code>/<code>drink</code>/<code>zap</code>과 <a href="https://github.com/smalljiny/muhan/issues/121">#121</a>이 쓸 선행 계층이 생겼습니다.</p>
       </div>
       <div class="s-card here">
         <div class="s-k">지금 해야 할 것 — CP1 잔여</div>
@@ -661,7 +661,7 @@
         <div class="s-k">열린 트랙 — 이제 막힌 것 없음</div>
         <div class="s-t">배선 체인 3건 동시 착수 가능</div>
         <ul class="s-list">
-          <li>#119 teach · #120 study · <strong>#121 attack</strong> — 선행 0</li>
+          <li>#119 teach · <strong>#121 attack</strong> — 선행 0 (#120 study ✅)</li>
           <li>#122 cast는 #121만 대기 (체인 종단)</li>
           <li>E11 파생 부채 6건 #129~#134</li>
         </ul>
@@ -926,14 +926,14 @@
           <span class="gate open">HIGH #138 깨끗한 DB e2e 통과 불가</span>
           <span class="gate open">릴리스 + <code>develop</code> → <code>main</code> 병합</span>
         </div>
-        <p class="cp-foot"><b>게이트 5개 중 3개가 닫혔고, 남은 셋은 서로 독립입니다.</b> #60이 랜딩하면서 방을 읽고 출구 버튼으로 이동하는 경로가 실제로 열렸습니다 — CP1의 "걸어 다니는 것"은 이제 관측 가능합니다. 남은 것은 <strong>같은 방 사람의 입·퇴장이 보이지 않는 것</strong>(#116)과 두 개의 조용한 결함입니다. <strong>#124를 닫지 않고 이 관문을 통과하면 안 됩니다</strong> — 진행도를 먹는 세계에 사람을 초대할 수는 없고, <code>train</code>이 이미 라이브라 노출 창이 열려 있습니다. <strong>#138은 성격이 다릅니다</strong> — 코드 결함이 아니라 시드 데이터 결손이지만, 첫 릴리스에서 남이 README를 따라 띄우는 순간 바로 부딪히는 지점이라 CP1 안에 둡니다.<br><br><b>브랜치 상태 —</b> 원격에는 현재 <code>develop</code> 하나만 있고 기본 브랜치도 <code>develop</code>입니다. <code>main</code>은 <strong>이 관문에서 처음 생깁니다</strong>. <code>.harness/rules/git-workflow.md</code>의 <code>main</code>=production 전략은 문서가 맞고 원격이 아직 따라오지 않은 상태입니다.</p>
+        <p class="cp-foot"><b>게이트 9개 중 6개가 닫혔고, 남은 셋은 서로 독립입니다.</b> #60이 랜딩하면서 방을 읽고 출구 버튼으로 이동하는 경로가 실제로 열렸습니다 — CP1의 "걸어 다니는 것"은 이제 관측 가능합니다. <strong>08-11 이후 CP1 게이트에는 변화가 없습니다</strong> — #120은 M6 항목이라 이 관문을 움직이지 않습니다. 남은 것은 <strong>같은 방 사람의 입·퇴장이 보이지 않는 것</strong>(#116)과 두 개의 조용한 결함입니다. <strong>#124를 닫지 않고 이 관문을 통과하면 안 됩니다</strong> — 진행도를 먹는 세계에 사람을 초대할 수는 없고, <code>train</code>이 이미 라이브라 노출 창이 열려 있습니다. <strong>#138은 성격이 다릅니다</strong> — 코드 결함이 아니라 시드 데이터 결손이지만, 첫 릴리스에서 남이 README를 따라 띄우는 순간 바로 부딪히는 지점이라 CP1 안에 둡니다.<br><br><b>브랜치 상태 —</b> 원격에는 현재 <code>develop</code> 하나만 있고 기본 브랜치도 <code>develop</code>입니다. <code>main</code>은 <strong>이 관문에서 처음 생깁니다</strong>. <code>.harness/rules/git-workflow.md</code>의 <code>main</code>=production 전략은 문서가 맞고 원격이 아직 따라오지 않은 상태입니다.</p>
       </div>
 
       <div class="ms">
         <div class="ms-head">
           <span class="ms-id">M6</span>
           <span class="ms-name">싸우기 — 전투 · 마법 · 아이템 라이브화</span>
-          <span class="ms-meta">0/8 · <strong>#118 해소로 개방됨</strong> · 선행 대기 0건</span>
+          <span class="ms-meta">1/8 · <strong>#120 랜딩(PR #145)</strong> · 선행 대기 0건</span>
         </div>
         <div class="cards">
           <div class="card t">
@@ -950,11 +950,12 @@
             <div class="kv"><span class="k">설계</span><span class="v">offensive/instant/buff/debuff 4종 request 형태 분기(<code>pietyBonus</code> 사전계산·target 타입 불일치) + <code>realmGrowth</code> write-back</span></div>
             <div class="kv"><span class="k">선행</span><span class="v">#121 (<code>toCaster(PlayerCombatState)</code>) — 체인 종단</span></div>
           </div>
-          <div class="card t">
-            <div class="card-top"><span class="chip t">착수 가능</span><span class="card-title">아이템 인스턴스 라이브화 + study</span>
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">아이템 인스턴스 라이브화 + study</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/120">#120</a></div>
-            <div class="kv"><span class="k">4중 결손</span><span class="v">인벤이 라이브 상태에 없음(<code>object.owner</code> 파생 설계) · <code>hydrateInventory</code>가 wiring 표면에 미노출 · <code>loadObjectTemplates</code> boot 호출 0건 · 인스턴스→템플릿 join 함수 없음</span></div>
-            <div class="kv rest"><span class="k">결정</span><span class="v">입장 시 hydrate vs 명령 시점 조회 — 후자면 <code>CommandHandler</code>를 <strong>async로 확장</strong>(전 핸들러 파급). <code>read</code>/<code>drink</code>/<code>zap</code>의 선행 계층</span></div>
+            <div class="kv"><span class="k">랜딩</span><span class="v">PR #145 (08-18) — 4중 결손 전부 해소. 템플릿 인덱스 boot 조립(별칭 <code>keys</code> 포함) · <code>LiveCharacter.inventory</code> 세션 진입 시 적재 · 인스턴스↔템플릿 결합 함수 · <code>objects</code> 삭제 write-behind 어댑터 · <code>progress:study</code> 배선. <code>PROTOCOL_VERSION</code> 4→<strong>5</strong></span></div>
+            <div class="kv"><span class="k">결정</span><span class="v"><strong>입장 시 hydrate</strong>를 택해 <code>CommandHandler</code>는 동기로 유지했습니다 — 전 핸들러 async 파급을 피했습니다. 두 write는 <code>markCharacterDirty</code>→<code>markObjectDeleted</code> 순서를 고정하고 보상 트랜잭션 대신 <strong>재연마 멱등성의 자가 치유</strong>에 맡깁니다</span></div>
+            <div class="kv rest"><span class="k">파생 부채</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/142">#142</a> 인벤 서수 divergence(<a href="https://github.com/smalljiny/muhan/issues/137">#137</a>의 자매 — EUC-KR collation 공유) · <a href="https://github.com/smalljiny/muhan/issues/143">#143</a> 템플릿 미해소·slot 무효 드롭이 무로그로 삼켜짐. <code>read</code>/<code>drink</code>/<code>zap</code>의 선행 계층이 이제 서 있습니다</span></div>
           </div>
           <div class="card t">
             <div class="card-top"><span class="chip t">미착수</span><span class="card-title">몬스터 전투/마법 tick boot 배선</span>
@@ -1106,6 +1107,12 @@
         <div class="debt-body"><code>postcss</code> 8.5.16(경로 순회, fix 8.5.18+) · <code>brace-expansion</code> 1.1.16/2.1.2/5.0.7(DoS, fix 5.0.8). 전부 dev 전이 의존성이라 런타임 번들 밖입니다. 기존 <code>pnpm.overrides</code>가 5.x 계열을 잡지 못하고, brace-expansion은 1.x/2.x 소비자를 5.x로 강제해야 해 eslint 툴체인 호환성 검토가 필요합니다.</div>
         <div class="debt-gate">▸ 상시 · CP3 이전 · 저위험·소규모</div>
       </div>
+      <div class="debt-card high">
+        <div class="debt-top"><span class="sev high">HIGH×12</span><span class="debt-title">의존성 갱신 — pnpm audit HIGH 12건</span>
+          <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/144">#144</a></div>
+        <div class="debt-body">08-14 기준 <code>pnpm audit</code>에서 HIGH 12건·moderate 5건이 잡힙니다. <a href="https://github.com/smalljiny/muhan/issues/113">#113</a>(devDependency 전이 4건)보다 넓은 범위이고 둘은 같은 토픽에서 함께 처리하는 편이 낫습니다.</div>
+        <div class="debt-gate">▸ 상시 · CP3 이전 · #113과 동일 토픽 권장</div>
+      </div>
       <div class="debt-card">
         <div class="debt-top"><span class="sev">잠복</span><span class="debt-title">세션 revocation + banned 비강제</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/89">#89</a></div>
@@ -1127,7 +1134,7 @@
       <h2>다음 한 수</h2>
       <span class="sec-tag">recommended order</span>
     </div>
-    <p class="sec-note">순서는 의존성 해제 폭과 되돌리기 비용 기준입니다. 지금 <strong>열린 PR 0 · 작업 트리 clean · 선행 대기 0건</strong>입니다 — #118이 닫히면서 <strong>백로그에 blocking으로 막힌 항목이 하나도 없어졌습니다</strong>(#122만 #121 대기). 셋을 병렬 트랙으로 띄울 수 있습니다.</p>
+    <p class="sec-note">순서는 의존성 해제 폭과 되돌리기 비용 기준입니다. 지금 <strong>열린 PR 0 · 작업 트리 clean · 선행 대기 0건</strong>입니다 — #118이 닫히면서 <strong>백로그에 blocking으로 막힌 항목이 하나도 없어졌습니다</strong>(#122만 #121 대기). #120이 M6의 첫 항목으로 닫혔지만 <strong>CP1 잔여 3건은 그대로</strong>입니다. 셋을 병렬 트랙으로 띄울 수 있습니다.</p>
     <div class="next">
       <div class="next-card">
         <div class="next-n">01</div>
@@ -1148,7 +1155,7 @@
   </section>
 
   <footer>
-    <span>출처: GitHub 이슈 #1~#138 · PR ~#141 (2026-08-11 · develop 6f73463)</span>
+    <span>출처: GitHub 이슈 #1~#144 · PR ~#145 (2026-08-18 · develop bdcd2a2)</span>
     <span>설계 정본: docs/specs/architecture.md (ADR #14)</span>
     <span>구현 명세: docs/specs/ 30개 문서</span>
     <span>SoT는 GitHub 이슈·PR·docs/specs/ — 이 페이지는 파생 조감도이고, M0~M7·CP1~CP3은 이슈 의존 관계에서 도출한 그룹핑입니다</span>
@@ -1185,12 +1192,13 @@
     [99,  6, "todo", 510, 206, "몬스터 전투/마법 tick boot 배선", "프로덕션에서 몬스터가 움직이지 않음"],
     [60,  5, "done", 510, 342, "E11 월드 뷰 (방·이동·주변) (완료)", "PR #128 — world:room 7필드 확장 · PROTOCOL_VERSION 4"],
     [119, 5, "todo", 610, 42,  "teach 명령 배선", "방 내 대상 플레이어 전수"],
-    [120, 6, "todo", 610, 100, "아이템 라이브화 + study", "read/drink/zap의 선행 계층 · 4중 결손"],
+    [120, 6, "done", 610, 100, "아이템 라이브화 + study (완료)", "PR #145 — 인벤 라이브화 · PROTOCOL_VERSION 5"],
     [121, 6, "todo", 610, 158, "attack 배선 + PlayerCombatState 파이프", "장비 해소·유효 스탯 합성 신규 구축"],
     [61,  6, "todo", 610, 342, "E12 캐릭터·전투·인벤 패널", "E6 규칙 이벤트 게이트 — #121·#122가 낳음"],
     [122, 6, "todo", 710, 158, "cast 배선 — 플레이어 시전 진입점", "체인 종단 · 4종 request 디스패치 설계"],
     [62,  7, "todo", 710, 262, "E13 소셜·채팅 UI", "방 채팅 절반 충족 · 채널·귓속말은 E7 게이트"],
     [113, -1, "dbt", 58,  296, "devDependency 전이 취약점 4건", "postcss · brace-expansion · dev-only"],
+    [144, -1, "dbt", 46,  368, "의존성 갱신 — pnpm audit HIGH 12건", "moderate 5건 동반 · #113과 동일 토픽 권장"],
     [51,  -1, "dbt", 128, 320, "ctx.heartbeat 타이머 이중 소유권", "유지보수 · 게이트 없음"],
     [138, -1, "dbt", 130, 400, "깨끗한 DB에서 e2e 통과 불가", "HIGH · dev 시드가 DB에 없음 · CP1"],
     [43,  -1, "dbt", 128, 96,  "은행 트랜잭션 ↔ write-behind 조정", "계약: 해소 전 은행 명령 배선 금지 · CP2"],
@@ -1204,7 +1212,7 @@
            [32,58],[58,59],[59,60],[34,116],[36,118],[36,123],[36,99],
            [118,119],[118,120],[118,121],[121,122],
            [60,61],[36,61],[34,37],[35,37],[59,62],[37,62]];
-  var D = [[124,36],[138,58],[43,31],[100,99],[108,99],[89,35],[51,32],[113,30]];
+  var D = [[124,36],[138,58],[43,31],[100,99],[108,99],[89,35],[51,32],[113,30],[144,30]];
 
   var MS_NAME = ["M0 역설계·분석", "M1 서버 기반", "M2 월드·계정", "M3 규칙 코어",
                  "M4 접속 셸", "M5 걷기", "M6 싸우기", "M7 어울리기"];
