@@ -1,4 +1,5 @@
 import type { Character, ObjectInstance, RoomNode } from 'shared'
+import { characterPatchSchema } from '../repo/characterRepository.js'
 import type { LiveCharacter, LiveCharacterRegistry } from './liveCharacterRegistry.js'
 import type { MoveActor } from './tryMove.js'
 
@@ -69,6 +70,8 @@ export const DEFAULT_START_ROOM = 1
 /** 최소 logger seam — save/logger.ts·worldClock.ts 관례 미러(console 금지). */
 export interface EntryLogger {
   warn(context: Record<string, unknown>, message: string): void
+  /** pending 스냅샷 검증 실패처럼 **폴백으로 삼키는 이상**을 흔적으로 남긴다(무로그 삼킴 금지). */
+  error(context: Record<string, unknown>, message: string): void
 }
 
 export interface LiveCharacterEntryDeps {
@@ -84,6 +87,16 @@ export interface LiveCharacterEntryDeps {
   readonly resolveRoom: (roomId: number) => RoomNode | undefined
   readonly onRoomEntered: (room: RoomNode, actor: MoveActor) => void
   readonly onRoomLeft: (room: RoomNode, actor: MoveActor) => void
+  /**
+   * 미영속(write-behind) 캐릭터 스냅샷 조회 seam — `SaveEngine.peekPending('characters', id)`을
+   * 배선 지점에서 1회 좁힌 것이다. 보유하지 않으면 `undefined`.
+   *
+   * **필수 필드다**(optional 아님). 미주입이면 hydrate가 DB 문서만 읽어 아직 flush되지 않은 진행도를
+   * 되돌리는데(#124), 그 실패는 예외도 로그도 남기지 않는다 — 배선 누락을 타입으로 차단한다.
+   *
+   * 반환값은 tracker가 보관한 **라이브 참조일 수 있다**. 읽기만 하고 mutate하지 않는다.
+   */
+  readonly peekPendingCharacter: (characterId: string) => unknown
   readonly logger: EntryLogger
 }
 
@@ -91,6 +104,57 @@ export interface LiveCharacterEntry {
   hydrate(characterId: string): Promise<LiveCharacter>
   place(live: LiveCharacter): void
   release(characterId: string): void
+}
+
+/**
+ * 저장소 문서 위에 미영속 pending 스냅샷을 덮는다(#124).
+ *
+ * 영속 경로(`CharacterRepository.updateById`)와 **같은 스키마 인스턴스**로 검증한다 — 재파생하면
+ * overlay가 받아들인 patch와 flush가 저장할 patch가 갈라진다. 검증 실패는 던지지 않고 error 1건을
+ * 남긴 뒤 저장소 문서로 폴백한다: 진행도 일부를 잃는 것이 진입 자체를 막는 것보다 낫다.
+ *
+ * `_id`는 항상 요청한 `characterId`로 고정한다. `peekPending`이 이미 `_id`를 벗겨 주지만, 스냅샷이
+ * 엉뚱한 `_id`를 들고 있을 때 라이브 엔트리의 신원이 바뀌면 이후 모든 마킹·해소가 잘못된 키로 간다.
+ */
+function overlayPendingCharacter(
+  stored: Character,
+  pending: unknown,
+  characterId: string,
+  logger: EntryLogger,
+): Character {
+  if (pending === undefined) return stored
+
+  const parsed = characterPatchSchema.safeParse(pending)
+  if (!parsed.success) {
+    logger.error(
+      { characterId, issues: parsed.error.issues },
+      'hydrate: pending 캐릭터 스냅샷 검증 실패 — 저장소 문서로 폴백',
+    )
+    return stored
+  }
+
+  // 값이 undefined인 키를 떨군다. zod의 .partial()은 키가 존재하면 값이 undefined여도 출력에
+  // 남기므로, 그대로 spread하면 `{ gold: undefined }` 같은 patch가 stored의 필수 필드를 지운다.
+  // 타입은 number인데 런타임 값이 undefined인 캐릭터가 라이브 레지스트리에 들어가고, 이후 전투·
+  // 경제 규칙이 NaN을 뿜으며 다음 flush가 그 undefined를 $set한다 — 전 구간이 무성 실패다.
+  //
+  // 현재 producer(`snapshotCharacter`)는 그런 키를 만들지 않는다고 자기 파일에 명시하지만,
+  // 원시 `markDirty` seam이 열려 있어 신규 호출처가 그 계약 밖의 값을 넣을 수 있다.
+  // stored 사본에 정의된 값만 얹는 단일 패스다. Object.fromEntries는 인덱스 시그니처를 돌려줘
+  // 병합이 컴파일러 검사 밖으로 나가고, 사본 후 delete는 V8이 객체를 dictionary mode로 전이시켜
+  // 정작 이 가드가 존재하는 이유인 방어 경로에서 가장 느리다. 이 형태는 두 문제가 모두 없다.
+  const merged: Character = { ...stored }
+  for (const key of Object.keys(parsed.data) as (keyof Character)[]) {
+    const value = parsed.data[key]
+    if (value !== undefined) (merged as Record<string, unknown>)[key] = value
+  }
+
+  // pending은 앞으로 영속될 라이브 참조일 수 있어 오염시키면 안 된다. merged는 stored 사본이고,
+  // 얹는 값도 safeParse가 배열·객체를 전부 새로 만들어 준 것이라 중첩 컨테이너(stats·spells·
+  // realm·buffs)까지 참조가 끊긴다. 이 성질이 깨지면 라이브 캐릭터의 in-place 변이(regen이
+  // hpCurrent를 직접 바꾼다)가 곧 flush될 스냅샷을 오염시킨다.
+  merged._id = characterId
+  return merged
 }
 
 /** live.character에서 이동/배치용 MoveActor를 파생한다. */
@@ -105,10 +169,19 @@ export function createLiveCharacterEntry(deps: LiveCharacterEntryDeps): LiveChar
       const existing = deps.liveRegistry.get(characterId)
       if (existing !== undefined) return existing
 
-      const character = await deps.characterRepo.findById(characterId)
-      if (character === null) {
+      // 선형화 지점(§8.5): pending 조회를 **동기로 먼저** 끝낸다. findById를 await한 뒤에 읽으면
+      // 그 사이 in-flight write가 ack되어 pending이 사라지고, 이미 낡은 문서를 손에 쥔 채 "미영속
+      // 없음"으로 판정해 진행도가 되돌아간다. 반대 순서는 최악이라도 이미 저장된 값을 다시 덮는 것뿐이다.
+      const pending = deps.peekPendingCharacter(characterId)
+
+      const stored = await deps.characterRepo.findById(characterId)
+      if (stored === null) {
         throw new Error(`hydrate: character not found: ${characterId}`)
       }
+
+      // overlay는 orphan 폴백보다 **앞**에 온다 — pending의 새 currentRoom이 유효한데 저장소 문서의
+      // 것이 orphan이면, 순서가 뒤집힐 경우 멀쩡한 위치를 버리고 시작 방으로 되돌린다.
+      const character = overlayPendingCharacter(stored, pending, characterId, deps.logger)
 
       // 인벤 적재 — 진입당 정확히 1회(OQ3 상한). findById 뒤에 두어 미존재 캐릭터에는 조회하지
       // 않는다(순차 왕복 2회). 아래 두 반환 지점이 이 결과를 공유하므로 orphan 폴백도 인벤을 싣는다.

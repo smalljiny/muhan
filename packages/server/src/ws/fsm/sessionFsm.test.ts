@@ -1493,7 +1493,8 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
       resolveRoom: (id) => rooms.get(id),
       onRoomEntered,
       onRoomLeft,
-      logger: { warn: vi.fn() },
+      peekPendingCharacter: () => undefined,
+      logger: { warn: vi.fn(), error: vi.fn() },
     })
 
     // 옛 세션이 이미 캐릭터를 방에 배치해 둔 상태(registry+occupants 점유).
@@ -1560,7 +1561,8 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
       resolveRoom: (id) => rooms.get(id),
       onRoomEntered,
       onRoomLeft: vi.fn(),
-      logger: { warn: vi.fn() },
+      peekPendingCharacter: () => undefined,
+      logger: { warn: vi.fn(), error: vi.fn() },
     })
 
     // 이미 등록·배치된 상태(link-dead 세션의 라이브 엔트리 잔존).

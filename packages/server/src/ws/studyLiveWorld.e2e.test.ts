@@ -259,6 +259,7 @@ function buildHarness(): StudyHarness {
     // 정본 인덱스 — boot(`index.ts`)가 싣는 것과 같은 `loadObjectTemplates()` 산출물이다.
     objectTemplates: OBJECT_TEMPLATES,
     markDirty: (collection, id, snapshot) => saveEngine.markDirty(collection, id, snapshot),
+    peekPending: (collection, id) => saveEngine.peekPending(collection, id),
     // 이 흐름은 currentHour를 소비하지 않는다(학습 경로에 방·시간 게이트가 없다) — 묶음 필수 필드
     // 충족용이다. 형제 스위트에서는 이 값이 이동 시간 게이트의 실 입력이라 의미가 다르다.
     currentHour: () => 12,
@@ -267,7 +268,7 @@ function buildHarness(): StudyHarness {
     now: () => 0,
     onRoomEntered: vi.fn(),
     onRoomLeft: vi.fn(),
-    logger: { warn: vi.fn() },
+    logger: { warn: vi.fn(), error: vi.fn() },
   }
 
   const sessionAuth = new InMemorySessionAuthAdapter({

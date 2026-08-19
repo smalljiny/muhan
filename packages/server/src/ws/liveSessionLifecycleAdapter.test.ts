@@ -73,7 +73,8 @@ function setup(loadRoom: number) {
     resolveRoom: (id: number) => rooms.get(id),
     onRoomEntered,
     onRoomLeft,
-    logger: { warn: vi.fn() },
+    peekPendingCharacter: () => undefined,
+    logger: { warn: vi.fn(), error: vi.fn() },
   })
   return { registry, rooms, entry, onRoomEntered, onRoomLeft, character }
 }

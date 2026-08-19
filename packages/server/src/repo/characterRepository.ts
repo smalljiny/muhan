@@ -17,7 +17,10 @@ const COLLECTION_NAME = 'characters'
 // status의 .default('active')는 먼저 벗긴다(accountRepository와 동일 관례): patch에 status가
 // 없을 때 .partial()이라도 default가 재발화해 $set에 status:'active'가 주입되면, 무덤
 // (status='deleted') 문서를 부활시키는 silent write가 된다. removeDefault로 넘긴 값만 검증한다.
-const characterPatchSchema = characterSchema
+// 재접속 hydrate(#124)가 pending 스냅샷을 검증할 때 **이 인스턴스를 그대로 재사용**한다.
+// 소비처에서 재파생하면 영속 경로(updateById)와 검증 기준이 갈라지고, 그 불일치는 예외도
+// 로그도 남기지 않는다(overlay는 통과했는데 flush에서 거부되는 식).
+export const characterPatchSchema = characterSchema
   .extend({ status: characterSchema.shape.status.removeDefault() })
   .partial()
 

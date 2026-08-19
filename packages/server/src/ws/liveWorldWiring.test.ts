@@ -83,7 +83,9 @@ type BundleHarness = {
   onRoomEntered: ReturnType<typeof vi.fn>
   onRoomLeft: ReturnType<typeof vi.fn>
   warn: ReturnType<typeof vi.fn>
+  error: ReturnType<typeof vi.fn>
   findById: ReturnType<typeof vi.fn>
+  peekPending: ReturnType<typeof vi.fn>
   now: ReturnType<typeof vi.fn>
   objectTemplates: ObjectTemplateIndex
 }
@@ -94,7 +96,9 @@ function makeBundle(worldGraph: Map<number, RoomNode>, character?: Character): B
   const onRoomEntered = vi.fn()
   const onRoomLeft = vi.fn()
   const warn = vi.fn()
+  const error = vi.fn()
   const findById = vi.fn((_id: string) => Promise.resolve(character ?? null))
+  const peekPending = vi.fn((_collection: string, _id: string): unknown => undefined)
   const hydrateInventory = vi.fn((_id: string) => Promise.resolve([]))
   const now = vi.fn(() => NOW_TICK)
   const objectTemplates: ObjectTemplateIndex = new Map()
@@ -105,11 +109,12 @@ function makeBundle(worldGraph: Map<number, RoomNode>, character?: Character): B
     characterRepo: { findById, hydrateInventory },
     objectTemplates,
     markDirty,
+    peekPending,
     currentHour: () => 12,
     now,
     onRoomEntered,
     onRoomLeft,
-    logger: { warn },
+    logger: { warn, error },
   }
   return {
     bundle,
@@ -119,7 +124,9 @@ function makeBundle(worldGraph: Map<number, RoomNode>, character?: Character): B
     onRoomEntered,
     onRoomLeft,
     warn,
+    error,
     findById,
+    peekPending,
     now,
     objectTemplates,
   }
@@ -163,6 +170,18 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
       'char-1',
       expect.objectContaining({ _id: 'char-1', currentRoom: 3, level: 7 }),
     )
+  })
+
+  it("hydrate는 묶음 peekPending을 'characters'로 1회 좁혀 호출한다(#124 배선)", async () => {
+    const character = makeCharacter('char-1', 3)
+    const worldGraph = new Map<number, RoomNode>([[3, makeRoom(3)]])
+    const h = makeBundle(worldGraph, character)
+
+    const wiring = createLiveWorldWiring(h.bundle)
+    await wiring.liveWorldBinding.entry.hydrate('char-1')
+
+    expect(h.peekPending).toHaveBeenCalledTimes(1)
+    expect(h.peekPending).toHaveBeenCalledWith('characters', 'char-1')
   })
 
   it('lifecyclePort·entry는 같은 레지스트리/방을 배후에 둔다(#3 — place 후 onSessionEnd가 정리)', () => {
