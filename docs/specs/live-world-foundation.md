@@ -60,9 +60,26 @@ interface LiveCharacter {
 `hydrate(characterId)`는 **부수효과 없는 비동기 로드**다. 레지스트리 등록도 occupants 변경도 하지 않고 `LiveCharacter`만 조립해 돌려주며, 등록·배치는 동기 caller인 `place`의 몫이다.
 
 1. 이미 등록된 엔트리가 있으면 `findById` 없이 그대로 반환한다 — **재접속은 재로드하지 않는다.** 재로드하면 아직 영속되지 않은 라이브 `currentRoom`을 디스크 문서로 덮어쓴다.
-2. 문서가 없으면 던진다.
-3. `currentRoom`이 월드 그래프에서 미해소(orphan/삭제)면 `DEFAULT_START_ROOM = 1`로 교정하고 경고를 남긴다. 캐릭터 생성 기본값(START_ROOM=1)을 미러하는 단일 안전 홈이며, 레벨·종족·소속별 완전한 스폰 정책은 이 계층 범위 밖이다.
-4. `hydrateInventory(characterId)`로 소지품을 적재해 `LiveCharacter.inventory`에 싣는다(#120). 조기 반환 경로(1번)는 이미 인벤을 가진 엔트리를 돌려주므로 재조회하지 않는다.
+2. `peekPendingCharacter(characterId)`로 미영속 스냅샷을 **동기로 먼저** 조회한다(아래 pending overlay).
+3. 문서가 없으면 던진다.
+4. 스냅샷이 있으면 DB 문서 위에 overlay한다.
+5. `currentRoom`이 월드 그래프에서 미해소(orphan/삭제)면 `DEFAULT_START_ROOM = 1`로 교정하고 경고를 남긴다. 캐릭터 생성 기본값(START_ROOM=1)을 미러하는 단일 안전 홈이며, 레벨·종족·소속별 완전한 스폰 정책은 이 계층 범위 밖이다.
+6. `hydrateInventory(characterId)`로 소지품을 적재해 `LiveCharacter.inventory`에 싣는다(#120). 조기 반환 경로(1번)는 이미 인벤을 가진 엔트리를 돌려주므로 재조회하지 않는다.
+
+#### pending 스냅샷 overlay (#124)
+
+1번의 재로드 금지는 **엔트리가 살아 있는 동안**만 유효하다. grace 만료로 엔트리가 완전히 release된 뒤 재접속하면 `findById`가 저장소를 다시 읽는데, write-behind에서 저장소는 flush 전까지 정의상 stale하다. 그 재읽기 결과가 같은 `characters:<id>` 키에서 LWW 승자가 되어 진행도가 되돌아갔다 — grace(30초)가 flush 주기(120초)보다 짧아 창이 상시 열려 있었다.
+
+`hydrate`는 저장소 문서 위에 `SaveEngine.peekPending('characters', id)`의 반환값을 덮는다. `CharacterRepository.updateById`가 검증된 patch를 `$set`하므로, 같은 정규화·검증·합성을 하면 **재접속 직후 상태 = flush 직후 상태**가 정의상 성립한다.
+
+- **조회 순서가 계약이다** — `peekPending`을 `findById`보다 **먼저** 동기로 끝낸다. 역순이면 TOCTOU가 열린다: `await` 중 in-flight write가 착지·ack되면 스냅샷이 사라지고, 이미 낡은 문서를 손에 쥔 채 "미영속 없음"으로 판정해 진행도가 되돌아간다. 이 순서는 최악이라도 이미 저장된 값을 다시 덮는 것뿐이다.
+- **역방향 레이스는 도달 불가다** — "peek 직후 새 `markDirty`가 생겨 `findById`가 그보다 앞선 값을 읽는다"는 경로는 비-라이브 캐릭터에 writer가 존재하지 않아 성립하지 않는다(`train`·`move`·`study`는 라이브 actor를, `regen`은 라이브 플레이어 순회를, `onSessionEnd`는 레지스트리 엔트리를 각각 요구한다). 이 경로는 `liveRegistry.get` 미스 뒤에만 도달하므로 그 시점의 writer는 0개다.
+- **검증은 영속 경로와 같은 스키마 인스턴스로 한다** — `characterPatchSchema`는 의존 0 모듈 `repo/characterSchemas.ts`가 소유하고 저장소와 여기가 같은 인스턴스를 쓴다. 재파생하면 overlay가 받아들인 patch와 flush가 저장할 patch가 갈리는데, 그 불일치는 예외도 로그도 남기지 않는다.
+- **검증 실패는 던지지 않는다** — `logger.error` 1건을 남기고 저장소 문서로 폴백한다. 검증을 통과하지 못하는 스냅샷은 flush에서도 `ZodError`로 폐기되므로 폴백값이 곧 최종 영속값이다. 진행도 일부를 잃는 쪽이 진입 자체를 막는 것보다 낫다.
+- **값이 `undefined`인 키는 떨군다** — zod `.partial()`은 키가 존재하면 값이 `undefined`여도 출력에 남긴다. 그대로 spread하면 `{ gold: undefined }` 같은 patch가 `stored`의 필수 필드를 지워, 타입은 `number`인데 런타임 값이 `undefined`인 캐릭터가 레지스트리에 들어가고 다음 flush가 그 `undefined`를 `$set`한다.
+- **`_id`는 항상 요청한 `characterId`로 고정한다** — `peekPending`이 이미 `_id`를 벗겨 주지만, 스냅샷이 엉뚱한 `_id`를 들고 있을 때 라이브 엔트리의 신원이 바뀌면 이후 모든 마킹·해소가 잘못된 키로 간다.
+- **overlay는 orphan 폴백보다 앞에 온다** — pending의 새 `currentRoom`이 유효한데 저장소 문서의 것이 orphan이면, 순서가 뒤집힐 경우 멀쩡한 위치를 버리고 시작 방으로 되돌린다.
+- **보장 범위** — "pending이 `DirtyTracker`에 살아 있는 동안 hydrate가 그것을 채택한다"이고, 그 수명은 [`save-policy.md`](save-policy.md) §스냅샷 수명 계약이 정의한다. write가 영구 실패해 `discard`된 스냅샷은 범위 밖이다.
 
 인벤 적재가 추가하는 DB 왕복은 **세션당 정확히 1회**이며(단위 테스트가 이 상한을 고정해 N+1 유입을 막는다) `owner` 복합 인덱스를 탄다. 조회 실패는 **fail-closed**다 — 예외가 FSM으로 올라가 `error{internal}`로 진입이 거부된다. 빈 인벤으로 degrade하지 않는 이유는 소지품을 조용히 감추는 쪽이 더 나쁘기 때문이다. 소유 object 수 p95 > 50건 또는 hydrate p95 > 200ms가 관측되면 진입 지연 측정 토픽을 연다(구현부 헤더가 이 임계를 소유한다).
 
@@ -112,11 +129,13 @@ fan-out 대상 결정은 `createRoomChannelAdapter`(발화자 현재 방의 occu
 
 ### 조립 (부트 → 팩토리)
 
-부트(`index.ts`)는 원재료 묶음(월드 그래프·레지스트리·characterRepo·markDirty·currentHour·방 진입/퇴장 훅·logger·오브젝트 템플릿 인덱스·`now`)만 조립해 넘기고, `createLiveWorldWiring`이 진입 바인딩·이동 의존(`moveDeps`)·연마 의존(`trainDeps`)·비법서 연마 의존(`studyDeps`)·수명 포트·방 해소자(`resolveRoom`)·`markCharacterDirty`·`markObjectDeleted` seam을 파생한다. 부트는 커버리지 제외 배선 코드이므로 파생 로직을 테스트 가능한 순수 팩토리로 뽑고 부트에는 묶음 전달만 남긴다.
+부트(`index.ts`)는 원재료 묶음(월드 그래프·레지스트리·characterRepo·markDirty·peekPending·currentHour·방 진입/퇴장 훅·logger·오브젝트 템플릿 인덱스·`now`)만 조립해 넘기고, `createLiveWorldWiring`이 진입 바인딩·이동 의존(`moveDeps`)·연마 의존(`trainDeps`)·비법서 연마 의존(`studyDeps`)·수명 포트·방 해소자(`resolveRoom`)·`markCharacterDirty`·`markObjectDeleted` seam을 파생한다. 부트는 커버리지 제외 배선 코드이므로 파생 로직을 테스트 가능한 순수 팩토리로 뽑고 부트에는 묶음 전달만 남긴다.
 
 규칙 명령이 늘어도 원재료는 **거의** 늘지 않는다 — 팩토리가 기존 묶음에서 명령별 deps를 파생하기 때문이다. `train` 배선은 신규 원재료 0건이었고, `study` 배선은 `objectTemplates`(부팅 시 1회 조립하는 템플릿 인덱스)와 `now`(실명 만료 판정 기준 틱) 둘만 더했다. 두 번째 영속 seam인 `markObjectDeleted`는 원재료가 아니라 기존 `bundle.markDirty`에서 파생한다 — `markCharacterDirty`와 같은 규약이다.
 
-`markCharacterDirty`는 원시 `bundle.markDirty`를 1회 감싼 **단일 인스턴스**로, `moveDeps`·`lifecyclePort`·`trainDeps`가 같은 참조를 공유한다(`characters` 스냅샷 계약의 단일화 — [`save-policy.md`](save-policy.md)). `resolveRoom`은 `characterId → 레지스트리 엔트리 → currentRoom → 방` 경로의 by-character 해소자이며, 소비자가 방 채널 조립에 더해 `trainDeps`까지 둘로 늘었다(방 그래프 직접 조회 `roomId → 방`은 별개 해소자다).
+`markCharacterDirty`는 원시 `bundle.markDirty`를 1회 감싼 **단일 인스턴스**로, `moveDeps`·`lifecyclePort`·`trainDeps`가 같은 참조를 공유한다(`characters` 스냅샷 계약의 단일화 — [`save-policy.md`](save-policy.md)). 읽기 짝인 `peekPendingCharacter`도 같은 규약이다 — 팩토리가 원시 `bundle.peekPending`을 `CHARACTERS_COLLECTION`으로 **1회 좁혀** 진입 코어에 준다. 좁힘이 여러 곳에 흩어지면 컬렉션 리터럴 오타가 조용한 "pending 없음"이 되어 #124가 되살아난다. save 계층은 collection 무지라 반환이 `unknown`이고, 좁힘 지점이 아니라 **소비 지점**(hydrate)이 자기 스키마로 런타임 검증한다.
+
+`LiveCharacterEntryDeps.peekPendingCharacter`는 **optional이 아니다**. 미주입이면 hydrate가 DB 문서만 읽어 진행도를 되돌리는데 그 실패는 예외도 로그도 남기지 않으므로, 배선 누락을 타입으로 차단한다. 같은 이유로 `EntryLogger`에 `error`가 추가됐다 — 검증 실패를 폴백으로 삼키되 흔적은 남긴다. `resolveRoom`은 `characterId → 레지스트리 엔트리 → currentRoom → 방` 경로의 by-character 해소자이며, 소비자가 방 채널 조립에 더해 `trainDeps`까지 둘로 늘었다(방 그래프 직접 조회 `roomId → 방`은 별개 해소자다).
 
 **단일 공유 불변식**: 진입 코어와 레지스트리는 hydrate/place·이동·종료 release·발화자 방 해소가 **동일 인스턴스**를 배후에 둬야 상태가 분기하지 않는다. 팩토리가 진입 코어를 1회 생성해 네 소비자에 같은 참조를 전달한다.
 
@@ -145,6 +164,7 @@ fan-out 대상 결정은 `createRoomChannelAdapter`(발화자 현재 방의 occu
 - **규칙 명령은 `train`·`study` 둘이 배선됨** — 이 foundation 위에 `progress:train`(디스패처 패턴 확립 + 레벨·경험치·gold·능력치 변이)과 `progress:study`(#120 — 소지품 이름 해소 + 주문 지식 변이 + 비법서 소멸)가 얹혔다. 나머지 규칙 명령은 여전히 미배선이며 선행 결손이 배선이 아닌 신규 구현을 요구한다: `teach`(#119)·`attack`(#121)·`cast`(#122). 장비 슬롯 스탯 파이프는 여전히 dormant다(#121).
 - **인벤 서수 기준이 오라클과 다르다** — 오라클 `add_obj_crt`(`legacy/muhan/src/player.c:857-898`)는 EUC-KR `strcmp` 이름 사전순(동명 시 `adjustment` 순) 삽입으로 인벤 순서를 유지하지만, 포트는 `findByOwner`의 `_id` 오름차순이다. KS X 1001 완성형 배열이 Unicode Hangul Syllables 배열과 달라 JS 문자열 비교로 재현되지 않는 것이 원인이며, 방 대상 서수 divergence(#137)와 같은 성격이다. `_id` 정렬은 **결정적 순서를 보장하기 위한 것**이지 오라클 재현이 아니다(Mongo 자연 순서는 계약이 아니라 같은 인벤이 조회마다 다른 서수를 낼 수 있다). 추적 이슈 [#142](https://github.com/smalljiny/muhan/issues/142), 근거는 `world/liveCharacterEntry.ts` 헤더가 소유한다.
 - **인벤 변경의 영속 경로는 삭제뿐** — `study`의 비법서 소멸만 `markObjectDeleted`로 write-behind에 실린다. 착용 토글·`shotscur` 감소·줍기 같은 비-삭제 인벤 변경은 라이브 메모리에만 남고 영속되지 않는다. 해당 명령들이 배선될 때 함께 온다.
+- **pending overlay는 캐릭터 문서에 한한다(#124)** — hydrate가 합성하는 것은 `characters` 스냅샷뿐이고 `objectDeletions`는 합성하지 않는다. 그래서 grace 만료 재접속 시 삭제 마킹됐지만 아직 flush되지 않은 비법서가 인벤에 **유령으로 남는다**. 현재 무해하다 — 재연마 시 `setKnown`·`markObjectDeleted` 모두 멱등해 수렴하고, 줍기·버리기·건네주기 경로가 0건이라 복제 경로가 없다. #119(teach)·#121(attack)이 건네주기·전리품 경로를 열면 재평가가 필요하다. 인벤 자체의 재접속 revert(위 항목)는 여전히 열려 있다 — 캐릭터 문서 쪽만 닫혔고 인벤은 닫히지 않았다.
 - **`world:room`은 스냅샷이지 델타가 아니다** — E11(#60)이 방 이름·설명·점유자·아이템·크리처를 실어 최소 통지에서 벗어났다. 그러나 발화 시점은 여전히 진입·이동 성공 두 곳뿐이라, 내가 가만히 있는 동안 다른 사람이 들어와도 목록이 갱신되지 않는다. 실시간 입·퇴장 델타는 #116 소관이다.
 - **스폰 정책 미완결** — orphan `currentRoom`은 `DEFAULT_START_ROOM = 1` 단일 폴백으로만 방어한다. 레벨·종족·소속별 시작지 정책은 별도다.
 - **채널 fan-out에 가시성 필터 없음** — 방 채널 fan-out은 occupants 전 멤버 대상이며 발화자 자신도 제외하지 않는다. PINVIS·어둠·투명 필터는 E5 소관이다. (방 **표시**의 가시성 필터는 E11에서 별도로 들어왔다 — [`movement-rooms.md`](movement-rooms.md) §방 표시 가시성 필터. 두 필터는 다른 관심사다.)

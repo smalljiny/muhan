@@ -3,7 +3,7 @@
  * 응집 객체로 묶고, 즉시 저장(saveNow)과 graceful shutdown seam을 노출한다.
  *
  * 조립 구조:
- *   DirtyTracker(변경 레지스트리) ─drain─▶ SaveScheduler(주기 flush) ─enqueue─▶ AsyncWriteQueue
+ *   DirtyTracker(변경 레지스트리) ─checkout─▶ SaveScheduler(주기 flush) ─enqueue─▶ AsyncWriteQueue
  *   ─dispatch─▶ collection별 repo 어댑터(characters·bankAccounts→updateById, roomStates→upsert,
  *   objectDeletions→deleteById).
  *   clock·interval은 선택 주입(테스트 FakeClock, 기본 120초). AsyncWriteQueue에는 **실 logger를
@@ -12,7 +12,7 @@
  *
  * write 시도 순서 계약(호출처가 의존해도 되는 보장):
  *   같은 flush 안에서는 **markDirty 호출 순서가 곧 write 시도 순서**다. 근거는 두 층이다 —
- *   (1) DirtyTracker가 `Map`이라 `collection:id` 키의 삽입 순서를 보존한 채 drain하고,
+ *   (1) DirtyTracker가 `Map`이라 `collection:id` 키의 삽입 순서를 보존한 채 checkout하고,
  *   (2) AsyncWriteQueue가 단일 워커·FIFO라 pending을 하나씩 순차로 write한다.
  *   따라서 서로 다른 컬렉션에 걸친 두 write의 상대 순서를 호출처가 정할 수 있다. 예: 주문 학습
  *   (`characters`)을 먼저, 비법서 삭제(`objectDeletions`)를 나중에 마킹하면 시도 순서도 그렇게 된다.
@@ -29,11 +29,15 @@
  *   두 경로로 최신 저장을 덮어쓸 수 있다(write-loss). saveNow는 write 직전에 **두 계층을 모두
  *   evict**해 둘 다 봉쇄한다(evict-before-write):
  *     (A) tracker: 아직 flush되지 않은 snap_old를 tracker.evict로 제거한다 — 이후 주기 flush의
- *         drain()이 그 키를 못 꺼내므로 재-dispatch되지 않는다.
+ *         checkout()이 그 키를 못 꺼내므로 재-dispatch되지 않는다.
  *     (B) queue: 이미 flush돼 큐에 있는 snap_old를 queue.evict로 제거한다 — pending이면 취소하고,
  *         워커가 in-flight로 가져간 상태면 그 write 완료를 await한 뒤 진행한다. tracker-evict만으로는
  *         (B) 경로(flush 후 in-flight)가 남아 stale 덮어쓰기가 가능하다 — 두 evict가 함께라야
  *         구조적으로 봉쇄된다.
+ *   ⚠ 봉쇄는 (A)(B) **두 상태에 한해** 성립한다. checkout됐지만 backpressure로 enqueue가 아직
+ *   수락되지 않은 세 번째 상태는 어느 evict도 보지 못한다(AsyncWriteQueue.evict 주석 참조).
+ *   saveNow는 현재 프로덕션 호출자가 0건이라 발현 경로가 없고, 첫 호출자가 붙는 토픽에서
+ *   구조적으로 닫아야 한다.
  *   evict-before-write 순서를 택한 이유: write를 await하는 동안 도착한 더 새로운
  *   markDirty(K, snap_newer)는 evict 이후라 tracker에 그대로 남아 다음 flush로 영속화된다.
  *   write-후-evict 순서였다면 post-await evict가 그 snap_newer를 지워 유실시킨다(logic bug).
@@ -59,11 +63,12 @@ import type { CharacterRepository } from '../repo/characterRepository.js'
 import type { BankRepository } from '../repo/bankRepository.js'
 import type { WorldRepository } from '../repo/worldRepository.js'
 import type { ObjectRepository } from '../repo/objectRepository.js'
-import { DirtyTracker } from './dirtyTracker.js'
+import { DirtyTracker, type DirtyEntry } from './dirtyTracker.js'
 import {
   AsyncWriteQueue,
   type AsyncWriteQueueOptions,
   type DispatchMap,
+  type WriteOutcome,
 } from './asyncWriteQueue.js'
 import { SaveScheduler, type SchedulerClock } from './saveScheduler.js'
 import { OBJECT_DELETIONS_COLLECTION } from './markObjectDeleted.js'
@@ -91,10 +96,7 @@ function stripImmutableId(snapshot: unknown): unknown {
   if (typeof snapshot !== 'object' || snapshot === null || !('_id' in snapshot)) {
     return snapshot
   }
-  const rest: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(snapshot)) {
-    if (key !== '_id') rest[key] = value
-  }
+  const { _id: _immutable, ...rest } = snapshot as Record<string, unknown>
   return rest
 }
 
@@ -104,8 +106,14 @@ export interface SaveEngineOptions {
   readonly intervalMs?: number
   /** tick seam(기본 전역 setInterval/clearInterval). 테스트는 FakeClock을 주입한다. */
   readonly clock?: SchedulerClock
-  /** AsyncWriteQueue 옵션(capacity·재시도·backoff sleep seam). */
-  readonly queueOptions?: AsyncWriteQueueOptions
+  /**
+   * AsyncWriteQueue 옵션(capacity·재시도·backoff sleep seam).
+   *
+   * `onSettled`는 제외한다 — 엔진이 그 seam으로 DirtyTracker 반납을 배선하므로 호출자 값이
+   * 들어오면 반납이 발화하지 않아 스냅샷이 inProgress에 영구 잔류한다. 그 고장은 예외도 로그도
+   * 남기지 않으니, 넘길 수 있게 두고 무시하는 대신 타입으로 막는다.
+   */
+  readonly queueOptions?: Omit<AsyncWriteQueueOptions, 'onSettled'>
 }
 
 export class SaveEngine {
@@ -159,7 +167,14 @@ export class SaveEngine {
     }
     this.tracker = new DirtyTracker()
     // 실 logger 주입(NOOP 아님) — 무흔적 폐기 방지.
-    this.queue = new AsyncWriteQueue(this.dispatch, logger, options.queueOptions)
+    // onSettled 배선은 스프레드 **뒤**에 둔다. 호출자 값이 덮어쓰는 경로는 queueOptions의
+    // Omit이 이미 타입으로 막았고, 이 순서는 그 방어의 이중화다.
+    this.queue = new AsyncWriteQueue(this.dispatch, logger, {
+      ...options.queueOptions,
+      onSettled: (entry, outcome) => {
+        this.settle(entry, outcome)
+      },
+    })
     this.scheduler = new SaveScheduler(this.tracker, this.queue, {
       intervalMs: options.intervalMs,
       clock: options.clock,
@@ -173,6 +188,45 @@ export class SaveEngine {
    */
   markDirty(collection: string, id: string, snapshot: unknown): void {
     this.tracker.markDirty(collection, id, snapshot)
+  }
+
+  /**
+   * 해당 키의 미영속 스냅샷을 비파괴적으로 조회한다(재접속 hydrate의 단일 입구).
+   *
+   * `undefined`는 "그 키의 미영속 스냅샷이 없음"을 뜻한다 — 수명 계약상 저장소 문서가 최신이라는
+   * 의미이므로, 조회자는 DB에서 읽은 값을 그대로 쓰면 된다. 미착수(registry)든 write 진행 중
+   * (inProgress)이든 같은 값이 나오며, 판정은 tracker.peek 한 곳이 담당한다.
+   *
+   * 반환값은 **patch 컬렉션(characters·bankAccounts)에 한해** flush가 `$set`할 값과 문자 그대로
+   * 같다 — 그 두 라우트만 영속 경로에서 같은 `stripImmutableId`를 거치기 때문이다. 두 경로가 각자
+   * 정규화하면 hydrate가 덮어쓴 문서와 실제 저장될 문서가 갈라지는데, 그 불일치는 예외도 로그도
+   * 남기지 않는다. 나머지 두 라우트는 이 등식이 성립하지 않으니 그대로 소비하지 마라 —
+   * `roomStates`는 어댑터가 스냅샷을 벗기지 않고 통째로 upsert하고, `objectDeletions`는 스냅샷을
+   * 아예 쓰지 않는다(id만으로 삭제).
+   *
+   * 반환값은 tracker가 보관한 **라이브 참조일 수 있다**(`_id`가 없는 스냅샷은 그대로 돌려준다).
+   * mutate하지 마라 — 앞으로 영속될 스냅샷이 오염된다. DirtyTracker의 "참조 그대로 보관하고
+   * 복제하지 않는다" 계약과 짝을 이룬다.
+   *
+   * 반환 타입은 `unknown`이다. save 계층은 collection 무지(agnostic)이고, 소비자가 어차피 자기
+   * 스키마로 런타임 검증하므로 검증되지 않은 컴파일 타임 단언을 여기 얹지 않는다.
+   */
+  peekPending(collection: string, id: string): unknown {
+    const entry = this.tracker.peek(collection, id)
+    return entry === undefined ? undefined : stripImmutableId(entry.snapshot)
+  }
+
+  /**
+   * 큐의 job 종결 통지를 tracker 반납으로 옮긴다.
+   *
+   * `acked`(write 성공)와 `discarded`(permanent 실패·재시도 소진·어댑터 미발견) 모두 스냅샷의
+   * 소유권을 놓는다는 점에서 같다 — 전자는 저장소가 최신이 됐고, 후자는 그 스냅샷이 복구 없이
+   * 버려졌다. 어느 쪽도 tracker에 남겨두면 hydrate가 실재하지 않는 "미영속 진행도"를 보게 된다.
+   * 반납 조건(참조 동일성)은 DirtyTracker.release가 담당하므로 여기서는 분기만 한다.
+   */
+  private settle(entry: DirtyEntry, outcome: WriteOutcome): void {
+    if (outcome === 'acked') this.tracker.ack(entry)
+    else this.tracker.discard(entry)
   }
 
   /** 주기 flush 스케줄러를 시작한다. */

@@ -232,12 +232,13 @@ function buildHarness(): LiveWorldHarness {
     // 필드 존재만 증명하고 값의 정합성은 증명하지 못한다 — 실 검출자는 정본 인덱스를 싣는 study e2e다.
     objectTemplates: new Map(),
     markDirty: (collection, id, snapshot) => saveEngine.markDirty(collection, id, snapshot),
+    peekPending: (collection, id) => saveEngine.peekPending(collection, id),
     currentHour: () => 12, // pass-move 시간 게이트 통과(밤 게이트 회피)
     // P-flag 합성 시점 seam(#120 study 경로). 테스트는 고정 틱을 쓴다 — 만료 판정이 시간에 흔들리지 않게.
     now: () => 0,
     onRoomEntered: vi.fn(),
     onRoomLeft: vi.fn(),
-    logger: { warn: vi.fn() },
+    logger: { warn: vi.fn(), error: vi.fn() },
   }
 
   const sessionAuth = new InMemorySessionAuthAdapter({

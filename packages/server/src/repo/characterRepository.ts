@@ -1,6 +1,11 @@
 import type { Collection, Db, Filter } from 'mongodb'
 import { characterSchema, type Character, type ObjectInstance } from 'shared'
 import { DocumentNotFoundError, type IRepository } from './types.js'
+import { characterPatchSchema } from './characterSchemas.js'
+
+// 검증 스키마의 정본은 의존 0 모듈 `characterSchemas.ts`다(계층 역전 회피 — 그 파일 주석 참조).
+// 저장소를 통해 쓰던 기존 import 경로를 깨지 않도록 여기서 재-export한다.
+export { characterPatchSchema } from './characterSchemas.js'
 import type { ObjectRepository } from './objectRepository.js'
 import {
   backfillCharacterV2,
@@ -12,14 +17,6 @@ import {
 
 const COLLECTION_NAME = 'characters'
 
-// 부분 갱신 검증 스키마 — updateById마다 재구성하지 않도록 모듈 스코프에서 1회 파생한다.
-// strictObject의 .partial()은 존재 필드만 검증하고 unknown 키는 여전히 거부한다.
-// status의 .default('active')는 먼저 벗긴다(accountRepository와 동일 관례): patch에 status가
-// 없을 때 .partial()이라도 default가 재발화해 $set에 status:'active'가 주입되면, 무덤
-// (status='deleted') 문서를 부활시키는 silent write가 된다. removeDefault로 넘긴 값만 검증한다.
-const characterPatchSchema = characterSchema
-  .extend({ status: characterSchema.shape.status.removeDefault() })
-  .partial()
 
 /**
  * 캐릭터 영속 저장소.

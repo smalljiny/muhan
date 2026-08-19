@@ -5,6 +5,7 @@ import {
   DEFAULT_CAPACITY,
   MAX_RETRIES,
   type WriteAdapter,
+  type WriteOutcome,
 } from './asyncWriteQueue.js'
 import { NOOP_LOGGER } from './logger.js'
 import { DocumentNotFoundError } from '../repo/types.js'
@@ -363,6 +364,234 @@ describe('AsyncWriteQueue (unit)', () => {
       release()
       await queue.drain()
       expect(queue.pendingSize).toBe(0)
+    })
+  })
+
+  /**
+   * 완료 프로토콜 — 큐가 job 종결을 onSettled(entry, outcome)로 통지한다.
+   *
+   * DirtyTracker의 수명 계약(checkout→ack/discard)은 "write가 언제 끝났는가"를 큐만 알기 때문에
+   * 이 통지 없이는 성립하지 않는다. 통지가 빠지면 스냅샷이 inProgress에 영구 잔류하고(누수),
+   * 반대로 실패 경로에서 통지가 빠지면 폐기된 스냅샷이 최신인 척 남아 재접속 hydrate가 이미
+   * 버려진 값을 덮어쓴다. 그래서 성공·실패 **모든** 종결 경로를 개별 케이스로 고정한다.
+   */
+  describe('완료 프로토콜 (onSettled)', () => {
+    /** onSettled 통지를 기록하는 스파이. */
+    const settleSpy = (): ReturnType<typeof vi.fn> =>
+      vi.fn<(entry: DirtyEntry, outcome: WriteOutcome) => void>()
+
+    it('write 성공 시 onSettled(entry, "acked")를 정확히 1회 호출한다', async () => {
+      const adapter = vi.fn<WriteAdapter>(() => Promise.resolve())
+      const onSettled = settleSpy()
+      const queue = new AsyncWriteQueue({ characters: adapter }, NOOP_LOGGER, {
+        sleep: immediate,
+        onSettled,
+      })
+      const entry = job('characters', 'c1', { gold: 10 })
+
+      await queue.enqueue(entry)
+      await queue.drain()
+
+      expect(onSettled).toHaveBeenCalledTimes(1)
+      // 인자는 enqueue된 엔트리와 **같은 참조**여야 한다 — tracker의 반납 조건이 참조 동일성이라
+      // 복제본을 넘기면 ack이 조용한 no-op이 되어 스냅샷이 inProgress에 영구 잔류한다.
+      expect(onSettled.mock.calls[0]?.[0]).toBe(entry)
+      expect(onSettled.mock.calls[0]?.[1]).toBe('acked')
+    })
+
+    it('재시도 안에서 성공하면 통지는 여전히 acked 1회다(중간 실패는 통지하지 않는다)', async () => {
+      let n = 0
+      const adapter = vi.fn<WriteAdapter>(() => {
+        n += 1
+        return n < 3 ? Promise.reject(new Error('일시적 네트워크 오류')) : Promise.resolve()
+      })
+      const onSettled = settleSpy()
+      const queue = new AsyncWriteQueue({ characters: adapter }, NOOP_LOGGER, {
+        sleep: immediate,
+        onSettled,
+      })
+
+      await queue.enqueue(job('characters', 'c1', {}))
+      await queue.drain()
+
+      expect(adapter).toHaveBeenCalledTimes(3)
+      expect(onSettled).toHaveBeenCalledTimes(1)
+      expect(onSettled.mock.calls[0]?.[1]).toBe('acked')
+    })
+
+    it('permanent 에러(DocumentNotFoundError)는 discarded로 통지한다', async () => {
+      const adapter = vi.fn<WriteAdapter>(() =>
+        Promise.reject(new DocumentNotFoundError('characters', 'c1')),
+      )
+      const onSettled = settleSpy()
+      const queue = new AsyncWriteQueue({ characters: adapter }, { error: vi.fn() }, {
+        sleep: immediate,
+        onSettled,
+      })
+
+      await queue.enqueue(job('characters', 'c1', {}))
+      await queue.drain()
+
+      expect(onSettled).toHaveBeenCalledTimes(1)
+      expect(onSettled.mock.calls[0]?.[1]).toBe('discarded')
+    })
+
+    it('permanent 에러(ZodError)는 discarded로 통지한다', async () => {
+      const adapter = vi.fn<WriteAdapter>(() => Promise.reject(new ZodError([])))
+      const onSettled = settleSpy()
+      const queue = new AsyncWriteQueue({ characters: adapter }, { error: vi.fn() }, {
+        sleep: immediate,
+        onSettled,
+      })
+
+      await queue.enqueue(job('characters', 'c1', { gold: 'malformed' }))
+      await queue.drain()
+
+      expect(onSettled).toHaveBeenCalledTimes(1)
+      expect(onSettled.mock.calls[0]?.[1]).toBe('discarded')
+    })
+
+    it('transient 재시도 소진은 discarded로 통지한다', async () => {
+      const adapter = vi.fn<WriteAdapter>(() => Promise.reject(new Error('일시적 네트워크 오류')))
+      const onSettled = settleSpy()
+      const queue = new AsyncWriteQueue({ characters: adapter }, { error: vi.fn() }, {
+        sleep: immediate,
+        onSettled,
+      })
+
+      await queue.enqueue(job('characters', 'c1', {}))
+      await queue.drain()
+
+      expect(adapter).toHaveBeenCalledTimes(MAX_RETRIES + 1)
+      expect(onSettled).toHaveBeenCalledTimes(1)
+      expect(onSettled.mock.calls[0]?.[1]).toBe('discarded')
+    })
+
+    it('어댑터 미발견 job도 discarded로 통지한다', async () => {
+      const onSettled = settleSpy()
+      const queue = new AsyncWriteQueue({}, { error: vi.fn() }, { sleep: immediate, onSettled })
+
+      await queue.enqueue(job('unknownColl', 'x', {}))
+      await queue.drain()
+
+      expect(onSettled).toHaveBeenCalledTimes(1)
+      expect(onSettled.mock.calls[0]?.[1]).toBe('discarded')
+    })
+
+    it('주입 logger가 throw하는 경로도 discarded로 통지한다(안쪽 방어 경유)', async () => {
+      const adapter = vi.fn<WriteAdapter>(() =>
+        Promise.reject(new DocumentNotFoundError('characters', 'c1')),
+      )
+      const logger = {
+        error: vi.fn(() => {
+          throw new Error('logger 자체가 터진다')
+        }),
+      }
+      const onSettled = settleSpy()
+      const queue = new AsyncWriteQueue({ characters: adapter }, logger, {
+        sleep: immediate,
+        onSettled,
+      })
+
+      await queue.enqueue(job('characters', 'c1', {}))
+      await expect(queue.drain()).resolves.toBeUndefined()
+
+      // 결과를 확정하지 못한 경로는 보수적으로 discarded다 — write 성공을 확인하지 못했는데
+      // acked로 통지하면 아직 영속되지 않은 스냅샷이 tracker에서 사라진다.
+      expect(onSettled).toHaveBeenCalledTimes(1)
+      expect(onSettled.mock.calls[0]?.[1]).toBe('discarded')
+    })
+
+    /**
+     * 스펙 §8.8 — 통지 콜백의 오류가 워커 루프를 죽이지 않는다.
+     *
+     * onSettled 구현체(SaveEngine.settle→tracker.ack)가 throw하면 그 job의 반납은 실패하지만,
+     * 그 실패가 후속 job의 write까지 막으면 한 번의 콜백 버그가 전체 세이브 파이프라인을 정지시킨다.
+     */
+    it('§8.8: onSettled가 throw해도 워커가 죽지 않고 후속 job을 write·통지한다', async () => {
+      const written: string[] = []
+      const adapter = vi.fn<WriteAdapter>((id) => {
+        written.push(id)
+        return Promise.resolve()
+      })
+      const onSettled = vi.fn<(entry: DirtyEntry, outcome: WriteOutcome) => void>((entry) => {
+        if (entry.id === 'bad') throw new Error('통지 처리기가 터진다')
+      })
+      const queue = new AsyncWriteQueue({ characters: adapter }, NOOP_LOGGER, {
+        sleep: immediate,
+        onSettled,
+      })
+
+      await queue.enqueue(job('characters', 'bad', {}))
+      await queue.enqueue(job('characters', 'good', {}))
+      await expect(queue.drain()).resolves.toBeUndefined()
+
+      expect(written).toEqual(['bad', 'good'])
+      expect(onSettled).toHaveBeenCalledTimes(2)
+    })
+
+    it('§8.8: onSettled의 throw는 logger.error로 흔적을 남긴다', async () => {
+      const adapter = vi.fn<WriteAdapter>(() => Promise.resolve())
+      const error = vi.fn()
+      const cause = new Error('통지 처리기가 터진다')
+      const queue = new AsyncWriteQueue({ characters: adapter }, { error }, {
+        sleep: immediate,
+        onSettled: () => {
+          throw cause
+        },
+      })
+
+      await queue.enqueue(job('characters', 'c1', {}))
+      await expect(queue.drain()).resolves.toBeUndefined()
+
+      expect(error).toHaveBeenCalledTimes(1)
+      expect(error.mock.calls[0]?.[0]).toMatchObject({
+        collection: 'characters',
+        id: 'c1',
+        outcome: 'acked',
+        err: cause,
+      })
+    })
+
+    /**
+     * 통지 실패를 기록하려는 logger 자체가 throw하는 이중 고장.
+     *
+     * 이 파일의 소비자 계약은 실 logger 주입을 요구하는데, 그 logger가 고장 나 있을 수 있다.
+     * 흔적 남기기에 실패하는 것까지는 감수하되 워커 루프는 살아 후속 job을 계속 write해야 한다 —
+     * 로깅 실패가 세이브 파이프라인 전체를 정지시키면 고장의 크기가 부풀어 오른다.
+     */
+    it('§8.8: 통지 throw를 기록하려는 logger까지 throw해도 워커가 후속 job을 write한다', async () => {
+      const written: string[] = []
+      const adapter = vi.fn<WriteAdapter>((id) => {
+        written.push(id)
+        return Promise.resolve()
+      })
+      const error = vi.fn(() => {
+        throw new Error('logger도 터진다')
+      })
+      const queue = new AsyncWriteQueue({ characters: adapter }, { error }, {
+        sleep: immediate,
+        onSettled: (entry) => {
+          if (entry.id === 'bad') throw new Error('통지 처리기가 터진다')
+        },
+      })
+
+      await queue.enqueue(job('characters', 'bad', {}))
+      await queue.enqueue(job('characters', 'good', {}))
+      await expect(queue.drain()).resolves.toBeUndefined()
+
+      expect(written).toEqual(['bad', 'good'])
+      expect(error).toHaveBeenCalledTimes(1)
+    })
+
+    it('onSettled 미주입이어도 write는 정상 동작한다(옵션)', async () => {
+      const adapter = vi.fn<WriteAdapter>(() => Promise.resolve())
+      const queue = new AsyncWriteQueue({ characters: adapter }, NOOP_LOGGER, { sleep: immediate })
+
+      await queue.enqueue(job('characters', 'c1', { gold: 1 }))
+      await expect(queue.drain()).resolves.toBeUndefined()
+
+      expect(adapter).toHaveBeenCalledTimes(1)
     })
   })
 

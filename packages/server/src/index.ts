@@ -105,12 +105,17 @@ async function boot(): Promise<void> {
     characterRepo: characters,
     objectTemplates,
     markDirty: (collection, id, snapshot) => saveEngine.markDirty(collection, id, snapshot),
+    // markDirty와 짝이 되는 조회 seam — 같은 이유로 this 바인딩 유지를 위해 화살표로 감싼다.
+    peekPending: (collection, id) => saveEngine.peekPending(collection, id),
     currentHour: gameTime.currentHour,
     // P-flag 합성 시점 — worldRuntime 훅과 **같은 클로저**를 넘긴다(위 `now` 선언 참조).
     now,
     onRoomEntered: worldRuntime.onRoomEntered,
     onRoomLeft: worldRuntime.onRoomLeft,
-    logger: { warn: (context, message) => app.log.warn(context, message) },
+    logger: {
+      warn: (context, message) => app.log.warn(context, message),
+      error: (context, message) => app.log.error(context, message),
+    },
   }
 
   // ping을 /health의 진실 원천으로 주입한다. 세션 인증 어댑터는 플래그로 분기한다:

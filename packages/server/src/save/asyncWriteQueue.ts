@@ -15,7 +15,7 @@
  *    같은 키 재-enqueue 시 최신값으로 덮어쓴다. Map의 삽입 순서 보존으로 FIFO도 만족한다.
  *    **호출 계약**: coalescing이 "최종 write 1회"로 성립하려면 같은 키를 yield 없이 동기
  *    burst로 enqueue해야 한다(워커 시작을 microtask로 지연해 burst가 pending에 먼저 쌓이게
- *    한다). SaveScheduler는 이미 coalesce된 DirtyTracker를 drain해 동기 enqueue하므로 성립한다.
+ *    한다). SaveScheduler는 이미 coalesce된 DirtyTracker를 checkout해 동기 enqueue하므로 성립한다.
  *
  * 3. capacity-full backpressure (pending-only) — capacity는 pending Map 크기만 제한한다.
  *    coalescing 후에도 pending이 capacity 이상이면 enqueue가 공간이 생길 때까지 await(block)해
@@ -34,6 +34,10 @@
  *    resolve로 대체한다. 비결정적 타이밍 테스트를 피한다. 워커는 지속 타이머를 쓰지 않으므로
  *    (setTimeout은 backoff 동안만 존재하고 resolve됨) 프로세스를 살려두지 않는다 — unref 불필요.
  *
+ * 6. 완료 프로토콜 (onSettled) — 워커가 dispatch한 job의 종결을 소비자에게 통지한다. "write가
+ *    언제 끝났는가"는 큐만 알기 때문에, 이 통지 없이는 소비자의 스냅샷 수명 계약이 성립하지
+ *    않는다. 통지 대상·시점·예외 처리 계약은 `AsyncWriteQueueOptions.onSettled` 선언부가 정본이다.
+ *
  * 소비자 계약 (SaveScheduler·SaveEngine):
  *
  * 1. coalescing은 **동기 burst**에서만 성립한다. `for..await enqueue`처럼 각 enqueue를 awaiting
@@ -48,7 +52,7 @@
  */
 
 import { ZodError } from 'zod'
-import type { DirtyEntry } from './dirtyTracker.js'
+import { dirtyKey, type DirtyEntry } from './dirtyTracker.js'
 import type { SaveLogger } from './logger.js'
 import { DocumentNotFoundError } from '../repo/types.js'
 
@@ -67,6 +71,18 @@ export type WriteAdapter = (id: string, snapshot: unknown) => Promise<void>
 /** collection 이름 → write 어댑터 맵. */
 export type DispatchMap = Record<string, WriteAdapter>
 
+/**
+ * job 종결 결과 — `acked`는 어댑터 write 성공, `discarded`는 스냅샷 폐기다.
+ *
+ * 폐기는 permanent 실패(DocumentNotFoundError·ZodError)·재시도 소진·어댑터 미발견을 모두 포함하며,
+ * 결과를 확정하지 못한 경로(주입 logger·sleep이 throw)도 보수적으로 여기 속한다 — write 성공을
+ * 확인하지 못했는데 `acked`로 통지하면 아직 영속되지 않은 스냅샷이 소유자에게서 사라진다.
+ */
+export type WriteOutcome = 'acked' | 'discarded'
+
+/** job 종결 통지 seam — 계약은 `AsyncWriteQueueOptions.onSettled` 선언부 참조. */
+export type OnWriteSettled = (entry: DirtyEntry, outcome: WriteOutcome) => void
+
 /** AsyncWriteQueue 생성 옵션. */
 export interface AsyncWriteQueueOptions {
   /** pending 상한(기본 DEFAULT_CAPACITY). */
@@ -77,6 +93,23 @@ export interface AsyncWriteQueueOptions {
   readonly sleep?: (ms: number) => Promise<void>
   /** backoff base delay ms(기본 DEFAULT_BASE_DELAY_MS). */
   readonly baseDelayMs?: number
+  /**
+   * job 종결 통지(기본 없음). **워커가 dispatch한** job은 성공·폐기 어느 경로로 끝나도 정확히
+   * 1회 통지된다.
+   *
+   * dispatch에 도달하지 못하고 사라지는 두 경로는 통지가 **없다**(설계상 의도) —
+   *   (a) `evict`가 pending에서 취소한 job. saveNow가 `tracker.evict`를 먼저 부르므로 소비자
+   *       상태는 이미 정리돼 있다.
+   *   (b) 같은 키 재-enqueue로 coalescing에 밀려난 이전 스냅샷. 다음 checkout이 inProgress의
+   *       그 키를 새 엔트리로 덮으므로, 밀려난 엔트리의 미통지는 참조 동일성 규칙상 무해하다.
+   * 따라서 이 통지는 "enqueue한 엔트리마다 1회"가 아니다 — 통지 수를 세어 미완료 job을 추적하는
+   * refcount 용도로 쓰면 두 경로에서 어긋난다.
+   *
+   * SaveEngine이 이 seam으로 DirtyTracker의 반납(ack/discard)을 배선한다. 인자 entry는 enqueue된
+   * 것과 같은 참조다 — tracker의 반납 조건이 참조 동일성이므로 복제본을 넘기면 조용한 no-op이 된다.
+   * 콜백이 throw해도 워커 루프는 생존한다(work() 주석 참조).
+   */
+  readonly onSettled?: OnWriteSettled
 }
 
 /** 기본 backoff sleep — 실제 setTimeout. */
@@ -90,6 +123,7 @@ export class AsyncWriteQueue {
   private readonly sleep: (ms: number) => Promise<void>
   private readonly baseDelayMs: number
   private readonly logger: SaveLogger
+  private readonly onSettled?: OnWriteSettled
 
   /** pending job — 키(collection:id)당 최신 스냅샷 1건(coalescing + FIFO). */
   private readonly pending = new Map<string, DirtyEntry>()
@@ -117,6 +151,7 @@ export class AsyncWriteQueue {
     this.maxRetries = options.maxRetries ?? MAX_RETRIES
     this.sleep = options.sleep ?? realSleep
     this.baseDelayMs = options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS
+    this.onSettled = options.onSettled
   }
 
   /** 현재 pending job 개수(테스트·검사용). */
@@ -130,7 +165,7 @@ export class AsyncWriteQueue {
    * pending이 capacity 이상이고 새 키면 공간이 생길 때까지 await한다(backpressure).
    */
   async enqueue(job: DirtyEntry): Promise<void> {
-    const key = `${job.collection}:${job.id}`
+    const key = dirtyKey(job.collection, job.id)
     // coalescing으로 흡수되지 않는(새 키) 경우에만 capacity를 강제한다.
     // 여유 있는 공통 경로에서 Map.has() 조회를 건너뛰도록 저렴한 size 비교를 먼저 둔다.
     while (this.pending.size >= this.capacity && !this.pending.has(key)) {
@@ -162,13 +197,22 @@ export class AsyncWriteQueue {
    * 끝날 때까지 await한다. SaveEngine.saveNow가 즉시 write 직전에 호출해, 같은 키의 stale 큐 write가
    * saveNow의 최신 write보다 나중에 커밋돼 덮어쓰는 것을 pending·in-flight 양쪽에서 봉쇄한다.
    *
-   * 반환 후 이 키의 미완료 큐 write는 남지 않는다 — coalescing으로 키당 pending 1건, 단일 워커로
-   * in-flight 1건뿐이므로 pending 삭제 + in-flight await로 둘 다 소진된다. saveNow는 이 호출 전에
-   * tracker.evict로 stale mark를 제거하므로, await 도중 주기 flush가 이 키를 재-enqueue하는 일도 없다
-   * (await 중 도착한 더 새로운 markDirty는 evict 이후라 tracker에 남아 다음 flush로 영속화된다).
+   * 반환 후 **큐가 보유한** 이 키의 미완료 write는 남지 않는다 — coalescing으로 키당 pending 1건,
+   * 단일 워커로 in-flight 1건뿐이므로 pending 삭제 + in-flight await로 둘 다 소진된다.
+   *
+   * ⚠ 큐가 볼 수 없는 세 번째 상태가 있다. `SaveScheduler.flush()`는 `checkout()` 후 `enqueue`에서
+   * capacity backpressure로 블록될 수 있고, 그 창의 엔트리는 tracker의 inProgress에는 있지만 큐의
+   * pending에는 아직 없다. 이 evict는 그 엔트리를 취소하지 못하며, 반환 후 블록이 풀리면 stale
+   * 엔트리가 뒤늦게 enqueue돼 saveNow의 최신 write를 덮을 수 있다. saveNow에 프로덕션 호출자가
+   * 붙을 때(현재 0건) 구조적으로 닫아야 한다 — 스케줄러가 checkout 완료·enqueue 미수락 집합을
+   * 노출하거나, flush를 evict-aware로 만드는 형태다.
+   *
+   * saveNow는 이 호출 전에 tracker.evict로 stale mark를 제거하므로, await 도중 도착한 더 새로운
+   * markDirty는 evict 이후라 tracker에 남아 다음 flush로 영속화된다. 다만 saveNow **이전에 이미
+   * checkout된** 엔트리는 tracker.evict가 지워도 스케줄러의 지역 배열에 살아 있어 그대로 enqueue된다.
    */
   async evict(collection: string, id: string): Promise<void> {
-    const key = `${collection}:${id}`
+    const key = dirtyKey(collection, id)
     // pending에서 실제로 제거했으면 슬롯 1개가 비므로 capacity로 block된 enqueue 하나를 깨운다.
     // 이를 빠뜨리면 워커가 이 키를 take하며 슬롯을 비우는 유일한 경로가 사라져(evict가 대신 제거),
     // capacity 대기자가 영구히 방치돼 flush/shutdown이 hang한다(deadlock).
@@ -226,12 +270,16 @@ export class AsyncWriteQueue {
         this.inFlightSettled = new Promise<void>((resolve) => {
           settleInFlight = resolve
         })
+        // 기본값을 discarded로 두어, 결과를 확정하지 못한 경로(아래 catch)가 write 성공으로
+        // 오인되지 않게 한다.
+        let outcome: WriteOutcome = 'discarded'
         try {
-          await this.writeWithRetry(entry)
+          outcome = await this.writeWithRetry(entry)
         } catch {
           // 안쪽 방어(load-bearing) — writeWithRetry 내부의 logger·sleep이 throw해도 삼켜 루프가
           // 다음 job으로 진행하게 한다. 바깥 catch만 두면 여기서 루프를 이탈해 후속 job이 유실된다.
         } finally {
+          this.notifySettled(entry, outcome)
           this.inFlight -= 1
           this.inFlightKey = null
           this.inFlightSettled = null
@@ -240,6 +288,34 @@ export class AsyncWriteQueue {
       }
     } catch {
       // 최후 방어 — 도달 불가에 가깝지만 워커가 절대 reject하지 않음을 타입·런타임 양면에서 보장.
+    }
+  }
+
+  /**
+   * job 종결을 소비자에게 통지한다. 이 메서드는 throw하지 않는다.
+   *
+   * 호출 위치는 in-flight 창을 닫는 것과 **같은 동기 블록**에서 settleInFlight() 앞이다 — evict가
+   * in-flight write 완료를 await한 뒤에는 소비자 상태가 이미 반영돼 있어야 saveNow의
+   * evict-before-write 논증이 유지된다. 다만 settleInFlight()가 큐잉하는 evict 재개보다 관측자가
+   * 거치는 마이크로태스크 hop이 더 길어, 통지를 뒤로 옮겨도 밖에서는 구별되지 않는다. 즉 테스트가
+   * 보증하는 강도는 "같은 동기 블록"까지이고, 그 안에서의 배치는 이 주석이 유일한 근거다.
+   *
+   * 통지 처리기의 throw는 삼켜 워커 루프를 보호하되(후속 job의 write까지 막지 않는다) 로그는
+   * 남긴다 — 이 파일의 소비자 계약이 무흔적 폐기를 금지한다. 통지가 실패한 엔트리는 소비자 쪽에
+   * 반납되지 않은 채 남고, 같은 키가 다시 dirty로 기록되지 않으면 회수되지 않는다.
+   */
+  private notifySettled(entry: DirtyEntry, outcome: WriteOutcome): void {
+    try {
+      this.onSettled?.(entry, outcome)
+    } catch (error) {
+      try {
+        this.logger.error(
+          { collection: entry.collection, id: entry.id, outcome, err: error },
+          '완료 통지 처리기가 실패했다 — 소비자 반납이 누락될 수 있다',
+        )
+      } catch {
+        // logger 자체가 throw하는 경우까지 막아 워커 루프를 보호한다.
+      }
     }
   }
 
@@ -252,8 +328,10 @@ export class AsyncWriteQueue {
   /**
    * 어댑터로 write하되 에러를 분류해 재시도한다. 어떤 경로에서도 throw하지 않는다
    * (permanent·소진·미지 collection 모두 logger 기록 후 return) — 워커 루프 생존 보장.
+   *
+   * 반환값은 종결 결과다 — 어댑터 정상 반환만 `acked`이고 나머지 return 경로는 모두 `discarded`다.
    */
-  private async writeWithRetry(entry: DirtyEntry): Promise<void> {
+  private async writeWithRetry(entry: DirtyEntry): Promise<WriteOutcome> {
     // hasOwn 가드 — collection은 unconstrained string이므로 '__proto__' 등 prototype 키가
     // Object.prototype 멤버로 해석돼 undefined 가드를 우회하는 것을 막는다(security.md 동적 키 접근).
     const adapter = Object.hasOwn(this.dispatch, entry.collection)
@@ -264,13 +342,13 @@ export class AsyncWriteQueue {
         { collection: entry.collection, id: entry.id },
         'write 어댑터를 찾을 수 없어 job을 폐기한다',
       )
-      return
+      return 'discarded'
     }
     let attempt = 0
     for (;;) {
       try {
         await adapter(entry.id, entry.snapshot)
-        return
+        return 'acked'
       } catch (error) {
         if (error instanceof DocumentNotFoundError || error instanceof ZodError) {
           // permanent — stale/삭제된 id(DocumentNotFoundError) 또는 스키마 검증 실패(ZodError,
@@ -279,7 +357,7 @@ export class AsyncWriteQueue {
             { collection: entry.collection, id: entry.id, err: error },
             'permanent write 실패 — 재시도하지 않는다',
           )
-          return
+          return 'discarded'
         }
         attempt += 1
         if (attempt > this.maxRetries) {
@@ -287,7 +365,7 @@ export class AsyncWriteQueue {
             { collection: entry.collection, id: entry.id, err: error, attempts: attempt },
             'transient write 재시도 소진 — job을 폐기한다',
           )
-          return
+          return 'discarded'
         }
         await this.sleep(this.backoffMs(attempt))
       }

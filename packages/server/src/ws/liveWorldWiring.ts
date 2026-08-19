@@ -3,6 +3,7 @@ import type { ObjectTemplateIndex } from '../items/objectTemplate.js'
 import { createLiveCharacterEntry, type EntryLogger } from '../world/liveCharacterEntry.js'
 import type { LiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
 import {
+  CHARACTERS_COLLECTION,
   createMarkCharacterDirty,
   type MarkCharacterDirty,
 } from '../world/markCharacterDirty.js'
@@ -76,6 +77,14 @@ export interface LiveWorldWiringBundle {
   readonly objectTemplates: ObjectTemplateIndex
   /** 변경 엔티티 side registry 기록 — 이동 write-behind·종료 수렴이 소비한다(실 flush는 저장 스케줄러). */
   readonly markDirty: (collection: string, id: string, snapshot: unknown) => void
+  /**
+   * 미영속 스냅샷 조회 seam(`SaveEngine.peekPending`). 원시 `(collection, id)` 형태로 싣고, 팩토리가
+   * `'characters'`로 **1회 좁혀** 진입 코어에 준다(markDirty → markCharacterDirty 관례 미러).
+   *
+   * save 계층은 collection 무지라 반환이 `unknown`이다 — 좁힘 지점이 아니라 **소비 지점**(hydrate)이
+   * 자기 스키마로 런타임 검증한다.
+   */
+  readonly peekPending: (collection: string, id: string) => unknown
   /** 현재 게임시각(0~23) — 이동 시간 게이트가 소비한다(gameTime.currentHour 주입). */
   readonly currentHour: () => number
   /**
@@ -152,6 +161,10 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
   // studyDeps 하나뿐이면 단언할 대상이 없어 표면만 넓어진다. 두 번째 소비자가 생기면 그때 노출한다.
   const markObjectDeleted = createMarkObjectDeleted(bundle.markDirty)
 
+  // characters pending 조회 seam — 원시 `peekPending`을 'characters'로 **1회** 좁힌다(#3, markCharacterDirty 미러).
+  // 좁힘이 여러 곳에 흩어지면 컬렉션 리터럴 오타가 조용한 "pending 없음"이 되어 #124가 되살아난다.
+  const peekPendingCharacter = (id: string): unknown => bundle.peekPending(CHARACTERS_COLLECTION, id)
+
   // 진입 코어 — 단일 인스턴스로 생성해 liveWorldBinding·lifecyclePort가 공유한다(#3).
   const entry = createLiveCharacterEntry({
     characterRepo: bundle.characterRepo,
@@ -159,6 +172,7 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     resolveRoom: resolveRoomById,
     onRoomEntered: bundle.onRoomEntered,
     onRoomLeft: bundle.onRoomLeft,
+    peekPendingCharacter,
     logger: bundle.logger,
   })
 

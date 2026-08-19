@@ -83,12 +83,13 @@ function makeBundle(): BundleHarness {
     },
     objectTemplates: new Map(),
     markDirty,
+    peekPending: () => undefined,
     currentHour: () => 12,
     // P-flag 합성 시점 seam(#120 study 경로). 테스트는 고정 틱을 쓴다 — 만료 판정이 시간에 흔들리지 않게.
     now: () => 0,
     onRoomEntered: vi.fn(),
     onRoomLeft: vi.fn(),
-    logger: { warn: vi.fn() },
+    logger: { warn: vi.fn(), error: vi.fn() },
   }
   return { bundle, markDirty, liveRegistry, room }
 }
@@ -214,12 +215,13 @@ function makeEvictHarness(): EvictHarness {
     },
     objectTemplates: new Map(),
     markDirty,
+    peekPending: () => undefined,
     currentHour: () => 12, // 이동 시간 게이트 통과(밤 게이트 회피)
     // P-flag 합성 시점 seam(#120 study 경로). 테스트는 고정 틱을 쓴다 — 만료 판정이 시간에 흔들리지 않게.
     now: () => 0,
     onRoomEntered: vi.fn(),
     onRoomLeft: vi.fn(),
-    logger: { warn: vi.fn() },
+    logger: { warn: vi.fn(), error: vi.fn() },
   }
   return { bundle, markDirty, liveRegistry, roomTrain, roomDest }
 }
