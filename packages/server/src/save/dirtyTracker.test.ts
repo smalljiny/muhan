@@ -8,60 +8,30 @@ describe('DirtyTracker', () => {
     tracker = new DirtyTracker()
   })
 
-  it('같은 collection:id로 markDirty N회 후 drain하면 마지막 스냅샷 1건만 반환한다(coalescing)', () => {
+  it('같은 collection:id로 markDirty N회 후 checkout하면 마지막 스냅샷 1건만 반환한다(coalescing)', () => {
     tracker.markDirty('characters', 'char-1', { v: 1 })
     tracker.markDirty('characters', 'char-1', { v: 2 })
     tracker.markDirty('characters', 'char-1', { v: 3 })
 
-    const drained = tracker.drain()
+    const checked = tracker.checkout()
 
-    expect(drained).toHaveLength(1)
-    expect(drained[0]).toEqual({ collection: 'characters', id: 'char-1', snapshot: { v: 3 } })
+    expect(checked).toHaveLength(1)
+    expect(checked[0]).toEqual({ collection: 'characters', id: 'char-1', snapshot: { v: 3 } })
   })
 
-  /**
-   * 코얼레싱은 값만 갱신하고 **최초 삽입 위치를 보존한다**(Map 의미론). drain 순서가 곧 write 시도
-   * 순서이므로, 이 성질이 깨지면 "먼저 마킹한 키가 먼저 write된다"는 계약이 재-mark가 끼는 순간
-   * 조용히 무너진다 — `save/saveEngine.ts` 헤더의 순서 계약이 이것에 기대고 있고, study 핸들러의
-   * characters→objectDeletions 순서가 세션 종료의 characters 재-mark를 지나서도 살아남는 근거다.
-   *
-   * 이 사실을 여기서 고정하지 않으면 유일한 감시자가 실 소켓 e2e(가장 느리고 간접적인 층)가 된다.
-   */
-  it('재-mark는 값만 갱신하고 최초 삽입 위치를 유지한다(drain 순서 = write 시도 순서)', () => {
-    tracker.markDirty('characters', 'char-1', { v: 1 })
-    tracker.markDirty('objectDeletions', 'obj-9', { deleted: true })
-    // characters 재-mark — 최신 삽입이라고 뒤로 밀리면 안 된다.
-    tracker.markDirty('characters', 'char-1', { v: 2 })
-
-    const drained = tracker.drain()
-
-    expect(drained.map((e) => e.collection)).toEqual(['characters', 'objectDeletions'])
-    expect(drained[0]?.snapshot).toEqual({ v: 2 })
-  })
-
-  it('서로 다른 키 M개 markDirty 후 drain하면 M개를 반환하고 size는 0이 된다', () => {
+  it('서로 다른 키 M개 markDirty 후 checkout하면 M개를 반환하고 size는 0이 된다', () => {
     tracker.markDirty('characters', 'char-1', { gold: 10 })
     tracker.markDirty('bankAccounts', 'char-1', { balance: 500 })
     tracker.markDirty('roomStates', 'room-42', { open: true })
 
-    const drained = tracker.drain()
+    const checked = tracker.checkout()
 
-    expect(drained).toHaveLength(3)
-    expect(drained.map((e) => `${e.collection}:${e.id}`).sort()).toEqual([
+    expect(checked).toHaveLength(3)
+    expect(checked.map((e) => `${e.collection}:${e.id}`).sort()).toEqual([
       'bankAccounts:char-1',
       'characters:char-1',
       'roomStates:room-42',
     ])
-    expect(tracker.size).toBe(0)
-  })
-
-  it('drain 이후 registry가 비어 재호출 시 빈 배열을 반환한다', () => {
-    tracker.markDirty('characters', 'char-1', { gold: 10 })
-    tracker.drain()
-
-    const second = tracker.drain()
-
-    expect(second).toEqual([])
     expect(tracker.size).toBe(0)
   })
 
@@ -75,9 +45,9 @@ describe('DirtyTracker', () => {
     expect(snapshot).toEqual(pristine)
     // (b) .dirty 플래그가 심어지지 않았다
     expect('dirty' in snapshot).toBe(false)
-    // (c) drain된 항목이 원본과 동일 참조를 보관한다
-    const drained = tracker.drain()
-    expect(drained[0]?.snapshot).toBe(snapshot)
+    // (c) checkout된 항목이 원본과 동일 참조를 보관한다
+    const checked = tracker.checkout()
+    expect(checked[0]?.snapshot).toBe(snapshot)
   })
 
   it('markable 항목이 추가될 때마다 size가 pending 개수를 반영한다', () => {
@@ -99,9 +69,9 @@ describe('DirtyTracker', () => {
       tracker.evict('characters', 'char-1')
 
       expect(tracker.size).toBe(1)
-      const drained = tracker.drain()
-      expect(drained).toHaveLength(1)
-      expect(drained[0]).toEqual({ collection: 'characters', id: 'char-2', snapshot: { v: 2 } })
+      const checked = tracker.checkout()
+      expect(checked).toHaveLength(1)
+      expect(checked[0]).toEqual({ collection: 'characters', id: 'char-2', snapshot: { v: 2 } })
     })
 
     it('존재하지 않는 키를 evict하면 no-op이다(throw 없음, size 불변)', () => {
@@ -120,7 +90,11 @@ describe('DirtyTracker', () => {
       tracker.markDirty('characters', 'char-1', { v: 2 })
 
       expect(tracker.size).toBe(1)
-      expect(tracker.drain()[0]).toEqual({ collection: 'characters', id: 'char-1', snapshot: { v: 2 } })
+      expect(tracker.checkout()[0]).toEqual({
+        collection: 'characters',
+        id: 'char-1',
+        snapshot: { v: 2 },
+      })
     })
   })
 
@@ -151,11 +125,11 @@ describe('DirtyTracker', () => {
     /**
      * checkout 순서 = write 시도 순서.
      *
-     * drain과 마찬가지로 checkout도 Map 삽입 순서를 그대로 내보내며, 재-mark는 값만 갱신하고
-     * 최초 삽입 위치를 보존한다. flush가 이 배열 순서대로 enqueue하므로 이 성질이 깨지면
-     * study 핸들러의 characters→objectDeletions 순서 계약이 조용히 무너진다. drain 쪽 동일
-     * 케이스와 중복처럼 보이지만, flush 경로가 checkout으로 옮겨가면 이 케이스가 그 계약의
-     * 유일한 단위 감시자가 된다.
+     * checkout은 Map 삽입 순서를 그대로 내보내며, 재-mark는 값만 갱신하고 최초 삽입 위치를
+     * 보존한다. flush가 이 배열 순서대로 enqueue하므로 이 성질이 깨지면 `save/saveEngine.ts`
+     * 헤더의 순서 계약과, study 핸들러의 characters→objectDeletions 순서가 세션 종료의
+     * characters 재-mark를 지나서도 살아남는 근거가 조용히 무너진다. 여기서 고정하지 않으면
+     * 유일한 감시자가 실 소켓 e2e(가장 느리고 간접적인 층)가 된다.
      */
     it('checkout은 Map 삽입 순서를 보존한다(checkout 순서 = write 시도 순서)', () => {
       tracker.markDirty('characters', 'char-1', { v: 1 })
@@ -270,14 +244,16 @@ describe('DirtyTracker', () => {
       expect(tracker.inProgressSize).toBe(0)
     })
 
-    it('두 번 연속 checkout은 서로소 집합을 반환한다', () => {
+    it('두 번 연속 checkout은 서로소 집합을 반환한다(재호출 시 빈 배열)', () => {
       tracker.markDirty('characters', 'char-1', { v: 1 })
       const first = tracker.checkout()
 
       const second = tracker.checkout()
 
       expect(first).toHaveLength(1)
+      // registry가 비어 두 번째 checkout은 빈 배열이다 — 동시 flush가 겹쳐도 서로소인 근거.
       expect(second).toEqual([])
+      expect(tracker.size).toBe(0)
 
       tracker.markDirty('characters', 'char-2', { v: 2 })
       const third = tracker.checkout()

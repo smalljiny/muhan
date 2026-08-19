@@ -306,6 +306,57 @@ describe('SaveEngine (integration)', () => {
     expect(await objectRepo.findById('obj-1')).toBeNull()
   })
 
+  /**
+   * 완료 프로토콜(checkout→ack/discard) 전환 회귀.
+   *
+   * flush가 파괴적 drain에서 checkout으로 바뀌면서 스냅샷이 write 종결까지 tracker에 남는다.
+   * 반납(ack/discard)이 배선되지 않으면 그 키가 inProgress에 잔류하는데, 잔류 자체는 조용해서
+   * 실 Mongo 왕복으로 "다음 주기가 여전히 최신값을 쓴다"를 관통 확인한다.
+   */
+  it('CC#9 — 반납 후 같은 키를 재-mark하면 다음 flush가 최신값을 영속화한다', async () => {
+    await charRepo.insert(makeCharacter({ _id: 'char-1', gold: 0 }))
+    const engine = makeEngine()
+    engine.start()
+
+    engine.markDirty('characters', 'char-1', { gold: 111 })
+    clock.tick()
+    await barrier()
+    expect((await charRepo.findById('char-1'))?.gold).toBe(111)
+
+    // 반납된 키를 다시 마킹 — 두 번째 주기도 정상 dispatch돼야 한다.
+    // shutdown을 배리어로 쓴다(강제 flush + queue drain) — 실 Mongo 왕복은 setTimeout(0) 한 번으로
+    // 완료가 보장되지 않아 tick+barrier 반복은 비결정적이다.
+    engine.markDirty('characters', 'char-1', { gold: 222 })
+    await engine.shutdown()
+
+    expect((await charRepo.findById('char-1'))?.gold).toBe(222)
+  })
+
+  it('CC#10 — permanent 실패로 폐기된 키도 이후 flush 경로를 막지 않는다', async () => {
+    const logger = { error: vi.fn() }
+    const engine = new SaveEngine(charRepo, bankRepo, worldRepo, objectRepo, logger, {
+      clock,
+      queueOptions: { sleep: immediate },
+    })
+    engine.start()
+
+    // 존재하지 않는 문서 — updateById가 DocumentNotFoundError를 던져 permanent 폐기된다.
+    engine.markDirty('characters', 'ghost-1', { gold: 5 })
+    clock.tick()
+    await barrier()
+
+    // 폐기 이후 주기에서도 다른 키의 write가 정상 진행된다.
+    // 최종 단언은 shutdown(강제 flush + queue drain) 뒤에 둔다 — 실 Mongo 왕복은 setTimeout(0)
+    // 한 번으로 완료가 보장되지 않아 tick+barrier 시점 단언은 비결정적이다.
+    await charRepo.insert(makeCharacter({ _id: 'char-1', gold: 0 }))
+    engine.markDirty('characters', 'char-1', { gold: 333 })
+    await engine.shutdown()
+
+    expect((await charRepo.findById('char-1'))?.gold).toBe(333)
+    // 폐기는 무흔적이 아니다 — permanent 실패 1건이 정확히 1회 기록된다.
+    expect(logger.error).toHaveBeenCalledTimes(1)
+  })
+
   it('shutdown 후 남은 pending이 없다(drain 완료)', async () => {
     await charRepo.insert(makeCharacter({ _id: 'char-1', gold: 0 }))
     const engine = makeEngine()

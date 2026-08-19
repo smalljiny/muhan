@@ -4,8 +4,7 @@
  * 변경된 도메인 엔티티를 도메인 객체 자체에 `.dirty` 플래그를 심지 않고, 외부 레지스트리
  * `Map<"collection:id", { collection, id, snapshot }>`에 기록한다(불변성 — coding-style.md).
  * 같은 `collection:id` 키로 여러 번 markDirty하면 last-write-wins로 coalescing되어, 한 저장
- * 주기 동안 키당 최신 스냅샷 1건만 남는다. 소비 경로는 아래 수명 계약을 따른다 — drain()은
- * 그 계약 이전의 과도기 경로이며 곧 제거된다.
+ * 주기 동안 키당 최신 스냅샷 1건만 남는다. 소비 경로는 아래 수명 계약을 따른다.
  *
  * 수명 계약(registry / inProgress 2단 소유):
  *   스냅샷은 markDirty부터 write 종결까지 tracker 안에 **연속 존재**해야 한다. 중간에 사라지면
@@ -27,6 +26,20 @@
  */
 
 /**
+ * 레지스트리·큐 공통 키 포맷 — `collection:id`.
+ *
+ * collection·id가 콜론(:)을 포함하지 않는다고 가정한다 — collection은 고정 리터럴
+ * (characters·bankAccounts·roomStates), id는 Mongo hex 또는 한글 이름이라 성립한다.
+ *
+ * DirtyTracker와 AsyncWriteQueue가 **같은 논리 키**로 같은 엔트리를 가리켜야 하는 것이 계약이다.
+ * SaveEngine.saveNow가 tracker.evict와 queue.evict를 짝지어 부르는데, 두 키가 어긋나면 evict가
+ * 절반만 듣고 write-loss 봉쇄가 예외도 로그도 없이 무너진다. 그래서 포맷을 여기 한 곳에 둔다.
+ */
+export function dirtyKey(collection: string, id: string): string {
+  return `${collection}:${id}`
+}
+
+/**
  * 레지스트리 항목 — 저장 대상 컬렉션·id와 그 시점의 문서 스냅샷.
  * 소비자(스케줄러·큐)가 항목을 mutate하지 못하도록 readonly로 노출한다.
  *
@@ -45,47 +58,21 @@ export class DirtyTracker {
   private readonly inProgress = new Map<string, DirtyEntry>()
 
   /**
-   * collection·id가 콜론(:)을 포함하지 않는다고 가정한다 — collection은 고정 리터럴
-   * (characters·bankAccounts·roomStates), id는 Mongo hex 또는 한글 이름이라 성립한다.
-   */
-  private static key(collection: string, id: string): string {
-    return `${collection}:${id}`
-  }
-
-  /**
    * collection·id 엔티티를 dirty로 기록한다. 같은 키 재호출 시 이전 스냅샷을 덮어써
    * last-write-wins로 coalescing한다. 전달된 snapshot은 mutate하지 않고 참조를 그대로 보관한다.
    */
   markDirty(collection: string, id: string, snapshot: unknown): void {
-    this.registry.set(DirtyTracker.key(collection, id), { collection, id, snapshot })
-  }
-
-  /**
-   * 현재 pending 항목 전체를 배열로 반환하고 registry를 비운다.
-   *
-   * @deprecated checkout()을 쓴다 — 반환 엔트리가 tracker에서 사라져 수명 계약이 성립하지
-   * 않는다. 이 메서드는 flush 경로가 checkout()으로 전환될 때 제거된다(#124).
-   *
-   * 파괴적 연산이다 — drain된 항목은 tracker에서 사라진다. 소비자(AsyncWriteQueue·
-   * SaveEngine)의 비동기 write가 실패하면 그 항목은 여기 없으므로, 소비자가 보유한
-   * 스냅샷으로 다시 `markDirty`해 requeue해야 한다. 단, drain 이후 같은 키가 새 스냅샷으로
-   * 재-markDirty된 경우, 실패-requeue(과거 스냅샷)가 그 최신 스냅샷을 last-write-wins로
-   * 덮어쓰지 않도록 최신 mark가 우선해야 한다.
-   */
-  drain(): readonly DirtyEntry[] {
-    const entries = Array.from(this.registry.values())
-    this.registry.clear()
-    return entries
+    this.registry.set(dirtyKey(collection, id), { collection, id, snapshot })
   }
 
   /**
    * pending 항목 전체를 배열로 반환하고, 같은 엔트리를 inProgress로 이관하며 registry를 비운다.
    *
-   * registry에 대해서는 drain()과 같이 파괴적·원자적이라 동시 flush가 겹쳐도 서로소 집합을
-   * 가져간다. drain()과 달리 반환한 엔트리가 tracker에서 사라지지 않고 inProgress에 남아,
-   * write가 끝날 때까지 peek()으로 조회된다. 소비자는 write 종결 시 그 엔트리를 그대로 넘겨
-   * ack(성공) 또는 discard(폐기)를 호출해 소유권을 반납해야 한다 — 반납하지 않으면 그 키는
-   * 다음 checkout이 덮어쓸 때까지 inProgress에 남는다.
+   * registry에 대해 파괴적·원자적이라 동시 flush가 겹쳐도 서로소 집합을 가져간다. 다만 반환한
+   * 엔트리가 tracker에서 사라지지는 않고 inProgress에 남아, write가 끝날 때까지 peek()으로
+   * 조회된다. 소비자는 write 종결 시 그 엔트리를 그대로 넘겨 ack(성공) 또는 discard(폐기)를
+   * 호출해 소유권을 반납해야 한다 — 반납하지 않으면 그 키는 다음 checkout이 덮어쓸 때까지
+   * inProgress에 남는다.
    *
    * 이관된 키가 이후 새 스냅샷으로 재-markDirty되면 registry에 별도로 쌓이며, peek()이
    * registry를 먼저 보므로 최신 스냅샷이 우선한다.
@@ -115,7 +102,7 @@ export class DirtyTracker {
    * 되어 반납 누락이 예외도 로그도 없이 지나간다. 도출로 바꾸면 그 조합 자체가 표현 불가능해진다.
    */
   private release(entry: DirtyEntry): void {
-    const key = DirtyTracker.key(entry.collection, entry.id)
+    const key = dirtyKey(entry.collection, entry.id)
     if (this.inProgress.get(key) === entry) this.inProgress.delete(key)
   }
 
@@ -142,7 +129,7 @@ export class DirtyTracker {
    * 그 키는 저장소 문서가 최신이라는 의미다.
    */
   peek(collection: string, id: string): DirtyEntry | undefined {
-    const key = DirtyTracker.key(collection, id)
+    const key = dirtyKey(collection, id)
     return this.registry.get(key) ?? this.inProgress.get(key)
   }
 
@@ -156,7 +143,7 @@ export class DirtyTracker {
    * 취소·완료 대기는 tracker가 못 하며 `AsyncWriteQueue.evict`가 담당한다(saveEngine.ts 참조).
    */
   evict(collection: string, id: string): void {
-    const key = DirtyTracker.key(collection, id)
+    const key = dirtyKey(collection, id)
     this.registry.delete(key)
     this.inProgress.delete(key)
   }

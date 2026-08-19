@@ -2,7 +2,7 @@
  * 주기 flush 스케줄러 — DirtyTracker와 AsyncWriteQueue를 잇는 저장 정책 엔진.
  *
  * 게임 루프가 markDirty로 DirtyTracker에 쌓아 둔 변경 스냅샷을, 주입된 clock의 주기 tick
- * (기본 120초)마다 한 번에 drain해 AsyncWriteQueue로 흘려보낸다. 게임 틱과 영속화 write를
+ * (기본 120초)마다 한 번에 checkout해 AsyncWriteQueue로 흘려보낸다. 게임 틱과 영속화 write를
  * 분리하는 write-behind 파이프라인의 스케줄 층이다.
  *
  * clock seam:
@@ -15,23 +15,25 @@
  *   인스턴스 격리를 보장한다.
  *
  * flush 절차:
- *   (1) DirtyTracker.drain()으로 이미 coalesce된(키당 최신 1건) 항목 배열을 얻는다.
+ *   (1) DirtyTracker.checkout()으로 이미 coalesce된(키당 최신 1건) 항목 배열을 얻는다. checkout은
+ *       registry를 비우되 같은 엔트리를 tracker의 inProgress에 남겨, 스냅샷이 write 종결까지
+ *       조회 가능하게 유지한다(dirtyTracker.ts 수명 계약). 종결 통지는 큐가 담당한다.
  *   (2) 배열을 순회하며 AsyncWriteQueue.enqueue를 **동기 burst**로 호출한다 — 각 enqueue
  *       사이에 await로 yield하지 않고 반환된 Promise를 수집한 뒤 마지막에 Promise.all로
  *       완료를 기다린다. AsyncWriteQueue 소비자 계약("coalescing은 동기 burst에서만 성립")을
- *       지키기 위함이다. drain 결과가 0건이면 enqueue를 한 번도 부르지 않는 no-op이다.
+ *       지키기 위함이다. checkout 결과가 0건이면 enqueue를 한 번도 부르지 않는 no-op이다.
  *
  * re-entrancy:
  *   enqueue는 backpressure로 block할 수 있어 flush가 여러 tick에 걸쳐 진행될 수 있다.
- *   flushing 플래그로 이전 flush 진행 중 다음 tick의 flush 시작을 건너뛴다. drain()은
- *   파괴적·원자적이라 두 flush가 겹쳐도 서로소 집합을 drain하므로 write 정합성은 항상
+ *   flushing 플래그로 이전 flush 진행 중 다음 tick의 flush 시작을 건너뛴다. checkout()은 registry에
+ *   대해 파괴적·원자적이라 두 flush가 겹쳐도 서로소 집합을 가져가므로 write 정합성은 항상
  *   유지된다 — 플래그는 장기 backpressure 시 대기 flush가 쌓이는 것을 막는 방어다.
  *
  *   불변식: re-entrancy flushing 플래그는 **interval(onTick) 경로만** 보호한다. 직접 flush()
  *   호출(SaveEngine.shutdown이 사용)은 항상 허용되며 플래그를 확인·설정하지 않는다. 정합성은
- *   DirtyTracker.drain()의 원자적·파괴적 특성에 근거한다 — 동시 flush는 서로소 집합을 drain하므로
- *   interval flush와 shutdown flush가 겹쳐도 같은 항목을 이중 write하지 않는다. Story 5 SaveEngine은
- *   이 계약에 의도적으로 의존한다(진행 중 tick flush와 무관하게 shutdown이 즉시 잔여분을 flush).
+ *   DirtyTracker.checkout()의 원자적·파괴적 특성에 근거한다 — 동시 flush는 서로소 집합을 가져가므로
+ *   interval flush와 shutdown flush가 겹쳐도 같은 항목을 이중 write하지 않는다. SaveEngine.shutdown은
+ *   이 계약에 의도적으로 의존한다(진행 중 tick flush와 무관하게 즉시 잔여분을 flush).
  *
  * Open Q 1 (interval-only):
  *   flush 트리거는 시간 간격만 사용한다. dirty 건수 임계값 기반 병행 트리거는 두지 않는다.
@@ -48,9 +50,15 @@ export type { SchedulerClock, IntervalHandle } from '../util/clock.js'
 /** 기본 flush 간격(ms) — 120초. 생성자 옵션으로 override 가능하다. */
 export const DEFAULT_INTERVAL_MS = 120_000
 
-/** DirtyTracker 의존성의 최소 계약(구조적 주입 — 테스트 mock 허용). */
-export interface DirtyDrainSource {
-  drain(): readonly DirtyEntry[]
+/**
+ * DirtyTracker 의존성의 최소 계약(구조적 주입 — 테스트 mock 허용).
+ *
+ * checkout()은 registry를 비우되 엔트리를 tracker 안에 남기는 비유실 소비 연산이다 — 파괴적
+ * drain으로 되돌리면 큐 write 중인 스냅샷이 tracker에서 사라져 재접속 hydrate가 과거 문서를
+ * 읽는다(#124).
+ */
+export interface DirtyCheckoutSource {
+  checkout(): readonly DirtyEntry[]
   readonly size: number
 }
 
@@ -70,7 +78,7 @@ export interface SaveSchedulerOptions {
 }
 
 export class SaveScheduler {
-  private readonly tracker: DirtyDrainSource
+  private readonly tracker: DirtyCheckoutSource
   private readonly queue: WriteEnqueue
   private readonly intervalMs: number
   private readonly clock: SchedulerClock
@@ -82,7 +90,7 @@ export class SaveScheduler {
   private flushing = false
 
   constructor(
-    tracker: DirtyDrainSource,
+    tracker: DirtyCheckoutSource,
     queue: WriteEnqueue,
     options: SaveSchedulerOptions = {},
   ) {
@@ -99,16 +107,16 @@ export class SaveScheduler {
   }
 
   /**
-   * DirtyTracker를 drain해 각 항목을 AsyncWriteQueue로 동기 burst enqueue한다.
+   * DirtyTracker를 checkout해 각 항목을 AsyncWriteQueue로 동기 burst enqueue한다.
    * 빈 배치는 no-op(enqueue 호출 없음). enqueue backpressure 완료까지 await한다.
    */
   async flush(): Promise<void> {
-    const entries = this.tracker.drain()
+    const entries = this.tracker.checkout()
     if (entries.length === 0) return
     // 동기 burst — map은 각 enqueue 사이에 await로 yield하지 않고 동기 순회하므로 첫 await
     // 전에 모든 enqueue가 발사된다. AsyncWriteQueue의 "coalescing은 동기 burst에서만 성립"
-    // 계약을 지킨다. drain 소스가 collection:id로 이미 coalesce돼 한 배치에 동일 키가 없어
-    // 이 계약은 vacuously 성립하지만, 다른 drain 소스로 교체돼도 안전하도록 유지한다.
+    // 계약을 지킨다. checkout 소스가 collection:id로 이미 coalesce돼 한 배치에 동일 키가 없어
+    // 이 계약은 vacuously 성립하지만, 다른 소스로 교체돼도 안전하도록 유지한다.
     await Promise.all(entries.map((entry) => this.queue.enqueue(entry)))
   }
 

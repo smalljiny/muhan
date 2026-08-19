@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { DirtyEntry } from './dirtyTracker.js'
 import { DirtyTracker } from './dirtyTracker.js'
-import { AsyncWriteQueue, type WriteAdapter } from './asyncWriteQueue.js'
+import { AsyncWriteQueue, type WriteAdapter, type WriteOutcome } from './asyncWriteQueue.js'
 import { NOOP_LOGGER } from './logger.js'
+import { DocumentNotFoundError } from '../repo/types.js'
 import {
   SaveScheduler,
   DEFAULT_INTERVAL_MS,
@@ -55,7 +56,7 @@ describe('SaveScheduler', () => {
   })
 
   describe('T4.2 — flush 동작', () => {
-    it('간격 경과(tick) 시 DirtyTracker를 drain해 각 항목을 enqueue한다', () => {
+    it('간격 경과(tick) 시 DirtyTracker를 checkout해 각 항목을 enqueue한다', () => {
       const tracker = new DirtyTracker()
       const { queue, enqueue } = mockQueue()
       const scheduler = new SaveScheduler(tracker, queue, { clock })
@@ -82,7 +83,7 @@ describe('SaveScheduler', () => {
       expect(tracker.size).toBe(0)
     })
 
-    it('빈 배치(drain 0건)는 no-op이라 enqueue를 호출하지 않는다', () => {
+    it('빈 배치(checkout 0건)는 no-op이라 enqueue를 호출하지 않는다', () => {
       const tracker = new DirtyTracker()
       const { queue, enqueue } = mockQueue()
       const scheduler = new SaveScheduler(tracker, queue, { clock })
@@ -94,7 +95,7 @@ describe('SaveScheduler', () => {
       expect(enqueue).not.toHaveBeenCalled()
     })
 
-    it('flush() 직접 호출도 drain→enqueue 절차를 수행한다', async () => {
+    it('flush() 직접 호출도 checkout→enqueue 절차를 수행한다', async () => {
       const tracker = new DirtyTracker()
       const { queue, enqueue } = mockQueue()
       const scheduler = new SaveScheduler(tracker, queue, { clock })
@@ -243,7 +244,7 @@ describe('SaveScheduler', () => {
 
       scheduler.start()
       clock.tick()
-      // 큐 자체의 drain을 배리어로 사용 — 워커가 어댑터까지 dispatch 완료
+      // 큐 소진 대기(AsyncWriteQueue.drain)를 배리어로 사용 — 워커가 어댑터까지 dispatch 완료
       await queue.drain()
 
       expect(roomAdapter).toHaveBeenCalledTimes(1)
@@ -269,6 +270,191 @@ describe('SaveScheduler', () => {
 
       expect(roomAdapter).toHaveBeenCalledTimes(1)
       expect(roomAdapter).toHaveBeenCalledWith('r42', { hp: 3 })
+    })
+  })
+
+  /**
+   * 완료 프로토콜 왕복 — checkout → enqueue → write → ack/discard.
+   *
+   * SaveEngine이 하는 배선(onSettled → tracker.ack/discard)을 그대로 조립해, 스냅샷이 mark부터
+   * write 종결까지 tracker 안에 **연속 존재**함을 구간별로 고정한다. flush가 checkout이 아니라
+   * 파괴적 drain을 쓰면 큐에 넘어간 순간 스냅샷이 사라져 재접속 hydrate가 과거 문서를 읽는다(#124).
+   */
+  describe('완료 프로토콜 왕복 (checkout → write → ack/discard)', () => {
+    interface Composed {
+      tracker: DirtyTracker
+      queue: AsyncWriteQueue
+      scheduler: SaveScheduler
+      settle: ReturnType<typeof vi.fn>
+    }
+
+    /** tracker·queue·scheduler를 프로덕션과 같은 형태로 조립한다(onSettled → ack/discard). */
+    function compose(
+      adapter: WriteAdapter,
+      options: { logger?: { error: ReturnType<typeof vi.fn> }; onSettled?: (entry: DirtyEntry, outcome: WriteOutcome) => void } = {},
+    ): Composed {
+      const tracker = new DirtyTracker()
+      const settle = vi.fn<(entry: DirtyEntry, outcome: WriteOutcome) => void>((entry, outcome) => {
+        if (options.onSettled !== undefined) {
+          options.onSettled(entry, outcome)
+          return
+        }
+        if (outcome === 'acked') tracker.ack(entry)
+        else tracker.discard(entry)
+      })
+      const queue = new AsyncWriteQueue({ characters: adapter }, options.logger ?? NOOP_LOGGER, {
+        sleep: () => Promise.resolve(),
+        onSettled: (entry, outcome) => {
+          settle(entry, outcome)
+        },
+      })
+      const scheduler = new SaveScheduler(tracker, queue, { clock })
+      return { tracker, queue, scheduler, settle }
+    }
+
+    /** 게이트로 write를 붙잡아 두는 어댑터 — in-flight 구간을 관찰한다. */
+    function gatedAdapter(): { adapter: WriteAdapter; release: () => void } {
+      let release!: () => void
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      return {
+        adapter: async () => {
+          await gate
+        },
+        release: () => {
+          release()
+        },
+      }
+    }
+
+    it('flush는 checkout을 쓴다 — 큐로 넘어간 뒤에도 peek이 스냅샷을 반환한다', async () => {
+      const { adapter, release } = gatedAdapter()
+      const { tracker, queue, scheduler } = compose(adapter)
+      const snapshot = { gold: 10 }
+      tracker.markDirty('characters', 'c1', snapshot)
+
+      await scheduler.flush()
+
+      // registry는 비었지만 스냅샷은 inProgress에 남아 조회된다.
+      expect(tracker.size).toBe(0)
+      expect(tracker.peek('characters', 'c1')?.snapshot).toBe(snapshot)
+
+      release()
+      await queue.drain()
+    })
+
+    it('§8.7: write 성공 후 그 키만 peek이 undefined가 되고 같은 배치의 다른 키는 남는다', async () => {
+      const { adapter: gated, release } = gatedAdapter()
+      // c1은 즉시 성공하고 c2는 게이트에 걸려 in-flight로 남는다.
+      const adapter = vi.fn<WriteAdapter>((id) => (id === 'c1' ? Promise.resolve() : gated(id, null)))
+      const { tracker, queue, scheduler } = compose(adapter)
+      tracker.markDirty('characters', 'c1', { gold: 10 })
+      tracker.markDirty('characters', 'c2', { gold: 20 })
+
+      await scheduler.flush()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
+      expect(tracker.peek('characters', 'c1')).toBeUndefined()
+      expect(tracker.peek('characters', 'c2')?.snapshot).toEqual({ gold: 20 })
+      expect(tracker.inProgressSize).toBe(1)
+
+      release()
+      await queue.drain()
+      expect(tracker.peek('characters', 'c2')).toBeUndefined()
+      expect(tracker.inProgressSize).toBe(0)
+    })
+
+    it('§8.11: permanent 실패로 폐기된 스냅샷도 inProgress에서 제거된다(누수 없음)', async () => {
+      const adapter = vi.fn<WriteAdapter>(() =>
+        Promise.reject(new DocumentNotFoundError('characters', 'c1')),
+      )
+      const logger = { error: vi.fn() }
+      const { tracker, queue, scheduler, settle } = compose(adapter, { logger })
+      tracker.markDirty('characters', 'c1', { gold: 10 })
+
+      await scheduler.flush()
+      await queue.drain()
+
+      expect(settle).toHaveBeenCalledTimes(1)
+      expect(settle.mock.calls[0]?.[1]).toBe('discarded')
+      expect(tracker.peek('characters', 'c1')).toBeUndefined()
+      expect(tracker.inProgressSize).toBe(0)
+    })
+
+    it('§8.8: 통지 처리기가 throw하면 엔트리가 inProgress에 남고 다음 checkout이 덮어써 해소된다', async () => {
+      let firstNotified = false
+      const { tracker, queue, scheduler } = compose(() => Promise.resolve(), {
+        onSettled: () => {
+          // 첫 통지만 실패시킨다 — 반납이 누락된 엔트리가 어떻게 회수되는지 고정한다.
+          if (!firstNotified) {
+            firstNotified = true
+            throw new Error('통지 처리기가 터진다')
+          }
+        },
+      })
+      const stale = { gold: 10 }
+      tracker.markDirty('characters', 'c1', stale)
+
+      await scheduler.flush()
+      await queue.drain()
+
+      // 반납이 실패해 과거 스냅샷이 잔류한다(안전한 실패 — 사라지는 것보다 남는 쪽).
+      expect(tracker.peek('characters', 'c1')?.snapshot).toBe(stale)
+      expect(tracker.inProgressSize).toBe(1)
+
+      // 같은 키의 다음 checkout이 그 자리를 덮어써 누수가 해소된다.
+      const fresh = { gold: 20 }
+      tracker.markDirty('characters', 'c1', fresh)
+      await scheduler.flush()
+
+      expect(tracker.peek('characters', 'c1')?.snapshot).toBe(fresh)
+      expect(tracker.inProgressSize).toBe(1)
+      await queue.drain()
+    })
+
+    /**
+     * §8.12 — flush 2회가 이중 enqueue를 만들지 않는다.
+     *
+     * flush()는 첫 await 전에 checkout()을 동기로 끝내므로 두 호출은 실제로 인터리브하지 않는다.
+     * 여기서 고정하는 것은 그 결과다 — 직접 flush가 re-entrancy 플래그를 우회해도 checkout의
+     * 파괴적 특성이 두 번째 호출에 빈 배열을 주어 같은 엔트리가 두 번 enqueue되지 않는다.
+     */
+    it('§8.12: flush가 겹쳐 호출돼도 같은 엔트리를 두 번 enqueue하지 않는다', async () => {
+      const tracker = new DirtyTracker()
+      const enqueued: DirtyEntry[] = []
+      const enqueue = vi.fn<(job: DirtyEntry) => Promise<void>>((entry) => {
+        enqueued.push(entry)
+        return Promise.resolve()
+      })
+      const scheduler = new SaveScheduler(tracker, { enqueue }, { clock })
+      tracker.markDirty('characters', 'c1', { v: 1 })
+      tracker.markDirty('characters', 'c2', { v: 2 })
+
+      await Promise.all([scheduler.flush(), scheduler.flush()])
+
+      expect(enqueue).toHaveBeenCalledTimes(2)
+      expect(enqueued.map((e) => e.id).sort()).toEqual(['c1', 'c2'])
+    })
+
+    it('evict가 반환하는 시점에는 in-flight write의 반납이 이미 반영돼 있다', async () => {
+      const { adapter, release } = gatedAdapter()
+      const { tracker, queue, scheduler, settle } = compose(adapter)
+      tracker.markDirty('characters', 'c1', { gold: 10 })
+
+      await scheduler.flush()
+      await new Promise((resolve) => setTimeout(resolve, 0)) // 워커가 in-flight로 가져간다
+      expect(settle).not.toHaveBeenCalled() // write가 아직 게이트에 걸려 있다
+
+      const evictP = queue.evict('characters', 'c1')
+      release()
+      await evictP
+
+      // saveNow는 이 시점에 "이 키의 미완료 큐 write 없음"을 전제로 최신값을 쓴다.
+      // 반납이 evict 반환 뒤로 밀리면 뒤늦은 ack이 saveNow 이후에 도착한다.
+      expect(settle).toHaveBeenCalledTimes(1)
+      expect(settle.mock.calls[0]?.[1]).toBe('acked')
+      expect(tracker.peek('characters', 'c1')).toBeUndefined()
     })
   })
 
