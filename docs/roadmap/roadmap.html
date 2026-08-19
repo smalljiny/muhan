@@ -530,10 +530,10 @@
 
 <div class="wrap">
   <header>
-    <p class="eyebrow">muhan · github issues → roadmap · 2026-08-18 · <strong>develop bdcd2a2</strong></p>
+    <p class="eyebrow">muhan · github issues → roadmap · 2026-08-19 · <strong>develop 6920540</strong></p>
     <h1>지금 어디에 있나 — 무한 포팅 진행 궤도</h1>
     <p class="lede">1991–93년 Mordor 파생 한국어 MUD "무한"을 Node.js + 웹으로 재구현하는 프로젝트입니다. 에픽 E1~E13과 토픽·부채 이슈에서 파생한 현황입니다. <strong>규칙 엔진의 순수 레이어(전투·마법·진행·스탯·아이템·경제)는 전부 닫혔고, 지금 남은 것은 그 규칙을 살아 있는 세션에 잇는 "배선"입니다.</strong> 크리티컬 패스는 여전히 라이브 명령 배선 체인이지만, <strong>그 헤드였던 <a href="https://github.com/smalljiny/muhan/issues/118">#118</a>이 08-10에 닫히면서 체인 전체가 열렸습니다</strong> — 이제 병목은 선행 이슈가 아니라 각 토픽 내부의 설계 결정입니다.</p>
-    <p class="lede" style="margin-top:8px"><strong>08-18 기준</strong> — 08-11 이후 한 항목이 랜딩했습니다. <a href="https://github.com/smalljiny/muhan/issues/120">#120</a> 아이템 인스턴스 라이브화 + <code>study</code> 배선(PR #145) — 인벤토리가 세션 진입 시 라이브 상태에 올라가고 <code>progress:study</code>가 순수 규칙 <code>study()</code>에 닿습니다. <code>PROTOCOL_VERSION</code> 4→<strong>5</strong>(<code>ClientCommand</code> 9종 · <code>ServerEvent</code> 12종). <strong>열린 PR 0 · 작업 트리 clean</strong>. 남은 CP1 게이트는 <strong>여전히</strong> <a href="https://github.com/smalljiny/muhan/issues/116">#116</a>·<a href="https://github.com/smalljiny/muhan/issues/124">#124</a>·<a href="https://github.com/smalljiny/muhan/issues/138">#138</a> 셋으로 변화가 없고, 이번 토픽이 부채 2건(<a href="https://github.com/smalljiny/muhan/issues/142">#142</a> 인벤 서수 divergence · <a href="https://github.com/smalljiny/muhan/issues/143">#143</a> 무로그 삼킴)을, 08-14에 <a href="https://github.com/smalljiny/muhan/issues/144">#144</a>(pnpm audit HIGH 12건)가 추가됐습니다.</p>
+    <p class="lede" style="margin-top:8px"><strong>08-19 기준</strong> — 08-18 이후 <a href="https://github.com/smalljiny/muhan/issues/124">#124</a>가 닫혔습니다(PR #146). <code>hydrate</code>가 저장소를 재읽기하는 대신 write-behind가 보유한 pending 스냅샷을 DB 문서 위에 overlay하고, 그 전제로 <code>DirtyTracker</code>에 스냅샷 수명 계약(<code>checkout</code>/<code>ack</code>/<code>discard</code>/<code>peek</code>)을 세웠습니다 — 스냅샷이 mark부터 write 종결까지 단일 소유자 안에 연속 존재합니다. 프로토콜 변경 없음(<code>PROTOCOL_VERSION</code> <strong>5</strong> · <code>ClientCommand</code> 9종 · <code>ServerEvent</code> 12종). <strong>열린 PR 0 · 작업 트리 clean</strong>. <strong>CP1 게이트가 셋에서 둘로 줄었습니다</strong> — 남은 것은 <a href="https://github.com/smalljiny/muhan/issues/116">#116</a>·<a href="https://github.com/smalljiny/muhan/issues/138">#138</a>입니다. 같은 날 <a href="https://github.com/smalljiny/muhan/issues/142">#142</a>(인벤 서수)를 <a href="https://github.com/smalljiny/muhan/issues/137">#137</a>로 통합·close해 서수 divergence를 단일 토픽으로 모았습니다.</p>
     <p class="lede" style="margin-top:8px"><strong>릴리스 계획</strong> — <strong>CP1이 첫 릴리스 지점</strong>입니다. 통과 시 릴리스를 내고 <code>develop</code>을 <code>main</code>에 병합합니다. 그때까지 원격에는 <code>develop</code> 하나만 존재하는 것이 정상입니다.</p>
 
     <!-- ══ HERO 다이어그램 ══ -->
@@ -1056,14 +1056,14 @@
       <h2>보안 · 기술부채</h2>
       <span class="sec-tag">off-milestone · gates</span>
     </div>
-    <p class="sec-note">어느 에픽에도 속하지 않지만 체크포인트의 통과 조건으로 작동합니다. 08-03에 <strong>#126(검증 거짓 통과)이 닫히면서 "조용한 거짓" 두 건 중 하나가 사라졌습니다</strong>. 남은 #124는 여전히 데이터를 조용히 되돌리고, <code>train</code>이 라이브라 노출 창이 열려 있습니다. 여기에 #138(문서화된 e2e 경로가 막힘)과 E11이 파생시킨 정리 항목 6건이 새로 들어왔습니다.</p>
+    <p class="sec-note">어느 에픽에도 속하지 않지만 체크포인트의 통과 조건으로 작동합니다. <strong>"조용한 거짓" 두 건이 08-19로 모두 닫혔습니다</strong> — 08-03 #126(검증 거짓 통과), 08-19 #124(재접속 진행도 revert). 남은 HIGH는 #138(문서화된 e2e 경로가 막힘) 하나이고, 나머지는 divergence 기록과 E11 파생 정리 항목입니다.</p>
 
     <div class="debt-grid">
-      <div class="debt-card high">
-        <div class="debt-top"><span class="sev high">HIGH</span><span class="debt-title">재접속 re-hydrate가 진행도를 무성 revert</span>
+      <div class="debt-card">
+        <div class="debt-top"><span class="sev">해소 08-19</span><span class="debt-title">재접속 re-hydrate 무성 revert — 닫힘</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/124">#124</a></div>
-        <div class="debt-body">grace(30초) &lt; flush 주기(120초)라 정상 설정에서 창이 열립니다. <code>hydrate</code>가 DirtyTracker pending을 보지 않고 저장소를 재읽기 → stale 스냅샷이 LWW 승자 → level·gold·experience·vitals·stats 전체 소실. 세션 종료 시 flush를 트리거하는 지점이 <strong>코드 전체에 없습니다</strong>. <code>train</code>이 이미 라이브라 노출 창이 열려 있습니다.</div>
-        <div class="debt-gate">▸ CP1 게이트 · 실사용 데이터 유실</div>
+        <div class="debt-body">PR #146으로 닫혔습니다. <code>hydrate</code>가 <code>peekPending('characters', id)</code>를 DB 문서 위에 overlay하고, 조회를 <code>findById</code>보다 <strong>먼저 동기로</strong> 끝내 선형화 지점을 고정합니다(역순이면 <code>await</code> 중 write가 ack되며 스냅샷이 사라지는 TOCTOU). 전제로 <code>DirtyTracker</code>를 <code>registry</code>+<code>inProgress</code> 2단 소유로 바꿔 <strong>파괴적 <code>drain()</code>이 만들던 3개 사각</strong>(반출~enqueue 전 · 큐 대기 · write 진행 중)을 덮었습니다. <strong>남은 범위</strong> — <code>objectDeletions</code>는 합성하지 않아 삭제 예정 비법서가 인벤에 유령으로 남고(현재 무해 · #119·#121이 건네주기 경로를 열면 재평가), <code>saveNow</code> evict는 backpressure 창의 엔트리를 못 막습니다(프로덕션 호출자 0건).</div>
+        <div class="debt-gate">▸ CP1 게이트 해제 · <code>save-policy.md</code>가 수명 계약을 소유</div>
       </div>
       <div class="debt-card high">
         <div class="debt-top"><span class="sev high">HIGH</span><span class="debt-title">깨끗한 DB에서 전송 왕복 e2e 통과 불가</span>
@@ -1072,10 +1072,10 @@
         <div class="debt-gate">▸ CP1 게이트 · 문서화된 진입 경로가 막힘</div>
       </div>
       <div class="debt-card">
-        <div class="debt-top"><span class="sev">divergence</span><span class="debt-title">방 대상 서수 기준이 도착 순서</span>
+        <div class="debt-top"><span class="sev">divergence</span><span class="debt-title">이름 서수 기준 — 방·인벤 3집합 (#142 통합)</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/137">#137</a></div>
-        <div class="debt-body">오라클은 방의 크리처·플레이어를 <code>strcmp</code> <strong>이름 정렬로 삽입</strong>하므로 <code>고블린 2</code>의 "2"는 사전순 서수입니다. 포트는 도착 순서(<code>occupants</code> Set 삽입 순 · <code>creatures</code> push 순)를 씁니다. <code>strcmp</code>가 EUC-KR <strong>바이트</strong> 비교라 JS 문자열 비교로 재현되지 않아(KS X 1001 배열 ≠ Unicode 배열) #118에서 유예했습니다. 질의 접두가 같고 이름이 다른 후보가 공존할 때만 갈립니다. <strong>소비 토픽 #119~#122가 오라클 순서를 전제하고 짜면 안 됩니다.</strong></div>
-        <div class="debt-gate">▸ 게이트 없음 · 명령 배선 체인이 인계받음</div>
+        <div class="debt-body">오라클은 방 플레이어·방 크리처·캐릭터 인벤 <strong>세 리스트 모두</strong>를 <code>strcmp</code> 이름 정렬로 삽입하므로 <code>고블린 2</code>·<code>비법서 2</code>의 "2"는 사전순 서수입니다. 포트는 방=도착 순서(<code>occupants</code> Set 삽입 순 · <code>creatures</code> push 순), 인벤=<code>findByOwner</code>의 <code>_id</code> 오름차순을 씁니다 — 후자는 #120이 <strong>결정성 확보용</strong>으로 넣은 것이지 오라클 재현이 아닙니다. 원인은 KS X 1001 배열 ≠ Unicode 배열 하나이고 <strong>비교 함수 1개로 3집합이 함께 해소</strong>되므로 08-19에 <a href="https://github.com/smalljiny/muhan/issues/142">#142</a>를 여기로 통합했습니다. 인벤에만 2차 정렬 키(동명 시 <code>adjustment</code> 순)가 더 있습니다. <strong>소비 토픽 #119·#121·#122가 오라클 순서를 전제하고 짜면 안 됩니다.</strong></div>
+        <div class="debt-gate">▸ 게이트 없음 · 명령 배선 체인이 인계받음 · <a href="https://github.com/smalljiny/muhan/issues/142">#142</a> 통합·close</div>
       </div>
       <div class="debt-card">
         <div class="debt-top"><span class="sev">잠복</span><span class="debt-title">world:room 수신자 인지 가시성 필터 부재</span>
@@ -1128,28 +1128,28 @@
       <h2>다음 한 수</h2>
       <span class="sec-tag">recommended order</span>
     </div>
-    <p class="sec-note">순서는 의존성 해제 폭과 되돌리기 비용 기준입니다. 지금 <strong>열린 PR 0 · 작업 트리 clean · 선행 대기 0건</strong>입니다 — #118이 닫히면서 <strong>백로그에 blocking으로 막힌 항목이 하나도 없어졌습니다</strong>(#122만 #121 대기). #120이 M6의 첫 항목으로 닫혔지만 <strong>CP1 잔여 3건은 그대로</strong>입니다. 셋을 병렬 트랙으로 띄울 수 있습니다.</p>
+    <p class="sec-note">순서는 의존성 해제 폭과 되돌리기 비용 기준입니다. 지금 <strong>열린 PR 0 · 작업 트리 clean · 선행 대기 0건</strong>입니다 — #118이 닫히면서 <strong>백로그에 blocking으로 막힌 항목이 하나도 없어졌습니다</strong>(#122만 #121 대기). 08-19 #124 해소로 <strong>CP1 잔여가 셋에서 둘로 줄었습니다</strong>. 둘 다 서로 독립이라 병렬로 띄울 수 있습니다.</p>
     <div class="next">
       <div class="next-card">
         <div class="next-n">01</div>
-        <div class="next-t">CP1 잔여 3건을 먼저 — #124 · #138 · #116</div>
-        <div class="next-d">이제 <strong>첫 릴리스가 손에 닿는 거리</strong>라 여기를 먼저 닫는 편이 낫습니다. <strong>#124</strong>는 <code>train</code>이 라이브인 지금 실사용 진행도를 먹을 수 있고, <strong>#138</strong>은 남이 README를 따라 띄우는 첫 순간 부딪히며, <strong>#116</strong>은 "같은 방 사람과 어울린다"는 CP1의 마지막 절반입니다. 셋 다 서로 독립입니다.</div>
+        <div class="next-t">CP1 잔여 2건을 먼저 — #138 · #116</div>
+        <div class="next-d">이제 <strong>첫 릴리스가 손에 닿는 거리</strong>라 여기를 먼저 닫는 편이 낫습니다. <strong>#138</strong>은 남이 README를 따라 띄우는 첫 순간 부딪히고, <code>e2e</code>가 <code>turbo.json</code>·CI 어디에도 없어 <strong>깨진 것을 자동으로 발견할 경로가 없습니다</strong> — 아래 트랙들이 수직 경로를 건드리기 전에 닫아두는 편이 값쌉니다. <strong>#116</strong>은 "같은 방 사람과 어울린다"는 CP1의 마지막 절반입니다. 둘은 서로 독립입니다.</div>
       </div>
       <div class="next-card">
         <div class="next-n">02</div>
         <div class="next-t">#121 attack — 체인에서 가장 앞</div>
-        <div class="next-d">M6 8건 중 <strong>#122(cast)의 유일한 선행</strong>이고, #61(E12 전투·인벤 패널)이 기다리는 전투 ServerEvent 계약이 여기서 나옵니다. 다만 이름과 달리 "배선"이 아니라 <strong>장비 해소 파이프 신규 구축</strong>(<code>EffectiveStatContext</code> 8필드 합성)이라 체인에서 가장 무거운 항목입니다 — 규모를 얕잡지 않는 편이 좋습니다. #119(teach)는 가장 가벼워 패턴 복제 시연으로 먼저 돌려볼 수 있습니다.</div>
+        <div class="next-d">M6 8건 중 <strong>#122(cast)의 유일한 선행</strong>이고, #61(E12 전투·인벤 패널)이 기다리는 전투 ServerEvent 계약이 여기서 나옵니다. 다만 이름과 달리 "배선"이 아니라 <strong>장비 해소 파이프 신규 구축</strong>(<code>EffectiveStatContext</code> 8필드 합성)이라 체인에서 가장 무거운 항목입니다 — 규모를 얕잡지 않는 편이 좋습니다. #119(teach)는 가장 가벼워 패턴 복제 시연으로 먼저 돌려볼 수 있습니다. <strong>#37(E7 소셜·채널)은 이것과 의존이 없어 병렬 트랙으로 띄울 수 있습니다</strong> — 선행(#35 CLOSED · 방 채널 인프라 가동)이 이미 충족돼 대기 중이 아니고, 닫히면 #62(E13)의 채널·귓속말 절반이 함께 열립니다.</div>
       </div>
       <div class="next-card">
         <div class="next-n">03</div>
         <div class="next-t">#130 · #131을 CP1에 얹기</div>
-        <div class="next-d">E11 파생 6건 중 이 둘만 <strong>사용자에게 직접 보이는 결함</strong>입니다 — 잠긴 문을 한 번 누르면 에러 배너가 이후 이동 성공에도 계속 남고(#130), 이동할수록 방 스냅샷이 무상한 누적돼 매 렌더 전량 재직렬화됩니다(#131). 첫 릴리스에 사람을 초대하는 관문이라면 이 둘은 CP1 UX의 일부로 보는 게 맞습니다. 나머지 넷(#132·#133·#134·#137)은 기록만 정확하면 급하지 않습니다.</div>
+        <div class="next-d">E11 파생 6건 중 이 둘만 <strong>사용자에게 직접 보이는 결함</strong>입니다 — 잠긴 문을 한 번 누르면 에러 배너가 이후 이동 성공에도 계속 남고(#130), 이동할수록 방 스냅샷이 무상한 누적돼 매 렌더 전량 재직렬화됩니다(#131). 첫 릴리스에 사람을 초대하는 관문이라면 이 둘은 CP1 UX의 일부로 보는 게 맞습니다. 나머지 셋(#132·#133·#134)과 서수 divergence(#137)는 기록만 정확하면 급하지 않습니다.</div>
       </div>
     </div>
   </section>
 
   <footer>
-    <span>출처: GitHub 이슈 #1~#144 · PR ~#145 (2026-08-18 · develop bdcd2a2)</span>
+    <span>출처: GitHub 이슈 #1~#144 · PR ~#146 (2026-08-19 · develop 6920540)</span>
     <span>설계 정본: docs/specs/architecture.md (ADR #14)</span>
     <span>구현 명세: docs/specs/ 30개 문서</span>
     <span>SoT는 GitHub 이슈·PR·docs/specs/ — 이 페이지는 파생 조감도이고, M0~M7·CP1~CP3은 이슈 의존 관계에서 도출한 그룹핑입니다</span>
@@ -1195,17 +1195,18 @@
     [51,  -1, "dbt", 128, 320, "ctx.heartbeat 타이머 이중 소유권", "유지보수 · 게이트 없음"],
     [138, -1, "dbt", 130, 400, "깨끗한 DB에서 e2e 통과 불가", "HIGH · dev 시드가 DB에 없음 · CP1"],
     [43,  -1, "dbt", 128, 96,  "은행 트랜잭션 ↔ write-behind 조정", "계약: 해소 전 은행 명령 배선 금지 · CP2"],
-    [124, -1, "dbt", 300, 448, "재접속 re-hydrate 무성 revert", "HIGH · 진행도 전체 소실 · CP1"],
+    [124, -1, "done", 300, 448, "재접속 re-hydrate 무성 revert (완료)", "PR #146 — pending overlay · 스냅샷 수명 계약 · CP1 해제"],
     [89,  -1, "dbt", 390, 440, "세션 revocation + banned 비강제", "잠복 · Firebase credential 필요 · CP3"],
     [100, -1, "dbt", 452, 300, "몬스터 spell_fail(전사계 fizzle) 미배선", "전사계 MMAGIC 12종 항상 명중"],
-    [108, -1, "dbt", 452, 372, "몬스터 self-heal healer 게이트 미이식", "divergence 62/195 = 32%"]
+    [108, -1, "dbt", 452, 372, "몬스터 self-heal healer 게이트 미이식", "divergence 62/195 = 32%"],
+    [137, -1, "dbt", 560, 424, "이름 서수 기준 divergence (방·인벤)", "KS X 1001 collation 부재 · #142 통합 · 게이트 없음"]
   ];
 
   var E = [[14,30],[30,31],[30,32],[30,33],[31,34],[32,34],[32,35],[34,36],[33,36],
            [32,58],[58,59],[59,60],[34,116],[36,118],[36,123],[36,99],
            [118,119],[118,120],[118,121],[121,122],
            [60,61],[36,61],[34,37],[35,37],[59,62],[37,62]];
-  var D = [[124,36],[138,58],[43,31],[100,99],[108,99],[89,35],[51,32],[144,30]];
+  var D = [[124,36],[138,58],[43,31],[100,99],[108,99],[89,35],[51,32],[144,30],[137,118]];
 
   var MS_NAME = ["M0 역설계·분석", "M1 서버 기반", "M2 월드·계정", "M3 규칙 코어",
                  "M4 접속 셸", "M5 걷기", "M6 싸우기", "M7 어울리기"];
