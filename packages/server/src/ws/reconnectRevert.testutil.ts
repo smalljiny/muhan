@@ -45,8 +45,19 @@ import type { ActorContext } from './actorContext.js'
  * 스위트가 고정하려는 것은 **세이브 계층과 진입 코어 사이의 인터리빙**이라, 검증에 필요한 제어점이
  * 소켓 왕복이 아니라 (a) `lifecyclePort.onSessionEnd({reason:'graceExpired'})` 직접 구동, (b) 큐
  * backpressure·`findById` 지연의 게이트 고정, (c) `FakeClock` tick 시점이다. 소켓을 끼우면 그 세 축이
- * 전부 비결정 대기 뒤로 숨어 §8.4·§8.5를 "결정적으로" 구성할 수 없다. 소켓 관통 자체는 형제 두
- * e2e 스위트가 이미 덮는다.
+ * 전부 비결정 대기 뒤로 숨어 §8.4·§8.5를 "결정적으로" 구성할 수 없다.
+ *
+ * ## 소켓 관통은 어디가 덮는가 (경로별로 다르다 — 뭉뚱그리지 마라)
+ * transport 일반(진입·이동·채팅·연마의 소켓 왕복)은 형제 두 e2e 스위트 `liveWorld.e2e.test.ts`·
+ * `studyLiveWorld.e2e.test.ts`가 덮는다. 그러나 **이 스위트가 겨냥하는 결함 경로**(release → 재접속 →
+ * pending overlay)의 소켓판은 그 일반 커버리지에 포함되지 않는다 — `liveWorld.e2e.test.ts`의 재접속
+ * 케이스(`이동 후 재접속 시 라이브 상태(도착 방)를 보존하고 재로드하지 않는다`)는 엔트리가 레지스트리에
+ * **살아 있는** grace 창 안의 rebind만 타므로 `hydrate`가 `peekPendingCharacter`를 부르는 지점에 도달조차
+ * 하지 않는다(D-G 1 조기 반환).
+ *
+ * 그 공백은 `studyLiveWorld.e2e.test.ts`의 케이스
+ * `grace 만료로 release된 뒤 flush 이전에 새 소켓으로 재접속해도 학습한 주문이 살아남는다`가 닫는다 —
+ * grace 만료로 엔트리를 실제로 release시킨 뒤 새 소켓으로 재접속해 overlay 경로를 관통시킨다.
  *
  * ## 이 파일은 테스트 전용이다 — 프로덕션 코드를 바꾸지 않는다.
  *

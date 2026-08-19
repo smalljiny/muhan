@@ -34,6 +34,10 @@
  *         워커가 in-flight로 가져간 상태면 그 write 완료를 await한 뒤 진행한다. tracker-evict만으로는
  *         (B) 경로(flush 후 in-flight)가 남아 stale 덮어쓰기가 가능하다 — 두 evict가 함께라야
  *         구조적으로 봉쇄된다.
+ *   ⚠ 봉쇄는 (A)(B) **두 상태에 한해** 성립한다. checkout됐지만 backpressure로 enqueue가 아직
+ *   수락되지 않은 세 번째 상태는 어느 evict도 보지 못한다(AsyncWriteQueue.evict 주석 참조).
+ *   saveNow는 현재 프로덕션 호출자가 0건이라 발현 경로가 없고, 첫 호출자가 붙는 토픽에서
+ *   구조적으로 닫아야 한다.
  *   evict-before-write 순서를 택한 이유: write를 await하는 동안 도착한 더 새로운
  *   markDirty(K, snap_newer)는 evict 이후라 tracker에 그대로 남아 다음 flush로 영속화된다.
  *   write-후-evict 순서였다면 post-await evict가 그 snap_newer를 지워 유실시킨다(logic bug).

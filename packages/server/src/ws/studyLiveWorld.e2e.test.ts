@@ -18,6 +18,7 @@ import { createLiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
 import type { LiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
 import { makeRoom } from '../world/roomFixtures.testutil.js'
 import { SaveEngine } from '../save/saveEngine.js'
+import { CHARACTERS_COLLECTION } from '../world/markCharacterDirty.js'
 import { NOOP_LOGGER } from '../save/logger.js'
 import { FakeClock } from '../util/clock.testutil.js'
 import { loadObjectTemplates, type ObjectTemplate } from '../items/objectTemplate.js'
@@ -52,6 +53,13 @@ import {
 // ⚠ 닫히는 것은 그 하나뿐이다. **boot(`index.ts`)의 묶음 조립은 여전히 미검증**이다 — 이 파일도
 // `LiveWorldWiringBundle` 리터럴을 자체 구성하므로, boot가 `objectTemplates`에 무엇을 싣는지는 여기서
 // 검출되지 않는다(`index.ts`는 커버리지 제외 배선 코드라 설계상 그렇다).
+//
+// ## 두 번째 책임 — release 후 재접속의 소켓판(#124)
+// 마지막 케이스는 학습 흐름이 아니라 **재접속 overlay 경로**를 관통시킨다. 그 경로의 규칙 층은
+// `reconnectRevert.regression.test.ts`가 소켓 없이 덮고, 형제 `liveWorld.e2e.test.ts`의 재접속 케이스는
+// 엔트리가 살아 있는 rebind만 덮어 `hydrate`의 pending 조회에 도달하지 않는다. 여기에 두는 이유는
+// 하네스가 이미 실 `SaveEngine`·`peekPending` seam·정본 템플릿을 싣고 있어, 학습으로 만든 미영속
+// 진행도를 소켓 프레임(`progress:studied.spells`)으로 되읽을 수 있는 유일한 스위트이기 때문이다.
 //
 // ## 하네스 최소화 — 방 1개·계정 1개
 // 연마는 방을 읽지 않고(대상이 소지품 스코프다) 다른 세션과 상호작용하지도 않는다. 형제 스위트의
@@ -93,6 +101,21 @@ const BOOK_OBJNUM = 142
 const BOOK_SPELL_NO = 12
 /** 시드 인스턴스 `_id` — `progress:studied.consumedObjectId`·`objects.deleteById` 단언의 기준값이다. */
 const BOOK_INSTANCE_ID = 'study-e2e-book-1'
+
+/**
+ * 두 번째 시드 비법서 objnum — 정본 `objects.json`의 `파초식서`(id 342). 재접속 회귀 케이스에서만 쓴다.
+ *
+ * 선정 기준은 `BOOK_OBJNUM`과 같다(SCROLL·`ndice === 20`으로 레벨 게이트 등호 통과·all-zero flags라
+ * 정렬·클래스·가시성 게이트 미발화). **다른 주문번호를 담는 것**만 다르고, 그 차이가 회귀 단언을
+ * 성립시킨다 — 재접속 후 이 책을 연마하면 `progress:studied.spells`에 첫 세션에서 배운 12번 비트와
+ * 방금 배운 30번 비트가 함께 실려야 한다. 같은 책을 다시 연마하면 두 경우가 구별되지 않는다
+ * (`setKnown`이 멱등이라 되돌아간 상태에서도 같은 프레임이 나온다).
+ */
+const BOOK2_OBJNUM = 342
+/** 두 번째 비법서가 담은 주문번호(`magicpower - 1`) — 카탈로그 30번 `파초식`. */
+const BOOK2_SPELL_NO = 30
+/** 두 번째 시드 인스턴스 `_id`. */
+const BOOK2_INSTANCE_ID = 'study-e2e-book-2'
 /** 캐릭터 레벨 — 시드 비법서 `ndice`(20)와 같게 잡아 레벨 게이트 경계를 통과시킨다. */
 const CHAR_LEVEL = 20
 
@@ -101,6 +124,8 @@ const OBJECT_TEMPLATES = loadObjectTemplates()
 
 /** 시드 비법서 템플릿(정본). 위 상수들의 실제 출처이며 아래 단언·시드가 함께 참조한다. */
 const BOOK_TEMPLATE: ObjectTemplate | undefined = OBJECT_TEMPLATES.get(BOOK_OBJNUM)
+/** 두 번째 시드 비법서 템플릿(정본) — 재접속 회귀 케이스의 이름·값 출처다. */
+const BOOK2_TEMPLATE: ObjectTemplate | undefined = OBJECT_TEMPLATES.get(BOOK2_OBJNUM)
 
 /** 최소 유효 Character 문서(형제 스위트 `makeCharacter` 미러 — 학습에 필요한 필드만 조정한다). */
 function makeCharacter(): Character {
@@ -133,20 +158,29 @@ function makeCharacter(): Character {
  * 인스턴스를 검증 없이 돌려주므로(실 `ObjectRepository.findByOwner`는 `objectSchema.parse`한다), 파싱을
  * 끼우지 않으면 스키마가 거부할 시드로도 시나리오가 통과해 배선 검출력이 떨어진다.
  */
-function makeBookInstance(): ObjectInstance {
+function makeBookInstance(
+  objnum: number,
+  instanceId: string,
+  template: ObjectTemplate | undefined,
+): ObjectInstance {
   return objectSchema.parse({
-    _id: BOOK_INSTANCE_ID,
-    objnum: BOOK_OBJNUM,
+    _id: instanceId,
+    objnum,
     // ⚠ 인스턴스의 type은 스키마 필수 필드를 채울 뿐이다 — study()의 ② SCROLL 게이트가 읽는 것은
     //   `found.template.type`(정본 인덱스)이지 이 값이 아니다. 여기를 바꿔도 게이트는 흔들리지 않는다.
     type: SCROLL,
     owner: { type: 'character', id: CHAR },
     slot: null,
     equipped: false,
-    value: BOOK_TEMPLATE?.value ?? 0,
+    value: template?.value ?? 0,
     shotscur: 1,
     schemaVersion: 1,
   })
+}
+
+/** 기본 시드 인벤 — 비법서 1권. 재접속 회귀 케이스만 두 번째 권을 얹어 호출한다. */
+function defaultInventory(): ObjectInstance[] {
+  return [makeBookInstance(BOOK_OBJNUM, BOOK_INSTANCE_ID, BOOK_TEMPLATE)]
 }
 
 /**
@@ -224,13 +258,18 @@ interface StudyHarness {
  *     실제로 repo까지 도달하는지, 그리고 어느 순서로 도달하는지를 여기서만 볼 수 있다.
  *
  * bank/world repo는 이 흐름에서 미사용이라 최소 stub을 캐스트로 채운다(형제 스위트 관례 미러).
+ *
+ * `inventory`는 `hydrateInventory`가 **진입마다** 돌려주는 시드다(페이크 repo는 시드 배열의 사본을
+ * 준다 — 라이브에서 소모된 인스턴스는 다음 진입에 되살아난다. 인벤은 종료 스냅샷 대상이 아니라는
+ * `liveCharacterEntry.ts` 헤더의 divergence가 그대로 관측되는 지점이다). 기본값은 비법서 1권이고,
+ * 재접속 회귀 케이스만 두 권을 싣는다.
  */
-function buildHarness(): StudyHarness {
+function buildHarness(inventory: readonly ObjectInstance[] = defaultInventory()): StudyHarness {
   const room = makeRoom({ roomId: ROOM_STUDY })
   const worldGraph = new Map<number, RoomNode>([[ROOM_STUDY, room]])
 
   const writeOrder: WriteRoute[] = []
-  const characterRepo = makeCharacterRepo(makeCharacter(), [makeBookInstance()], writeOrder)
+  const characterRepo = makeCharacterRepo(makeCharacter(), inventory, writeOrder)
   const objectRepo = makeObjectRepo(writeOrder)
 
   // SaveEngine — FakeClock + 즉시 backoff. 주기 tick이 발화하지 않으므로 flush 시점은 오직
@@ -454,5 +493,81 @@ describe('학습 end-to-end (실 소켓 · 정본 템플릿 인덱스)', () => {
     const live = h.liveRegistry.get(CHAR)
     expect(live?.inventory).toHaveLength(1)
     expect(isKnown(live?.character.spells ?? [], BOOK_SPELL_NO)).toBe(false)
+  })
+
+  /**
+   * #124 회귀 — release → 재접속 → pending overlay의 **소켓판**.
+   *
+   * 형제 회귀 스위트(`reconnectRevert.regression.test.ts`)는 결정적 제어를 위해 소켓을 싣지 않고
+   * `createLiveWorldWiring`을 직접 호출한다. 형제 e2e(`liveWorld.e2e.test.ts`)의 재접속 케이스는
+   * 엔트리가 **레지스트리에 살아 있는** grace 창 안의 rebind만 덮어 `hydrate`가 `peekPendingCharacter`를
+   * 부르는 지점에 도달하지 않는다(D-G 1 조기 반환). 그 사이의 공백을 이 케이스가 닫는다.
+   *
+   * 성립 조건 두 가지를 본문에서 각각 단언한다:
+   *  (1) grace 만료로 라이브 엔트리가 **실제로 release**됐을 것 — 아니면 조기 반환 경로를 돌아 통과가 무의미하다.
+   *  (2) 재접속이 **flush 이전**일 것 — pending 스냅샷이 tracker에 남아 있는 창에서만 overlay가 발동한다.
+   */
+  it('grace 만료로 release된 뒤 flush 이전에 새 소켓으로 재접속해도 학습한 주문이 살아남는다', async () => {
+    // grace를 스키마 최소값(1ms)으로 낮춘다 — 기본 60초로는 close 후에도 link-dead 엔트리가 살아 있어
+    // 재접속이 rebind(D-G 1 조기 반환)로 빠지고 overlay 경로에 도달하지 못한다. env를 먼저 바꾸고
+    // 설정 캐시를 비운 뒤 app을 만든다(grace는 스케줄 시점에 지연 조회되지만 순서를 명시해 둔다).
+    process.env.WS_RECONNECT_GRACE_MS = '1'
+    resetConfigForTests()
+
+    const h = buildHarness([
+      makeBookInstance(BOOK_OBJNUM, BOOK_INSTANCE_ID, BOOK_TEMPLATE),
+      makeBookInstance(BOOK2_OBJNUM, BOOK2_INSTANCE_ID, BOOK2_TEMPLATE),
+    ])
+    const url = await startTracked(h.app)
+
+    // ── 1) 첫 세션 — 진입 후 비법서 A(12번 `혼동`)를 연마한다. ──────────────────────
+    const first = trackedClient(url)
+    const s1 = await enterWorld(first, CHAR)
+    expect(s1.entered).toMatchObject({ type: 'session:entered', characterId: CHAR })
+    await waitFor(() => h.room.occupants.has(CHAR))
+
+    first.send(JSON.stringify({ type: 'progress:study', target: BOOK_TEMPLATE?.name ?? '' }))
+    expect(await s1.reader.next()).toMatchObject({
+      type: 'progress:studied',
+      spellNo: BOOK_SPELL_NO,
+    })
+
+    // ── 2) 성립 조건 (1) — grace 만료가 라이브 엔트리를 release했다. ─────────────────
+    // 소켓을 닫으면 link-dead가 되고 1ms 뒤 graceExpired 수렴이 markDirty → release로 이어진다.
+    // 아래 세 단언이 "레지스트리에서 실제로 빠졌다"를 고정한다 — 하나라도 빠지면 이 케이스는 D-G 1
+    // 조기 반환을 돌면서도 통과하는 무의미한 테스트가 된다.
+    first.close()
+    await waitFor(() => h.liveRegistry.get(CHAR) === undefined)
+    expect(h.app.wsSessionRegistry.get(CHAR)).toBeUndefined()
+    expect(h.room.occupants.has(CHAR)).toBe(false)
+
+    // ── 3) 성립 조건 (2) — 아직 flush 이전이다(pending 창이 열려 있다). ───────────────
+    // FakeClock을 tick하지 않으므로 주기 flush가 돌지 않는다. 종료 스냅샷이 tracker에 남아 있고
+    // repo에는 어떤 write도 도달하지 않았다.
+    expect(h.saveEngine.peekPending(CHARACTERS_COLLECTION, CHAR)).toBeDefined()
+    expect(h.characterRepo.updateById).not.toHaveBeenCalled()
+
+    // ── 4) 재접속 — 새 소켓·새 진입. 엔트리가 없으니 rebind가 아니라 fresh 등록이다. ───
+    const second = trackedClient(url)
+    const s2 = await enterWorld(second, CHAR)
+    // resumed가 아니라 entered다 = 이 진입이 hydrate를 다시 돌았다는 프레임 수준 증거다.
+    expect(s2.entered).toMatchObject({ type: 'session:entered', characterId: CHAR })
+    expect(s2.room).toMatchObject({ type: 'world:room', roomId: ROOM_STUDY })
+    // repo 왕복도 2회째다(첫 진입 1 + 재접속 1) — 조기 반환이었다면 1로 머문다.
+    expect(h.characterRepo.findById).toHaveBeenCalledTimes(2)
+
+    // ── 5) 확인 — 두 번째 비법서를 연마해 그 결과 프레임의 spells로 첫 세션 학습분을 읽는다. ──
+    // `progress:studied.spells`가 주문 지식을 싣는 **유일한** 서버 이벤트라 관측 경로가 이것뿐이다
+    // (라이브 레지스트리를 직접 읽으면 소켓을 관통하지 않은 관측이 된다).
+    second.send(JSON.stringify({ type: 'progress:study', target: BOOK2_TEMPLATE?.name ?? '' }))
+    const studied2 = await s2.reader.next()
+    expect(studied2).toMatchObject({ type: 'progress:studied', spellNo: BOOK2_SPELL_NO })
+
+    const spells = studied2.type === 'progress:studied' ? studied2.spells : []
+    // 방금 배운 30번 비트(재접속 세션의 정상 동작).
+    expect(isKnown(spells, BOOK2_SPELL_NO)).toBe(true)
+    // 회귀 앵커 — 저장소 문서의 spells는 all-zero다. hydrate가 pending overlay를 걷어내면 12번 비트가
+    // 사라지므로 이 단언만이 #124 결함을 소켓 경로에서 검출한다.
+    expect(isKnown(spells, BOOK_SPELL_NO)).toBe(true)
   })
 })

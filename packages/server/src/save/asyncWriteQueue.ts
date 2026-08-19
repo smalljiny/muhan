@@ -197,10 +197,19 @@ export class AsyncWriteQueue {
    * 끝날 때까지 await한다. SaveEngine.saveNow가 즉시 write 직전에 호출해, 같은 키의 stale 큐 write가
    * saveNow의 최신 write보다 나중에 커밋돼 덮어쓰는 것을 pending·in-flight 양쪽에서 봉쇄한다.
    *
-   * 반환 후 이 키의 미완료 큐 write는 남지 않는다 — coalescing으로 키당 pending 1건, 단일 워커로
-   * in-flight 1건뿐이므로 pending 삭제 + in-flight await로 둘 다 소진된다. saveNow는 이 호출 전에
-   * tracker.evict로 stale mark를 제거하므로, await 도중 주기 flush가 이 키를 재-enqueue하는 일도 없다
-   * (await 중 도착한 더 새로운 markDirty는 evict 이후라 tracker에 남아 다음 flush로 영속화된다).
+   * 반환 후 **큐가 보유한** 이 키의 미완료 write는 남지 않는다 — coalescing으로 키당 pending 1건,
+   * 단일 워커로 in-flight 1건뿐이므로 pending 삭제 + in-flight await로 둘 다 소진된다.
+   *
+   * ⚠ 큐가 볼 수 없는 세 번째 상태가 있다. `SaveScheduler.flush()`는 `checkout()` 후 `enqueue`에서
+   * capacity backpressure로 블록될 수 있고, 그 창의 엔트리는 tracker의 inProgress에는 있지만 큐의
+   * pending에는 아직 없다. 이 evict는 그 엔트리를 취소하지 못하며, 반환 후 블록이 풀리면 stale
+   * 엔트리가 뒤늦게 enqueue돼 saveNow의 최신 write를 덮을 수 있다. saveNow에 프로덕션 호출자가
+   * 붙을 때(현재 0건) 구조적으로 닫아야 한다 — 스케줄러가 checkout 완료·enqueue 미수락 집합을
+   * 노출하거나, flush를 evict-aware로 만드는 형태다.
+   *
+   * saveNow는 이 호출 전에 tracker.evict로 stale mark를 제거하므로, await 도중 도착한 더 새로운
+   * markDirty는 evict 이후라 tracker에 남아 다음 flush로 영속화된다. 다만 saveNow **이전에 이미
+   * checkout된** 엔트리는 tracker.evict가 지워도 스케줄러의 지역 배열에 살아 있어 그대로 enqueue된다.
    */
   async evict(collection: string, id: string): Promise<void> {
     const key = dirtyKey(collection, id)

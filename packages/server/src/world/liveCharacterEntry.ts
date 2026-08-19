@@ -1,5 +1,5 @@
 import type { Character, ObjectInstance, RoomNode } from 'shared'
-import { characterPatchSchema } from '../repo/characterRepository.js'
+import { characterPatchSchema } from '../repo/characterSchemas.js'
 import type { LiveCharacter, LiveCharacterRegistry } from './liveCharacterRegistry.js'
 import type { MoveActor } from './tryMove.js'
 
@@ -29,7 +29,9 @@ import type { MoveActor } from './tryMove.js'
  *
  * ⚠ 이 재로드 금지는 **엔트리가 살아 있는 동안**만 유효하다. grace 만료로 엔트리가 완전히 release된
  * 뒤 재접속하면 인벤은 디스크 스냅샷으로 돌아간다 — 세션 종료 스냅샷(`liveSessionLifecycleAdapter`)이
- * `character`만 dirty로 표시하고 인벤은 표시하지 않기 때문이다(#124의 pending 스냅샷과 같은 부류).
+ * `character`만 dirty로 표시하고 인벤은 표시하지 않기 때문이다. #124(캐릭터 문서의 pending 스냅샷
+ * 무시)와 뿌리는 같지만 **대조로 읽어라** — 캐릭터 문서 쪽은 hydrate의 pending overlay로 닫혔고,
+ * 인벤은 닫히지 않았다.
  *
  * 이 공백은 **삭제에 한해서만** 닫힌다 — 후속 Story가 `objectDeletions` 삭제 어댑터를 추가하지만
  * objects의 update·insert 어댑터는 없다. 따라서 삭제 이외의 인벤 변경(equip 토글·`shotscur` 감소·
