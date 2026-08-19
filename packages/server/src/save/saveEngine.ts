@@ -92,10 +92,7 @@ function stripImmutableId(snapshot: unknown): unknown {
   if (typeof snapshot !== 'object' || snapshot === null || !('_id' in snapshot)) {
     return snapshot
   }
-  const rest: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(snapshot)) {
-    if (key !== '_id') rest[key] = value
-  }
+  const { _id: _immutable, ...rest } = snapshot as Record<string, unknown>
   return rest
 }
 
@@ -187,6 +184,32 @@ export class SaveEngine {
    */
   markDirty(collection: string, id: string, snapshot: unknown): void {
     this.tracker.markDirty(collection, id, snapshot)
+  }
+
+  /**
+   * 해당 키의 미영속 스냅샷을 비파괴적으로 조회한다(재접속 hydrate의 단일 입구).
+   *
+   * `undefined`는 "그 키의 미영속 스냅샷이 없음"을 뜻한다 — 수명 계약상 저장소 문서가 최신이라는
+   * 의미이므로, 조회자는 DB에서 읽은 값을 그대로 쓰면 된다. 미착수(registry)든 write 진행 중
+   * (inProgress)이든 같은 값이 나오며, 판정은 tracker.peek 한 곳이 담당한다.
+   *
+   * 반환값은 **patch 컬렉션(characters·bankAccounts)에 한해** flush가 `$set`할 값과 문자 그대로
+   * 같다 — 그 두 라우트만 영속 경로에서 같은 `stripImmutableId`를 거치기 때문이다. 두 경로가 각자
+   * 정규화하면 hydrate가 덮어쓴 문서와 실제 저장될 문서가 갈라지는데, 그 불일치는 예외도 로그도
+   * 남기지 않는다. 나머지 두 라우트는 이 등식이 성립하지 않으니 그대로 소비하지 마라 —
+   * `roomStates`는 어댑터가 스냅샷을 벗기지 않고 통째로 upsert하고, `objectDeletions`는 스냅샷을
+   * 아예 쓰지 않는다(id만으로 삭제).
+   *
+   * 반환값은 tracker가 보관한 **라이브 참조일 수 있다**(`_id`가 없는 스냅샷은 그대로 돌려준다).
+   * mutate하지 마라 — 앞으로 영속될 스냅샷이 오염된다. DirtyTracker의 "참조 그대로 보관하고
+   * 복제하지 않는다" 계약과 짝을 이룬다.
+   *
+   * 반환 타입은 `unknown`이다. save 계층은 collection 무지(agnostic)이고, 소비자가 어차피 자기
+   * 스키마로 런타임 검증하므로 검증되지 않은 컴파일 타임 단언을 여기 얹지 않는다.
+   */
+  peekPending(collection: string, id: string): unknown {
+    const entry = this.tracker.peek(collection, id)
+    return entry === undefined ? undefined : stripImmutableId(entry.snapshot)
   }
 
   /**

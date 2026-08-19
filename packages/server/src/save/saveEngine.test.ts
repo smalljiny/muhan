@@ -183,6 +183,9 @@ describe('SaveEngine', () => {
 
       expect(spies.charUpdate).toHaveBeenCalledTimes(1)
       expect(spies.charUpdate).toHaveBeenCalledWith('c1', { gold: 99 })
+      // evict가 지운 stale 스냅샷은 조회 seam에도 남지 않는다 — 남으면 hydrate가 즉시 write된
+      // 값보다 오래된 진행도를 덮어쓴다.
+      expect(engine.peekPending('characters', 'c1')).toBeUndefined()
     })
 
     it('evict-before-write 판별: saveNow write가 in-flight인 동안 도착한 최신 markDirty를 유실하지 않는다', async () => {
@@ -347,6 +350,8 @@ describe('SaveEngine', () => {
       // 반납 가드가 참조 동일성이므로, 폐기 경로도 checkout이 내준 그 엔트리여야 한다.
       expect(discardSpy.mock.calls[0]?.[0]).toBe(checkedOut[0])
       expect(ackSpy).not.toHaveBeenCalled()
+      // 폐기된 스냅샷은 복구되지 않으므로 조회 seam에도 보이지 않아야 한다.
+      expect(engine.peekPending('characters', 'c1')).toBeUndefined()
     })
 
     /**
@@ -359,6 +364,130 @@ describe('SaveEngine', () => {
       expectTypeOf<NonNullable<SaveEngineOptions['queueOptions']>>().not.toHaveProperty('onSettled')
       expectTypeOf<NonNullable<SaveEngineOptions['queueOptions']>>().toHaveProperty('sleep')
       expectTypeOf<NonNullable<SaveEngineOptions['queueOptions']>>().toHaveProperty('capacity')
+    })
+  })
+
+  /**
+   * pending 스냅샷 조회 seam — 재접속 hydrate가 아직 영속되지 않은 진행도를 보는 단일 입구다.
+   *
+   * 두 축을 고정한다 — (1) 조회처는 tracker 한 곳이고, (2) 반환값은 영속 경로와 같은 _id 정규화를
+   * 거친다. 계약 근거는 `SaveEngine.peekPending` JSDoc이 정본이다.
+   */
+  describe('T3.2 — peekPending 조회 seam', () => {
+    it('registry·inProgress 양쪽에 없는 키는 undefined를 반환한다(수명 계약상 DB가 최신)', () => {
+      const engine = makeEngine(spies, clock)
+      expect(engine.peekPending('characters', 'c1')).toBeUndefined()
+
+      engine.markDirty('characters', 'c1', { gold: 1 })
+      // 키는 collection·id 쌍이다 — 한쪽만 맞는 조회는 여전히 미보유다.
+      expect(engine.peekPending('characters', 'c2')).toBeUndefined()
+      expect(engine.peekPending('bankAccounts', 'c1')).toBeUndefined()
+    })
+
+    it('markDirty 직후 registry의 스냅샷을 반환한다', () => {
+      const engine = makeEngine(spies, clock)
+      engine.markDirty('characters', 'c1', { gold: 10, name: '타이' })
+      expect(engine.peekPending('characters', 'c1')).toEqual({ gold: 10, name: '타이' })
+    })
+
+    it('같은 키를 재-mark하면 coalescing된 최신 스냅샷을 반환한다', () => {
+      const engine = makeEngine(spies, clock)
+      engine.markDirty('characters', 'c1', { gold: 1 })
+      engine.markDirty('characters', 'c1', { gold: 2 })
+      expect(engine.peekPending('characters', 'c1')).toEqual({ gold: 2 })
+    })
+
+    it('_id를 포함한 전체 문서 스냅샷은 _id를 벗겨 반환한다(flush가 $set할 값과 동일)', async () => {
+      const engine = makeEngine(spies, clock)
+      const snapshot = { _id: 'c1', gold: 10, name: '타이' }
+      engine.markDirty('characters', 'c1', snapshot)
+
+      const peeked = engine.peekPending('characters', 'c1')
+      expect(peeked).toEqual({ gold: 10, name: '타이' })
+      expect(peeked).not.toHaveProperty('_id')
+
+      // 영속 경로와 같은 값임을 대조한다 — 두 경로가 각자 정규화하면 여기서 갈라진다.
+      engine.start()
+      clock.tick()
+      await barrier()
+      expect(spies.charUpdate).toHaveBeenCalledWith('c1', peeked)
+    })
+
+    /**
+     * stripImmutableId의 identity 분기 — `_id`가 없으면 복제 없이 참조 그대로 돌려준다.
+     *
+     * `toBe`로 단언하는 것은 의도다. tracker가 스냅샷을 복제하지 않고 보관하므로 반환값이 라이브
+     * 참조일 수 있고, peekPending JSDoc이 소비자에게 mutate 금지를 명시한다. 두 진술이 한 결정임을
+     * 여기서 고정한다. (`null` 스냅샷이 "미보유"(undefined)와 구별되는 것도 같은 분기다 — 값 없음과
+     * 키 없음은 다른 사건이다.)
+     */
+    it.each([
+      ['_id 없는 객체', { gold: 10 }],
+      ['문자열', '문자열'],
+      ['숫자', 7],
+      ['null', null],
+    ])('%s 스냅샷은 참조 그대로 반환한다', (_label, snapshot) => {
+      const engine = makeEngine(spies, clock)
+      engine.markDirty('characters', 'k', snapshot)
+      expect(engine.peekPending('characters', 'k')).toBe(snapshot)
+    })
+
+    /**
+     * §8.6 — 반납 가드(참조 동일성)가 seam을 통과해서도 성립한다.
+     *
+     * K가 S1으로 in-flight인 동안 S2로 재-mark되고 다음 checkout이 S2를 이관하면, 뒤늦게 도착한
+     * S1의 ack은 no-op이어야 한다. 이 가드가 없으면 아직 write되지 않은 S2가 tracker에서 사라져
+     * hydrate가 그 진행도를 못 본다 — #124의 재발 경로다.
+     */
+    it('§8.6 — in-flight S1의 ack이 재-mark된 S2를 지우지 않는다(seam이 S2를 반환한다)', async () => {
+      // write마다 gate를 쌓아 종결 시점을 테스트가 직접 연다(타이밍 경합 없음).
+      const gates: Array<() => void> = []
+      spies.charUpdate.mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            gates.push(resolve)
+          }),
+      )
+      const engine = makeEngine(spies, clock)
+
+      engine.markDirty('characters', 'c1', { gold: 1 }) // S1
+      engine.start()
+      clock.tick()
+      await barrier() // 워커가 S1을 in-flight로 가져가 hang
+
+      engine.markDirty('characters', 'c1', { gold: 2 }) // S2 — in-flight 중 재-mark
+      clock.tick()
+      await barrier() // 두 번째 checkout이 S2를 inProgress로 이관(S1 엔트리를 덮는다)
+
+      expect(engine.peekPending('characters', 'c1')).toEqual({ gold: 2 })
+
+      // 단일 워커라 이 시점에 dispatch된 write는 S1 하나다 — gate가 실제로 잡혔는지 고정한다.
+      // 없으면 아래 gates[n]?.()가 조용히 no-op이 되어 뒤따르는 단언이 vacuous하게 통과한다.
+      expect(gates).toHaveLength(1)
+
+      gates[0]?.() // S1 write 종결 → ack(S1)은 참조 불일치라 no-op
+      await barrier()
+      expect(engine.peekPending('characters', 'c1')).toEqual({ gold: 2 })
+
+      // S1이 끝나야 워커가 S2를 가져간다.
+      expect(gates).toHaveLength(2)
+      gates[1]?.() // S2 write 종결 → ack(S2)는 참조 일치라 반납된다
+      await barrier()
+      expect(engine.peekPending('characters', 'c1')).toBeUndefined()
+    })
+
+    /**
+     * T3.3 — 반환 타입 결정(플랜 OQ2)을 타입 단계에서 고정한다.
+     *
+     * collection별 타입 파라미터를 두지 않는다. 소비자(hydrate)가 characterPatchSchema로 런타임
+     * 검증하므로, 검증되지 않은 컴파일 타임 단언을 이중으로 두면 둘이 어긋나도 타입 검사가 잡지
+     * 못한다. save 계층이 collection 무지(agnostic)라는 기존 설계와도 정합이다.
+     */
+    it('공개 시그니처가 (collection: string, id: string) => unknown이다(OQ2 결정 고정)', () => {
+      // 인스턴스 프로퍼티가 아니라 클래스 타입에서 메서드 타입을 꺼낸다 — 형제 타입 테스트
+      // (queueOptions)와 같은 형태이고, 메서드를 수신자에서 떼어내는 lint 규칙도 피한다.
+      expectTypeOf<SaveEngine['peekPending']>().returns.toBeUnknown()
+      expectTypeOf<SaveEngine['peekPending']>().parameters.toEqualTypeOf<[string, string]>()
     })
   })
 
