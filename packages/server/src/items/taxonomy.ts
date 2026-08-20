@@ -90,6 +90,16 @@ export const WIELD = 20
 /** 착용 슬롯 최대치(wearflag 상한). */
 export const MAXWEAR = 20
 
+/**
+ * WIELD 착용 슬롯(0-based) — `ObjectInstance.slot`이 쓰는 좌표계다.
+ *
+ * wearflag는 1-based(WIELD=20)이고 인스턴스 slot은 0-based라 −1로 파생한다. 이 파생을 소비처마다
+ * 사적으로 두면 정의가 흩어지므로 원산지인 여기에 둔다 — 장착 무기를 보는 소비처는 모두 **같은
+ * 아이템을 가리켜야** 하고, 각자 파생하면 그 일치가 우연이 된다. 선택 자체도 복제하지 않는다:
+ * `equipStats`의 `findWieldedPair`가 그 판정의 단일 출처다.
+ */
+export const WIELD_SLOT = WIELD - 1
+
 /** 착용 명령 라우팅 결과 — 게임 명령 어휘. */
 export type WearCommand = 'ready' | 'hold' | 'wear'
 
