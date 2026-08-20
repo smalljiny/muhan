@@ -51,7 +51,7 @@ export function createCreatureLedgers(): CreatureLedgers {
       // wanderOut splice)는 사망 seam을 타지 않아 원장이 남는다. "죽으면 다 정리된다"고 읽으면
       // 안 된다 — 공격받다 배회로 사라진 크리처만큼 누수가 가동 시간에 비례해 늘어난다.
       // 지금 닫지 못하는 이유는 `world/`가 `combat/`을 import하지 않는 규약이라 creatureTick이
-      // 직접 부를 수 없고, 비사망 소멸을 바깥에 알리는 seam이 아직 없어서다. 그 seam이 별도 과제다.
+      // 직접 부를 수 없고, 비사망 소멸을 바깥에 알리는 seam이 아직 없어서다. 그 seam은 **#147**이 소유한다.
       ledgers.delete(instanceId)
     },
   }

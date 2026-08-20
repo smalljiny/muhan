@@ -248,6 +248,11 @@ export function createAttackHandler(deps: AttackHandlerDeps): CommandHandler {
     ]
     if (outcome.died) {
       // 사망 seam이 이미 방 creatures[]에서 제거한 뒤라, 이 투영에는 죽은 개체가 없다(D14).
+      //
+      // ⚠ 이 방 뷰는 **공격자 소켓에만** 간다(핸들러 반환은 요청 소켓으로 나간다). 같은 방의 다른
+      // 점유자는 통지를 받지 못해 죽은 크리처를 계속 목록에 두고 지목할 수 있다. 방 스코프 전파는
+      // 스펙 §5가 **#116**(방송 seam 결선)으로 유예한 범위다 — 이 핸들러의 누락이 아니라 아직
+      // 결선되지 않은 방송 경로다. #116이 붙는 시점에 이 발화도 방 전파로 함께 올린다.
       events.push({ type: 'world:room', ...projectRoomView(room, deps.resolveCharacterName) })
     }
     return events
