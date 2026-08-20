@@ -53,7 +53,7 @@ export interface ResolveContext {
  * 단일 타격 결과(메시지 렌더링 입력). 무기 마모·낙하는 실제 오브젝트 이동 없이 플래그만 표면화한다.
  * specialAttack은 몬스터 명중 타격일 때만 non-null이다(플레이어·미명중은 null).
  */
-interface AttackDescriptor {
+export interface AttackDescriptor {
   readonly hit: boolean
   readonly damage: number
   readonly critical: boolean

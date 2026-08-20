@@ -184,9 +184,9 @@ describe('clientCommandSchema (client→server 봉투)', () => {
     })
 
     it('text가 누락되면 거부한다', () => {
-      expect(
-        clientCommandSchema.safeParse({ type: 'chat:message', channel: 'say' }).success,
-      ).toBe(false)
+      expect(clientCommandSchema.safeParse({ type: 'chat:message', channel: 'say' }).success).toBe(
+        false,
+      )
     })
 
     it('text가 빈 문자열이면 거부한다', () => {
@@ -197,13 +197,19 @@ describe('clientCommandSchema (client→server 봉투)', () => {
 
     it('text가 상한(512)을 넘으면 거부한다 (전파 대상 필드 DoS floor)', () => {
       expect(
-        clientCommandSchema.safeParse({ type: 'chat:message', channel: 'say', text: 'ㄱ'.repeat(513) })
-          .success,
+        clientCommandSchema.safeParse({
+          type: 'chat:message',
+          channel: 'say',
+          text: 'ㄱ'.repeat(513),
+        }).success,
       ).toBe(false)
       // 상한 이내는 통과한다(경계값).
       expect(
-        clientCommandSchema.safeParse({ type: 'chat:message', channel: 'say', text: 'ㄱ'.repeat(512) })
-          .success,
+        clientCommandSchema.safeParse({
+          type: 'chat:message',
+          channel: 'say',
+          text: 'ㄱ'.repeat(512),
+        }).success,
       ).toBe(true)
     })
 
@@ -260,8 +266,11 @@ describe('clientCommandSchema (client→server 봉투)', () => {
         clientCommandSchema.safeParse({ type: 'chat:emote', emote: 'ㄱ'.repeat(65) }).success,
       ).toBe(false)
       expect(
-        clientCommandSchema.safeParse({ type: 'chat:emote', emote: '웃음', target: 'ㄱ'.repeat(65) })
-          .success,
+        clientCommandSchema.safeParse({
+          type: 'chat:emote',
+          emote: '웃음',
+          target: 'ㄱ'.repeat(65),
+        }).success,
       ).toBe(false)
       expect(
         clientCommandSchema.safeParse({ type: 'chat:emote', emote: '웃음', text: 'ㄱ'.repeat(513) })
@@ -299,9 +308,9 @@ describe('clientCommandSchema (client→server 봉투)', () => {
     })
 
     it('direction이 빈 문자열이면 거부한다', () => {
-      expect(
-        clientCommandSchema.safeParse({ type: 'world:move', direction: '' }).success,
-      ).toBe(false)
+      expect(clientCommandSchema.safeParse({ type: 'world:move', direction: '' }).success).toBe(
+        false,
+      )
     })
 
     it('direction이 상한(32)을 넘으면 거부한다 (입력 위생)', () => {
@@ -339,9 +348,9 @@ describe('clientCommandSchema (client→server 봉투)', () => {
     })
 
     it('알 수 없는 키를 거부한다 (strict)', () => {
-      expect(
-        clientCommandSchema.safeParse({ type: 'progress:train', extra: true }).success,
-      ).toBe(false)
+      expect(clientCommandSchema.safeParse({ type: 'progress:train', extra: true }).success).toBe(
+        false,
+      )
     })
 
     it('id가 문자열이 아니면 거부한다', () => {
@@ -379,9 +388,9 @@ describe('clientCommandSchema (client→server 봉투)', () => {
     })
 
     it('target이 빈 문자열이면 거부한다', () => {
-      expect(
-        clientCommandSchema.safeParse({ type: 'progress:study', target: '' }).success,
-      ).toBe(false)
+      expect(clientCommandSchema.safeParse({ type: 'progress:study', target: '' }).success).toBe(
+        false,
+      )
     })
 
     it('target이 상한(32)을 넘으면 거부한다 (world:move.direction 선례의 입력 위생)', () => {
@@ -427,6 +436,97 @@ describe('clientCommandSchema (client→server 봉투)', () => {
     it('알 수 없는 키를 거부한다 (strict)', () => {
       expect(
         clientCommandSchema.safeParse({ type: 'progress:study', target: '비법서', extra: true })
+          .success,
+      ).toBe(false)
+    })
+  })
+
+  describe('combat:attack', () => {
+    it('target만 있으면 통과한다 (ordinal·id 생략)', () => {
+      const parsed = clientCommandSchema.safeParse({ type: 'combat:attack', target: '고블린' })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'combat:attack') {
+        expect(parsed.data.target).toBe('고블린')
+        expect(parsed.data.ordinal).toBeUndefined()
+        expect(parsed.data.id).toBeUndefined()
+      }
+    })
+
+    it('target + ordinal + id가 있으면 통과한다', () => {
+      const parsed = clientCommandSchema.safeParse({
+        type: 'combat:attack',
+        target: '고블린',
+        ordinal: 2,
+        id: 'a1',
+      })
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'combat:attack') {
+        expect(parsed.data.ordinal).toBe(2)
+        expect(parsed.data.id).toBe('a1')
+      }
+    })
+
+    it('target이 누락되면 거부한다 (대상 지목 필수)', () => {
+      expect(clientCommandSchema.safeParse({ type: 'combat:attack' }).success).toBe(false)
+    })
+
+    it('target이 빈 문자열이면 거부한다', () => {
+      expect(clientCommandSchema.safeParse({ type: 'combat:attack', target: '' }).success).toBe(
+        false,
+      )
+      // 하한 경계값 — 1자는 통과한다(접두 매칭이라 짧은 지목도 유효한 입력이다).
+      expect(clientCommandSchema.safeParse({ type: 'combat:attack', target: '곰' }).success).toBe(
+        true,
+      )
+    })
+
+    it('target이 상한(32)을 넘으면 거부한다 (world:move.direction 선례의 입력 위생)', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'combat:attack', target: 'ㄱ'.repeat(33) }).success,
+      ).toBe(false)
+      // 상한 이내는 통과한다(경계값).
+      expect(
+        clientCommandSchema.safeParse({ type: 'combat:attack', target: 'ㄱ'.repeat(32) }).success,
+      ).toBe(true)
+    })
+
+    // targetOrdinalPayloadSchema를 spread하지 않은 결과가 여기서 드러난다 — 그 블록의 ordinal은
+    // 하한이 없어 0·음수를 통과시킨다(progress:study 선례와 같은 근거).
+    it('ordinal 0·음수를 거부한다 (하한 1)', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'combat:attack', target: '고블린', ordinal: 0 })
+          .success,
+      ).toBe(false)
+      expect(
+        clientCommandSchema.safeParse({ type: 'combat:attack', target: '고블린', ordinal: -1 })
+          .success,
+      ).toBe(false)
+      // 하한 경계는 통과한다.
+      expect(
+        clientCommandSchema.safeParse({ type: 'combat:attack', target: '고블린', ordinal: 1 })
+          .success,
+      ).toBe(true)
+    })
+
+    it('ordinal이 상한(99)을 넘거나 정수가 아니면 거부한다', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'combat:attack', target: '고블린', ordinal: 100 })
+          .success,
+      ).toBe(false)
+      expect(
+        clientCommandSchema.safeParse({ type: 'combat:attack', target: '고블린', ordinal: 1.5 })
+          .success,
+      ).toBe(false)
+      // 상한 경계는 통과한다.
+      expect(
+        clientCommandSchema.safeParse({ type: 'combat:attack', target: '고블린', ordinal: 99 })
+          .success,
+      ).toBe(true)
+    })
+
+    it('알 수 없는 키를 거부한다 (strict)', () => {
+      expect(
+        clientCommandSchema.safeParse({ type: 'combat:attack', target: '고블린', extra: true })
           .success,
       ).toBe(false)
     })

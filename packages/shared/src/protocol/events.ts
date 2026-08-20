@@ -173,6 +173,71 @@ export const serverEventSchema = z.discriminatedUnion('type', [
     spells: z.array(z.int().min(0).max(255)).length(SPELL_MASK_BYTES),
     consumedObjectId: z.string().min(1),
   }),
+  // 전투 라운드 결과 통지 — 한 번의 공격 라운드가 확정한 결과를 본인에게 1회 발화한다.
+  // progress:trained 선례대로 correlationId를 싣지 않는다(상태 이벤트 — 거부만 error로 상관 키를 반향한다).
+  //
+  // 대상은 instanceId와 표시 이름을 함께 싣는다 — world:room의 items·creatures가 쓰는 것과 같은
+  // 관용구다. 이름만으로는 짝지을 수 없다: 방에 같은 이름 크리처가 여럿일 수 있고(명령이 ordinal을
+  // 두는 이유가 그것이다), 그러면 클라이언트가 world:room 목록에서 어느 개체를 때렸는지 알 수 없다.
+  // instanceId는 방별 monotonic 발급기(world/spawn.ts의 createInstanceIdAllocator)가 내주므로 사망·
+  // 리스폰 뒤에도 재사용되지 않는다 — 프로세스 수명 동안 개체를 유일하게 가리킨다.
+  // died가 true면 그 인스턴스는 **이미 방에서 제거된 뒤**다. 조회용 키가 아니라 "방금 지목했던 그
+  // 개체" 식별자이므로, 클라이언트는 이것으로 자기 방 모델에서 정확히 그 개체를 지운다.
+  //
+  // top-level hit·damage·critical·fumble은 라운드 전체의 집계이고(다중공격 타격들의 합·OR),
+  // attacks는 그 집계를 만든 개별 타격의 목록이다. 표시 계층이 타격별 문장을 쓰려면 목록이 필요하고,
+  // 요약만 쓰려면 집계 필드로 충분하다 — 둘 다 싣는 이유다.
+  // damage에 하한을 두지 않는다 — 서버 집계 결과를 그대로 싣고, 값역 해석은 전투 규칙이 소유한다.
+  //
+  // attacks 원소 6필드는 server/src/combat/resolveAttack.ts의 AttackDescriptor 7필드에서
+  // specialAttack을 뺀 것이다(D11). 몬스터 특수공격 마커는 이슈 #99 소관이라 이 토픽의 와이어 계약에
+  // 넣지 않는다 — 그때 필드를 추가하면 version bump 대상이다. strict라서 지금 실어 보내면 거부된다.
+  //
+  // progress:studied의 spells와 같은 상황이다 — 저쪽 형상을 **따로 선언한 것**이지 파생한 것이 아니다.
+  // shared는 server를 import할 수 없어(의존 방향이 server → shared) 그 대응을 여기서 강제할 수 없다.
+  // 강제는 반대편이 한다 — server/src/combat/attackDescriptorWire.test.ts가 두 타입을 함께 놓고
+  // 컴파일 타임에 대조한다. 이 주석만으로는 아무것도 강제되지 않는다.
+  z.strictObject({
+    type: z.literal('combat:attacked'),
+    targetInstanceId: z.string().min(1),
+    targetName: z.string().min(1),
+    hit: z.boolean(),
+    damage: z.int(),
+    critical: z.boolean(),
+    fumble: z.boolean(),
+    died: z.boolean(),
+    attacks: z.array(
+      z.strictObject({
+        hit: z.boolean(),
+        damage: z.int(),
+        critical: z.boolean(),
+        fumble: z.boolean(),
+        durabilityHit: z.boolean(),
+        weaponDropped: z.boolean(),
+      }),
+    ),
+  }),
+  // 스탯 스냅샷 통지 — 전투·회복으로 바뀐 자원과 성장 수치를 본인에게 발화한다. 델타가 아니라 스냅샷이라
+  // 놓친 이벤트가 있어도 다음 통지에서 상태가 수렴한다(world:room 선례).
+  // progress:trained 선례대로 correlationId를 싣지 않는다(상태 이벤트).
+  //
+  // hpCurrent·mpCurrent·experience·level은 characterSchema에 대응 필드가 있어 그 하한을 미러한다 —
+  // 클라(wsClient)가 인바운드 프레임을 이 스키마로 safeParse하므로 형식적 정합이 아니라 실 입력 검증
+  // 표면이다. level 하한 1은 progress:trained와 같다.
+  //
+  // hpMax·mpMax는 characterSchema에 없다 — 저장하지 않고 stats/derived.ts의 computeHpMax·computeMpMax로
+  // 매번 파생하는 값이라(compute-on-read), 미러할 대응 필드가 없어 자원 하한 0만 둔다. 그래서 hpMax 0이
+  // 형식상 통과한다 — 살아 있는 캐릭터에서는 나타나지 않는 값이고, 값역 해석은 성장 규칙이 소유한다.
+  // hpCurrent ≤ hpMax 같은 교차 필드 불변식도 두지 않는다(progress:trained와 같은 결).
+  z.strictObject({
+    type: z.literal('character:stats'),
+    hpCurrent: z.int().min(0),
+    hpMax: z.int().min(0),
+    mpCurrent: z.int().min(0),
+    mpMax: z.int().min(0),
+    experience: z.int().min(0),
+    level: z.int().min(1),
+  }),
 ])
 
 export type ErrorCode = z.infer<typeof errorCodeSchema>
