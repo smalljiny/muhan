@@ -74,4 +74,8 @@ describe('combat 배럴', () => {
   it('initiateAttack 오프너를 재export한다', () => {
     expect(typeof combat.initiateAttack).toBe('function')
   })
+
+  it('프로덕션 rng(defaultCombatRng)를 재export한다', () => {
+    expect(typeof combat.defaultCombatRng).toBe('function')
+  })
 })
