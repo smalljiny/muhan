@@ -39,7 +39,9 @@ interface LiveCharacter {
 
 **방 위치의 단일 출처는 `character.currentRoom`이며, 별도 방 필드를 두지 않는다.** 같은 원칙을 소유 계정에도 적용해 `character.accountId`(필수 FK)로 역참조하고 복제 필드를 만들지 않는다 — 같은 값의 출처가 둘이 되어 분기하는 것을 구조적으로 막는다. `character` 자체는 immutability 규칙의 **승인된 라이브 carve-out**으로, 이 계층은 `currentRoom`만 in-place 갱신한다.
 
-레지스트리는 `combatRegistry`와 **분리한다**. 이 계층은 장비·유효 스탯을 다루지 않아 `PlayerCombatState`(유효 스탯 컨텍스트·장비 해소 요구)를 파생할 수 없고, `combatRegistry`는 런타임 caller 0건(dormant)이라 지금 통합해도 이득이 없다. 후속 전투 배선 토픽이 `LiveCharacter.character`에서 필요 시점에 파생해 등록하면 되므로 분리가 재설계를 강제하지 않는다. `liveCharacterRegistry.ts`는 `combat/`에서 아무것도 import하지 않는다.
+레지스트리는 `combatRegistry`와 **분리한다**. 이 계층은 장비·유효 스탯을 다루지 않아 `PlayerCombatState`(유효 스탯 컨텍스트·장비 해소 요구)를 파생할 수 없기 때문이다. `liveCharacterRegistry.ts`는 `combat/`에서 아무것도 import하지 않는다 — 이 규약은 지금도 유효하다.
+
+**#121이 그 "후속 전투 배선 토픽"이다.** `combatRegistry`는 더 이상 dormant가 아니다. 분리를 유지한 채 `ws/liveWorldWiring.ts`가 진입 코어의 `place`/`release`를 감싸 두 레지스트리를 잇는다 — `place` 직후 `assemblePlayerCombatState`로 조립해 `combatRegistry.register`, `release`에서 `remove`. 래핑 방식이라 `liveCharacterEntry`와 `world/`의 import 방향은 그대로다. 예상대로 분리가 재설계를 강제하지 않았다.
 
 ### 프로토콜 표면
 
@@ -161,10 +163,10 @@ fan-out 대상 결정은 `createRoomChannelAdapter`(발화자 현재 방의 occu
 ## 제약사항
 
 - **이동 leave/join 방송 미결선** — `tryMove`의 `broadcastLeave`/`broadcastJoin`은 no-op으로 채운다. 방 채팅 전파는 채널 포트가 소유하고, 이동 통지(누가 들어왔다/나갔다)는 후속 토픽 몫이다.
-- **규칙 명령은 `train`·`study` 둘이 배선됨** — 이 foundation 위에 `progress:train`(디스패처 패턴 확립 + 레벨·경험치·gold·능력치 변이)과 `progress:study`(#120 — 소지품 이름 해소 + 주문 지식 변이 + 비법서 소멸)가 얹혔다. 나머지 규칙 명령은 여전히 미배선이며 선행 결손이 배선이 아닌 신규 구현을 요구한다: `teach`(#119)·`attack`(#121)·`cast`(#122). 장비 슬롯 스탯 파이프는 여전히 dormant다(#121).
+- **규칙 명령은 `train`·`study`·`attack` 셋이 배선됨** — 이 foundation 위에 `progress:train`(디스패처 패턴 확립 + 레벨·경험치·gold·능력치 변이), `progress:study`(#120 — 소지품 이름 해소 + 주문 지식 변이 + 비법서 소멸), `combat:attack`(#121 — 방 스코프 대상 지목 + 전투 판정 + 몬스터 사망·경험치 분배)이 얹혔다. 남은 규칙 명령은 `teach`(#119)·`cast`(#122)다. **장비 슬롯 스탯 파이프는 #121이 열었다** — `assemblePlayerCombatState`가 `pairObjects` → `projectEquipStats` → `toPlayerCombatState`로 착용 장비를 유효 전투 스탯에 반영한다.
 - **인벤 서수 기준이 오라클과 다르다** — 오라클 `add_obj_crt`(`legacy/muhan/src/player.c:857-898`)는 EUC-KR `strcmp` 이름 사전순(동명 시 `adjustment` 순) 삽입으로 인벤 순서를 유지하지만, 포트는 `findByOwner`의 `_id` 오름차순이다. KS X 1001 완성형 배열이 Unicode Hangul Syllables 배열과 달라 JS 문자열 비교로 재현되지 않는 것이 원인이며, 방 대상 서수 divergence(#137)와 같은 성격이다. `_id` 정렬은 **결정적 순서를 보장하기 위한 것**이지 오라클 재현이 아니다(Mongo 자연 순서는 계약이 아니라 같은 인벤이 조회마다 다른 서수를 낼 수 있다). 추적 이슈 [#142](https://github.com/smalljiny/muhan/issues/142), 근거는 `world/liveCharacterEntry.ts` 헤더가 소유한다.
 - **인벤 변경의 영속 경로는 삭제뿐** — `study`의 비법서 소멸만 `markObjectDeleted`로 write-behind에 실린다. 착용 토글·`shotscur` 감소·줍기 같은 비-삭제 인벤 변경은 라이브 메모리에만 남고 영속되지 않는다. 해당 명령들이 배선될 때 함께 온다.
-- **pending overlay는 캐릭터 문서에 한한다(#124)** — hydrate가 합성하는 것은 `characters` 스냅샷뿐이고 `objectDeletions`는 합성하지 않는다. 그래서 grace 만료 재접속 시 삭제 마킹됐지만 아직 flush되지 않은 비법서가 인벤에 **유령으로 남는다**. 현재 무해하다 — 재연마 시 `setKnown`·`markObjectDeleted` 모두 멱등해 수렴하고, 줍기·버리기·건네주기 경로가 0건이라 복제 경로가 없다. #119(teach)·#121(attack)이 건네주기·전리품 경로를 열면 재평가가 필요하다. 인벤 자체의 재접속 revert(위 항목)는 여전히 열려 있다 — 캐릭터 문서 쪽만 닫혔고 인벤은 닫히지 않았다.
+- **pending overlay는 캐릭터 문서에 한한다(#124)** — hydrate가 합성하는 것은 `characters` 스냅샷뿐이고 `objectDeletions`는 합성하지 않는다. 그래서 grace 만료 재접속 시 삭제 마킹됐지만 아직 flush되지 않은 비법서가 인벤에 **유령으로 남는다**. 현재 무해하다 — 재연마 시 `setKnown`·`markObjectDeleted` 모두 멱등해 수렴하고, 줍기·버리기·건네주기 경로가 0건이라 복제 경로가 없다. #121(attack)은 전리품을 방에 드롭하지 않기로 결정해(주울 수단이 없다) 이 경로를 열지 않았다. #119(teach)가 건네주기를 열거나 #99가 전리품 드롭을 붙이면 재평가가 필요하다. 인벤 자체의 재접속 revert(위 항목)는 여전히 열려 있다 — 캐릭터 문서 쪽만 닫혔고 인벤은 닫히지 않았다.
 - **`world:room`은 스냅샷이지 델타가 아니다** — E11(#60)이 방 이름·설명·점유자·아이템·크리처를 실어 최소 통지에서 벗어났다. 그러나 발화 시점은 여전히 진입·이동 성공 두 곳뿐이라, 내가 가만히 있는 동안 다른 사람이 들어와도 목록이 갱신되지 않는다. 실시간 입·퇴장 델타는 #116 소관이다.
 - **스폰 정책 미완결** — orphan `currentRoom`은 `DEFAULT_START_ROOM = 1` 단일 폴백으로만 방어한다. 레벨·종족·소속별 시작지 정책은 별도다.
 - **채널 fan-out에 가시성 필터 없음** — 방 채널 fan-out은 occupants 전 멤버 대상이며 발화자 자신도 제외하지 않는다. PINVIS·어둠·투명 필터는 E5 소관이다. (방 **표시**의 가시성 필터는 E11에서 별도로 들어왔다 — [`movement-rooms.md`](movement-rooms.md) §방 표시 가시성 필터. 두 필터는 다른 관심사다.)

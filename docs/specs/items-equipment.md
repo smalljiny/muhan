@@ -14,12 +14,12 @@
 
 | 모듈 | 책임 |
 |------|------|
-| `taxonomy.ts` | object 타입 상수 0~14·`isWeapon(type)`·wearflag 슬롯 상수(BODY=1…WIELD=20, MAXWEAR=20)·`routeWearCommand`·`resolveSlot` |
+| `taxonomy.ts` | object 타입 상수 0~14·`isWeapon(type)`·wearflag 슬롯 상수(BODY=1…WIELD=20, MAXWEAR=20)·**`WIELD_SLOT`(=WIELD−1, 0-based 19)**·`routeWearCommand`·`resolveSlot` |
 | `flags.ts` | object 플래그 비트 상수·게이트 predicate(성별·정렬·직업·크기·저주·결혼·귀속·enchant) + 종족/성별 상수 |
 | `objectTemplate.ts` | `buildObjectTemplateIndex(raw)` → `ReadonlyMap<objnum, ObjectTemplate>`·`loadObjectTemplates(worldRoot?)` 부팅 seam |
 | `objectPairing.ts` | `pairObject`·`pairObjects` — 인스턴스↔템플릿 결합(`EquippedPair` 생성의 단일 출처) |
 | `carriedTargetResolver.ts` | `resolveCarriedObject` — 소지품 스코프 이름·서수 대상 해소(오라클 `find_obj` 2단 스캔) |
-| `equipStats.ts` | `projectEquipStats` — 착용 객체 → `EffectiveStatContext` 기여 필드 compute-on-read 투영 |
+| `equipStats.ts` | `projectEquipStats` — 착용 객체 → `EffectiveStatContext` 기여 필드 compute-on-read 투영. **`findWieldedPair`** — 착용 WIELD 무기 선택의 단일 출처 |
 | `wear.ts` | `wearGate`(방어구)·`readyGate`(무기 장착)·`holdGate`(쥠) 다층 게이트 순수 함수 |
 | `enchant.ts` | `randEnchant(rng)` 확률 순수 함수(rng 주입) |
 | `consume.ts` | `deliverConsumable` — POTION/SCROLL/WAND magic 배달 분류 seam |
@@ -66,7 +66,9 @@ flags(hex string) 위에서 `world/hexFlags.js`의 `F_ISSET`으로 비트를 판
 
 - `instance.equipped === true`인 쌍만 집계한다 — 오라클 `compute_ac`(player.c:980)가 착용 슬롯 배열 `ready[]`만 순회하므로, 호출자가 전 인벤을 넘겨도 미착용 아이템이 AC/THAC0를 오염시키지 않는다.
 - `equipArmor` = Σ `template.armor`(부호 유지 — 저주 장비 음수·방패 포함, WIELD 무기 armor도 포함하는 것이 오라클 충실).
-- `weaponAdjustment` = WIELD 슬롯(0-based 19) 착용 무기의 `template.adjustment`(슬롯 번호로 판정 — HELD 무기 오인 방지, WIELD 미착용이면 0).
+- `weaponAdjustment` = `findWieldedPair`가 고른 착용 무기의 `template.adjustment`(슬롯 번호로 판정 — HELD 무기 오인 방지, WIELD 미착용이면 0).
+
+**WIELD 판정을 복제하지 않는다(#121).** 슬롯 좌표 `WIELD_SLOT`은 원산지인 `taxonomy.ts`가 소유하고(wearflag는 1-based, `ObjectInstance.slot`은 0-based라 −1 파생), 선택 자체는 `findWieldedPair(equipped)`가 단독 소유한다. 이유는 명중 보정(`weaponAdjustment`)과 무기 피해 서술자(`combat/assemblePlayerCombatState`의 `WeaponDamage`)가 **서로 다른 모듈에서 만들어지면서 같은 아이템을 설명해야** 하기 때문이다. 각자 판정을 복제하면 그 일치가 두 구현의 우연한 동형성에 기대게 되고, 한쪽에 조건이 하나 붙는 날(부서진 무기 제외 등) 조용히 갈린다 — 두 모듈 각자는 자기 안에서 일관되므로 어느 테스트도 그 갈라짐을 잡지 못한다. 후보가 여럿이면 입력 순서상 첫 매치이며 `pairObjects`가 인벤 순서를 보존한다.
 - `weaponProficiency`는 명시 입력 인자를 그대로 투영한다(Character.proficiency[5] 어댑터는 E6 유예).
 
 ### rand_enchant (`enchant.ts`)
