@@ -383,7 +383,7 @@ describe('createCommandRegistry — progress:study 조건부 등록', () => {
     )
 
     expect(result.outcome).toBe('rejected')
-    expect(result.event).toMatchObject({ type: 'error', code: 'unknown_type' })
+    expect(result.events[0]).toMatchObject({ type: 'error', code: 'unknown_type' })
   })
 
   it('study deps를 주면 progress:study가 study 핸들러로 디스패치된다', () => {
@@ -398,7 +398,7 @@ describe('createCommandRegistry — progress:study 조건부 등록', () => {
     )
 
     expect(result.outcome).toBe('handled')
-    expect(result.event).toMatchObject({
+    expect(result.events[0]).toMatchObject({
       type: 'progress:studied',
       spellNo: BOOK_SPELL_NO,
       consumedObjectId: 'book-1',

@@ -13,6 +13,7 @@ import {
 import { SaveEngine } from '../save/saveEngine.js'
 import { OBJECT_DELETIONS_COLLECTION } from '../save/markObjectDeleted.js'
 import type { SaveLogger } from '../save/logger.js'
+import { normalizeHandlerEvents } from './router.js'
 import { FakeClock } from '../util/clock.testutil.js'
 import { DocumentNotFoundError } from '../repo/types.js'
 import { characterPatchSchema } from '../repo/characterRepository.js'
@@ -403,9 +404,12 @@ export function buildHarness(options: { capacity?: number } = {}): Harness {
     saveLogger,
     callOrder,
     peekLog,
-    study: (command) => studyHandler(command, ACTOR),
-    train: (command) => trainHandler(command, ACTOR),
-    move: (command) => moveHandler(command, ACTOR),
+    // 이 하네스는 dispatch를 거치지 않고 핸들러를 직접 부르므로 정규화를 직접 한다. 캐스트로 좁히지
+    // 않는 것이 load-bearing이다 — 캐스트는 "이 핸들러는 이벤트를 하나만 낸다"는 단언인데, 성장 명령이
+    // 스탯 통지를 덧붙이는 순간 거짓이 된다. 첫 이벤트를 집는 것이 이 하네스가 뜻하는 바다(도메인 이벤트).
+    study: (command) => normalizeHandlerEvents(studyHandler(command, ACTOR))[0],
+    train: (command) => normalizeHandlerEvents(trainHandler(command, ACTOR))[0],
+    move: (command) => normalizeHandlerEvents(moveHandler(command, ACTOR))[0],
   }
 }
 

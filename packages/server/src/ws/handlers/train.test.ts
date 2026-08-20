@@ -353,7 +353,7 @@ describe('createCommandRegistry — progress:train 조건부 등록', () => {
     const registry = createCommandRegistry(testChannelPort)
     const result = dispatch(registry, { type: 'progress:train' }, actor, testPermission)
     expect(result.outcome).toBe('rejected')
-    expect(result.event).toMatchObject({ type: 'error', code: 'unknown_type' })
+    expect(result.events[0]).toMatchObject({ type: 'error', code: 'unknown_type' })
   })
 
   it('train deps를 주면 progress:train이 train 핸들러로 디스패치된다 (permissive 어댑터 — OQ3 기본 allow)', () => {
@@ -363,7 +363,7 @@ describe('createCommandRegistry — progress:train 조건부 등록', () => {
     const result = dispatch(registry, { type: 'progress:train' }, actor, testPermission)
 
     expect(result.outcome).toBe('handled')
-    expect(result.event).toMatchObject({
+    expect(result.events[0]).toMatchObject({
       type: 'progress:trained',
       level: SUCCESS_LEVEL + 1,
       levelsGained: 1,
@@ -379,7 +379,7 @@ describe('createCommandRegistry — progress:train 조건부 등록', () => {
     const result = dispatch(registry, { type: 'progress:train', id: 'p1' }, actor, denyPermission)
 
     expect(result.outcome).toBe('rejected')
-    expect(result.event).toMatchObject({ type: 'error', code: 'forbidden', correlationId: 'p1' })
+    expect(result.events[0]).toMatchObject({ type: 'error', code: 'forbidden', correlationId: 'p1' })
     // 권한 레이어가 핸들러 진입 자체를 막았다(연마가 실행되지 않았다).
     expect(markDirty).not.toHaveBeenCalled()
   })
@@ -391,7 +391,7 @@ describe('createCommandRegistry — progress:train 조건부 등록', () => {
     const result = dispatch(registry, { type: 'progress:train', extra: 1 }, actor, testPermission)
 
     expect(result.outcome).toBe('rejected')
-    expect(result.event).toMatchObject({ type: 'error', code: 'bad_payload' })
+    expect(result.events[0]).toMatchObject({ type: 'error', code: 'bad_payload' })
   })
 
   /**
@@ -411,11 +411,11 @@ describe('createCommandRegistry — progress:train 조건부 등록', () => {
     const registry = createCommandRegistry(testChannelPort, { train: deps })
 
     const first = dispatch(registry, { type: 'progress:train' }, actor, testPermission)
-    expect(first.event).toMatchObject({ type: 'progress:trained', level: SUCCESS_LEVEL + 1 })
+    expect(first.events[0]).toMatchObject({ type: 'progress:trained', level: SUCCESS_LEVEL + 1 })
 
     // 후속 명령 — stale 엔트리였다면 다시 성공했을 입력이다.
     const second = dispatch(registry, { type: 'progress:train' }, actor, testPermission)
-    expect(second.event).toMatchObject({ type: 'error', code: 'rule_rejected' })
+    expect(second.events[0]).toMatchObject({ type: 'error', code: 'rule_rejected' })
 
     // 라이브 단일 출처도 상승한 level·차감된 gold를 보유한다.
     expect(liveRegistry.get('char-1')?.character.level).toBe(SUCCESS_LEVEL + 1)
@@ -447,7 +447,7 @@ describe('createCommandRegistry — progress:train 조건부 등록', () => {
     const registry = createCommandRegistry(testChannelPort, { train: deps })
 
     const result = dispatch(registry, { type: 'progress:train' }, actor, testPermission)
-    expect(result.event).toMatchObject({ type: 'progress:trained' })
+    expect(result.events[0]).toMatchObject({ type: 'progress:trained' })
 
     expect(liveRegistry.get('char-1')?.inventory).toEqual([book])
   })

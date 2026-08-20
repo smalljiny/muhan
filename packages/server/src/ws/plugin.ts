@@ -584,7 +584,7 @@ export function registerWebsocket(
                   // 유효 명령 처리 성공(handled)만 무입력 타이머를 재-arm한다 — 거부(rejected:
                   // unknown_type·bad_payload·forbidden·internal)가 flood로 타이머를 무한 연장하지 못하게 한다.
                   if (result.outcome === 'handled') ctx.idle?.arm()
-                  if (result.event !== undefined) safeSend(socket, result.event)
+                  for (const event of result.events) safeSend(socket, event)
                 } else {
                   // handleSessionFrame은 이제 async라 await한다 — 큐가 프레임 완결 뒤에만 다음 프레임을 태워
                   // 공유 상태(state·createProgress) 동시 변이가 없다.

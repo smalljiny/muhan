@@ -11,14 +11,21 @@ import type { ChannelPort } from './channelPort.js'
 import type { PermissionPort } from './permissionPort.js'
 
 /**
- * 검증된 명령을 소비해 응답 이벤트(또는 응답 없음=undefined)를 계산하는 핸들러.
+ * 검증된 명령을 소비해 응답 이벤트(들)를 계산하는 핸들러.
  *
  * 핸들러는 `clientCommandSchema`로 이미 검증된 `ClientCommand`만 받는다(payload 재검증 불필요).
  * `actor`는 이 명령을 실행하는 행위자 컨텍스트다. 권한 판정은 dispatch의 `PermissionPort` 레이어가
  * 핸들러 진입 전에 끝내므로(Story 3), 핸들러는 통과한 명령의 게임 규칙 판정(자원 소모·상태 전이 등)에만
- * actor를 쓴다. 무권한 핸들러(echo)는 actor를 받되 무시한다. fire-and-forget 명령은 undefined를 반환한다.
+ * actor를 쓴다. 무권한 핸들러(echo)는 actor를 받되 무시한다.
+ *
+ * 반환은 세 형태를 허용한다: 응답 없음(fire-and-forget)은 `undefined`, 단일 이벤트는 `ServerEvent`,
+ * 다중 이벤트는 `readonly ServerEvent[]`다. `dispatch`가 이 세 형태를 `DispatchResult.events` 배열로
+ * 정규화하므로 기존 단일 이벤트/undefined 핸들러는 반환값을 바꾸지 않고도 새 타입에 그대로 들어맞는다.
  */
-export type CommandHandler = (command: ClientCommand, actor: ActorContext) => ServerEvent | undefined
+export type CommandHandler = (
+  command: ClientCommand,
+  actor: ActorContext,
+) => ServerEvent | readonly ServerEvent[] | undefined
 
 /** type 리터럴 → 핸들러 레지스트리. 반드시 실제 `Map`이라 prototype-chain 키에도 안전하다. */
 export type HandlerRegistry = Map<string, CommandHandler>
@@ -85,13 +92,43 @@ export function createCommandRegistry(
 /**
  * `dispatch`의 반환 타입 — 셸이 idle rearm 여부를 판단할 근거를 라우터가 명시 반환한다.
  *
- * `handled`는 정상 디스패치(핸들러가 이벤트를 냈거나 fire-and-forget으로 undefined를 낸 경우)를,
- * `rejected`는 라우팅 레이어가 요청을 거부한 경우(unknown_type·bad_payload·forbidden·internal)를 뜻한다.
- * `rejected`는 항상 `event`(error 이벤트)를 동반한다.
+ * `handled`는 정상 디스패치(핸들러가 이벤트를 냈거나 fire-and-forget으로 `undefined`를 낸 경우 —
+ * 후자는 dispatch가 빈 배열로 정규화한다)를, `rejected`는 라우팅 레이어가 요청을 거부한 경우
+ * (unknown_type·bad_payload·forbidden·internal)를 뜻한다.
+ *
+ * 두 outcome 모두 `events`로 통일하되 **길이 계약이 다르다**. `rejected`는 길이 1 튜플이다 —
+ * "거부에는 error 이벤트가 정확히 하나 실린다"는 불변식을 주석이 아니라 타입이 강제해야 한다
+ * (배열로 두면 `events: []`인 거부가 타입을 통과해, 셸이 거부를 알리지 못하고 침묵하는 회귀를
+ * 컴파일러가 놓친다). `handled`는 핸들러 반환에 따라 0개(fire-and-forget) 이상이다.
  */
 export type DispatchResult =
-  { outcome: 'handled'; event?: ServerEvent } | { outcome: 'rejected'; event: ServerEvent }
+  | { outcome: 'handled'; events: readonly ServerEvent[] }
+  | { outcome: 'rejected'; events: readonly [ServerEvent] }
 
+/**
+ * 핸들러 반환값(`undefined` | 단일 `ServerEvent` | 배열)을 `events` 배열로 정규화한다.
+ *
+ * `ServerEvent`는 객체이므로(union 전 variant가 `z.strictObject`라 배열 멤버가 없다) `Array.isArray`로
+ * 배열과 단일 이벤트를 구분한다: 배열이면 그대로, 아니면(단일 이벤트) 길이 1 배열로 감싸고,
+ * `undefined`면 빈 배열을 반환한다.
+ *
+ * 판별을 `isEventArray` 사용자 정의 가드로 감싸는 것이 load-bearing이다 — 표준 lib의
+ * `Array.isArray`는 `arg is any[]`로 고정돼 있어 true 갈래를 `any[]`로 좁히고 false 갈래에서
+ * 배열 멤버를 배제하지 못한다. 가드가 그 좁히기를 원래 union 멤버로 되돌려 캐스트를 없앤다.
+ *
+ * export하는 이유: 핸들러를 `dispatch` 없이 직접 부르는 테스트 하네스가 같은 정규화를 써야 한다.
+ * 거기서 반환을 단일 이벤트로 캐스트하면 다중 이벤트를 내는 핸들러가 생긴 순간 그 캐스트가 거짓이 된다.
+ */
+const isEventArray = (
+  result: ServerEvent | readonly ServerEvent[],
+): result is readonly ServerEvent[] => Array.isArray(result)
+
+export function normalizeHandlerEvents(
+  result: ServerEvent | readonly ServerEvent[] | undefined,
+): readonly ServerEvent[] {
+  if (result === undefined) return []
+  return isEventArray(result) ? result : [result]
+}
 
 /**
  * 핸드셰이크를 통과한 프레임을 레지스트리로 O(1) 디스패치한다(순수 함수 — 부수효과 없음).
@@ -108,9 +145,10 @@ export type DispatchResult =
  * `id`는 type 판별 직후 payload 검증 이전에 추출해, bad_payload·forbidden·internal 응답도 상관 키를 실어
  * 클라이언트가 실패를 상관지을 수 있게 한다. unknown_type은 type 판별 이전이라 상관 키를 싣지 않는다.
  *
- * 반환값은 `DispatchResult`다 — 핸들러가 성공(이벤트 또는 fire-and-forget undefined)하면 `handled`,
+ * 반환값은 `DispatchResult`다 — 핸들러가 성공(단일/다중 이벤트 또는 fire-and-forget)하면 `handled`,
  * 라우팅 레이어가 거부(unknown_type·bad_payload·forbidden·internal)하면 `rejected`를 태그해 셸이 idle
- * rearm 여부를 이 태그만으로 판단할 수 있게 한다.
+ * rearm 여부를 이 태그만으로 판단할 수 있게 한다. 두 outcome 모두 `events` 배열을 실으며, 핸들러 반환은
+ * `normalizeHandlerEvents`가 배열로 정규화한다.
  *
  * `actor`는 이 명령을 실행하는 행위자 컨텍스트다. dispatch는 `permission`으로 actor의 명령 실행 자격을
  * 게이트한 뒤(권한 판정은 dispatch 레이어 책임 — Story 3), 통과한 명령만 핸들러에 그대로 전달한다.
@@ -126,7 +164,7 @@ export function dispatch(
   if (type === undefined) {
     return {
       outcome: 'rejected',
-      event: makeErrorEvent('unknown_type', '알 수 없는 명령 type이다', undefined),
+      events: [makeErrorEvent('unknown_type', '알 수 없는 명령 type이다', undefined)],
     }
   }
 
@@ -134,7 +172,7 @@ export function dispatch(
   if (handler === undefined) {
     return {
       outcome: 'rejected',
-      event: makeErrorEvent('unknown_type', `등록되지 않은 명령 type이다: ${type}`, undefined),
+      events: [makeErrorEvent('unknown_type', `등록되지 않은 명령 type이다: ${type}`, undefined)],
     }
   }
 
@@ -146,7 +184,7 @@ export function dispatch(
   if (!parseResult.success) {
     return {
       outcome: 'rejected',
-      event: makeErrorEvent('bad_payload', '명령 payload 형식이 올바르지 않다', correlationId),
+      events: [makeErrorEvent('bad_payload', '명령 payload 형식이 올바르지 않다', correlationId)],
     }
   }
 
@@ -163,15 +201,15 @@ export function dispatch(
     if (!permission.check(parseResult.data, actor)) {
       return {
         outcome: 'rejected',
-        event: makeErrorEvent('forbidden', '이 명령을 실행할 권한이 없다', correlationId),
+        events: [makeErrorEvent('forbidden', '이 명령을 실행할 권한이 없다', correlationId)],
       }
     }
-    return { outcome: 'handled', event: handler(parseResult.data, actor) }
+    return { outcome: 'handled', events: normalizeHandlerEvents(handler(parseResult.data, actor)) }
   } catch {
     // permission.check·handler 예외를 이벤트로 격리한다. 원인은 클라이언트에 노출하지 않는다.
     return {
       outcome: 'rejected',
-      event: makeErrorEvent('internal', '명령 처리 중 서버 오류가 발생했다', correlationId),
+      events: [makeErrorEvent('internal', '명령 처리 중 서버 오류가 발생했다', correlationId)],
     }
   }
 }

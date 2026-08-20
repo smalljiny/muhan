@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import type { ServerEvent } from 'shared'
 import { dispatch, createCommandRegistry, type HandlerRegistry } from './router.js'
 import { echoHandler } from './handlers/echo.js'
 import type { ActorContext } from './actorContext.js'
@@ -19,55 +20,94 @@ const testPermission: PermissionPort = { check: () => true }
 
 // T6.5 — 라우터 디스패치의 순수 단위 스펙. 소켓 I/O 없이 결정적으로 검증한다.
 // 레이어링(allowlist → payload → permission → 예외 격리), correlationId 반향, Map 안전성, echo 왕복을 커버한다.
-// T2.4 — dispatch 반환이 DispatchResult로 승격되어 outcome('handled'|'rejected')·event 구조로 검증한다.
+// T2.4 — dispatch 반환이 DispatchResult로 승격되어 outcome('handled'|'rejected')·events 배열 구조로 검증한다.
 // T3.x — permission 레이어(safeParse 성공 후·handler 전)가 forbidden으로 거부하는 seam을 검증한다.
 describe('dispatch', () => {
   describe('allowlist 가드 (Map 기반)', () => {
     it('미등록 type은 rejected{unknown_type}로 차단하고 디스패치하지 않는다', () => {
-      const result = dispatch(createCommandRegistry(testChannelPort), { type: 'system:teleport', text: '핑' }, testActor, testPermission)
+      const result = dispatch(
+        createCommandRegistry(testChannelPort),
+        { type: 'system:teleport', text: '핑' },
+        testActor,
+        testPermission,
+      )
       expect(result.outcome).toBe('rejected')
-      expect(result.event).toMatchObject({ type: 'error', code: 'unknown_type' })
+      // 거부는 error 이벤트 정확히 하나다 — DispatchResult의 rejected 튜플 계약을 런타임에서도 고정한다.
+      expect(result.events).toHaveLength(1)
+      expect(result.events[0]).toMatchObject({ type: 'error', code: 'unknown_type' })
     })
 
     it('type 필드가 없는 프레임은 rejected{unknown_type}로 차단한다', () => {
-      const result = dispatch(createCommandRegistry(testChannelPort), { foo: 1 }, testActor, testPermission)
+      const result = dispatch(
+        createCommandRegistry(testChannelPort),
+        { foo: 1 },
+        testActor,
+        testPermission,
+      )
       expect(result.outcome).toBe('rejected')
-      expect(result.event).toMatchObject({ type: 'error', code: 'unknown_type' })
+      expect(result.events).toHaveLength(1)
+      expect(result.events[0]).toMatchObject({ type: 'error', code: 'unknown_type' })
     })
 
     it.each([['__proto__'], ['constructor'], ['prototype']])(
       'prototype-chain type(%s)은 실제 Map lookup이라 rejected{unknown_type}로 차단한다',
       (type) => {
-        const result = dispatch(createCommandRegistry(testChannelPort), { type, text: '핑' }, testActor, testPermission)
+        const result = dispatch(
+          createCommandRegistry(testChannelPort),
+          { type, text: '핑' },
+          testActor,
+          testPermission,
+        )
         expect(result.outcome).toBe('rejected')
-        expect(result.event).toMatchObject({ type: 'error', code: 'unknown_type' })
+        expect(result.events[0]).toMatchObject({ type: 'error', code: 'unknown_type' })
       },
     )
 
     it('type이 문자열이 아니면(숫자) rejected{unknown_type}로 차단한다', () => {
-      const result = dispatch(createCommandRegistry(testChannelPort), { type: 123, text: '핑' }, testActor, testPermission)
+      const result = dispatch(
+        createCommandRegistry(testChannelPort),
+        { type: 123, text: '핑' },
+        testActor,
+        testPermission,
+      )
       expect(result.outcome).toBe('rejected')
-      expect(result.event).toMatchObject({ type: 'error', code: 'unknown_type' })
+      expect(result.events[0]).toMatchObject({ type: 'error', code: 'unknown_type' })
     })
 
     it('unknown_type 응답은 correlationId를 싣지 않는다 (type 판별 이전이라 id 미추출)', () => {
-      const result = dispatch(createCommandRegistry(testChannelPort), { type: 'nope', id: 'c1' }, testActor, testPermission)
-      expect(result.event).not.toHaveProperty('correlationId')
+      const result = dispatch(
+        createCommandRegistry(testChannelPort),
+        { type: 'nope', id: 'c1' },
+        testActor,
+        testPermission,
+      )
+      expect(result.events[0]).not.toHaveProperty('correlationId')
     })
   })
 
   describe('payload 검증 (등록된 type + 잘못된 payload)', () => {
     it('등록된 type이지만 payload 위반(text 누락)은 rejected{bad_payload}로 응답한다', () => {
-      const result = dispatch(createCommandRegistry(testChannelPort), { type: 'debug:echo' }, testActor, testPermission)
+      const result = dispatch(
+        createCommandRegistry(testChannelPort),
+        { type: 'debug:echo' },
+        testActor,
+        testPermission,
+      )
       expect(result.outcome).toBe('rejected')
-      expect(result.event).toMatchObject({ type: 'error', code: 'bad_payload' })
+      expect(result.events).toHaveLength(1)
+      expect(result.events[0]).toMatchObject({ type: 'error', code: 'bad_payload' })
     })
 
     it('bad_payload 응답은 id가 있으면 correlationId로 반향한다 (payload 검증 이전 추출)', () => {
       // text=''는 min(1) 위반이지만 id는 유효 문자열 → 실패를 상관지을 수 있게 반향한다.
-      const result = dispatch(createCommandRegistry(testChannelPort), { type: 'debug:echo', text: '', id: 'c7' }, testActor, testPermission)
+      const result = dispatch(
+        createCommandRegistry(testChannelPort),
+        { type: 'debug:echo', text: '', id: 'c7' },
+        testActor,
+        testPermission,
+      )
       expect(result.outcome).toBe('rejected')
-      expect(result.event).toMatchObject({
+      expect(result.events[0]).toMatchObject({
         type: 'error',
         code: 'bad_payload',
         correlationId: 'c7',
@@ -75,15 +115,25 @@ describe('dispatch', () => {
     })
 
     it('bad_payload 응답은 id가 없으면 correlationId 키를 생략한다', () => {
-      const result = dispatch(createCommandRegistry(testChannelPort), { type: 'debug:echo', text: '' }, testActor, testPermission)
-      expect(result.event).toMatchObject({ type: 'error', code: 'bad_payload' })
-      expect(result.event).not.toHaveProperty('correlationId')
+      const result = dispatch(
+        createCommandRegistry(testChannelPort),
+        { type: 'debug:echo', text: '' },
+        testActor,
+        testPermission,
+      )
+      expect(result.events[0]).toMatchObject({ type: 'error', code: 'bad_payload' })
+      expect(result.events[0]).not.toHaveProperty('correlationId')
     })
 
     it('id가 문자열이 아니면(숫자) correlationId 키를 생략한다', () => {
-      const result = dispatch(createCommandRegistry(testChannelPort), { type: 'debug:echo', text: '', id: 42 }, testActor, testPermission)
-      expect(result.event).toMatchObject({ type: 'error', code: 'bad_payload' })
-      expect(result.event).not.toHaveProperty('correlationId')
+      const result = dispatch(
+        createCommandRegistry(testChannelPort),
+        { type: 'debug:echo', text: '', id: 42 },
+        testActor,
+        testPermission,
+      )
+      expect(result.events[0]).toMatchObject({ type: 'error', code: 'bad_payload' })
+      expect(result.events[0]).not.toHaveProperty('correlationId')
     })
   })
 
@@ -93,30 +143,55 @@ describe('dispatch', () => {
     const denyPermission: PermissionPort = { check: () => false }
 
     it('permission.check가 false면 rejected{forbidden}로 거부하고 correlationId를 반향한다', () => {
-      const result = dispatch(createCommandRegistry(testChannelPort), { type: 'debug:echo', text: '핑', id: 'c1' }, testActor, denyPermission)
+      const result = dispatch(
+        createCommandRegistry(testChannelPort),
+        { type: 'debug:echo', text: '핑', id: 'c1' },
+        testActor,
+        denyPermission,
+      )
       expect(result.outcome).toBe('rejected')
-      expect(result.event).toMatchObject({ type: 'error', code: 'forbidden', correlationId: 'c1' })
+      expect(result.events).toHaveLength(1)
+      expect(result.events[0]).toMatchObject({
+        type: 'error',
+        code: 'forbidden',
+        correlationId: 'c1',
+      })
     })
 
     it('permissive(allow)면 debug:echo가 회귀 없이 handled로 통과한다 (no-op permissive 검증)', () => {
-      const result = dispatch(createCommandRegistry(testChannelPort), { type: 'debug:echo', text: '핑' }, testActor, testPermission)
+      const result = dispatch(
+        createCommandRegistry(testChannelPort),
+        { type: 'debug:echo', text: '핑' },
+        testActor,
+        testPermission,
+      )
       expect(result.outcome).toBe('handled')
-      expect(result.event).toEqual({ type: 'debug:echo:result', text: '핑' })
+      expect(result.events[0]).toEqual({ type: 'debug:echo:result', text: '핑' })
     })
 
     it('레이어 순서: 잘못된 payload는 deny permission보다 우선해 bad_payload로 떨어진다 (permission.check 이전 safeParse)', () => {
       // deny permission + text 누락(payload 위반)을 함께 준다. 레이어 순서가 safeParse → permission이므로
       // forbidden이 아니라 bad_payload가 나와야 한다 — permission.check는 도달하지 않는다.
       const check = vi.fn(() => false)
-      const result = dispatch(createCommandRegistry(testChannelPort), { type: 'debug:echo' }, testActor, { check })
+      const result = dispatch(
+        createCommandRegistry(testChannelPort),
+        { type: 'debug:echo' },
+        testActor,
+        { check },
+      )
       expect(result.outcome).toBe('rejected')
-      expect(result.event).toMatchObject({ type: 'error', code: 'bad_payload' })
+      expect(result.events[0]).toMatchObject({ type: 'error', code: 'bad_payload' })
       expect(check).not.toHaveBeenCalled()
     })
 
     it('permission.check에는 검증된 명령(parseResult.data)을 넘긴다', () => {
       const check = vi.fn(() => true)
-      dispatch(createCommandRegistry(testChannelPort), { type: 'debug:echo', text: '핑' }, testActor, { check })
+      dispatch(
+        createCommandRegistry(testChannelPort),
+        { type: 'debug:echo', text: '핑' },
+        testActor,
+        { check },
+      )
       expect(check).toHaveBeenCalledWith({ type: 'debug:echo', text: '핑' }, testActor)
     })
 
@@ -136,7 +211,12 @@ describe('dispatch', () => {
         throwingPermission,
       )
       expect(result.outcome).toBe('rejected')
-      expect(result.event).toMatchObject({ type: 'error', code: 'internal', correlationId: 'c9' })
+      expect(result.events).toHaveLength(1)
+      expect(result.events[0]).toMatchObject({
+        type: 'error',
+        code: 'internal',
+        correlationId: 'c9',
+      })
     })
   })
 
@@ -152,41 +232,121 @@ describe('dispatch', () => {
       ])
 
     it('핸들러 throw는 rejected{internal}로 격리한다', () => {
-      const result = dispatch(throwingRegistry(), { type: 'debug:echo', text: '핑' }, testActor, testPermission)
+      const result = dispatch(
+        throwingRegistry(),
+        { type: 'debug:echo', text: '핑' },
+        testActor,
+        testPermission,
+      )
       expect(result.outcome).toBe('rejected')
-      expect(result.event).toMatchObject({ type: 'error', code: 'internal' })
+      expect(result.events[0]).toMatchObject({ type: 'error', code: 'internal' })
     })
 
     it('internal 응답은 id가 있으면 correlationId로 반향한다', () => {
-      const result = dispatch(throwingRegistry(), { type: 'debug:echo', text: '핑', id: 'c9' }, testActor, testPermission)
-      expect(result.event).toMatchObject({ type: 'error', code: 'internal', correlationId: 'c9' })
+      const result = dispatch(
+        throwingRegistry(),
+        { type: 'debug:echo', text: '핑', id: 'c9' },
+        testActor,
+        testPermission,
+      )
+      expect(result.events[0]).toMatchObject({
+        type: 'error',
+        code: 'internal',
+        correlationId: 'c9',
+      })
     })
   })
 
   describe('echo 왕복', () => {
     it('debug:echo{text}는 handled{debug:echo:result{text}}로 되돌린다', () => {
-      const result = dispatch(createCommandRegistry(testChannelPort), { type: 'debug:echo', text: '핑' }, testActor, testPermission)
+      const result = dispatch(
+        createCommandRegistry(testChannelPort),
+        { type: 'debug:echo', text: '핑' },
+        testActor,
+        testPermission,
+      )
       expect(result.outcome).toBe('handled')
-      expect(result.event).toEqual({ type: 'debug:echo:result', text: '핑' })
+      expect(result.events[0]).toEqual({ type: 'debug:echo:result', text: '핑' })
     })
 
     it('id가 있으면 correlationId로 반향한다', () => {
-      const result = dispatch(createCommandRegistry(testChannelPort), { type: 'debug:echo', text: '핑', id: 'c1' }, testActor, testPermission)
+      const result = dispatch(
+        createCommandRegistry(testChannelPort),
+        { type: 'debug:echo', text: '핑', id: 'c1' },
+        testActor,
+        testPermission,
+      )
       expect(result.outcome).toBe('handled')
-      expect(result.event).toEqual({ type: 'debug:echo:result', text: '핑', correlationId: 'c1' })
+      expect(result.events[0]).toEqual({
+        type: 'debug:echo:result',
+        text: '핑',
+        correlationId: 'c1',
+      })
     })
 
     it('id가 없으면 correlationId 키를 생략한다', () => {
-      const result = dispatch(createCommandRegistry(testChannelPort), { type: 'debug:echo', text: '핑' }, testActor, testPermission)
-      expect(result.event).not.toHaveProperty('correlationId')
+      const result = dispatch(
+        createCommandRegistry(testChannelPort),
+        { type: 'debug:echo', text: '핑' },
+        testActor,
+        testPermission,
+      )
+      expect(result.events[0]).not.toHaveProperty('correlationId')
     })
   })
 
   describe('fire-and-forget 핸들러', () => {
-    it('핸들러가 undefined를 반환해도 outcome은 handled이고 event는 undefined다', () => {
+    it('핸들러가 undefined를 반환해도 outcome은 handled이고 events는 빈 배열이다', () => {
       const fireAndForgetRegistry: HandlerRegistry = new Map([['debug:echo', () => undefined]])
-      const result = dispatch(fireAndForgetRegistry, { type: 'debug:echo', text: '핑' }, testActor, testPermission)
-      expect(result).toEqual({ outcome: 'handled', event: undefined })
+      const result = dispatch(
+        fireAndForgetRegistry,
+        { type: 'debug:echo', text: '핑' },
+        testActor,
+        testPermission,
+      )
+      expect(result).toEqual({ outcome: 'handled', events: [] })
+    })
+  })
+
+  // T2.1·T2.2가 넓힌 계약의 핵심 갈래다. 이 스펙이 없으면 배열 반환 경로가 한 번도 실행되지 않은 채
+  // 머지되어, Story 6·8이 다중 이벤트를 내기 시작할 때 처음 실행된다. 길이와 **순서**를 함께 고정한다 —
+  // plugin이 이 배열을 순서대로 safeSend하므로 순서가 곧 클라이언트 수신 순서다.
+  describe('다중 이벤트 반환', () => {
+    const first: ServerEvent = { type: 'debug:echo:result', text: '첫째' }
+    const second: ServerEvent = { type: 'error', code: 'internal', message: '둘째' }
+
+    it('핸들러가 배열을 반환하면 그 순서 그대로 events에 싣는다', () => {
+      const multiRegistry: HandlerRegistry = new Map([['debug:echo', () => [first, second]]])
+      const result = dispatch(
+        multiRegistry,
+        { type: 'debug:echo', text: '핑' },
+        testActor,
+        testPermission,
+      )
+      expect(result.outcome).toBe('handled')
+      expect(result.events).toEqual([first, second])
+    })
+
+    it('핸들러가 빈 배열을 반환하면 fire-and-forget과 같이 취급한다', () => {
+      const emptyRegistry: HandlerRegistry = new Map([['debug:echo', () => []]])
+      const result = dispatch(
+        emptyRegistry,
+        { type: 'debug:echo', text: '핑' },
+        testActor,
+        testPermission,
+      )
+      expect(result).toEqual({ outcome: 'handled', events: [] })
+    })
+
+    it('핸들러가 단일 이벤트를 반환하면 길이 1 배열로 정규화한다', () => {
+      const singleRegistry: HandlerRegistry = new Map([['debug:echo', () => first]])
+      const result = dispatch(
+        singleRegistry,
+        { type: 'debug:echo', text: '핑' },
+        testActor,
+        testPermission,
+      )
+      expect(result).toEqual({ outcome: 'handled', events: [first] })
     })
   })
 
@@ -196,8 +356,15 @@ describe('dispatch', () => {
     it('chat:message가 handled로 디스패치되고 채널 포트로 핸드오프된다', () => {
       const deliver = vi.fn()
       const registry = createCommandRegistry({ deliver })
-      const result = dispatch(registry, { type: 'chat:message', channel: 'say', text: 'x' }, testActor, testPermission)
+      const result = dispatch(
+        registry,
+        { type: 'chat:message', channel: 'say', text: 'x' },
+        testActor,
+        testPermission,
+      )
       expect(result.outcome).toBe('handled')
+      // 실 chat 핸들러 경로의 fire-and-forget 계약 — 스텁 레지스트리가 아니라 여기서도 빈 배열이어야 한다.
+      expect(result.events).toEqual([])
       expect(deliver).toHaveBeenCalledTimes(1)
       expect(deliver).toHaveBeenCalledWith({ speaker: testActor, channel: 'say', text: 'x' })
     })
@@ -205,8 +372,14 @@ describe('dispatch', () => {
     it('chat:emote가 handled로 디스패치되고 channel=emote로 핸드오프된다', () => {
       const deliver = vi.fn()
       const registry = createCommandRegistry({ deliver })
-      const result = dispatch(registry, { type: 'chat:emote', emote: '웃음' }, testActor, testPermission)
+      const result = dispatch(
+        registry,
+        { type: 'chat:emote', emote: '웃음' },
+        testActor,
+        testPermission,
+      )
       expect(result.outcome).toBe('handled')
+      expect(result.events).toEqual([])
       expect(deliver).toHaveBeenCalledWith({ speaker: testActor, channel: 'emote', text: '웃음' })
     })
   })
