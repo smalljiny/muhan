@@ -1,5 +1,14 @@
 import { describe, it, expect, vi } from 'vitest'
-import { isKnown, serverEventSchema, type Character, type ObjectInstance } from 'shared'
+import {
+  isKnown,
+  resolveHpMax,
+  resolveMpMax,
+  serverEventSchema,
+  type Character,
+  type ClientCommand,
+  type ObjectInstance,
+  type ServerEvent,
+} from 'shared'
 import { flagsHex } from '../../world/roomFixtures.testutil.js'
 import { OCLSEL, OEVILO } from '../../world/hexFlags.js'
 import { MISC, SCROLL } from '../../items/taxonomy.js'
@@ -14,7 +23,7 @@ import type { MarkCharacterDirty } from '../../world/markCharacterDirty.js'
 import type { MarkObjectDeleted } from '../../save/markObjectDeleted.js'
 import type { ActorContext } from '../actorContext.js'
 import { createStudyHandler, type StudyHandlerDeps } from './study.js'
-import { dispatch, createCommandRegistry } from '../router.js'
+import { dispatch, createCommandRegistry, normalizeHandlerEvents } from '../router.js'
 import type { ChannelPort } from '../channelPort.js'
 import type { PermissionPort } from '../permissionPort.js'
 
@@ -120,33 +129,89 @@ function makeSuccessDeps() {
   return makeDeps({ character: makeChar(), inventory: [makeInstance()] })
 }
 
+/**
+ * 핸들러 반환을 항상 배열로 정규화한다 — 성공 경로는 2개(`[progress:studied, character:stats]`),
+ * 거부 경로는 1개다.
+ *
+ * 프로덕션 `dispatch`가 쓰는 것과 **같은** 정규화 함수를 쓴다(train.test.ts 선례). 배열 판별을 손으로
+ * 다시 적으면 라우터가 규칙을 바꿔도 이 테스트가 계속 통과한다.
+ */
+function run(deps: StudyHandlerDeps, command: ClientCommand): readonly ServerEvent[] {
+  return normalizeHandlerEvents(createStudyHandler(deps)(command, actor))
+}
+
 describe('createStudyHandler', () => {
   describe('성공 경로', () => {
-    it('인벤의 비법서를 이름으로 지목하면 progress:studied를 내고 spells 비트를 세팅한다', () => {
+    it('progress:studied·character:stats 2개를 순서대로 내고 spells 비트를 세팅한다', () => {
       const { deps } = makeSuccessDeps()
 
-      const event = createStudyHandler(deps)({ type: 'progress:study', target: '비법' }, actor)
+      const events = run(deps, { type: 'progress:study', target: '비법' })
 
-      expect(event).toMatchObject({
+      expect(events).toHaveLength(2)
+      expect(events[0]).toMatchObject({
         type: 'progress:studied',
         spellNo: BOOK_SPELL_NO,
         spellName: '회복',
         consumedObjectId: 'book-1',
       })
-      const spells = (event as { spells: number[] }).spells
+      const studied = events[0]
+      const spells = studied !== undefined && 'spells' in studied ? studied.spells : []
       expect(isKnown(spells, BOOK_SPELL_NO)).toBe(true)
+      expect(events[1]).toMatchObject({ type: 'character:stats' })
     })
 
-    it('발화 이벤트가 와이어 계약(serverEventSchema)을 통과한다', () => {
+    it('발화 이벤트가 전부 와이어 계약(serverEventSchema)을 통과한다', () => {
       const { deps } = makeSuccessDeps()
 
-      const event = createStudyHandler(deps)({ type: 'progress:study', target: '비법서' }, actor)
+      const events = run(deps, { type: 'progress:study', target: '비법서' })
 
-      const parsed = serverEventSchema.safeParse(event)
-      expect(parsed.success).toBe(true)
+      expect(events).toHaveLength(2) // 빈 배열을 순회하며 통과하는 공허한 단언 방지.
+      for (const event of events) {
+        expect(serverEventSchema.safeParse(event).success).toBe(true)
+      }
+      const parsed = serverEventSchema.safeParse(events[0])
       if (parsed.success && parsed.data.type === 'progress:studied') {
         expect(parsed.data.spells).toHaveLength(16)
       }
+    })
+
+    /**
+     * D10 — 스탯 통지는 `character:stats` 하나로 통일한다. study 핸들러도 **자신이
+     * `liveRegistry.register`에 실은 그 문서**에서 투영한다.
+     *
+     * ⚠ 이 단언은 연마와 달리 "낡은 문서" 변이를 잡지 못한다 — study()는 `spells`만 바꾸고
+     * `character:stats`의 6필드(hp·mp·exp·level)를 하나도 건드리지 않아, 시작 시점 문서로 투영해도
+     * 같은 값이 나온다. 그 변이를 잡는 지점은 train.test.ts의 레벨 상승 케이스다.
+     */
+    it('character:stats가 라이브 엔트리의 확정 문서에서 투영된다', () => {
+      const { deps, registry } = makeSuccessDeps()
+
+      const events = run(deps, { type: 'progress:study', target: '비법서' })
+
+      const after = registry.get('char-1')?.character
+      expect(after).toBeDefined()
+      expect(events[1]).toMatchObject({
+        type: 'character:stats',
+        hpCurrent: after?.hpCurrent,
+        mpCurrent: after?.mpCurrent,
+        experience: after?.experience,
+        level: after?.level,
+      })
+    })
+
+    it('character:stats의 hpMax·mpMax가 resolveHpMax·resolveMpMax와 일치한다', () => {
+      const character = makeChar()
+      const { deps } = makeDeps({ character, inventory: [makeInstance()] })
+
+      const events = run(deps, { type: 'progress:study', target: '비법서' })
+
+      // 최대치는 문서에 없고 class·level에서 파생한다(compute-on-read) — 핸들러가 산술을 재구현하면
+      // 이 단언이 깨진다.
+      expect(events[1]).toMatchObject({
+        type: 'character:stats',
+        hpMax: resolveHpMax(character),
+        mpMax: resolveMpMax(character),
+      })
     })
 
     it('markCharacterDirty가 markObjectDeleted보다 먼저 호출된다 (OQ1 마킹 순서)', () => {
@@ -208,12 +273,9 @@ describe('createStudyHandler', () => {
         inventory: [makeInstance({ _id: 'book-a' }), makeInstance({ _id: 'book-b' })],
       })
 
-      const event = createStudyHandler(deps)(
-        { type: 'progress:study', target: '비법서', ordinal: 2 },
-        actor,
-      )
+      const events = run(deps, { type: 'progress:study', target: '비법서', ordinal: 2 })
 
-      expect(event).toMatchObject({ type: 'progress:studied', consumedObjectId: 'book-b' })
+      expect(events[0]).toMatchObject({ type: 'progress:studied', consumedObjectId: 'book-b' })
       expect(markObjectDeleted).toHaveBeenCalledWith('book-b')
     })
 
@@ -228,12 +290,9 @@ describe('createStudyHandler', () => {
 
       // 같은 라이브 레지스트리 위에서 두 번째 비법서를 연마한다(주문은 이미 습득 상태).
       const second = makeDeps({ registry })
-      const event = createStudyHandler(second.deps)(
-        { type: 'progress:study', target: '비법서' },
-        actor,
-      )
+      const events = run(second.deps, { type: 'progress:study', target: '비법서' })
 
-      expect(event).toMatchObject({ type: 'progress:studied', consumedObjectId: 'book-b' })
+      expect(events[0]).toMatchObject({ type: 'progress:studied', consumedObjectId: 'book-b' })
       expect(second.markObjectDeleted).toHaveBeenCalledWith('book-b')
       expect(registry.get('char-1')?.inventory).toEqual([])
     })
@@ -320,6 +379,26 @@ describe('createStudyHandler', () => {
       },
     )
 
+    /**
+     * 거부는 error 이벤트 **1개**다 — 상태가 바뀌지 않았으므로 스탯 스냅샷을 덧붙이지 않는다.
+     * 성공 경로만 배열을 낸다는 계약을 여기서 고정한다.
+     */
+    it.each(cases)(
+      '$name 거부는 이벤트 1개만 낸다 (character:stats 없음)',
+      ({ character, template, target }) => {
+        const { deps } = makeDeps({
+          character,
+          inventory: [makeInstance()],
+          templates: [template],
+        })
+
+        const events = run(deps, { type: 'progress:study', target })
+
+        expect(events).toHaveLength(1)
+        expect(events[0]).toMatchObject({ type: 'error', code: 'rule_rejected' })
+      },
+    )
+
     it('실패 7종이 서로 다른 message를 갖는다 (사유별 사상 누락 적발)', () => {
       const messages = cases.map(({ character, template, target }) => {
         const { deps } = makeDeps({
@@ -349,12 +428,10 @@ describe('createStudyHandler', () => {
     it('라이브 미등록 actor면 error{internal}, 두 마킹 모두 미호출', () => {
       const { deps, markCharacterDirty, markObjectDeleted } = makeDeps({})
 
-      const event = createStudyHandler(deps)(
-        { type: 'progress:study', target: '비법서', id: 's1' },
-        actor,
-      )
+      const events = run(deps, { type: 'progress:study', target: '비법서', id: 's1' })
 
-      expect(event).toMatchObject({ type: 'error', code: 'internal', correlationId: 's1' })
+      expect(events).toHaveLength(1)
+      expect(events[0]).toMatchObject({ type: 'error', code: 'internal', correlationId: 's1' })
       expect(markCharacterDirty).not.toHaveBeenCalled()
       expect(markObjectDeleted).not.toHaveBeenCalled()
     })
@@ -383,7 +460,7 @@ describe('createCommandRegistry — progress:study 조건부 등록', () => {
     )
 
     expect(result.outcome).toBe('rejected')
-    expect(result.event).toMatchObject({ type: 'error', code: 'unknown_type' })
+    expect(result.events[0]).toMatchObject({ type: 'error', code: 'unknown_type' })
   })
 
   it('study deps를 주면 progress:study가 study 핸들러로 디스패치된다', () => {
@@ -398,10 +475,13 @@ describe('createCommandRegistry — progress:study 조건부 등록', () => {
     )
 
     expect(result.outcome).toBe('handled')
-    expect(result.event).toMatchObject({
+    // dispatch가 핸들러의 배열 반환을 그대로 정규화해 내보낸다(스탯 통지가 소켓까지 나간다).
+    expect(result.events).toHaveLength(2)
+    expect(result.events[0]).toMatchObject({
       type: 'progress:studied',
       spellNo: BOOK_SPELL_NO,
       consumedObjectId: 'book-1',
     })
+    expect(result.events[1]).toMatchObject({ type: 'character:stats' })
   })
 })

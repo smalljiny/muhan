@@ -45,3 +45,23 @@ export function dice(n: number, s: number, p: number, rng: CombatRng): number {
 export function mdice(entity: DiceSpec, rng: CombatRng): number {
   return dice(entity.ndice, entity.sdice, entity.pdice, rng)
 }
+
+/**
+ * 프로덕션 `CombatRng` 구현 — `[min, max]` 양끝 포함 균등 정수(오라클 `mrand(a,b)` 관례).
+ *
+ * 이 저장소에 프로덕션 **난수** 굴림 구현이 0건이라(결정적 stub `dice.testutil.ts`는 테스트 전용) 라이브
+ * 배선이 주입할 것이 없었다. 그 빈자리를 채우는 최소 구현이며, 전투 모듈은 이것을 **직접 부르지
+ * 않는다** — 순수 함수들은 여전히 `rng` 인자로만 굴림을 받고, 이 구현은 배선 계층이 주입 seam에
+ * 꽂아 넣는 값이다(모듈 순수성 유지).
+ *
+ * `Math.floor(Math.random() * (max - min + 1)) + min`은 `Math.random()`의 값역이 `[0, 1)`이라
+ * 양끝을 포함한다. `max < min`이면 폭이 0 이하가 되어 `min`을 반환한다(굴림 없는 퇴화 구간).
+ *
+ * 재현 가능한 seeded PRNG는 이 seam을 그대로 대체하면 된다 — 소비자는 타입만 보므로 교체 비용이
+ * 주입 지점 한 곳이다.
+ */
+export const defaultCombatRng: CombatRng = (min: number, max: number) => {
+  const width = max - min + 1
+  if (width <= 1) return min
+  return Math.floor(Math.random() * width) + min
+}

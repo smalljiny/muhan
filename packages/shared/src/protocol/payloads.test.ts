@@ -4,6 +4,8 @@ import {
   targetOrdinalPayloadSchema,
   targetSecondaryPayloadSchema,
   freeTextPayloadSchema,
+  COMMAND_TARGET_MAX,
+  COMMAND_ORDINAL_MAX,
 } from './payloads.js'
 
 describe('noArgsPayloadSchema (인자 없음)', () => {
@@ -40,6 +42,33 @@ describe('targetOrdinalPayloadSchema (대상 + 서수)', () => {
   it('ordinal이 정수가 아니면 거부한다', () => {
     expect(targetOrdinalPayloadSchema.safeParse({ target: '검', ordinal: 1.5 }).success).toBe(false)
   })
+
+  // 상한·하한이 이 블록에 있으므로 경계값도 여기서 고정한다 — 이 블록을 spread하는 명령
+  // (progress:study·combat:attack)은 자기 리터럴을 갖지 않아 검증 지점이 여기 하나다.
+  it('target 상한 경계 — COMMAND_TARGET_MAX는 통과하고 1자 초과는 거부한다', () => {
+    expect(
+      targetOrdinalPayloadSchema.safeParse({ target: 'ㄱ'.repeat(COMMAND_TARGET_MAX) }).success,
+    ).toBe(true)
+    expect(
+      targetOrdinalPayloadSchema.safeParse({ target: 'ㄱ'.repeat(COMMAND_TARGET_MAX + 1) }).success,
+    ).toBe(false)
+  })
+
+  it('ordinal 하한 1 — 0과 음수를 거부한다', () => {
+    expect(targetOrdinalPayloadSchema.safeParse({ target: '검', ordinal: 1 }).success).toBe(true)
+    expect(targetOrdinalPayloadSchema.safeParse({ target: '검', ordinal: 0 }).success).toBe(false)
+    expect(targetOrdinalPayloadSchema.safeParse({ target: '검', ordinal: -1 }).success).toBe(false)
+  })
+
+  it('ordinal 상한 경계 — COMMAND_ORDINAL_MAX는 통과하고 1 초과는 거부한다', () => {
+    expect(
+      targetOrdinalPayloadSchema.safeParse({ target: '검', ordinal: COMMAND_ORDINAL_MAX }).success,
+    ).toBe(true)
+    expect(
+      targetOrdinalPayloadSchema.safeParse({ target: '검', ordinal: COMMAND_ORDINAL_MAX + 1 })
+        .success,
+    ).toBe(false)
+  })
 })
 
 describe('targetSecondaryPayloadSchema (대상 + 보조 대상)', () => {
@@ -54,9 +83,9 @@ describe('targetSecondaryPayloadSchema (대상 + 보조 대상)', () => {
   })
 
   it('secondary가 빈 문자열이면 거부한다', () => {
-    expect(
-      targetSecondaryPayloadSchema.safeParse({ target: '열쇠', secondary: '' }).success,
-    ).toBe(false)
+    expect(targetSecondaryPayloadSchema.safeParse({ target: '열쇠', secondary: '' }).success).toBe(
+      false,
+    )
   })
 })
 

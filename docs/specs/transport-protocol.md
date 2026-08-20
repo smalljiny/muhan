@@ -20,14 +20,14 @@
 
 `shared`의 기존 `schema/`(영속·도메인)와 **별개 모듈**이다 — 프로토콜은 와이어 메시지 계약, `schema/`는 저장 도메인 모델이다. 모든 TS 타입은 `z.infer`로만 파생하며 병렬 수기 타입을 두지 않는다. `index.ts` 배럴이 스키마·타입·`PROTOCOL_VERSION`을 함께 재노출하고, `shared/src/index.ts`가 이를 `export *`로 상위 노출한다. DOM 전역(`Event`·`Command`)과 충돌하지 않도록 파생 타입은 `ClientCommand`·`ServerEvent`로 한정 명명한다.
 
-**`version.ts`** — `PROTOCOL_VERSION = 5`. 계약이 하위 비호환으로 바뀔 때마다 1씩 단조 증가시키는 정수(semver 미채택 — 와이어 호환성만 판단하면 되므로 정수 동등 비교가 단순). 핸드셰이크가 이 값을 실어 client·server가 같은 계약 세대를 쓰는지 대조한다. 직전 bump는 #120의 `progress:study` 명령·`progress:studied` 이벤트 신설이다 — 판별 union에 variant를 더하면 구버전 서버가 신규 `type`을 `unknown_type`으로 거부하므로 4 → 5로 올렸다. 그 전 bump는 E11(#60)의 `world:room` 페이로드 확장이었다(기존 variant가 `z.strictObject`라 required 필드 추가가 구버전 클라의 `safeParse`를 깨뜨림).
+**`version.ts`** — `PROTOCOL_VERSION = 6`. 계약이 하위 비호환으로 바뀔 때마다 1씩 단조 증가시키는 정수(semver 미채택 — 와이어 호환성만 판단하면 되므로 정수 동등 비교가 단순). 핸드셰이크가 이 값을 실어 client·server가 같은 계약 세대를 쓰는지 대조한다. 직전 bump는 #121의 `combat:attack` 명령과 `combat:attacked`·`character:stats` 이벤트 신설이다 — 판별 union에 variant를 더하면 구버전 서버가 신규 `type`을 `unknown_type`으로 거부하므로 5 → 6으로 올렸다. 그 전 bump는 #120의 `progress:study` 명령·`progress:studied` 이벤트 신설(4 → 5)이었고, 그 전은 E11(#60)의 `world:room` 페이로드 확장이었다(기존 variant가 `z.strictObject`라 required 필드 추가가 구버전 클라의 `safeParse`를 깨뜨림).
 
 **`payloads.ts`** — 명령 인자 패턴 building block 4종. 무한 명령 어휘가 인자 구조상 수렴하는 4패턴을 독립 `z.strictObject`로 못박아 command 봉투가 재사용한다. 다단 대화(prompt/response) payload는 T2 경계라 여기 두지 않는다.
 
 | 스키마 | shape | 용도 |
 |------|------|------|
 | `noArgsPayloadSchema` | `{}` | (a) 무인자 — 대상·텍스트 없이 동작만(예: 둘러보기) |
-| `targetOrdinalPayloadSchema` | `{ target: string, ordinal?: int }` | (b) 대상+서수 — 동명 대상이 여럿일 때 n번째 지목(생략 시 첫 번째) |
+| `targetOrdinalPayloadSchema` | `{ target: string(1..32), ordinal?: int(1..99) }` | (b) 대상+서수 — 동명 대상이 여럿일 때 n번째 지목(생략 시 첫 번째). 상한은 모듈 상수 `COMMAND_TARGET_MAX`(32)·`COMMAND_ORDINAL_MAX`(99)가 소유하고 `progress:study`·`combat:attack`이 이 블록을 spread한다(#121) |
 | `targetSecondaryPayloadSchema` | `{ target: string, secondary: string }` | (c) 대상+보조대상 — 두 대상을 엮음(예: 상자에 열쇠 사용) |
 | `freeTextPayloadSchema` | `{ text: string }` | (d) 자유 텍스트 — 임의 문자열 한 덩어리(예: 말하기·echo) |
 
@@ -51,6 +51,8 @@
 - `{ type: 'progress:train', id?: string }` — 연마. **인자가 없다** — 훈련방 여부·클래스 일치·exp·gold 게이트를 전부 서버(`progression/train`)가 소유하므로 클라는 의도만 보내고 대상·수량 같은 인자 표면을 두지 않는다(입력 위생 부담 0). `id`는 상관 키(선택) — 성공 통지 `progress:trained`는 상태 이벤트라 상관 키를 싣지 않고, 거부 시 `error` 이벤트가 이 `id`를 `correlationId`로 반향한다. 정본 [`progression.md`](progression.md).
 - `{ type: 'progress:study', target: string(min 1, max 32), ordinal?: int(min 1, max 99), id?: string }` — 비법서 연마(#120). `progress:train`과 달리 **대상 인자가 있다** — 오라클이 소지품에서 이름으로 책을 지목하기 때문이다. `target`은 아이템 이름 또는 별칭(`keys`)과 대조할 문자열이고 상한 32는 입력 위생이다(어떤 아이템 이름도 이 안에 든다). `ordinal`은 동명 아이템 중 몇 번째인지(`비법서 2 연마`)이며 **오브젝트 id를 와이어로 받지 않는다** — 클라가 남의 오브젝트 id를 지목할 표면 자체를 없앤다(대상 해소는 서버가 행위자 인벤 스코프 안에서만 수행). 하한 `min 1`은 오라클 파서가 서수 미지정 시 `val[1]=1`을 넣는 것과 일치한다. 정본 [`magic-progression.md`](magic-progression.md).
 
+- `{ type: 'combat:attack', target: string(min 1, max 32), ordinal?: int(min 1, max 99), id?: string }` — 근접 공격(#121). `targetOrdinalPayloadSchema.shape`를 spread해 `progress:study`와 같은 지목 문법을 공유한다(상한 정의를 두 곳에 흩지 않는다). `target`은 방 안 크리처 이름·별칭과 대조할 문자열이고 `ordinal`은 동명 크리처 중 몇 번째인지다. **크리처 `instanceId`를 와이어로 받지 않는다** — 클라가 다른 방 개체를 지목할 표면 자체를 없앤다(대상 해소는 서버가 행위자의 현재 방 스코프 안에서만 수행). 사람을 지목하면 PvP 범위 밖이라 `rule_rejected`로 거부한다. 정본 [`combat.md`](combat.md).
+
 **`events.ts`** — `serverEventSchema = z.discriminatedUnion('type', [...])` + `errorCodeSchema`.
 
 - `{ type: 'system:hello', protocolVersion: int }` — 연결 직후 서버가 자기 버전을 push.
@@ -65,6 +67,9 @@
 - `{ type: 'progress:trained', level: int(min 1), levelsGained: int(min 0), experience: int(min 0), gold: int(min 0), hpCurrent: int(min 0), mpCurrent: int(min 0), stats: [int×5], prestige: 'invincible'|'caretaker'|'none' }` — 연마 성공 통지. `train()`이 확정한 성장 결과 스냅샷을 본인에게 1회 발화한다. `world:room` 선례를 따라 **`correlationId`를 싣지 않는다**(상태 이벤트 — 거부만 `error`로 상관 키를 반향한다). train이 실제로 바꾸는 필드만 싣고 전체 캐릭터 상태 직렬화는 후속 토픽 몫이다. `levelsGained`가 0인 것은 유효하다 — 승급(무적·초인) 경로는 레벨을 올리지 않고 전이만 한다. `stats`는 `characterSchema.stats`와 동일한 5-튜플이며 numeric 하한도 `characterSchema`를 미러한다(클라 `wsClient`가 인바운드 프레임을 이 스키마로 `safeParse`하므로 형식적 정합이 아니라 실 입력 검증 표면이다). 정본 [`progression.md`](progression.md).
 
 - `{ type: 'progress:studied', spellNo: int(0..127), spellName: string(min 1), spells: [int(0..255) × 16], consumedObjectId: string(min 1) }` — 비법서 연마 성공 통지(#120). `study()`가 확정한 지식 상태를 본인에게 1회 발화한다. `progress:trained` 선례를 따라 **`correlationId`를 싣지 않는다**(상태 이벤트). `spells`는 갱신된 주문 지식 비트마스크 전체이며 `consumedObjectId`는 소멸한 비법서의 인스턴스 id다 — 클라가 인벤 뷰에서 해당 항목을 지우는 데 쓴다. `spellNo` 상한과 `spells` 길이는 모듈 상수 `SPELL_MASK_BYTES = 16`에서 파생하고, 이 상수는 `magic/spellStore.ts`·`schema/character.ts`와 **같은 값이지만 import하지 않고 따로 선언한다** — 와이어 계약이 도메인 상수를 따라 조용히 움직이면 안 되기 때문이다(움직이면 version bump 대상). 형상 어긋남은 `events.test.ts`의 `characterSchema.spells` 교차 드리프트 테스트가 잡는다. 정본 [`magic-progression.md`](magic-progression.md).
+
+- `{ type: 'combat:attacked', targetName: string(min 1), targetInstanceId: int(min 0), hit: boolean, damage: int(min 0), critical: boolean, fumble: boolean, died: boolean, attacks: {hit, damage, critical, fumble, durabilityHit, weaponDropped}[] }` — 공격 결과 통지(#121). 공격을 실행한 본인에게 1회 발화하며 `world:room` 선례를 따라 **`correlationId`를 싣지 않는다**(상태 이벤트). `targetInstanceId`를 이름과 함께 싣는 이유는 같은 이름 크리처가 방에 여럿일 때 클라가 어느 개체를 맞혔는지 짝지어야 하기 때문이다. `attacks`는 타격별 배열이며 현재는 `PUPDMG` 미영속으로 항상 원소 1개지만(다중공격 구조적 미발화), 배열 형태를 지금 고정해 #61이 타격별 연출을 붙일 때 version bump를 다시 하지 않게 한다. 서버측 원천은 `combat/resolveAttack.ts`의 `AttackDescriptor`이고, shared가 server를 import할 수 없으므로 일치 강제를 반대편(`combat/attackDescriptorWire.test.ts` 컴파일타임 대조)에서 한다. 정본 [`combat.md`](combat.md).
+- `{ type: 'character:stats', hpCurrent: int(min 0), hpMax: int, mpCurrent: int(min 0), mpMax: int, experience: int(min 0), level: int(min 1) }` — 스탯 스냅샷(#121). `combat:attack`·`progress:train`·`progress:study` **세 명령 모두**가 성공 시 함께 발화해 스탯 변화 통지 경로를 하나로 통일한다 — 클라이언트가 이벤트 한 종만 보고 패널을 갱신한다. 상태 이벤트라 `correlationId`를 싣지 않는다. 최대치(`hpMax`·`mpMax`)는 저장하지 않고 `resolveHpMax`·`resolveMpMax`로 파생한다(`progression/maxResolvers.ts`의 compute-on-read 계약 유지). numeric 하한은 `characterSchema`를 미러한다. `progress:trained`·`progress:studied`의 기존 필드는 그대로 둔다 — 두 이벤트는 "무엇이 일어났는지"를 서술하는 도메인 이벤트이고 이쪽은 현재 스탯 스냅샷이라 역할이 다르다.
 
 `errorCodeSchema = z.enum(['handshake_required', 'unknown_type', 'bad_payload', 'internal', 'unauthorized', 'session_state', 'forbidden', 'rate_limited', 'rule_rejected'])` — `handshake_required`(핸드셰이크 전 명령 수신), `unknown_type`(미지 discriminator), `bad_payload`(payload 형식 위반), `internal`(핸들러/처리 중 서버 내부 오류), `unauthorized`(소유하지 않은 캐릭터 지목 등 **미인증** 세션의 인가 실패, T2), `session_state`(현재 세션 단계에서 허용되지 않는 명령, T2), `forbidden`(**인증됐으나** RBAC 권한 부족으로 거부, E3-4), `rate_limited`(인바운드 프레임이 연결·계정 속도 상한을 초과해 `JSON.parse` 전에 drop됨, #64 — 연속 폐기 구간의 첫 폐기에만 1회 통지, 정본 [`ws-rate-limit.md`](ws-rate-limit.md)), `rule_rejected`(형식·권한·단계는 옳으나 **게임 세계의 규칙**이 명령을 막음 — 잠긴 문, 소지하지 않은 비법서, study 게이트 탈락). `unauthorized`(신원 없음, 재인증 유도)와 `forbidden`(신원 있으나 자격 없음, 권한 없음 안내)은 client-visible 의미가 다르다. WS upgrade **전** 게이트의 거부(`401 unauthenticated`·`403 forbidden_origin`)는 프로토콜 error 이벤트가 아니라 HTTP 응답이며 이 열거에 없다(auth-session.md 참조).
 
@@ -156,11 +161,23 @@ if (!isCurrentBinding || ctx.closed) break   // 조용히 무시, idle 재-arm �
 export interface GameCommandDeps {
   readonly move?: MoveHandlerDeps
   readonly train?: TrainHandlerDeps
+  readonly study?: StudyHandlerDeps
+  readonly attack?: AttackHandlerDeps
 }
 createCommandRegistry(channelPort: ChannelPort, deps?: GameCommandDeps): HandlerRegistry
 ```
 
-명령이 늘 때마다 팩토리에 optional **위치 파라미터**를 덧붙이면 호출부가 인자 순서에 결합되고, 중간 명령만 미주입하려면 `undefined` 자리 채우기가 필요해진다. 필드 번들이 그 결합을 끊는다 — 호출부는 배선할 명령의 필드만 채우고, 필드가 없으면 그 명령은 미등록으로 남아 dispatch가 `unknown_type`을 반환한다(방 배치·영속 seam이 아직 없는 컨텍스트의 기본 동작). 모든 필드가 optional이라 번들 자체도 optional이며, 무-deps 호출부(라우터 순수 단위 테스트 등)는 1-인자 형태 그대로다. 현재 `deps.move`(→ `world:move`)·`deps.train`(→ `progress:train`)·`deps.study`(→ `progress:study`) 셋을 받고, 후속 규칙 명령(teach·attack·cast)이 같은 형상으로 필드를 더한다.
+**핸들러 반환 계약 (#121에서 다중 이벤트로 확장)** — 한 명령이 두 이벤트를 보내야 하는 경우가 생겨(`combat:attack` → `combat:attacked` + `character:stats`, 사망 시 `world:room`까지 3종) 계약을 넓혔다.
+
+```ts
+type CommandHandler = (command, actor) => ServerEvent | readonly ServerEvent[] | undefined
+type DispatchResult = { outcome: 'handled'; events: readonly ServerEvent[] }
+                    | { outcome: 'rejected'; events: readonly [ServerEvent] }
+```
+
+성공·거부 두 경로 모두 `events` 배열로 통일한다 — 모양이 갈리면 소비 지점이 분기해야 한다. `rejected`는 **길이-1 튜플**로 좁혀 "거부에는 error가 정확히 하나"를 타입이 강제한다. 세 반환 형태(`undefined`·단일·배열)를 배열로 접는 `normalizeHandlerEvents`를 export해 테스트 하네스가 같은 정규화를 재구현하지 않게 한다. 소비 지점은 `ws/plugin.ts` 한 곳이라 변경이 갇힌다(`result.events`를 순회해 `safeSend`).
+
+명령이 늘 때마다 팩토리에 optional **위치 파라미터**를 덧붙이면 호출부가 인자 순서에 결합되고, 중간 명령만 미주입하려면 `undefined` 자리 채우기가 필요해진다. 필드 번들이 그 결합을 끊는다 — 호출부는 배선할 명령의 필드만 채우고, 필드가 없으면 그 명령은 미등록으로 남아 dispatch가 `unknown_type`을 반환한다(방 배치·영속 seam이 아직 없는 컨텍스트의 기본 동작). 모든 필드가 optional이라 번들 자체도 optional이며, 무-deps 호출부(라우터 순수 단위 테스트 등)는 1-인자 형태 그대로다. 현재 `deps.move`(→ `world:move`)·`deps.train`(→ `progress:train`)·`deps.study`(→ `progress:study`)·`deps.attack`(→ `combat:attack`) 넷을 받고, 후속 규칙 명령(teach·cast)이 같은 형상으로 필드를 더한다.
 
 `echoHandler(command, _actor)`는 `debug:echo{text, id?}` → `debug:echo:result{text, correlationId?}`로 되돌린다. `actor`를 받되 무시하는 무권한 진단 핸들러다. 라우터가 이미 검증한 `ClientCommand`만 받으므로 payload를 재검증하지 않는다. `id`가 있을 때만(`!== undefined`, 빈 문자열도 유효) `correlationId` 키를 싣는다.
 

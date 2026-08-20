@@ -8,6 +8,7 @@ import type { ObjectTemplateIndex } from '../../items/objectTemplate.js'
 import { resolveCarriedObject } from '../../items/carriedTargetResolver.js'
 import { composeCharacterFlags } from '../../character/flags.js'
 import { study, type StudyFailure } from '../../magic/learning.js'
+import { characterStatsEvent } from '../characterStatsEvent.js'
 import { makeErrorEvent } from '../serverEvent.js'
 
 /**
@@ -97,16 +98,28 @@ const REJECT_MESSAGES: Record<StudyFailure | 'not-found', string> = {
  *    구조적으로 미발화하므로 지금은 관측되지 않는다. <!-- 추적 이슈: #123 (값역), 방 owner 표현은 미개설 -->
  * ③ **성공 시 방 브로드캐스트 미재현** — 오라클은 연마 성공을 방 전체에 알린다(magic1.c:333-334,
  *    `%M이 %1i의 내용을 읽고 연마합니다`). 이 핸들러는 발화자 본인에게만 `progress:studied`를 낸다.
- *    누락이 아니라 **와이어에 대응 이벤트가 없어서**다 — `ServerEvent` 12종에 방 스코프 "누가 무엇을
+ *    누락이 아니라 **와이어에 대응 이벤트가 없어서**다 — `ServerEvent`에 방 스코프 "누가 무엇을
  *    했다" 통지가 없다. 재현하려면 프로토콜 확장(version bump)이 선행돼야 한다. <!-- 추적 이슈: #116 -->
  *
+ * ## 스탯 통지는 `character:stats`로 통일한다 (D10)
+ * 공격·연마와 같은 스냅샷 이벤트를 성공 경로에 **덧붙인다** — `progress:studied`의 기존 필드는 한 글자도
+ * 바꾸지 않는다(D15). 투영 규칙의 단일 출처는 `ws/characterStatsEvent.ts`이고 여기서 재구현하지 않는다.
+ *
+ * 투영 입력은 이 명령이 확정해 `liveRegistry.register`에 실은 그 `character`다. study()가 바꾸는 것은
+ * `spells`뿐이라 지금은 시작 시점 문서로 투영해도 6필드 값이 같지만, 그것은 이 명령의 부수 효과가
+ * 좁다는 우연이지 계약이 아니다. 확정 문서를 넘기는 쪽이 `progress:train`·`combat:attack`과 같은 규칙이다.
+ *
  * 반환:
- *   - 성공 → `progress:studied{...}`(상태 이벤트, correlationId 없음 — progress:trained 선례).
- *   - 게임 규칙 거부·대상 미해소 → `error{rule_rejected, message}`(id 있으면 correlationId 반향).
+ *   - 성공 → `[progress:studied, character:stats]`(둘 다 상태 이벤트라 correlationId 없음 — progress:trained 선례).
+ *   - 게임 규칙 거부·대상 미해소 → `error{rule_rejected, message}` **1개**(id 있으면 correlationId 반향).
+ *     상태가 안 바뀌었으므로 스탯 스냅샷을 붙이지 않는다.
  *   - 라이브 미등록 actor → `error{internal}`(배선 격리 — 게임 규칙 거부와 구분).
  */
 export function createStudyHandler(deps: StudyHandlerDeps): CommandHandler {
-  return (command: ClientCommand, actor: ActorContext): ServerEvent | undefined => {
+  return (
+    command: ClientCommand,
+    actor: ActorContext,
+  ): ServerEvent | readonly ServerEvent[] | undefined => {
     // (1) defensive narrow — router는 progress:study type에만 이 핸들러를 배선하므로 false 갈래는
     //     구조적으로 도달 불가한 방어선이다.
     if (command.type !== 'progress:study') return undefined
@@ -174,12 +187,16 @@ export function createStudyHandler(deps: StudyHandlerDeps): CommandHandler {
     deps.markCharacterDirty(actor.characterId, character)
     deps.markObjectDeleted(found.instance._id)
 
-    return {
-      type: 'progress:studied',
-      spellNo,
-      spellName: entry.koreanName,
-      spells: character.spells,
-      consumedObjectId: found.instance._id,
-    }
+    return [
+      {
+        type: 'progress:studied',
+        spellNo,
+        spellName: entry.koreanName,
+        spells: character.spells,
+        consumedObjectId: found.instance._id,
+      },
+      // 이 명령이 확정한 문서에서 투영한다(위 헤더 참조) — 라이브 엔트리에 실은 것과 같은 객체다.
+      characterStatsEvent(character),
+    ]
   }
 }

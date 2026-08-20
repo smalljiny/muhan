@@ -343,13 +343,18 @@ export function registerWebsocket(
   const effectiveLiveWorld = liveWorld ?? wiring?.liveWorldBinding
 
   // 명령 레지스트리는 무상태 핸들러의 배선표라 연결 간 공유 안전하다 — 채널 포트·(묶음 파생) 명령 deps 번들을
-  // 클로저 주입해 1회 조립한다. 번들의 move·train·study 필드가 있으면 world:move·progress:train·
-  // progress:study가 등록되고, 없으면 미등록(unknown_type)이다.
+  // 클로저 주입해 1회 조립한다. 번들의 move·train·study·attack 필드가 있으면 world:move·progress:train·
+  // progress:study·combat:attack이 등록되고, 없으면 미등록(unknown_type)이다.
   const commandRegistry = createCommandRegistry(
     effectiveChannelPort,
     wiring === undefined
       ? undefined
-      : { move: wiring.moveDeps, train: wiring.trainDeps, study: wiring.studyDeps },
+      : {
+          move: wiring.moveDeps,
+          train: wiring.trainDeps,
+          study: wiring.studyDeps,
+          attack: wiring.attackDeps,
+        },
   )
   app.decorate('wsConnections', connections)
   app.decorate('wsLifecyclePort', effectiveLifecyclePort)
@@ -584,7 +589,7 @@ export function registerWebsocket(
                   // 유효 명령 처리 성공(handled)만 무입력 타이머를 재-arm한다 — 거부(rejected:
                   // unknown_type·bad_payload·forbidden·internal)가 flood로 타이머를 무한 연장하지 못하게 한다.
                   if (result.outcome === 'handled') ctx.idle?.arm()
-                  if (result.event !== undefined) safeSend(socket, result.event)
+                  for (const event of result.events) safeSend(socket, event)
                 } else {
                   // handleSessionFrame은 이제 async라 await한다 — 큐가 프레임 완결 뒤에만 다음 프레임을 태워
                   // 공유 상태(state·createProgress) 동시 변이가 없다.

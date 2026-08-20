@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { freeTextPayloadSchema, CHAT_TEXT_MAX, CHAT_TARGET_MAX } from './payloads.js'
+import {
+  freeTextPayloadSchema,
+  targetOrdinalPayloadSchema,
+  CHAT_TEXT_MAX,
+  CHAT_TARGET_MAX,
+} from './payloads.js'
 
 /**
  * 감정표현 별칭(emote)의 상한 — 인바운드 chat:emote 전용이라 아웃바운드와 공유하지 않고 여기 둔다.
@@ -83,18 +88,23 @@ export const clientCommandSchema = z.discriminatedUnion('type', [
   // 대상 지목만 보낸다. id는 상관 키(선택) — progress:studied는 상태 이벤트라 상관 키를 싣지 않고,
   // 거부 시 error 이벤트가 이 id를 correlationId로 반향한다.
   //
-  // target 상한 32는 world:move.direction과 같은 결의 입력 위생이다 — 이름 전체를 담는 상한이 아니라
-  // 접두 상한이다(매칭이 접두 기반이라 32자 접두면 어떤 아이템도 지목된다).
-  // payloads.ts의 targetOrdinalPayloadSchema를 spread하지 않는다 — 그 블록의 ordinal은 하한이 없어
-  // 0과 음수를 통과시키는데, 이 계약이 막아야 하는 값이 정확히 그것이다(chat:message가 무상한 text
-  // 블록을 spread하지 않는 것과 같은 이유).
-  // ordinal 하한 1이 소지품 해소자의 ordinal 0 갈래를 라이브에서 도달 불가로 만든다 — 오라클 근거와
-  // 그 갈래의 처리는 server/src/items/carriedTargetResolver.ts 헤더가 소유한다(중복 서술 방지).
-  // 상한 99는 서수의 상식적 외곽이다(그 이상은 지목 의도가 아니라 입력 사고다).
+  // target·ordinal 형상과 그 상한 근거는 payloads.ts의 targetOrdinalPayloadSchema가 소유한다.
+  // 그 블록을 spread해 리터럴 상한이 명령마다 흩어지는 것을 막는다(debug:echo가 freeTextPayloadSchema를
+  // spread하는 관용구와 같다 — 리터럴 discriminator와 strict는 새 strictObject가 그대로 보존한다).
   z.strictObject({
     type: z.literal('progress:study'),
-    target: z.string().min(1).max(32),
-    ordinal: z.int().min(1).max(99).optional(),
+    ...targetOrdinalPayloadSchema.shape,
+    id: z.string().optional(),
+  }),
+  // 공격 명령 — 방 안의 대상을 지목해 전투를 개시한다. 대상 해소는 방 대상 해소자가 소유하고,
+  // 명중·피해·사망 판정은 전부 서버(combat)가 소유한다. 클라는 지목만 보낸다.
+  // id는 상관 키(선택) — 성공 통지 combat:attacked는 상태 이벤트라 상관 키를 싣지 않고, 거부 시
+  // error 이벤트가 이 id를 correlationId로 반향한다(progress:study 선례).
+  //
+  // progress:study와 같은 "대상 + 서수" 패턴이라 같은 building block을 spread한다.
+  z.strictObject({
+    type: z.literal('combat:attack'),
+    ...targetOrdinalPayloadSchema.shape,
     id: z.string().optional(),
   }),
 ])

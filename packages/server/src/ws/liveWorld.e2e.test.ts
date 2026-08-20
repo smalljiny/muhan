@@ -23,6 +23,7 @@ import type { BankRepository } from '../repo/bankRepository.js'
 import type { WorldRepository } from '../repo/worldRepository.js'
 import type { ObjectRepository } from '../repo/objectRepository.js'
 import type { LiveWorldWiringBundle } from './liveWorldWiring.js'
+import { createInstanceIdAllocator } from '../world/spawn.js'
 import {
   startTestServer,
   newAuthedClient,
@@ -231,6 +232,9 @@ function buildHarness(): LiveWorldHarness {
     // 자체 구성하므로 boot가 무엇을 실었는지는 여기서 검출되지 않는다. 필수 필드 type-check는
     // 필드 존재만 증명하고 값의 정합성은 증명하지 못한다 — 실 검출자는 정본 인덱스를 싣는 study e2e다.
     objectTemplates: new Map(),
+    // 사망 seam 원재료 — 이 하네스는 소환·리스폰 경로를 검증하지 않아 빈 인덱스와 신규 발급기를 싣는다.
+    spawnTemplates: new Map(),
+    alloc: createInstanceIdAllocator(),
     markDirty: (collection, id, snapshot) => saveEngine.markDirty(collection, id, snapshot),
     peekPending: (collection, id) => saveEngine.peekPending(collection, id),
     currentHour: () => 12, // pass-move 시간 게이트 통과(밤 게이트 회피)

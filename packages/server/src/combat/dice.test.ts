@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dice, mdice } from './dice.js'
+import { dice, mdice, defaultCombatRng } from './dice.js'
 import { maxRollRng, minRollRng, seqRng } from './dice.testutil.js'
 
 /**
@@ -66,5 +66,44 @@ describe('mdice', () => {
     const entity = { ndice: 2, sdice: 6, pdice: 3 }
     const rng = seqRng([4, 5])
     expect(mdice(entity, rng)).toBe(12)
+  })
+})
+
+describe('defaultCombatRng', () => {
+  it('min === max이면 그 값을 그대로 돌려준다 (폭 1 구간)', () => {
+    for (let i = 0; i < 20; i += 1) {
+      expect(defaultCombatRng(7, 7)).toBe(7)
+    }
+  })
+
+  it('항상 [min, max] 범위의 정수를 돌려준다', () => {
+    for (let i = 0; i < 200; i += 1) {
+      const value = defaultCombatRng(1, 6)
+      expect(Number.isInteger(value)).toBe(true)
+      expect(value).toBeGreaterThanOrEqual(1)
+      expect(value).toBeLessThanOrEqual(6)
+    }
+  })
+
+  it('양끝(min·max)이 모두 실제로 나온다 — 반열림 구간이 아니다', () => {
+    const seen = new Set<number>()
+    for (let i = 0; i < 500; i += 1) seen.add(defaultCombatRng(1, 3))
+    expect(seen).toEqual(new Set([1, 2, 3]))
+  })
+
+  it('음수 구간도 균등하게 다룬다', () => {
+    for (let i = 0; i < 100; i += 1) {
+      const value = defaultCombatRng(-2, 2)
+      expect(value).toBeGreaterThanOrEqual(-2)
+      expect(value).toBeLessThanOrEqual(2)
+      expect(Number.isInteger(value)).toBe(true)
+    }
+  })
+
+  it('dice의 정수 계약을 만족한다 (throw 없이 합산된다)', () => {
+    const total = dice(3, 6, 2, defaultCombatRng)
+    expect(Number.isInteger(total)).toBe(true)
+    expect(total).toBeGreaterThanOrEqual(2 + 3)
+    expect(total).toBeLessThanOrEqual(2 + 18)
   })
 })

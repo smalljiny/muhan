@@ -327,7 +327,7 @@ describe('createCommandRegistry — world:move 조건부 등록', () => {
     const registry = createCommandRegistry(testChannelPort)
     const result = dispatch(registry, { type: 'world:move', direction: '동' }, actor, testPermission)
     expect(result.outcome).toBe('rejected')
-    expect(result.event).toMatchObject({ type: 'error', code: 'unknown_type' })
+    expect(result.events[0]).toMatchObject({ type: 'error', code: 'unknown_type' })
   })
 
   it('moveDeps를 주면 world:move가 move 핸들러로 디스패치된다', () => {
@@ -346,6 +346,6 @@ describe('createCommandRegistry — world:move 조건부 등록', () => {
     const result = dispatch(registry, { type: 'world:move', direction: '동' }, actor, testPermission)
 
     expect(result.outcome).toBe('handled')
-    expect(result.event).toEqual(ROOM_200_ARRIVAL_EVENT)
+    expect(result.events[0]).toEqual(ROOM_200_ARRIVAL_EVENT)
   })
 })

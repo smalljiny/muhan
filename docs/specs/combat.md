@@ -2,8 +2,8 @@
 
 > 무한의 4중 인라인 복제 근접 전투를 단일 `resolveAttack` 파이프로 통합하고(#82, E6a-1), 그 위에 몬스터
 > 특수공격 6종·상태이상 DoT·몬스터 사망 후처리(exp·정렬·전리품)·전투 AI 타깃선정/도주·#91 라운드순서
-> 충실화를 얹은(#83, E6a-2) 서버 전투 계층. 순수 로직·seam 레벨까지 구현하며, production boot 배선·라이브
-> dispatch는 #99가 소유한다.
+> 충실화를 얹은(#83, E6a-2) 서버 전투 계층. **플레이어 오프너(`combat:attack`)는 #121이 라이브 세션에
+> 연결했고**, 몬스터 틱 구동 라운드·특수공격 마커·DoT 조립은 여전히 #99가 소유한다.
 
 ## 개요
 
@@ -40,7 +40,7 @@ production boot에서 누가 이 seam들을 조립하는지(health-pulse xor 접
 
 | 모듈 | 책임 |
 |------|------|
-| `dice.ts` | `dice(n,s,p,rng)=p+Σⁿrng(1,s)`·`mdice(entity,rng)` 프리미티브. `CombatRng` seam(`(min,max)=>number`, mrand 관례)·`DiceSpec` 타입. `rng` 필수 파라미터. |
+| `dice.ts` | `dice(n,s,p,rng)=p+Σⁿrng(1,s)`·`mdice(entity,rng)` 프리미티브. `CombatRng` seam(`(min,max)=>number`, mrand 관례)·`DiceSpec` 타입. `rng` 필수 파라미터. 프로덕션 구현 `defaultCombatRng`도 여기 있다(#121 — 그전까지 저장소에 실 굴림 구현이 0건이었다). |
 | `constants.ts` | 튜닝 상수 — 크리티컬 배수(3~6)·명중 굴림 상한(플레이어 30·몬스터 20)·PvP 쿨다운 증분(+3)·MMAGIC 시전 확률(20%)·반격 쿨다운(기본 1초·실명 6초)·클래스 인덱스. |
 | `playerState.ts` | `PlayerCombatState`(라이브 플레이어 전투상태)·`WeaponDamage` 타입 + `toPlayerCombatState` 조립 헬퍼. `flags`는 합성하지 않고 **인자로 받는다**([character-flags.md](character-flags.md)). |
 | `combatRegistry.ts` | `CombatRegistry` — characterId-keyed 라이브 전투상태 인메모리 저장소(register/get/remove/has). |
@@ -56,8 +56,11 @@ production boot에서 누가 이 seam들을 조립하는지(health-pulse xor 접
 | `aggro.ts` | `selectAggroTarget`/`dexEvades`/`resolveAggro` — 선공 가중 랜덤 타깃선정 + 민첩 회피. |
 | `flee.ts` | `decideFlee` — PWIMPY/PFEARS 도주 결정(순수, boolean 반환). |
 | `combatTick.ts` | `createCombatTick(deps)` — `onCombatTick` 핸들러 팩토리(몬스터 근접 + MMAGIC seam + 적 플레이어 반격 + #91 라운드순서). |
-| `initiateAttack.ts` | 플레이어 오프너 `initiateAttack` — 개시 게이트(pre/post 무적 분해) + `resolveAttack` 1회 + death ripple + 적대 등록. |
-| `index.ts` | 공개 배럴 — dice/constants/playerState/combatRegistry/combatant/attackStats/pvp/enmity/resolveAttack/combatTick/initiateAttack. 6개 신규 순수 모듈(specialAttack·statusEffects·dot·deathDistribution·aggro·flee)은 내부 소비 전용이며 라이브 조립(#99) 전까지 배럴 표면에 없다. |
+| `initiateAttack.ts` | 플레이어 오프너 `initiateAttack` — 개시 게이트(pre/post 무적 분해) + `resolveAttack` 1회 + death ripple + 적대 등록. **#121이 `ws/handlers/attack.ts`에서 라이브 호출한다.** |
+| `assemblePlayerCombatState.ts` | `LiveCharacter` → `PlayerCombatState` 조립기(순수, #121). 장비 페어링·`projectEquipStats` 투영·WIELD 무기 해소를 묶어 전투 입력을 만든다. `flags`는 합성하지 않고 주입받는다. 이월 3필드 생산자 `toCarry`를 함께 export한다. |
+| `applyVitals.ts` | 전투상태 hp·mp를 캐릭터 문서에 병합(순수, #121). 하한 0 클램프를 소유한다 — `combatant.ts`의 피해 차감에 클램프가 없어 음수가 될 수 있는데 `characterSchema`와 와이어 `character:stats`가 둘 다 `min(0)`이라 음수는 조용한 flush 실패가 된다. 되쓰기 지점이 둘(공격 핸들러·세션 종료)이라 모듈로 뽑았다. |
+| `creatureLedgers.ts` | `createCreatureLedgers()` — `Map<instanceId, DamageLedger>` 라우터(#121). 아래 "ledger per-creature 스코핑"을 닫는다. |
+| `index.ts` | 공개 배럴 — dice(+`defaultCombatRng`)/constants/playerState/combatRegistry/combatant/attackStats/pvp/enmity/resolveAttack/combatTick/initiateAttack + #121이 더한 assemblePlayerCombatState·applyVitals·creatureLedgers. specialAttack·statusEffects·dot·aggro·flee는 여전히 내부 소비 전용이다(#99 대기). |
 
 `world/hexFlags.ts`(크리처/플레이어/오브젝트 hex flags — 특수공격 관련 M-flag 8개(브레스 3비트 포함, MBRETH/MBRWP1/MBRWP2/MENEDR/MPOISS/MDISEA/MDISIT/MBLNDR)·PPOISN/PDISEA/PBLIND·
 PWIMPY/PHIDDN/PINVIS/PDMINV·MAGGRE/MGAGGR/MEAGGR/MDINVI)와 `world/roomFlags.ts`(위험방·realm
@@ -296,7 +299,16 @@ characterId-keyed `CombatRegistry`로 관리한다.
   in-place 갱신하고, 레지스트리는 그 참조를 보유한다.
 - `nextAttackAt`은 몬스터의 `nextActionAt`과 구분되는 별도 필드(플레이어 세션 액터 타이머)다.
 
-세션 lifecycle 콜사이트 배선(월드 입장 시 register / 퇴장 시 remove)은 커넥션 계층 글루로 범위 밖이다.
+**세션 lifecycle 배선은 #121이 채웠다** — `ws/liveWorldWiring.ts`가 진입 코어의 `place`/`release`를 감싸
+월드 입장 시 `register`, 세션 종료 시 `remove`한다(`world/`가 `combat/`을 import하지 않는 규약을 지키려고
+`liveCharacterEntry`를 고치지 않고 래핑한다). 등록·제거를 같은 래퍼가 대칭으로 소유하므로 세션 수명
+어댑터는 제거를 하지 않는다.
+
+조립 입력은 `assemblePlayerCombatState(live, objectTemplates, flags, carry?)`가 만든다. 재조립 시점은
+**공격마다 + 세션 진입(`place`)** 둘이고, 진행 중 전투의 hp·mp·`nextAttackAt`은 `toCarry`로 이어받는다 —
+무효화 규칙 없이 레벨업·장비 변경이 다음 공격에 자동 반영되면서 진행 중 전투가 초기화되지 않는다.
+`place`에도 carry가 필요한 이유는 진입 코어가 멱등이라 재접속 시 조기 반환하는데, 래퍼가 무조건 덮으면
+`nextAttackAt`이 0으로 돌아가 재접속으로 쿨다운을 지울 수 있기 때문이다.
 
 ### seam 소비·제공
 
@@ -315,13 +327,20 @@ characterId-keyed `CombatRegistry`로 관리한다.
 **#99(production boot 배선)로 유예**:
 - MMAGIC 시전 seam은 채워졌으나(magic), 특수공격 마커(status 부여·exp 차감·장비용해)·DoT 재생 xor
   조립·aggro 실 등록·flee 실 이동 dispatch는 이 토픽이 계산까지만 하고 배선하지 않는다.
-- `distributeCreatureDeath`의 exp/alignment 실 누적·±1000 클램프·`drops`의 `room.items` push는 미배선.
-- **ledger per-creature 스코핑(BLOCKING)**: `DamageLedger = Map<attackerId, number>`는 attacker키만
-  갖는 defender-agnostic 구조다. `resolveAttack`이 모든 크리처 defender에 대해 이 단일 ledger에
-  누적하므로, multi-monster 전투에서는 플레이어가 몬스터 B에 준 데미지가 몬스터 A 사망 보상(exp·
-  alignment·groupkill 카운트)에 잘못 합산될 수 있다. `distributeCreatureDeath`는 전달된 ledger를
-  "이 죽은 크리처에 스코핑된 데미지"로 **신뢰만 하고 검증하지 않는다** — #99 라이브 조립이 반드시
-  per-creature ledger를 라우팅(또는 defender-scoped 뷰를 전달)해야 하는 구조적 전제다.
+- `distributeCreatureDeath`의 **exp 실 누적은 #121이 배선했다**(`ws/assembleDeathSeams.ts` — 라이브
+  레지스트리에 반영). `alignmentDelta`는 여전히 미적용이다 — 현 `alignment` 값역이 `[0,2]`(#123)라 델타를
+  더하면 학습 게이트가 쓰는 1|2 인코딩이 깨진다. ±1000 클램프도 #123 대기. `drops`의 `room.items` push는
+  미배선이며 의도적이다 — 방 바닥 아이템을 주울 수단이 없어(`objectOwnerSchema`에 room owner 없음) 넣으면
+  못 줍는 아이템만 쌓인다.
+- ~~**ledger per-creature 스코핑(BLOCKING)**~~ — **#121이 해소했다.** `DamageLedger` 타입은 그대로 두고
+  배선이 `creatureLedgers.ts`(`Map<instanceId, DamageLedger>`)로 라우팅한다. `distributeCreatureDeath`가
+  전달된 ledger를 "이 죽은 크리처에 스코핑된 데미지"로 신뢰하는 전제는 유지되며, 이제 호출자가 그 전제를
+  실제로 지킨다. 타입 자체를 defender-scoped로 바꾸는 것은 `enmity`·`resolveAttack`·`combatTick`까지
+  파급되므로 여전히 #99 소관이다.
+
+  남은 갭: `discard`를 부르는 곳이 사망 경로 하나뿐이라, 공격받다 **배회로 방을 떠난** 크리처의 원장은
+  회수되지 않는다(`instanceId`가 방별 monotonic이라 키 재사용도 없어 Map이 단조 증가한다). 비사망 소멸
+  seam이 없어 지금 닫을 수 없고 **#147**이 소유한다.
 - 건강 펄스(health-pulse) xor 조립 위치(누가 `resolvePlayerDot`과 progression 재생 provider를 접합
   하는가)는 #99 또는 progression 슬롯 개정이 결정한다.
 

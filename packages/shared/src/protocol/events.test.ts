@@ -652,6 +652,86 @@ describe('serverEventSchema (server→client 봉투)', () => {
     })
   })
 
+  describe('character:stats', () => {
+    /** 스탯 스냅샷 통지의 최소 유효 payload. 각 케이스가 필요한 필드만 덮어쓴다. */
+    const validStats = {
+      type: 'character:stats',
+      hpCurrent: 12,
+      hpMax: 30,
+      mpCurrent: 4,
+      mpMax: 10,
+      experience: 250,
+      level: 3,
+    }
+
+    it('6필드가 채워지면 통과한다', () => {
+      const parsed = serverEventSchema.safeParse(validStats)
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'character:stats') {
+        expect(parsed.data.hpCurrent).toBe(12)
+        expect(parsed.data.hpMax).toBe(30)
+        expect(parsed.data.mpCurrent).toBe(4)
+        expect(parsed.data.mpMax).toBe(10)
+        expect(parsed.data.experience).toBe(250)
+        expect(parsed.data.level).toBe(3)
+      }
+    })
+
+    it('경계값은 통과한다 (자원 0, level 1)', () => {
+      const boundary = {
+        ...validStats,
+        hpCurrent: 0,
+        mpCurrent: 0,
+        hpMax: 0,
+        mpMax: 0,
+        experience: 0,
+        level: 1,
+      }
+      expect(serverEventSchema.safeParse(boundary).success).toBe(true)
+    })
+
+    // 거부 케이스는 형식이 같아 표로 묶는다(progress:trained 선례). 하한은 characterSchema를 미러한다.
+    it.each([
+      ['level 0', { level: 0 }],
+      ['experience -1', { experience: -1 }],
+      ['hpCurrent -1', { hpCurrent: -1 }],
+      ['hpMax -1', { hpMax: -1 }],
+      ['mpCurrent -1', { mpCurrent: -1 }],
+      ['mpMax -1', { mpMax: -1 }],
+      ['level 비정수', { level: 1.5 }],
+      // 상태 이벤트라 상관 키를 싣지 않는다(progress:trained 선례) — strict가 막는다.
+      ['correlationId 동승', { correlationId: 'c1' }],
+      ['알 수 없는 키', { extra: true }],
+    ])('%s이면 거부한다', (_label, patch) => {
+      expect(serverEventSchema.safeParse({ ...validStats, ...patch }).success).toBe(false)
+    })
+
+    it('필수 필드가 빠지면 거부한다', () => {
+      const { mpMax: _mpMax, ...withoutMpMax } = validStats
+      expect(serverEventSchema.safeParse(withoutMpMax).success).toBe(false)
+    })
+
+    /**
+     * 영속 스키마와의 하한 드리프트 차단 — `progress:studied`의 spells 테스트와 같은 관용구다.
+     * 와이어 하한은 `characterSchema`의 대응 필드를 미러한다고 주석이 약속하는데, 리터럴 0을
+     * 리터럴 0과 대조하는 테스트는 그 약속을 지키지 못한다. 같은 입력을 양쪽에 통과시켜
+     * accept/reject가 일치하는지 본다.
+     *
+     * `hpMax`·`mpMax`는 대상이 아니다 — `characterSchema`에 대응 필드가 없고(compute-on-read),
+     * 미러할 출처가 없어 자원 하한 0만 두기 때문이다.
+     */
+    it.each(['hpCurrent', 'mpCurrent', 'experience', 'level'] as const)(
+      '%s 하한이 characterSchema와 일치한다 (드리프트 차단)',
+      (field) => {
+        const persisted = characterSchema.shape[field]
+        for (const value of [-1, 0, 1, 2]) {
+          const wireAccepts = serverEventSchema.safeParse({ ...validStats, [field]: value }).success
+          expect(wireAccepts).toBe(persisted.safeParse(value).success)
+        }
+      },
+    )
+  })
+
   it('command 전용 type(debug:echo)을 거부한다', () => {
     expect(serverEventSchema.safeParse({ type: 'debug:echo', text: '핑' }).success).toBe(false)
   })

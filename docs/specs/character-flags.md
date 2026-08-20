@@ -144,6 +144,17 @@ toPlayerCombatState(character, effectiveContext, weaponDamage, flags: string): P
 
 **임계값을 현 값역에 맞춰 재조정하지 않는다.** 오라클 상수를 보존하면 E6가 `-1000..+1000`을 도입할 때 **코드 변경 없이** 네 게이트가 동시에 발화한다. "고치면" 오라클 상수가 소실되고 E6에서 값 재해석이 필요해진다. 이를 "정렬 게이트 수정"으로 보고하지 않는다.
 
+### 미영속 6종이 만드는 구조적 미발화 (#121 관측)
+
+`composeCharacterFlags`는 **타이머 보유 효과 전용**이라 `PHIDDN`·`PDMINV`·`PWIMPY`·`PCHAOS`·`PFAMIL`·`PUPDMG` 6종에 영원히 0을 반환한다(위 파티션 표). #121이 전투를 배선하면서 이 성질이 실제 규칙을 죽이는 지점 두 곳이 드러났다.
+
+| 소비 지점 | 읽는 비트 | 결과 |
+|---|---|---|
+| `combat/resolveAttack.ts`의 `multiAttackCount` | `PUPDMG` | 초인 다중공격이 **배선된 순간부터 항상 1타**다. 값이 틀린 게 아니라 입력이 없다. 와이어 `combat:attacked.attacks`는 배열 형태를 유지해 영속화가 붙는 날 프로토콜을 다시 올리지 않게 한다 |
+| `combat/pvp.ts`의 `checkPvpGate` | `PCHAOS`·`PFAMIL` | PvP 동의 게이트가 **영구 거부**된다. #121은 이 게이트에 닿기 전에 사람 대상을 무조건 거부하는 fail-closed 설계를 택했다 — 깨진 동의 게이트를 유일 출처로 배선하면 거부가 조용히 굳고 회귀 테스트에도 잡히지 않는다 |
+
+두 경우 모두 **동작을 바꾸지 않고 소비 지점에 기록만 남겼다.** 6종 영속화는 별도 이슈 소관이며, 붙는 시점에 두 규칙이 함께 살아난다.
+
 ### `ActorContext.flags` 타입
 
 `readonly flags?: readonly string[]` → `readonly flags?: string`으로 정정했다. 이 포트의 플래그 정본 표현은 hex **문자열**이며 `F_ISSET(hex, bit)`로 판독한다 — PBLIND(42)·PFEARS(43)·PSILNC(44)가 비트 인덱스 > 31이라 number bitfield로도 담을 수 없다.
@@ -152,7 +163,7 @@ toPlayerCombatState(character, effectiveContext, weaponDamage, flags: string): P
 
 ## 제약사항
 
-- **명령 배선 미포함** — teach(#119)·study(#120)·attack(#121) 명령의 파싱·대상 해소·broadcast·응답 메시지는 각 배선 토픽 소관이다. 이 계층은 그들이 소비할 입력원과 합성 경로만 세운다.
+- **명령 배선 미포함** — teach(#119)·cast(#122) 명령의 파싱·대상 해소·broadcast·응답 메시지는 각 배선 토픽 소관이다. 이 계층은 그들이 소비할 입력원과 합성 경로만 세운다. study(#120)·attack(#121)은 배선이 끝났고, 실제로 이 계층의 `composeCharacterFlags`를 소비한다 — attack 핸들러가 `now` 1회로 합성한 스냅샷을 대상 해소자·전투상태 조립기·실명 판정 셋에 같은 값으로 넘긴다(두 번 합성하면 두 `now()` 사이 만료로 판정이 갈린다).
 - **플레이어 대상 디버프 부여 경로 미배선** — `magic/debuffEffects.ts`는 `target.kind !== 'creature'`에서 전면 유예 중이다. 플레이어에게 침묵·공포를 **거는** writer는 이 계층 밖이며, 여기서는 값이 안착할 영속 필드와 판독 경로만 제공한다.
 - **미소유 비트의 영속처 부재** — PHIDDN·PDMINV·PWIMPY·PCHAOS·PFAMIL·PUPDMG. 위 봉쇄 경고 참조.
 - **E6 성향 시스템 미포함** — alignment 값 체계 확장, 성향 증감 규칙(살해·PvP), 4개 게이트의 실발화는 [#123](https://github.com/smalljiny/muhan/issues/123) 소관이다.

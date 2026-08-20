@@ -13,6 +13,7 @@ import {
 import { SaveEngine } from '../save/saveEngine.js'
 import { OBJECT_DELETIONS_COLLECTION } from '../save/markObjectDeleted.js'
 import type { SaveLogger } from '../save/logger.js'
+import { normalizeHandlerEvents } from './router.js'
 import { FakeClock } from '../util/clock.testutil.js'
 import { DocumentNotFoundError } from '../repo/types.js'
 import { characterPatchSchema } from '../repo/characterRepository.js'
@@ -34,6 +35,7 @@ import { createMoveHandler } from './handlers/move.js'
 import { createLiveWorldWiring } from './liveWorldWiring.js'
 import type { LiveWorldWiring, LiveWorldWiringBundle } from './liveWorldWiring.js'
 import type { ActorContext } from './actorContext.js'
+import { createInstanceIdAllocator } from '../world/spawn.js'
 
 /**
  * #124 회귀 스위트가 공유하는 시드·픽스처·하네스 — `reconnectRevert.regression.test.ts`와
@@ -368,6 +370,9 @@ export function buildHarness(options: { capacity?: number } = {}): Harness {
       hydrateInventory: (id) => characterRepo.hydrateInventory(id),
     },
     objectTemplates: OBJECT_TEMPLATES,
+    // 사망 seam 원재료 — 이 하네스는 소환·리스폰 경로를 검증하지 않아 빈 인덱스와 신규 발급기를 싣는다.
+    spawnTemplates: new Map(),
+    alloc: createInstanceIdAllocator(),
     markDirty: (collection, id, snapshot) => saveEngine.markDirty(collection, id, snapshot),
     // 관측만 얹고 값은 손대지 않는다 — hydrate가 보는 pending과 테스트가 보는 pending이 같은 객체다.
     peekPending: (collection, id) => {
@@ -403,9 +408,12 @@ export function buildHarness(options: { capacity?: number } = {}): Harness {
     saveLogger,
     callOrder,
     peekLog,
-    study: (command) => studyHandler(command, ACTOR),
-    train: (command) => trainHandler(command, ACTOR),
-    move: (command) => moveHandler(command, ACTOR),
+    // 이 하네스는 dispatch를 거치지 않고 핸들러를 직접 부르므로 정규화를 직접 한다. 캐스트로 좁히지
+    // 않는 것이 load-bearing이다 — 캐스트는 "이 핸들러는 이벤트를 하나만 낸다"는 단언인데, 성장 명령이
+    // 스탯 통지를 덧붙이는 순간 거짓이 된다. 첫 이벤트를 집는 것이 이 하네스가 뜻하는 바다(도메인 이벤트).
+    study: (command) => normalizeHandlerEvents(studyHandler(command, ACTOR))[0],
+    train: (command) => normalizeHandlerEvents(trainHandler(command, ACTOR))[0],
+    move: (command) => normalizeHandlerEvents(moveHandler(command, ACTOR))[0],
   }
 }
 
