@@ -35,6 +35,7 @@ import { createMoveHandler } from './handlers/move.js'
 import { createLiveWorldWiring } from './liveWorldWiring.js'
 import type { LiveWorldWiring, LiveWorldWiringBundle } from './liveWorldWiring.js'
 import type { ActorContext } from './actorContext.js'
+import { createInstanceIdAllocator } from '../world/spawn.js'
 
 /**
  * #124 회귀 스위트가 공유하는 시드·픽스처·하네스 — `reconnectRevert.regression.test.ts`와
@@ -369,6 +370,9 @@ export function buildHarness(options: { capacity?: number } = {}): Harness {
       hydrateInventory: (id) => characterRepo.hydrateInventory(id),
     },
     objectTemplates: OBJECT_TEMPLATES,
+    // 사망 seam 원재료 — 이 하네스는 소환·리스폰 경로를 검증하지 않아 빈 인덱스와 신규 발급기를 싣는다.
+    spawnTemplates: new Map(),
+    alloc: createInstanceIdAllocator(),
     markDirty: (collection, id, snapshot) => saveEngine.markDirty(collection, id, snapshot),
     // 관측만 얹고 값은 손대지 않는다 — hydrate가 보는 pending과 테스트가 보는 pending이 같은 객체다.
     peekPending: (collection, id) => {

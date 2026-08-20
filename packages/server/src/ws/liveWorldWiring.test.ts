@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Character, RoomNode, ServerEvent } from 'shared'
 import { createLiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
+import { createInstanceIdAllocator } from '../world/spawn.js'
 import { defaultFleeRng } from '../world/tryMove.js'
 import {
   makeExitTo,
@@ -108,6 +109,9 @@ function makeBundle(worldGraph: Map<number, RoomNode>, character?: Character): B
     liveRegistry,
     characterRepo: { findById, hydrateInventory },
     objectTemplates,
+    // 사망 seam 원재료 — 이 하네스는 소환·리스폰 경로를 검증하지 않아 빈 인덱스와 신규 발급기를 싣는다.
+    spawnTemplates: new Map(),
+    alloc: createInstanceIdAllocator(),
     markDirty,
     peekPending,
     currentHour: () => 12,

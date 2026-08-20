@@ -3,6 +3,7 @@ import type { Character, RoomNode } from 'shared'
 import { createLiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
 import { createLiveCharacterEntry } from '../world/liveCharacterEntry.js'
 import { createMarkCharacterDirty } from '../world/markCharacterDirty.js'
+import { createCombatRegistry } from '../combat/combatRegistry.js'
 import { createLiveSessionLifecycleAdapter } from './liveSessionLifecycleAdapter.js'
 import type { DisconnectReason } from './sessionRegistry.js'
 
@@ -107,6 +108,7 @@ describe('createLiveSessionLifecycleAdapter', () => {
         liveRegistry: fx.registry,
         release: (id) => fx.entry.release(id),
         markCharacterDirty: createMarkCharacterDirty(markDirty),
+        combatRegistry: createCombatRegistry(),
       })
 
       adapter.onSessionEnd({ accountId: 'acct-1', characterId: 'char-1', reason })
@@ -136,6 +138,7 @@ describe('createLiveSessionLifecycleAdapter', () => {
       liveRegistry: fx.registry,
       release: (id) => fx.entry.release(id),
       markCharacterDirty: createMarkCharacterDirty(markDirty),
+      combatRegistry: createCombatRegistry(),
     })
 
     adapter.onSessionEnd({ accountId: 'acct-1', characterId: 'char-1', reason: 'graceExpired' })
@@ -170,6 +173,7 @@ describe('createLiveSessionLifecycleAdapter', () => {
       liveRegistry: fx.registry,
       release: (id) => fx.entry.release(id),
       markCharacterDirty: createMarkCharacterDirty(markDirty),
+      combatRegistry: createCombatRegistry(),
     })
 
     adapter.onSessionEnd({ accountId: 'acct-1', characterId: 'char-1', reason: 'idleTimeout' })
@@ -190,6 +194,7 @@ describe('createLiveSessionLifecycleAdapter', () => {
       liveRegistry: fx.registry,
       release: (id) => fx.entry.release(id),
       markCharacterDirty: createMarkCharacterDirty(markDirty),
+      combatRegistry: createCombatRegistry(),
     })
 
     expect(() =>

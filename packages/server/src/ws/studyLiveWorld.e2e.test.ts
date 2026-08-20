@@ -29,6 +29,7 @@ import type { BankRepository } from '../repo/bankRepository.js'
 import type { WorldRepository } from '../repo/worldRepository.js'
 import type { ObjectRepository } from '../repo/objectRepository.js'
 import type { LiveWorldWiringBundle } from './liveWorldWiring.js'
+import { createInstanceIdAllocator } from '../world/spawn.js'
 import {
   startTestServer,
   newAuthedClient,
@@ -297,6 +298,9 @@ function buildHarness(inventory: readonly ObjectInstance[] = defaultInventory())
     },
     // 정본 인덱스 — boot(`index.ts`)가 싣는 것과 같은 `loadObjectTemplates()` 산출물이다.
     objectTemplates: OBJECT_TEMPLATES,
+    // 사망 seam 원재료 — 이 하네스는 소환·리스폰 경로를 검증하지 않아 빈 인덱스와 신규 발급기를 싣는다.
+    spawnTemplates: new Map(),
+    alloc: createInstanceIdAllocator(),
     markDirty: (collection, id, snapshot) => saveEngine.markDirty(collection, id, snapshot),
     peekPending: (collection, id) => saveEngine.peekPending(collection, id),
     // 이 흐름은 currentHour를 소비하지 않는다(학습 경로에 방·시간 게이트가 없다) — 묶음 필수 필드

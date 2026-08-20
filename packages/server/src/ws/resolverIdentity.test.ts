@@ -15,6 +15,7 @@ vi.mock('../world/roomTargetResolvers.js', async (importOriginal) => {
 
 import { createRoomPlayerResolver } from '../world/roomTargetResolvers.js'
 import { createLiveWorldWiring, type LiveWorldWiringBundle } from './liveWorldWiring.js'
+import { createInstanceIdAllocator } from '../world/spawn.js'
 
 /**
  * 공유 불변식 #3 — 방 스코프 플레이어 해소자가 **기존 `resolveCharacterName` 인스턴스**를 배후에 둔다.
@@ -33,6 +34,9 @@ describe('resolveRoomPlayer 배선 — 이름 해소자 인스턴스 공유 (불
         hydrateInventory: vi.fn(() => Promise.resolve([])),
       },
       objectTemplates: new Map(),
+      // 사망 seam 원재료 — 이 하네스는 소환·리스폰 경로를 검증하지 않아 빈 인덱스와 신규 발급기를 싣는다.
+      spawnTemplates: new Map(),
+      alloc: createInstanceIdAllocator(),
       markDirty: vi.fn(),
       peekPending: () => undefined,
       currentHour: () => 12,

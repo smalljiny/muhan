@@ -10,6 +10,7 @@ import { SEED_ACCOUNT_ID, SEED_CHARACTER_ID } from '../auth/seedSessionAuth.test
 import type { ConnectionContext } from './connection.js'
 import type { SessionLifecyclePort } from './sessionLifecyclePort.js'
 import type { LiveWorldWiringBundle } from './liveWorldWiring.js'
+import { createInstanceIdAllocator } from '../world/spawn.js'
 import {
   buildSeededApp,
   injectAuthedWS,
@@ -82,6 +83,9 @@ function makeBundle(): BundleHarness {
       hydrateInventory: vi.fn(() => Promise.resolve([])),
     },
     objectTemplates: new Map(),
+    // 사망 seam 원재료 — 이 하네스는 소환·리스폰 경로를 검증하지 않아 빈 인덱스와 신규 발급기를 싣는다.
+    spawnTemplates: new Map(),
+    alloc: createInstanceIdAllocator(),
     markDirty,
     peekPending: () => undefined,
     currentHour: () => 12,
@@ -214,6 +218,9 @@ function makeEvictHarness(): EvictHarness {
       hydrateInventory: vi.fn(() => Promise.resolve([])),
     },
     objectTemplates: new Map(),
+    // 사망 seam 원재료 — 이 하네스는 소환·리스폰 경로를 검증하지 않아 빈 인덱스와 신규 발급기를 싣는다.
+    spawnTemplates: new Map(),
+    alloc: createInstanceIdAllocator(),
     markDirty,
     peekPending: () => undefined,
     currentHour: () => 12, // 이동 시간 게이트 통과(밤 게이트 회피)

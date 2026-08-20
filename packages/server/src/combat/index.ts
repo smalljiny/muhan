@@ -21,6 +21,7 @@ export {
 } from './constants.js'
 export { toPlayerCombatState } from './playerState.js'
 export type { PlayerCombatState, WeaponDamage } from './playerState.js'
+export { applyVitals } from './applyVitals.js'
 export { assemblePlayerCombatState } from './assemblePlayerCombatState.js'
 export type { CombatStateCarry } from './assemblePlayerCombatState.js'
 export { createCombatRegistry } from './combatRegistry.js'

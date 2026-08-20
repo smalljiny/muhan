@@ -4,6 +4,7 @@ import { createChatHandler } from './handlers/chat.js'
 import { createMoveHandler, type MoveHandlerDeps } from './handlers/move.js'
 import { createTrainHandler, type TrainHandlerDeps } from './handlers/train.js'
 import { createStudyHandler, type StudyHandlerDeps } from './handlers/study.js'
+import { createAttackHandler, type AttackHandlerDeps } from './handlers/attack.js'
 import { readStringField } from './frame.js'
 import { makeErrorEvent } from './serverEvent.js'
 import type { ActorContext } from './actorContext.js'
@@ -43,6 +44,7 @@ export interface GameCommandDeps {
   readonly move?: MoveHandlerDeps
   readonly train?: TrainHandlerDeps
   readonly study?: StudyHandlerDeps
+  readonly attack?: AttackHandlerDeps
 }
 
 /**
@@ -85,6 +87,9 @@ export function createCommandRegistry(
   }
   if (deps?.study !== undefined) {
     registry.set('progress:study', createStudyHandler(deps.study))
+  }
+  if (deps?.attack !== undefined) {
+    registry.set('combat:attack', createAttackHandler(deps.attack))
   }
   return registry
 }

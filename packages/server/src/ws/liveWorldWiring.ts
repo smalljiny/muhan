@@ -1,7 +1,17 @@
 import type { Character, ObjectInstance, RoomNode, ServerEvent } from 'shared'
 import type { ObjectTemplateIndex } from '../items/objectTemplate.js'
-import { createLiveCharacterEntry, type EntryLogger } from '../world/liveCharacterEntry.js'
-import type { LiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
+import {
+  createLiveCharacterEntry,
+  type EntryLogger,
+  type LiveCharacterEntry,
+} from '../world/liveCharacterEntry.js'
+import type { LiveCharacter, LiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
+import type { InstanceIdAllocator, SpawnTemplateIndex } from '../world/spawn.js'
+import { composeCharacterFlags } from '../character/flags.js'
+import { assemblePlayerCombatState } from '../combat/assemblePlayerCombatState.js'
+import { createCombatRegistry, type CombatRegistry } from '../combat/combatRegistry.js'
+import { createCreatureLedgers } from '../combat/creatureLedgers.js'
+import { defaultCombatRng } from '../combat/dice.js'
 import {
   CHARACTERS_COLLECTION,
   createMarkCharacterDirty,
@@ -20,6 +30,8 @@ import type { TrainHandlerDeps } from './handlers/train.js'
 import type { StudyHandlerDeps } from './handlers/study.js'
 import { createRoomChannelAdapter } from './roomChannelAdapter.js'
 import { createLiveSessionLifecycleAdapter } from './liveSessionLifecycleAdapter.js'
+import { assembleDeathSeams } from './assembleDeathSeams.js'
+import type { AttackHandlerDeps } from './handlers/attack.js'
 import type { LiveWorldBinding } from './liveWorldBinding.js'
 import type { ChannelPort, ChannelDeliveryContext } from './channelPort.js'
 import type { SessionLifecyclePort } from './sessionLifecyclePort.js'
@@ -75,6 +87,25 @@ export interface LiveWorldWiringBundle {
    * 소비자는 인스턴스↔템플릿 결합과 인벤 스코프 이름 해소(#120)다.
    */
   readonly objectTemplates: ObjectTemplateIndex
+  /**
+   * 크리처 스폰 템플릿 인덱스(몹번호 → 템플릿). 사망 seam의 MSUMMO 소환·MPERMT 리스폰 타이머 리셋이
+   * 소비한다(`CreatureDeathDeps.templates`).
+   *
+   * boot는 `worldRuntime.templates`를 **그대로** 싣는다. 사망 seam이 자기 인덱스를 따로 로드하면
+   * 같은 몹번호가 두 객체로 갈라져 perm 슬롯 이름 매칭(slot.misc → template.name)이 스폰 경로와
+   * 다른 사본을 보게 된다 — creatures.json은 부팅 고정 콘텐츠라 사본을 둘 이유가 없다.
+   */
+  readonly spawnTemplates: SpawnTemplateIndex
+  /**
+   * 방별 monotonic instanceId 발급기(D7). 사망 seam의 MSUMMO 소환이 소비한다(`CreatureDeathDeps.alloc`).
+   *
+   * boot는 `worldRuntime.alloc`을 **그대로** 싣는다 — perm 리스폰·random 스폰·invasion 3경로가 이미
+   * 공유하는 그 인스턴스여야 소환 크리처 instanceId가 충돌하지 않는다. 별도 발급기를 만들면 방별
+   * 카운터가 `room.creatures.length`에서 다시 시작해(`createInstanceIdAllocator`의 lazy fallback)
+   * 살아 있는 크리처와 같은 `${roomId}:c${idx}`를 발급하고, 그때부터 지목·원장·제거가 엉뚱한 개체를
+   * 가리킨다. 예외도 로그도 남지 않는 종류의 사고다.
+   */
+  readonly alloc: InstanceIdAllocator
   /** 변경 엔티티 side registry 기록 — 이동 write-behind·종료 수렴이 소비한다(실 flush는 저장 스케줄러). */
   readonly markDirty: (collection: string, id: string, snapshot: unknown) => void
   /**
@@ -117,7 +148,18 @@ export interface LiveWorldWiring {
    * 신규 원재료는 `now` 하나뿐이고, 나머지는 기존 seam(레지스트리·objectTemplates·markDirty 파생)의 조합이다.
    */
   readonly studyDeps: StudyHandlerDeps
-  /** 세션 종료 수명 어댑터(markCharacterDirty → release). liveWorldBinding.entry.release와 같은 인스턴스를 배후에 둔다. */
+  /**
+   * combat:attack 배선용 공격 의존. 이 팩토리가 사망 seam·원장·전투 레지스트리를 **1회씩** 조립해
+   * 싣고, 나머지 seam(방·대상 해소자·이름 해소자·markCharacterDirty)은 위에서 만든 인스턴스를
+   * 그대로 재사용한다(#3).
+   */
+  readonly attackDeps: AttackHandlerDeps
+  /**
+   * 라이브 전투상태 레지스트리(단일 인스턴스). 진입(place 시 등록)·공격 핸들러(조회·교체 등록)·
+   * 세션 종료(되쓰기 후 제거)가 같은 참조를 본다. 세 소비자가 갈리면 hp가 갈래마다 다르게 보인다.
+   */
+  readonly combatRegistry: CombatRegistry
+  /** 세션 종료 수명 어댑터(전투상태 되쓰기 → markCharacterDirty → release → 전투상태 제거). liveWorldBinding.entry.release와 같은 인스턴스를 배후에 둔다. */
   readonly lifecyclePort: SessionLifecyclePort
   /**
    * characters 전체 문서 스냅샷 seam(bundle.markDirty를 1회 감싼 단일 인스턴스). moveDeps·lifecyclePort가
@@ -163,10 +205,14 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
 
   // characters pending 조회 seam — 원시 `peekPending`을 'characters'로 **1회** 좁힌다(#3, markCharacterDirty 미러).
   // 좁힘이 여러 곳에 흩어지면 컬렉션 리터럴 오타가 조용한 "pending 없음"이 되어 #124가 되살아난다.
-  const peekPendingCharacter = (id: string): unknown => bundle.peekPending(CHARACTERS_COLLECTION, id)
+  const peekPendingCharacter = (id: string): unknown =>
+    bundle.peekPending(CHARACTERS_COLLECTION, id)
+
+  // 라이브 전투상태 레지스트리 — **1회** 생성해 진입(place)·공격 핸들러·세션 종료가 공유한다(#3).
+  const combatRegistry = createCombatRegistry()
 
   // 진입 코어 — 단일 인스턴스로 생성해 liveWorldBinding·lifecyclePort가 공유한다(#3).
-  const entry = createLiveCharacterEntry({
+  const entryCore = createLiveCharacterEntry({
     characterRepo: bundle.characterRepo,
     liveRegistry: bundle.liveRegistry,
     resolveRoom: resolveRoomById,
@@ -175,6 +221,52 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     peekPendingCharacter,
     logger: bundle.logger,
   })
+
+  /**
+   * 진입 코어에 전투상태 등록을 덧씌운 entry — 배치 직후 전투상태를 조립해 레지스트리에 넣는다.
+   *
+   * **왜 `liveCharacterEntry`를 직접 고치지 않는가**: `world/`는 `combat/`을 import하지 않는다
+   * (스펙 §3.2 — `liveCharacterRegistry`·`assemblePlayerCombatState`의 JSDoc이 같은 규약을 명시한다).
+   * 진입 코어에 조립기를 넣으면 그 규약이 깨지고 world 계층이 전투 계층을 역참조하게 된다. 그래서
+   * 배선 계층인 이 팩토리가 감싼다 — 방향은 ws→world·ws→combat로 유지되고, 두 도메인은 서로를 모른다.
+   *
+   * flags는 `composeCharacterFlags(character, now)`로 여기서 합성한다(조립기는 hex를 인자로만 받는
+   * 순수 함수다 — `playerState.ts`의 주입 규약).
+   *
+   * ★ **등록된 상태가 있으면 hp·mp·nextAttackAt을 carry로 이어받는다**(공격 핸들러의 D4와 같은 규칙).
+   * `entryCore.place`는 **멱등**이라 이미 점유자면 조기 반환하는데(`liveCharacterEntry.ts:218`),
+   * 래퍼가 그 멱등성을 따라가지 않고 무조건 새 상태를 덮으면 **재접속이 진행 중 전투를 초기화한다** —
+   * `nextAttackAt`이 0으로 돌아가 공격 쿨다운이 지워지고(재접속으로 연타 가능), 몬스터 반격이
+   * 연결되는 시점(#99)에는 hp가 문서 값으로 복귀해 "재접속하면 회복"이 된다. grace 창 재접속은
+   * 실재 경로다(#124 회귀 스위트가 그 창을 위해 존재한다).
+   *
+   * 최초 입장(등록 상태 없음)은 carry 없이 조립한다 — 캐릭터 문서의 hp·mp가 초기값이 되고
+   * `nextAttackAt`은 0이라 첫 공격에 쿨다운 게이트가 없다.
+   */
+  const entry: LiveCharacterEntry = {
+    ...entryCore,
+    place: (live: LiveCharacter) => {
+      entryCore.place(live)
+      const registered = combatRegistry.get(live.character._id)
+      const carry =
+        registered === undefined
+          ? undefined
+          : {
+              hpCurrent: registered.hpCurrent,
+              mpCurrent: registered.mpCurrent,
+              nextAttackAt: registered.nextAttackAt,
+            }
+      const flags = composeCharacterFlags(live.character, bundle.now())
+      combatRegistry.register(assemblePlayerCombatState(live, bundle.objectTemplates, flags, carry))
+    },
+    // 등록·제거를 같은 래퍼가 대칭으로 소유한다 — 제거를 lifecyclePort에만 두면 `entry.release`를
+    // 포트 밖에서 부르는 호출자가 생겼을 때 전투상태가 남는다. `remove`는 미등록에 no-op이라
+    // 어댑터의 제거와 중복돼도 무해하다.
+    release: (characterId: string) => {
+      entryCore.release(characterId)
+      combatRegistry.remove(characterId)
+    },
+  }
 
   // 점유자 이름 해소자 — **1회 생성**해 진입 seam(liveWorldBinding)과 이동 seam(moveDeps)이 같은 참조를
   // 공유한다(#3). 두 번 만들면 두 발화 경로가 서로 다른 클로저를 쓰게 되어 나중에 해소 규칙이 갈릴 수 있다.
@@ -211,10 +303,12 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
   }
 
   // 세션 종료 수명 어댑터 — release는 진입 코어의 것을 그대로 주입해 같은 레지스트리/방을 정리한다(#3).
+  // combatRegistry도 같은 인스턴스를 주어 종료 시 전투로 깎인 hp·mp가 캐릭터 문서로 되쓰인다.
   const lifecyclePort = createLiveSessionLifecycleAdapter({
     liveRegistry: bundle.liveRegistry,
     release: (characterId) => entry.release(characterId),
     markCharacterDirty,
+    combatRegistry,
   })
 
   // 발화자 방 해소자(by-character): registry로 라이브 엔트리를 찾고 currentRoom(단일 출처)으로 방을 얻는다.
@@ -242,11 +336,47 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     markObjectDeleted,
   }
 
+  // 크리처별 데미지 원장 라우터 — **1회** 생성해 공격 누적(attackDeps.ledgers)과 사망 분배
+  // (fireCreatureDeath 내부)가 같은 참조를 쓴다. 두 인스턴스로 갈리면 사망 시점에 읽는 원장이 비어
+  // 기여자 게이트(`ledger.get(id) > 0`)가 전부 탈락하고 보상이 조용히 0이 된다(assembleDeathSeams 헤더).
+  const ledgers = createCreatureLedgers()
+
+  // 사망 seam — **1회** 조립한다. 소환·리스폰이 쓰는 alloc·templates는 묶음이 실어 준 worldRuntime
+  // 인스턴스를 그대로 넘긴다(bundle.alloc JSDoc — instanceId 충돌 방지).
+  const deathSeams = assembleDeathSeams({
+    liveRegistry: bundle.liveRegistry,
+    ledgers,
+    markCharacterDirty,
+    creatureDeathDeps: { templates: bundle.spawnTemplates, alloc: bundle.alloc },
+    logger: bundle.logger,
+  })
+
+  // 공격 의존 — 신규 원재료는 없다. 사망 seam·원장·전투 레지스트리는 위에서 1회씩 만든 것이고,
+  // 나머지는 전부 기존 인스턴스의 재사용이다(#3). 특히 `resolveCharacterName`은 world:room 두
+  // 생산자와 같은 참조여야 "보이는 이름"과 사망 후 방 재투영의 이름이 갈리지 않는다.
+  const attackDeps: AttackHandlerDeps = {
+    ...deathSeams,
+    liveRegistry: bundle.liveRegistry,
+    combatRegistry,
+    objectTemplates: bundle.objectTemplates,
+    resolveRoom,
+    resolveRoomCreature,
+    resolveRoomPlayer,
+    resolveCharacterName,
+    now: bundle.now,
+    // 굴림 seam — 전투 모듈은 순수 함수로 남고 프로덕션 배선이 실 rng를 꽂는다(attack.ts 헤더).
+    rng: defaultCombatRng,
+    ledgers,
+    markCharacterDirty,
+  }
+
   return {
     liveWorldBinding,
     moveDeps,
     trainDeps,
     studyDeps,
+    attackDeps,
+    combatRegistry,
     lifecyclePort,
     resolveRoom,
     markCharacterDirty,

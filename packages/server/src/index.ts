@@ -37,7 +37,9 @@ function buildFirebaseSessionAuth(
 ): FirebaseSessionAuthAdapter {
   const projectId = config.FIREBASE_PROJECT_ID
   if (projectId === undefined || projectId.length === 0) {
-    throw new Error('FIREBASE_PROJECT_ID가 필요하다 (DEV_LOGIN_ENABLED=false 프로덕션 세션 인증 경로)')
+    throw new Error(
+      'FIREBASE_PROJECT_ID가 필요하다 (DEV_LOGIN_ENABLED=false 프로덕션 세션 인증 경로)',
+    )
   }
   const verifier = createFirebaseVerifier(projectId)
   return new FirebaseSessionAuthAdapter(verifier, accounts, characters)
@@ -104,6 +106,11 @@ async function boot(): Promise<void> {
     liveRegistry,
     characterRepo: characters,
     objectTemplates,
+    // 사망 seam(소환·perm 리스폰)이 쓰는 두 원재료는 **worldRuntime의 인스턴스를 그대로** 싣는다.
+    // 별도 발급기·인덱스를 만들면 소환 크리처 instanceId가 스폰 크리처와 충돌한다(D7 4경로 공유 계약 —
+    // worldRuntime.alloc JSDoc이 이 조립 지점을 지목한다).
+    spawnTemplates: worldRuntime.templates,
+    alloc: worldRuntime.alloc,
     markDirty: (collection, id, snapshot) => saveEngine.markDirty(collection, id, snapshot),
     // markDirty와 짝이 되는 조회 seam — 같은 이유로 this 바인딩 유지를 위해 화살표로 감싼다.
     peekPending: (collection, id) => saveEngine.peekPending(collection, id),
@@ -124,7 +131,10 @@ async function boot(): Promise<void> {
   //   FIREBASE_PROJECT_ID로 세우고, AccountRepository·CharacterRepository를 넘긴다. PROJECT_ID가 없으면
   //   무효 어댑터가 배포되지 않도록 fail-fast한다(optional 스키마의 프로덕션 경로 보강).
   const sessionAuthDeps = config.DEV_LOGIN_ENABLED
-    ? { sessionAuth: createDevSeedAuthAdapterFromEnv(config), devLoginSeedCookie: config.DEV_SEED_COOKIE }
+    ? {
+        sessionAuth: createDevSeedAuthAdapterFromEnv(config),
+        devLoginSeedCookie: config.DEV_SEED_COOKIE,
+      }
     : { sessionAuth: buildFirebaseSessionAuth(config, accounts, characters) }
   const app = buildApp({
     pingDb: () => pingDb(conn.db),

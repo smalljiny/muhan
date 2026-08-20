@@ -18,6 +18,7 @@ import type { CombatRng } from '../../combat/dice.js'
 import type { AttackDescriptor } from '../../combat/resolveAttack.js'
 import { ATTACK_COOLDOWN_BLIND, ATTACK_COOLDOWN_INTERVAL } from '../../combat/constants.js'
 import { assemblePlayerCombatState } from '../../combat/assemblePlayerCombatState.js'
+import { applyVitals } from '../../combat/applyVitals.js'
 import { toCombatant } from '../../combat/combatant.js'
 import { initiateAttack } from '../../combat/initiateAttack.js'
 import type { DeathSeams } from '../assembleDeathSeams.js'
@@ -226,19 +227,8 @@ export function createAttackHandler(deps: AttackHandlerDeps): CommandHandler {
     }
     // 최신 문서에 hp·mp만 얹는다. `{ ...relive }`로 나머지(인벤토리)를 그대로 옮긴다 — 새 엔트리를
     // 통째로 지으면 진입에서 1회 적재한 인벤이 조용히 사라지고 되돌릴 경로가 없다.
-    //
-    // 하한 0으로 클램프한다. `combat/combatant.ts`의 피해 차감에는 클램프가 없어 hp가 음수가 될 수
-    // 있는데, 받는 쪽 두 계약이 모두 `min(0)`이다 — `characterSchema.hpCurrent`와 와이어
-    // `character:stats.hpCurrent`. 음수가 나가면 (a) 클라이언트가 프레임을 통째로 거부하고
-    // (b) 스키마를 위반한 문서가 flush 대상이 된다. 둘 다 예외 없이 조용히 실패한다.
-    // 이 토픽에서는 플레이어가 방어자가 되는 경로가 없어 도달 불가지만, 여기가 hp가 캐릭터 문서로
-    // 나가는 **유일한 지점**이고 #99가 몬스터 반격을 잇는 순간 도달한다.
-    // 사망 판정은 `state.hpCurrent < 1`을 보는 전투 규칙이 이미 끝냈으므로 클램프가 판정을 바꾸지 않는다.
-    const character: Character = {
-      ...relive.character,
-      hpCurrent: Math.max(0, state.hpCurrent),
-      mpCurrent: Math.max(0, state.mpCurrent),
-    }
+    // 하한 0 클램프의 근거는 `combat/applyVitals.ts`가 단독 소유한다(되쓰기 지점이 둘이다).
+    const character: Character = applyVitals(relive.character, state)
     deps.liveRegistry.register({ ...relive, character })
     deps.markCharacterDirty(actor.characterId, character)
 
