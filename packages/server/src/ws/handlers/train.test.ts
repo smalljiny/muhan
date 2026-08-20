@@ -1,19 +1,26 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
   neededExp,
+  resolveHpMax,
+  resolveMpMax,
   serverEventSchema,
   type Character,
+  type ClientCommand,
   type ObjectInstance,
   type RoomNode,
+  type ServerEvent,
 } from 'shared'
 import { setFlag } from '../../world/door.js'
 import { RTRAIN, goldToTrain } from '../../progression/train.js'
 import { trainingFlagsForClass } from '../../progression/train.testutil.js'
-import { createLiveCharacterRegistry, type LiveCharacter } from '../../world/liveCharacterRegistry.js'
+import {
+  createLiveCharacterRegistry,
+  type LiveCharacter,
+} from '../../world/liveCharacterRegistry.js'
 import { createMarkCharacterDirty } from '../../world/markCharacterDirty.js'
 import type { ActorContext } from '../actorContext.js'
-import { createTrainHandler } from './train.js'
-import { dispatch, createCommandRegistry } from '../router.js'
+import { createTrainHandler, type TrainHandlerDeps } from './train.js'
+import { dispatch, createCommandRegistry, normalizeHandlerEvents } from '../router.js'
 import type { ChannelPort } from '../channelPort.js'
 import type { PermissionPort } from '../permissionPort.js'
 
@@ -75,7 +82,7 @@ function makeChar(overrides: Partial<Character> = {}): Character {
     experience: 0,
     spells: new Array<number>(16).fill(0),
     realm: [0, 0, 0, 0],
-    schemaVersion: 3,
+    schemaVersion: 6,
     accountId: 'acc-1',
     status: 'active',
     alignment: 1,
@@ -87,6 +94,10 @@ const actor: ActorContext = { accountId: 'acc-1', characterId: 'char-1' }
 
 /** 정확히 1레벨분 exp·gold를 가진 class1 L2 캐릭터(성공 경로 표준 픽스처). */
 const SUCCESS_LEVEL = 2
+/** 무적 승급 경계 레벨(shared prestige의 INVINCIBLE_LEVEL). class<9면 이 레벨에서 승급한다. */
+const PRESTIGE_LEVEL = 100
+/** 무적 class 인덱스 — 승급 후 형상의 최대치 파생 입력이다. */
+const INVINCIBLE_CLASS = 9
 const SUCCESS_EXP = neededExp(SUCCESS_LEVEL)
 const SUCCESS_GOLD = goldToTrain(SUCCESS_LEVEL)
 
@@ -133,41 +144,164 @@ function makeDeps(options: {
   }
 }
 
+/**
+ * 핸들러 반환을 항상 배열로 정규화한다 — 성공 경로는 2개(`[progress:trained, character:stats]`),
+ * 거부 경로는 1개다.
+ *
+ * 프로덕션 `dispatch`가 쓰는 것과 **같은** 정규화 함수를 쓴다. 여기서 `Array.isArray` 분기를 손으로
+ * 다시 적으면 배열 판별 규칙의 출처가 둘이 되어, 라우터가 정규화 규칙을 바꿔도 이 테스트는 계속 통과한다.
+ */
+function run(deps: TrainHandlerDeps, command: ClientCommand): readonly ServerEvent[] {
+  return normalizeHandlerEvents(createTrainHandler(deps)(command, actor))
+}
+
 describe('createTrainHandler', () => {
   describe('성공 경로', () => {
-    it('progress:trained를 내고 레벨 상승·gold 차감을 싣는다', () => {
+    it('progress:trained·character:stats 2개를 순서대로 낸다', () => {
       const character = makeSuccessChar()
       const { deps } = makeDeps({
         live: { character },
         room: makeRoom(1, trainingFlagsForClass(1)),
       })
-      const handler = createTrainHandler(deps)
 
-      const event = handler({ type: 'progress:train' }, actor)
+      const events = run(deps, { type: 'progress:train' })
 
-      expect(event).toMatchObject({
+      expect(events).toHaveLength(2)
+      expect(events[0]).toMatchObject({
         type: 'progress:trained',
         level: SUCCESS_LEVEL + 1,
         levelsGained: 1,
         gold: 0,
         prestige: 'none',
       })
+      expect(events[1]).toMatchObject({ type: 'character:stats' })
     })
 
-    it('발화 이벤트가 와이어 계약(serverEventSchema)을 통과한다', () => {
+    it('발화 이벤트가 전부 와이어 계약(serverEventSchema)을 통과한다', () => {
       const { deps } = makeDeps({
         live: { character: makeSuccessChar() },
         room: makeRoom(1, trainingFlagsForClass(1)),
       })
 
-      const event = createTrainHandler(deps)({ type: 'progress:train' }, actor)
+      const events = run(deps, { type: 'progress:train' })
 
-      const parsed = serverEventSchema.safeParse(event)
-      expect(parsed.success).toBe(true)
+      expect(events).toHaveLength(2) // 빈 배열을 순회하며 통과하는 공허한 단언 방지.
+      for (const event of events) {
+        expect(serverEventSchema.safeParse(event).success).toBe(true)
+      }
+      const parsed = serverEventSchema.safeParse(events[0])
       if (parsed.success && parsed.data.type === 'progress:trained') {
         // stats는 5-튜플로 그대로 전달된다(map/spread로 넓히면 타입·길이 계약이 깨진다).
         expect(parsed.data.stats).toHaveLength(5)
       }
+    })
+
+    /**
+     * D10 — 스탯 통지는 `character:stats` 하나로 통일한다. 이 이벤트는 **연마가 확정한 문서**에서
+     * 투영해야 한다. 명령 시작 시점 문서(`live.character`)로 투영하면 클라이언트가 한 박자 뒤처진
+     * 레벨·경험치를 받는다.
+     */
+    it('character:stats가 연마 후 확정 문서의 level·experience를 싣는다', () => {
+      const { deps } = makeDeps({
+        live: { character: makeSuccessChar() },
+        room: makeRoom(1, trainingFlagsForClass(1)),
+      })
+
+      const events = run(deps, { type: 'progress:train' })
+
+      // train()은 exp를 깎지 않으므로 experience는 그대로이고 level만 오른다.
+      expect(events[1]).toMatchObject({
+        type: 'character:stats',
+        level: SUCCESS_LEVEL + 1,
+        experience: SUCCESS_EXP,
+      })
+    })
+
+    /**
+     * `hpMax`·`mpMax`는 문서에 없고 `class`·`level`에서 매번 파생한다(compute-on-read). 따라서
+     * **레벨이 오르면 최대치도 바뀐다** — 이 케이스가 "낡은 문서로 투영" 변이를 잡는 지점이다.
+     */
+    it('character:stats의 hpMax·mpMax가 연마 후 레벨의 resolveHpMax·resolveMpMax와 일치한다', () => {
+      const before = makeSuccessChar()
+      const { deps, registry } = makeDeps({
+        live: { character: before },
+        room: makeRoom(1, trainingFlagsForClass(1)),
+      })
+
+      const events = run(deps, { type: 'progress:train' })
+
+      const after = registry.get('char-1')?.character
+      expect(after?.level).toBe(SUCCESS_LEVEL + 1)
+      const grown = { class: before.class, level: SUCCESS_LEVEL + 1 }
+      expect(events[1]).toMatchObject({
+        type: 'character:stats',
+        hpMax: resolveHpMax(grown),
+        mpMax: resolveMpMax(grown),
+      })
+      // 비-공허 근거: 연마 전후의 최대치가 실제로 다르다. 같다면 위 단언은 낡은 문서로 투영해도
+      // 통과하므로 계약을 검증하지 못한다.
+      expect(resolveHpMax(before)).not.toBe(resolveHpMax(grown))
+      expect(resolveMpMax(before)).not.toBe(resolveMpMax(grown))
+    })
+
+    /**
+     * 승급(무적) 경로가 **가장 강한 stale-투영 검출기**다. 일반 연마는 레벨이 +1이지만 승급은
+     * `level 100 → 1`·`experience → 0`·`class → 9`로 전 필드가 크게 튄다. 게다가
+     * `progress:trained`만 보면 `levelsGained: 0`이라 아무 일도 없었던 것처럼 보이고, 실제 변화는
+     * 오직 `character:stats`에만 나타난다 — 이 Story가 추가한 계약이 이 경로에서 특히 load-bearing이다.
+     */
+    it('승급(무적) 경로에서도 character:stats가 전이 후 문서를 싣는다', () => {
+      const before = makeChar({
+        class: 1,
+        level: PRESTIGE_LEVEL,
+        experience: neededExp(PRESTIGE_LEVEL),
+        gold: goldToTrain(PRESTIGE_LEVEL),
+      })
+      const { deps } = makeDeps({
+        live: { character: before },
+        room: makeRoom(1, trainingFlagsForClass(1)),
+      })
+
+      const events = run(deps, { type: 'progress:train' })
+
+      expect(events).toHaveLength(2)
+      expect(events[0]).toMatchObject({
+        type: 'progress:trained',
+        levelsGained: 0,
+        prestige: 'invincible',
+      })
+      // 전이 후 형상: class 9·level 1·experience 0. 시작 시점 문서로 투영하면 셋 다 틀린다.
+      const promoted = { class: INVINCIBLE_CLASS, level: 1 }
+      expect(events[1]).toMatchObject({
+        type: 'character:stats',
+        level: 1,
+        experience: 0,
+        hpMax: resolveHpMax(promoted),
+        mpMax: resolveMpMax(promoted),
+      })
+      // 비-공허 근거: 승급 전후 최대치가 실제로 다르다(hpCurrent·mpCurrent도 풀회복으로 함께 튄다).
+      expect(resolveHpMax(before)).not.toBe(resolveHpMax(promoted))
+      expect(events[1]).toMatchObject({
+        hpCurrent: resolveHpMax(promoted),
+        mpCurrent: resolveMpMax(promoted),
+      })
+    })
+
+    it('character:stats의 hpCurrent·mpCurrent가 라이브 엔트리의 확정 값과 일치한다', () => {
+      const { deps, registry } = makeDeps({
+        live: { character: makeSuccessChar() },
+        room: makeRoom(1, trainingFlagsForClass(1)),
+      })
+
+      const events = run(deps, { type: 'progress:train' })
+
+      const after = registry.get('char-1')?.character
+      expect(after).toBeDefined()
+      expect(events[1]).toMatchObject({
+        type: 'character:stats',
+        hpCurrent: after?.hpCurrent,
+        mpCurrent: after?.mpCurrent,
+      })
     })
 
     it('alignment 값과 무관하게 성공한다 (OQ5 — train 경로는 alignment를 읽지 않는다)', () => {
@@ -180,9 +314,9 @@ describe('createTrainHandler', () => {
           room: makeRoom(1, trainingFlagsForClass(1)),
         })
 
-        const event = createTrainHandler(deps)({ type: 'progress:train' }, actor)
+        const events = run(deps, { type: 'progress:train' })
 
-        expect(event).toMatchObject({ type: 'progress:trained' })
+        expect(events[0]).toMatchObject({ type: 'progress:trained' })
       }
     })
 
@@ -251,21 +385,24 @@ describe('createTrainHandler', () => {
       },
     ]
 
-    it.each(cases)('$name → rule_rejected + 비어 있지 않은 한국어 message', ({ character, flags }) => {
-      const { deps, markDirty } = makeDeps({
-        live: { character },
-        room: makeRoom(1, flags),
-      })
+    it.each(cases)(
+      '$name → rule_rejected + 비어 있지 않은 한국어 message',
+      ({ character, flags }) => {
+        const { deps, markDirty } = makeDeps({
+          live: { character },
+          room: makeRoom(1, flags),
+        })
 
-      const event = createTrainHandler(deps)({ type: 'progress:train' }, actor)
+        const event = createTrainHandler(deps)({ type: 'progress:train' }, actor)
 
-      expect(event).toMatchObject({ type: 'error', code: 'rule_rejected' })
-      const message = (event as { message: string }).message
-      expect(message.length).toBeGreaterThan(0)
-      // 한글이 실제로 들어 있어야 한다(미사상 사유가 빈/영문 message로 새는 것을 막는다).
-      expect(message).toMatch(/[가-힣]/)
-      expect(markDirty).not.toHaveBeenCalled()
-    })
+        expect(event).toMatchObject({ type: 'error', code: 'rule_rejected' })
+        const message = (event as { message: string }).message
+        expect(message.length).toBeGreaterThan(0)
+        // 한글이 실제로 들어 있어야 한다(미사상 사유가 빈/영문 message로 새는 것을 막는다).
+        expect(message).toMatch(/[가-힣]/)
+        expect(markDirty).not.toHaveBeenCalled()
+      },
+    )
 
     it('거부 사유 5종이 서로 다른 message를 갖는다 (사유별 사상 누락 적발)', () => {
       const messages = cases.map(({ character, flags }) => {
@@ -275,6 +412,22 @@ describe('createTrainHandler', () => {
       })
       expect(new Set(messages).size).toBe(cases.length)
     })
+
+    /**
+     * 거부는 error 이벤트 **1개**다 — 상태가 바뀌지 않았으므로 스탯 스냅샷을 덧붙이지 않는다.
+     * 성공 경로만 배열을 낸다는 계약을 여기서 고정한다.
+     */
+    it.each(cases)(
+      '$name 거부는 이벤트 1개만 낸다 (character:stats 없음)',
+      ({ character, flags }) => {
+        const { deps } = makeDeps({ live: { character }, room: makeRoom(1, flags) })
+
+        const events = run(deps, { type: 'progress:train' })
+
+        expect(events).toHaveLength(1)
+        expect(events[0]).toMatchObject({ type: 'error', code: 'rule_rejected' })
+      },
+    )
 
     it('id가 있으면 rule_rejected 이벤트에 correlationId를 반향한다', () => {
       const { deps } = makeDeps({
@@ -302,15 +455,16 @@ describe('createTrainHandler', () => {
       expect(resolveRoom).not.toHaveBeenCalled()
     })
 
-    it('방이 해소되지 않으면 error{internal}, train 미실행', () => {
+    it('방이 해소되지 않으면 error{internal} 1개, train 미실행', () => {
       const { deps, markDirty } = makeDeps({
         live: { character: makeSuccessChar() },
         room: undefined,
       })
 
-      const event = createTrainHandler(deps)({ type: 'progress:train', id: 't2' }, actor)
+      const events = run(deps, { type: 'progress:train', id: 't2' })
 
-      expect(event).toMatchObject({ type: 'error', code: 'internal', correlationId: 't2' })
+      expect(events).toHaveLength(1)
+      expect(events[0]).toMatchObject({ type: 'error', code: 'internal', correlationId: 't2' })
       expect(markDirty).not.toHaveBeenCalled()
     })
 
@@ -363,11 +517,14 @@ describe('createCommandRegistry — progress:train 조건부 등록', () => {
     const result = dispatch(registry, { type: 'progress:train' }, actor, testPermission)
 
     expect(result.outcome).toBe('handled')
+    // dispatch가 핸들러의 배열 반환을 그대로 정규화해 내보낸다(스탯 통지가 소켓까지 나간다).
+    expect(result.events).toHaveLength(2)
     expect(result.events[0]).toMatchObject({
       type: 'progress:trained',
       level: SUCCESS_LEVEL + 1,
       levelsGained: 1,
     })
+    expect(result.events[1]).toMatchObject({ type: 'character:stats', level: SUCCESS_LEVEL + 1 })
   })
 
   it('deny 어댑터에서는 핸들러 이전에 forbidden으로 거부된다 (OQ3)', () => {
@@ -379,7 +536,11 @@ describe('createCommandRegistry — progress:train 조건부 등록', () => {
     const result = dispatch(registry, { type: 'progress:train', id: 'p1' }, actor, denyPermission)
 
     expect(result.outcome).toBe('rejected')
-    expect(result.events[0]).toMatchObject({ type: 'error', code: 'forbidden', correlationId: 'p1' })
+    expect(result.events[0]).toMatchObject({
+      type: 'error',
+      code: 'forbidden',
+      correlationId: 'p1',
+    })
     // 권한 레이어가 핸들러 진입 자체를 막았다(연마가 실행되지 않았다).
     expect(markDirty).not.toHaveBeenCalled()
   })
