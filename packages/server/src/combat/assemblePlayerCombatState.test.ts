@@ -1,12 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  characterSchema,
-  computeAc,
-  computeThaco,
-  type Character,
-  type EffectiveStatContext,
-  type ObjectInstance,
-} from 'shared'
+import { computeAc, computeThaco, type EffectiveStatContext, type ObjectInstance } from 'shared'
 import { assemblePlayerCombatState } from './assemblePlayerCombatState.js'
 import {
   makeObjectInstance,
@@ -17,6 +10,11 @@ import { flagsHex, NO_FLAGS } from '../world/roomFixtures.testutil.js'
 import { PPROTE, PBLESS, F_ISSET } from '../world/hexFlags.js'
 import { HELD, WIELD_SLOT } from '../items/taxonomy.js'
 import type { LiveCharacter } from '../world/liveCharacterRegistry.js'
+import {
+  makeCharacter,
+  SEED_STRENGTH as STRENGTH,
+  SEED_DEXTERITY as DEXTERITY,
+} from '../world/characterFixtures.testutil.js'
 
 /**
  * LiveCharacter → PlayerCombatState 조립기 테스트.
@@ -25,37 +23,6 @@ import type { LiveCharacter } from '../world/liveCharacterRegistry.js'
  * 결과와 정확히 같아야 하고, 장비 기여는 projectEquipStats 결과와 같아야 한다. 그래서 기대값을
  * 손으로 적은 숫자가 아니라 같은 입력으로 호출한 stats-core 결과로 표현한다.
  */
-
-/** 능력치 튜플 순서: strength0·dexterity1·constitution2·intelligence3·piety4. */
-const STRENGTH = 16
-const DEXTERITY = 18
-
-/**
- * 시드 캐릭터 — `characterSchema.parse`를 통과시켜 만든다. 리터럴을 그대로 쓰면 스키마가 거부할
- * 시드로도 테스트가 통과해 배선 검출력이 떨어진다(`ws/reconnectRevert.testutil.ts` 관례).
- */
-function makeCharacter(overrides: Partial<Character> = {}): Character {
-  return characterSchema.parse({
-    _id: 'char-1',
-    name: '테스토스',
-    class: 4,
-    race: 1,
-    stats: [STRENGTH, DEXTERITY, 12, 10, 14],
-    gold: 100,
-    currentRoom: 1,
-    hpCurrent: 42,
-    mpCurrent: 15,
-    level: 7,
-    experience: 0,
-    spells: new Array<number>(16).fill(0),
-    realm: [0, 0, 0, 0],
-    schemaVersion: 6,
-    accountId: 'acct-1',
-    status: 'active',
-    alignment: 1,
-    ...overrides,
-  })
-}
 
 function makeLive(
   inventory: readonly ObjectInstance[],
