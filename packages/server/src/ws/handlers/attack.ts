@@ -17,7 +17,7 @@ import type { CreatureLedgers } from '../../combat/creatureLedgers.js'
 import type { CombatRng } from '../../combat/dice.js'
 import type { AttackDescriptor } from '../../combat/resolveAttack.js'
 import { ATTACK_COOLDOWN_BLIND, ATTACK_COOLDOWN_INTERVAL } from '../../combat/constants.js'
-import { assemblePlayerCombatState } from '../../combat/assemblePlayerCombatState.js'
+import { assemblePlayerCombatState, toCarry } from '../../combat/assemblePlayerCombatState.js'
 import { applyVitals } from '../../combat/applyVitals.js'
 import { toCombatant } from '../../combat/combatant.js'
 import { initiateAttack } from '../../combat/initiateAttack.js'
@@ -136,10 +136,14 @@ function toWireAttack(descriptor: AttackDescriptor): WireAttack {
  *   - 라이브 미등록 actor·방 미해소·되쓰기 직전 재조회 실패 → `error{internal}`(배선 격리).
  */
 export function createAttackHandler(deps: AttackHandlerDeps): CommandHandler {
-  return (command: ClientCommand, actor: ActorContext): ServerEvent | readonly ServerEvent[] => {
+  return (
+    command: ClientCommand,
+    actor: ActorContext,
+  ): ServerEvent | readonly ServerEvent[] | undefined => {
     // (1) defensive narrow — router는 combat:attack type에만 이 핸들러를 배선하므로 false 갈래는
-    //     구조적으로 도달 불가한 방어선이다.
-    if (command.type !== 'combat:attack') return []
+    //     구조적으로 도달 불가한 방어선이다. 형제 핸들러(train·study)와 같은 관용구로 undefined를
+    //     돌려준다 — `normalizeHandlerEvents`가 빈 배열로 정규화한다.
+    if (command.type !== 'combat:attack') return undefined
 
     // (2) 시각을 1회만 읽는다 — 쿨다운 비교·flags 만료·전투 컨텍스트가 같은 시점을 봐야 한다.
     const now = deps.now()
@@ -178,14 +182,7 @@ export function createAttackHandler(deps: AttackHandlerDeps): CommandHandler {
     // (8) 전투상태 재조립 + 교체 등록(D4) — 레벨업·장비 변경이 다음 공격에 자동 반영되고,
     //     진행 중 전투의 hp·mp·쿨다운만 등록 상태에서 이어받는다(carry). 미등록이면 carry 없이
     //     캐릭터 문서 값으로 시작한다.
-    const carry =
-      registered === undefined
-        ? undefined
-        : {
-            hpCurrent: registered.hpCurrent,
-            mpCurrent: registered.mpCurrent,
-            nextAttackAt: registered.nextAttackAt,
-          }
+    const carry = registered === undefined ? undefined : toCarry(registered)
     const state = assemblePlayerCombatState(live, deps.objectTemplates, flags, carry)
     deps.combatRegistry.register(state)
 

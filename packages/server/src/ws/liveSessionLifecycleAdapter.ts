@@ -17,7 +17,7 @@ import type { CombatRegistry } from '../combat/combatRegistry.js'
  *  1. 라이브 전투상태(hp·mp)를 캐릭터 문서로 되쓴다.
  *  2. 그 문서를 dirty로 표시해 다음 저장 주기에 영속화되게 한다(최종 방 currentRoom도 함께 실린다).
  *  3. Story 3의 release 코어로 방 점유(occupants)와 라이브 레지스트리 엔트리를 제거한다.
- *  4. 전투상태 레지스트리에서 이 캐릭터 엔트리를 제거한다.
+ *     전투상태 레지스트리 엔트리 제거도 그 release가 함께 소유한다(아래 "제거 소유자" 절).
  *
  * no-op 어댑터(createNoopSessionLifecycleAdapter)와 달리 이 어댑터는 실제 도메인 상태를 변이한다.
  * 단, 실 DB write는 하지 않는다 — markDirty로 side registry에만 기록하고 실 flush는 저장 스케줄러/
@@ -42,8 +42,11 @@ import type { CombatRegistry } from '../combat/combatRegistry.js'
  * 스냅샷은 되쓰기 이전 값을 담고, 전투로 깎인 hp가 저장되지 않은 채 세션이 끝난다(다음 접속에
  * 만신으로 부활하는 형태 — 예외도 로그도 없다).
  *
- * 제거(`combatRegistry.remove`)는 반대로 **맨 뒤**다. release 앞에서 지우면 되쓰기 이후 경로가 전투
- * 상태를 다시 읽을 수 없고, 순서를 앞당겨 얻는 것도 없다.
+ * ── 제거 소유자는 주입된 `release`다 (이 어댑터가 아니다) ──────────
+ * 전투상태 엔트리 제거는 이 어댑터가 직접 하지 않는다. 조립 팩토리(`liveWorldWiring.ts`)가 `place`(등록)와
+ * `release`(제거)를 같은 래퍼에 대칭으로 두었고, 이 어댑터는 그 `release`를 마지막 단계에서 부를 뿐이다.
+ * 여기서 따로 지우면 소유자가 둘이 된다. 결과 순서는 여전히 "되쓰기 → markDirty → release(제거)"라,
+ * 되쓰기가 전투상태를 읽는 시점에는 엔트리가 살아 있다.
  *
  * 전투상태가 없는 세션(전투를 한 번도 하지 않고 종료)은 되쓰기를 건너뛰고 기존 동작 그대로 간다.
  *
@@ -91,21 +94,24 @@ export interface LiveSessionLifecycleAdapterDeps {
    */
   readonly markCharacterDirty: MarkCharacterDirty
   /**
-   * 라이브 전투상태 레지스트리 — 종료 시점 hp·mp를 읽고(`get`) 세션 엔트리를 제거한다(`remove`).
-   * 소비하는 두 메서드만 요구한다(최소 표면).
+   * 라이브 전투상태 레지스트리 — 종료 시점 hp·mp를 읽는 용도다. `get` 하나만 요구한다(최소 표면).
+   *
+   * **제거(`remove`)는 이 어댑터의 표면이 아니다.** 전투상태 엔트리를 지우는 주체는 주입된
+   * `release`(조립 팩토리의 래퍼)이며, deps 타입에 `remove`를 남겨 두면 "이 어댑터가 제거를
+   * 보장한다"고 읽혀 소유자가 둘로 보인다 — 타입 수준에서 하나로 좁힌다.
    *
    * **필수 필드다**(optional 아님). 미주입이면 전투로 깎인 hp가 저장되지 않은 채 세션이 끝나는데
    * 그 실패는 예외도 로그도 남기지 않는다 — 배선 누락을 타입으로 차단한다(`peekPendingCharacter` 선례).
    *
    * 공격 핸들러(`combatRegistry`)·진입 등록과 **같은 인스턴스**여야 한다. 갈리면 되쓰기가 빈
-   * 레지스트리를 읽어 항상 건너뛰고, 제거는 아무것도 지우지 않아 종료된 세션의 전투상태가 누적된다.
+   * 레지스트리를 읽어 항상 건너뛰고, 종료된 세션의 hp가 저장되지 않는다.
    */
-  readonly combatRegistry: Pick<CombatRegistry, 'get' | 'remove'>
+  readonly combatRegistry: Pick<CombatRegistry, 'get'>
 }
 
 /**
  * 라이브 세션 수명 어댑터를 만든다. onSessionEnd는 전투상태 hp·mp를 문서에 되쓰고 markCharacterDirty로
- * 표시한 뒤 release로 점유·엔트리를 정리하고 마지막에 전투상태를 제거한다. 미등록 characterId는 no-op이다.
+ * 표시한 뒤 release로 점유·라이브 엔트리·전투상태를 함께 정리한다. 미등록 characterId는 no-op이다.
  */
 export function createLiveSessionLifecycleAdapter(
   deps: LiveSessionLifecycleAdapterDeps,

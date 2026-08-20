@@ -8,7 +8,7 @@ import {
 import type { LiveCharacter, LiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
 import type { InstanceIdAllocator, SpawnTemplateIndex } from '../world/spawn.js'
 import { composeCharacterFlags } from '../character/flags.js'
-import { assemblePlayerCombatState } from '../combat/assemblePlayerCombatState.js'
+import { assemblePlayerCombatState, toCarry } from '../combat/assemblePlayerCombatState.js'
 import { createCombatRegistry, type CombatRegistry } from '../combat/combatRegistry.js'
 import { createCreatureLedgers } from '../combat/creatureLedgers.js'
 import { defaultCombatRng } from '../combat/dice.js'
@@ -247,17 +247,20 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     ...entryCore,
     place: (live: LiveCharacter) => {
       entryCore.place(live)
-      const registered = combatRegistry.get(live.character._id)
-      const carry =
-        registered === undefined
-          ? undefined
-          : {
-              hpCurrent: registered.hpCurrent,
-              mpCurrent: registered.mpCurrent,
-              nextAttackAt: registered.nextAttackAt,
-            }
-      const flags = composeCharacterFlags(live.character, bundle.now())
-      combatRegistry.register(assemblePlayerCombatState(live, bundle.objectTemplates, flags, carry))
+      // 조립 출처는 **라이브 레지스트리의 권위 엔트리**다. `entryCore.place`는 멱등이라 이미 점유자면
+      // 조기 반환하며 `register(live)`를 하지 않는데(`liveCharacterEntry.ts:218`), 그때 인자로 받은
+      // `live`는 하이드레이트했다가 버려진 문서다. 그 버려진 문서로 조립하면 재접속~첫 공격 구간이
+      // 스테일 파생값(armor·thaco·level)으로 계산된다 — carry가 지켜 주는 hp·mp·쿨다운 밖의 필드다.
+      // 지금은 다음 공격의 재조립이 덮어 주지만 몬스터 반격 tick(#99)이 붙으면 그 구간이 관측된다.
+      // `?? live`는 도달 불가 방어선이다 — `place`는 등록하거나(신규) 이미 점유자라 조기 반환하는데,
+      // 점유(occupants)와 레지스트리 엔트리는 `release`가 함께 지우므로 둘은 항상 같이 존재한다.
+      const authoritative = bundle.liveRegistry.get(live.character._id) ?? live
+      const registered = combatRegistry.get(authoritative.character._id)
+      const carry = registered === undefined ? undefined : toCarry(registered)
+      const flags = composeCharacterFlags(authoritative.character, bundle.now())
+      combatRegistry.register(
+        assemblePlayerCombatState(authoritative, bundle.objectTemplates, flags, carry),
+      )
     },
     // 등록·제거를 같은 래퍼가 대칭으로 소유한다 — 제거를 lifecyclePort에만 두면 `entry.release`를
     // 포트 밖에서 부르는 호출자가 생겼을 때 전투상태가 남는다. `remove`는 미등록에 no-op이라

@@ -33,6 +33,14 @@ import { toPlayerCombatState, type PlayerCombatState, type WeaponDamage } from '
  * 영속 필드가 아직 `Character` 스키마에 없어 여기서는 `proficiency: 0`을 싣고, 같은 이유로
  * `projectEquipStats(..., 0)`으로 `weaponProficiency`도 0을 넘긴다. 결과적으로 모든 플레이어가
  * 숙련 보너스 0인 상태로 계산된다 — 숙련도 영속화가 붙는 시점에 두 자리를 함께 교체한다.
+ *
+ * ## 알려진 divergence D11 — `PUPDMG` 미영속 → 초인 다중공격이 항상 1타
+ *
+ * `resolveAttack`은 `state.flags`의 `PUPDMG`를 읽어 `multiAttackCount`를 정한다. 그런데 이 모듈이
+ * 싣는 `flags`의 유일한 생산자인 `composeCharacterFlags`는 **타이머 보유 효과 전용**이라
+ * `PUPDMG`에 영속 경로가 없고 영원히 0을 반환한다(`character/flags.ts` 헤더의 파티션 표). 즉
+ * 초인 다중공격은 배선된 순간부터 구조적으로 미발화한다 — 값이 틀린 것이 아니라 입력이 없다.
+ * `PUPDMG` 영속화가 붙기 전에는 이 모듈 출력으로 다중공격을 기대하면 안 된다(#121 스펙 D11).
  */
 
 /**
@@ -51,6 +59,23 @@ const UNPERSISTED_PROFICIENCY = 0
  * 진행 중인 전투의 현재 HP/MP와 공격 쿨다운이 조용히 되돌아간다. 그 3필드만 넘겨 유지한다(D4).
  */
 export type CombatStateCarry = Pick<PlayerCombatState, 'hpCurrent' | 'mpCurrent' | 'nextAttackAt'>
+
+/**
+ * 등록된 전투상태에서 이월분을 뽑는다 — `CombatStateCarry` 필드 목록의 유일한 생산자다.
+ *
+ * 호출부가 `{ hpCurrent, mpCurrent, nextAttackAt }`을 손으로 적으면 이월 대상이 늘 때 타입만 넓어지고
+ * 값은 조용히 빠진다(`assemblePlayerCombatState` 본문이 목록을 안 적는 것과 같은 이유). 생산자를
+ * 여기 하나로 모아 타입과 값이 함께 움직이게 한다.
+ *
+ * 미등록(최초 조립) 분기는 호출부에 남긴다 — `undefined` 판정은 레지스트리 조회의 관심사다.
+ */
+export function toCarry(state: PlayerCombatState): CombatStateCarry {
+  return {
+    hpCurrent: state.hpCurrent,
+    mpCurrent: state.mpCurrent,
+    nextAttackAt: state.nextAttackAt,
+  }
+}
 
 /**
  * WIELD 슬롯 착용 무기를 `WeaponDamage`로 해소한다. 미착용이면 `null`(맨손 분기).
