@@ -57,6 +57,11 @@ describe('combat 배럴', () => {
     expect(typeof combat.registerEnemy).toBe('function')
     expect(typeof combat.createDamageLedger).toBe('function')
     expect(typeof combat.accumulateDamage).toBe('function')
+    expect(typeof combat.createCreatureLedgers).toBe('function')
+  })
+
+  it('라이브 조립 표면(전투상태 조립기)을 재export한다', () => {
+    expect(typeof combat.assemblePlayerCombatState).toBe('function')
   })
 
   it('combatTick 팩토리·반격 상수를 재export한다', () => {

@@ -21,15 +21,24 @@ export {
 } from './constants.js'
 export { toPlayerCombatState } from './playerState.js'
 export type { PlayerCombatState, WeaponDamage } from './playerState.js'
+export { assemblePlayerCombatState } from './assemblePlayerCombatState.js'
+export type { CombatStateCarry } from './assemblePlayerCombatState.js'
 export { createCombatRegistry } from './combatRegistry.js'
 export type { CombatRegistry } from './combatRegistry.js'
 export { toCombatant } from './combatant.js'
 export type { Combatant, PlayerCombatant, CreatureCombatant } from './combatant.js'
-export { hitThreshold, playerBaseDamage, monsterDamage, applyPaladinAlignment } from './attackStats.js'
+export {
+  hitThreshold,
+  playerBaseDamage,
+  monsterDamage,
+  applyPaladinAlignment,
+} from './attackStats.js'
 export { checkTargetImmunityPre, checkTargetImmunityPost, checkPvpGate } from './pvp.js'
 export type { CombatGateResult, TargetImmunityInput, PvpGateInput } from './pvp.js'
 export { registerEnemy, createDamageLedger, accumulateDamage } from './enmity.js'
 export type { DamageLedger } from './enmity.js'
+export { createCreatureLedgers } from './creatureLedgers.js'
+export type { CreatureLedgers } from './creatureLedgers.js'
 export { resolveAttack } from './resolveAttack.js'
 export type { ResolveContext, AttackOutcome } from './resolveAttack.js'
 export { createCombatTick } from './combatTick.js'
