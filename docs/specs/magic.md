@@ -4,7 +4,7 @@
 
 ## 개요
 
-무한의 마법은 **단일 주문 함수 집합을 네 진입 경로(CAST·SCROLL·POTION·WAND)가 공유**하는 구조다. 원본은 주문 하나가 `int fn(caster, cmnd, how)`이고 `how`만 바꿔 재사용하며, 시전자가 플레이어든 몬스터든 같은 함수를 탄다 — 몬스터 마법조차 `crt_spell`이 크리처를 시전자 자리에 넣어 동일 함수를 CAST 경로로 호출한다. 핵심 비대칭은 **마나·클래스·주문지식 게이트가 전부 `how==CAST` 조건**이라는 점이다. 아이템 경로는 이 게이트를 우회하고 대신 소모·`spell_fail` 굴림으로 게이트된다.
+무한의 마법은 **단일 주문 함수 집합을 네 진입 경로(CAST·SCROLL·POTION·WAND)가 공유**하는 구조다. 원본은 주문 하나가 `int fn(caster, cmnd, how)`이고 `how`만 바꿔 재사용하며, 시전자가 플레이어든 몬스터든 같은 함수를 탄다 — 몬스터 마법조차 `crt_spell`이 몬스터를 시전자 자리에 넣어 동일 함수를 CAST 경로로 호출한다. 핵심 비대칭은 **마나·클래스·주문지식 게이트가 전부 `how==CAST` 조건**이라는 점이다. 아이템 경로는 이 게이트를 우회하고 대신 소모·`spell_fail` 굴림으로 게이트된다.
 
 이 계층은 그 구조를 **effect/delivery 분리**(ADR 전역 불변식 3)로 재설계한다. `how==CAST` 4중 조건 분기는 `CastContext.gated` 단일 boolean으로 접히고, 주문 원본(`global.c`의 `spllist`·`ospell` 정적 테이블)은 선언 카탈로그로 외부화된다. 공식·수치·게이트 *의미*는 콘텐츠로 충실히 이식하고, 함수 포인터 테이블·인라인 게이트·선형 탐색은 원작의 구현 방식이므로 재설계한다.
 
@@ -17,12 +17,12 @@
 
 ## 구조
 
-카탈로그(선언 데이터)는 몹·플레이어·향후 클라이언트가 공유하므로 `shared`에, effect·게이트·데미지 산술은 라이브 인스턴스·RNG를 소비하므로 `server`에 둔다. 골든 fixture는 E8 오라클 하네스에 둔다.
+카탈로그(선언 데이터)는 몬스터·플레이어·향후 클라이언트가 공유하므로 `shared`에, effect·게이트·데미지 산술은 라이브 인스턴스·RNG를 소비하므로 `server`에 둔다. 골든 fixture는 E8 오라클 하네스에 둔다.
 
 | 위치 | 모듈 | 책임 |
 |------|------|------|
 | `packages/shared/src/magic/` | `catalog.ts` | 주문 카탈로그 선언 테이블 — `SPELL_CATALOG`(56)·`OSPELL_GRID`(20)·`REALM`/`SPELL_NO` 상수·`spellByNo`/`ospellOf` O(1) 조회. read-only 메타데이터 단일 출처. |
-| `packages/server/src/magic/` | `caster.ts` | `Caster` 추상(몹·플레이어 공유 6필드) + `toCaster` 오버로드 어댑터. |
+| `packages/server/src/magic/` | `caster.ts` | `Caster` 추상(몬스터·플레이어 공유 6필드) + `toCaster` 오버로드 어댑터. |
 | | `castContext.ts` | `CastContext` — `ResolveContext` + `gated` 한 필드. |
 | | `dispatch.ts` | `SpellDispatch<H>` — 주문번호 → 핸들러 O(1) 디스패처. 비-offensive는 `NOT_IMPLEMENTED` 마커. |
 | | `gate.ts` | 시전 게이트 — `evaluateGate`(순수)·`applyCastGate`(마나 소비). |
@@ -82,7 +82,7 @@ WAND ──────┘    ctx = { gated, room, rng, now, death seam, ledger 
 
 ### `Caster` 추상
 
-몹(`CreatureInstance`)·플레이어(`PlayerCombatState`)를 시전자로 통일하는 **정확히 6필드** 계약이다(그 이상 노출 금지 — 하위 토픽 #85·#86의 결합 인터페이스를 최소화):
+몬스터(`CreatureInstance`)·플레이어(`PlayerCombatState`)를 시전자로 통일하는 **정확히 6필드** 계약이다(그 이상 노출 금지 — 하위 토픽 #85·#86의 결합 인터페이스를 최소화):
 
 ```
 Caster { mpCurrent, level, realm[], class, intBonus, knows(spellNo) }
@@ -179,7 +179,7 @@ combat `createCombatTick`의 `castSpell?` 의존에 `crtSpell`을 주입한다. 
 
 ## 관련 문서
 
-- oracle: `docs/notes/game-analysis-20260625/a6-magic.md`(§1~4·§10), `legacy/muhan/src/magic1.c`(offensive_spell)·`magic8.c`(spell_fail)·`update.c:654`(crt_spell)·`global.c:571-659`(spllist·ospell)
+- 오라클: `docs/notes/game-analysis-20260625/a6-magic.md`(§1~4·§10), `legacy/muhan/src/magic1.c`(offensive_spell)·`magic8.c`(spell_fail)·`update.c:654`(crt_spell)·`global.c:571-659`(spllist·ospell)
 - 의존 스펙: [combat.md](combat.md)(`CastSpellSeam`·death seam·`CreatureInstance` operand) · [stats-core.md](stats-core.md)(파생 스탯·`bonusOf`) · [progression.md](progression.md)(MP 재생 — #84는 소비만) · [golden-fixture-harness.md](golden-fixture-harness.md)(오라클 fixture 규약)
 - 이름 조회: [name-matching.md](name-matching.md)(`spellByName` 규칙 본체 — 완전일치 우선·모호 거부)
 - 확장 계층: [magic-progression.md](magic-progression.md)(E6b-2 #85 — spell store·학습·성장·타이머·비-offensive effect·몬스터 self-heal)

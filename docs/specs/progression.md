@@ -10,7 +10,7 @@
 
 진행은 **결정적**이다 — exp·레벨업·성장·재생·사망 페널티에 확률 굴림이 없고 RNG 주입 seam도 없다(전투 데미지는 #82 담당).
 
-원본 동작 명세(oracle): `command7.c`(연마)·`player.c`(재생·성장)·`creature.c`(사망)·`global.c`(needed_exp·level_cycle 테이블)·`mtype.h`(class enum·방 플래그).
+원본 동작 명세(오라클): `command7.c`(연마)·`player.c`(재생·성장)·`creature.c`(사망)·`global.c`(needed_exp·level_cycle 테이블)·`mtype.h`(class enum·방 플래그).
 
 ## 구조
 
@@ -18,7 +18,7 @@
 
 | 파일 | 소유 | 역할 |
 |------|------|------|
-| `shared/progression/tables.ts` | shared | `needed_exp[128]`·`level_cycle[13][10]` oracle에서 옮겨 적은 테이블 |
+| `shared/progression/tables.ts` | shared | `needed_exp[128]`·`level_cycle[13][10]` 오라클에서 옮겨 적은 테이블 |
 | `shared/progression/expCurve.ts` | shared | `neededExp(level)`(테이블+L127 초과 선형)·`expToLevel(exp)`(역함수) |
 | `shared/progression/maxResolvers.ts` | shared | `resolveHpMax`/`resolveMpMax`(compute-on-read)·`clampVital` |
 | `shared/progression/levelUp.ts` | shared | `upLevel(char)`/`downLevel(char)` 순수 변이(능력치 성장·최대치 재동기화) |
@@ -79,7 +79,7 @@ backfill 시딩은 level과 일치: `level<=1 ? 0 : neededExp(level-1)`(그 레�
 
 ### HP/MP 재생
 
-WorldClock `register`에 `intervalSec:5` 슬롯 1개(`createRegenSlot`). 정상 방 재생량(oracle player.c:589-604):
+WorldClock `register`에 `intervalSec:5` 슬롯 1개(`createRegenSlot`). 정상 방 재생량(오라클 player.c:589-604):
 
 - `hpCurrent += MAX(4, 5 + bonusOf(con) + (class===권법가(2) ? 2 : 0))`
 - `mpCurrent += MAX(4, 5 + (int>17 ? 1 : 0) + (class===도술사(5) ? 2 : 0))`
@@ -115,7 +115,7 @@ WorldClock `register`에 `intervalSec:5` 슬롯 1개(`createRegenSlot`). 정상 
 
 ## 관련 문서
 
-- `docs/specs/stats-core.md` — 파생 resolver(`computeHpMax`/`computeMpMax`)·oracle 옮겨 적기 정책·`%4` 폐기 근거(소비 대상).
+- `docs/specs/stats-core.md` — 파생 resolver(`computeHpMax`/`computeMpMax`)·오라클 옮겨 적기 정책·`%4` 폐기 근거(소비 대상).
 - `docs/specs/runtime-foundation.md` — WorldClock `register` seam(재생 슬롯 배치 지점).
 - `docs/specs/save-policy.md` — SaveEngine write-behind·dirtyTracker 계약(진행 변이 영속).
 - `docs/specs/golden-fixture-harness.md` — 골든 fixture 옮겨 적기+독립 참조 관례(needed_exp·level_cycle).

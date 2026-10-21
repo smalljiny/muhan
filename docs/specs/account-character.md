@@ -92,7 +92,7 @@ E3-2의 `ConnectionState` 핸들러 맵에 `delete` 상태를 더하고, create 
 
 ### 선택·진입·재개
 
-`characterSelect`에서 `session:selectCharacter{characterId}`를 받으면 `assertOwnership`으로 소유·상태를 검증한다 — 미존재·타 계정 소유·**status='deleted'** 중 하나면 `OwnershipError`(존재/소유/삭제를 하나로 collapse — 열거 oracle 차단). `findById`가 status를 필터하지 않으므로 이 삭제 검사가 삭제 캐릭터로의 월드 재진입(재로그인 차단 우회)을 막는 유일 지점이다. 통과 시 `session:entered` + `command` 전이. link-dead 재접속은 세션 레지스트리([`session-lifecycle.md`](session-lifecycle.md))를 경유해 `session:resumed`로 재개한다.
+`characterSelect`에서 `session:selectCharacter{characterId}`를 받으면 `assertOwnership`으로 소유·상태를 검증한다 — 미존재·타 계정 소유·**status='deleted'** 중 하나면 `OwnershipError`(존재/소유/삭제를 하나로 collapse — 열거 오라클 차단). `findById`가 status를 필터하지 않으므로 이 삭제 검사가 삭제 캐릭터로의 월드 재진입(재로그인 차단 우회)을 막는 유일 지점이다. 통과 시 `session:entered` + `command` 전이. link-dead 재접속은 세션 레지스트리([`session-lifecycle.md`](session-lifecycle.md))를 경유해 `session:resumed`로 재개한다.
 
 ### soft-delete(자살) 서브플로우
 

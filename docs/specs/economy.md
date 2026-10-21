@@ -1,6 +1,6 @@
 # 경제 (금화·상점·전당포·수리·소지 한도)
 
-> 무한의 금화 경제와 상거래(구매·몹구매·전당포 판매·수리)·소지 한도를 순수 트랜잭션 함수 + 선언 가격 config로 이식한 시스템. A8 §7~8 이식(이슈 #87).
+> 무한의 금화 경제와 상거래(구매·몬스터 구매·전당포 판매·수리)·소지 한도를 순수 트랜잭션 함수 + 선언 가격 config로 이식한 시스템. A8 §7~8 이식(이슈 #87).
 
 ## 개요
 
@@ -8,9 +8,9 @@
 
 네 축으로 구성된다:
 
-- **금화 경제**(`moneyService`) — MONEY 오브젝트의 드롭·줍기·양도를 gold↔디스크립터 변환으로 통일.
-- **가격 config**(`priceConfig`) — 구매·몹구매·판매·수리 가격 배수·상한을 선언 테이블 하나로 외부화.
-- **상점 서비스**(`shopService`) — 상점 구매(buy)·몹상점 구매(purchase)·전당포 판매(sell)·수리(repair)의 게이트·거부조건·복제·RNG.
+- **금화 경제**(`moneyService`) — MONEY 아이템의 드롭·줍기·양도를 gold↔디스크립터 변환으로 통일.
+- **가격 config**(`priceConfig`) — 구매·몬스터 구매·판매·수리 가격 배수·상한을 선언 테이블 하나로 외부화.
+- **상점 서비스**(`shopService`) — 상점 구매(buy)·몬스터 상점 구매(purchase)·전당포 판매(sell)·수리(repair)의 게이트·거부조건·복제·RNG.
 - **소지 한도**(`carry`) — 무게(재귀 합, `maxWeight` 소비)·개수 두 상한을 순수 predicate 하나로.
 
 가격·판매·수리·소지 한도에는 골든 fixture가 있다(fixture 규약은 [`golden-fixture-harness.md`](golden-fixture-harness.md)). 결정적 RNG는 combat의 `CombatRng` 확장 지점(seam)([`combat.md`](combat.md))을 재사용한다.
@@ -33,7 +33,7 @@
 
 ### 금화 경제 (moneyService)
 
-MONEY 오브젝트(objnum 0 "동전", type 10)의 이동을 gold↔디스크립터 순수 변환으로 이식한다. 반환 `MoneyDescriptor`는 `{ objnum: 0, type: 10, value }`인 **소유자 없는 bare 디스크립터**이며 영속 `ObjectInstance`가 아니다 — 바닥 배치·소유자 연결은 #106의 몫이다.
+MONEY 아이템(objnum 0 "동전", type 10)의 이동을 gold↔디스크립터 순수 변환으로 이식한다. 반환 `MoneyDescriptor`는 `{ objnum: 0, type: 10, value }`인 **소유자 없는 bare 디스크립터**이며 영속 `ObjectInstance`가 아니다 — 바닥 배치·소유자 연결은 #106의 몫이다.
 
 | 함수 | 동작 | 거부 |
 |------|------|------|
@@ -68,9 +68,9 @@ MONEY 오브젝트(objnum 0 "동전", type 10)의 이동을 gold↔디스크립�
 
 재고 소싱 위치는 보류한다 — `shopItem`을 파라미터로 받고 `rom_num+1` 인접방 규칙(D5)을 재현하지 않는다. 오라클이 클론 직후 하는 영구 플래그 해제(OPERM2/OPERMT/OTEMPP)는 `ShopItem`이 플래그를 담지 않으므로 완전 인스턴스 연결 시점에 #106이 수행한다.
 
-### 몹상점 구매 (purchase, MPURIT)
+### 몬스터 상점 구매 (purchase, MPURIT)
 
-`purchase(char, item)` — 몹은 템플릿을 무한 복제하므로 buy와 동일하게 소유자 없는 클론을 반환한다. 어느 템플릿을 클론할지(몹 `carry[]`에서 itemRef→템플릿 해석)는 #106의 책임이며, purchase는 이미 해석된 템플릿 아이템을 받는다.
+`purchase(char, item)` — 몬스터는 템플릿을 무한 복제하므로 buy와 동일하게 소유자 없는 클론을 반환한다. 어느 템플릿을 클론할지(몬스터 `carry[]`에서 itemRef→템플릿 해석)는 #106의 책임이며, purchase는 이미 해석된 템플릿 아이템을 받는다.
 
 - 게이트: `gold < mobBuyPrice(value)`(= `max(10, value)`) → `insufficient-gold`.
 - 개수: 얻기 *전* `invCount > 150` → `count-limit`(buy와 동일 strict `>` 경계, 정확히 150 보유자는 성공).
@@ -124,7 +124,7 @@ RNG 순서: `broke(1,100)`를 먼저 굴리고, **성공일 때만** `durability
 
 ## 관련 문서
 
-- **oracle**: `docs/notes/game-analysis-20260625/a8-items-economy.md`(§7 금화 경제·§8 상점/전당포/수리·§10 구현 버그) · `legacy/muhan/src/`(`command7.c` buy/sell·`command8.c` repair·`command10.c` purchase·`command2.c` money·`creature.c` drop)
+- **오라클**: `docs/notes/game-analysis-20260625/a8-items-economy.md`(§7 금화 경제·§8 상점/전당포/수리·§10 구현 버그) · `legacy/muhan/src/`(`command7.c` buy/sell·`command8.c` repair·`command10.c` purchase·`command2.c` money·`creature.c` drop)
 - **의존 스펙**: [items-equipment.md](items-equipment.md)(object·value·weight·owner 소비) · [stats-core.md](stats-core.md)(`maxWeight`·`bonusOf` 소비) · [combat.md](combat.md)(`CombatRng` seam 재사용) · [golden-fixture-harness.md](golden-fixture-harness.md)(fixture 규약)
 - **형제 시스템**: [bank-items.md](bank-items.md)(은행 물품 보관 G8) · [save-policy.md](save-policy.md)(은행 현금 트랜잭션 `bankTransactionService`)
 - **후속**: #106(라이브 command 라우팅) · #43(write-behind 라이브 강제)

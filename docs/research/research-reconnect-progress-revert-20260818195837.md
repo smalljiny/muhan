@@ -46,7 +46,7 @@ Redis도 캐시 드리프트의 원인을 셋으로 정리하며 같은 지점�
 
 #120 스펙 OQ1이 `markCharacterDirty`를 먼저 두기로 한 결정은 이 추론과 동형이다. 다만 인용문의 마지막 문장이 본 토픽에 대한 경고다 — **본 결함에서는 두 write가 모두 성공하는데도 "한쪽만 revert"되어 소실 방향이 실현된다.** 부분 커밋의 원인이 실패가 아니라 revert라는 점만 다르고 결과는 같다.
 
-**아이템 복제 방지 선례가 강조하는 것은 원자성과 단일 권위다.** Bugnet은 "전송을 원자적으로 만들라(전송 시 **추가보다 제거를 먼저**), 이벤트 이중 발화를 막으라, 인벤토리를 **한 곳에서만 바뀌는 권위 상태**로 다루라"로 요약한다 ([Bugnet](https://bugnet.io/blog/how-to-fix-inventory-item-duplication-bug)). 고전적 복제 익스플로잇 목록에도 **"다른 캐릭터에게 거래한 뒤 거래한 계정을 먼저 접속 종료"**가 올라 있다 ([munique.net](https://munique.net/item-duplication-exploits/)) — 접속 종료가 영속 경계와 엮이는 순간이 공격 표면이라는 뜻이다.
+**아이템 복제 방지 선례가 강조하는 것은 원자성과 단일 기준이다.** Bugnet은 "전송을 원자적으로 만들라(전송 시 **추가보다 제거를 먼저**), 이벤트 이중 발화를 막으라, 인벤토리를 **한 곳에서만 바뀌는 기준 상태(authoritative)**로 다루라"로 요약한다 ([Bugnet](https://bugnet.io/blog/how-to-fix-inventory-item-duplication-bug)). 고전적 복제 익스플로잇 목록에도 **"다른 캐릭터에게 거래한 뒤 거래한 계정을 먼저 접속 종료"**가 올라 있다 ([munique.net](https://munique.net/item-duplication-exploits/)) — 접속 종료가 영속 경계와 엮이는 순간이 공격 표면이라는 뜻이다.
 
 **다중 키 원자성의 일반 해법은 transactional outbox다.** 업무 엔티티 갱신과 메시지 발행을 같은 트랜잭션에 넣고 별도 릴레이가 전달한다. 이득은 "2PC 없이도 DB 트랜잭션이 커밋될 때만 메시지가 전달됨이 보장"되고 **순서가 보존**된다는 것이다. 대가는 릴레이가 **메시지를 두 번 이상 발행할 수 있다**는 점이라 소비자 멱등성이 필요하다 ([microservices.io](https://microservices.io/patterns/data/transactional-outbox.html)).
 
@@ -126,7 +126,7 @@ Meta의 표현이 심각도를 요약한다 — *"어떤 경우 캐시 불일치
 13. [Cache Consistency: Strategies to Keep Data Fresh — Redis](https://redis.io/blog/cache-consistency-strategies/) — 캐시 드리프트 3대 원인
 14. [Players Save is reverted to last save state — The Indie Stone](https://theindiestone.com/forums/topic/90611-42131-players-save-is-reverted-to-last-save-state-whenever-he-disconnects/) — Project Zomboid 동일 증상 프로덕션 사례
 15. [Player data being reset to the "start" — Minecraft Forum](https://www.minecraftforum.net/forums/support/server-support-and/2950936-player-data-being-reset-to-the-start) — abrupt disconnect 시 상태 리셋 사례
-16. [How to Fix an Inventory Item Duplication Bug — Bugnet](https://bugnet.io/blog/how-to-fix-inventory-item-duplication-bug) — 원자적 전송·단일 권위 상태 원칙
+16. [How to Fix an Inventory Item Duplication Bug — Bugnet](https://bugnet.io/blog/how-to-fix-inventory-item-duplication-bug) — 원자적 전송·단일 기준 상태 원칙
 17. [On item duplication exploits and how to prevent them — munique.net](https://munique.net/item-duplication-exploits/) — 접속 종료를 이용한 복제 익스플로잇 유형
 18. [Session Management and Caching at Scale — Apache Ignite](https://ignite.apache.org/use-cases/session-management/) — 세션 캐시 정합성 포지셔닝
 19. [Ignite Write Behind Internals — StackOverflow](https://stackoverflow.com/questions/47548547/ignite-write-behind-internals) — write-behind backpressure 설계

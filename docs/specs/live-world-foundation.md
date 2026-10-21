@@ -131,7 +131,7 @@ fan-out 대상 결정은 `createRoomChannelAdapter`(발화자 현재 방의 occu
 
 ### 조립 (부트 → 팩토리)
 
-부트(`index.ts`)는 원재료 묶음(월드 그래프·레지스트리·characterRepo·markDirty·peekPending·currentHour·방 진입/퇴장 훅·logger·오브젝트 템플릿 인덱스·`now`)만 조립해 넘기고, `createLiveWorldWiring`이 진입 바인딩·이동 의존(`moveDeps`)·연마 의존(`trainDeps`)·비법서 연마 의존(`studyDeps`)·수명 포트·방 리졸버(`resolveRoom`)·`markCharacterDirty`·`markObjectDeleted` seam을 파생한다. 부트는 커버리지 제외 연결 코드이므로 파생 로직을 테스트 가능한 순수 팩토리로 뽑고 부트에는 묶음 전달만 남긴다.
+부트(`index.ts`)는 원재료 묶음(월드 그래프·레지스트리·characterRepo·markDirty·peekPending·currentHour·방 진입/퇴장 훅·logger·아이템 템플릿 인덱스·`now`)만 조립해 넘기고, `createLiveWorldWiring`이 진입 바인딩·이동 의존(`moveDeps`)·연마 의존(`trainDeps`)·비법서 연마 의존(`studyDeps`)·수명 포트·방 리졸버(`resolveRoom`)·`markCharacterDirty`·`markObjectDeleted` seam을 파생한다. 부트는 커버리지 제외 연결 코드이므로 파생 로직을 테스트 가능한 순수 팩토리로 뽑고 부트에는 묶음 전달만 남긴다.
 
 규칙 명령이 늘어도 원재료는 **거의** 늘지 않는다 — 팩토리가 기존 묶음에서 명령별 deps를 파생하기 때문이다. `train` 연결은 신규 원재료 0건이었고, `study` 연결은 `objectTemplates`(부팅 시 1회 조립하는 템플릿 인덱스)와 `now`(실명 만료 판정 기준 틱) 둘만 더했다. 두 번째 영속 seam인 `markObjectDeleted`는 원재료가 아니라 기존 `bundle.markDirty`에서 파생한다 — `markCharacterDirty`와 같은 규약이다.
 
@@ -167,11 +167,11 @@ fan-out 대상 결정은 `createRoomChannelAdapter`(발화자 현재 방의 occu
 - **인벤 서수 기준이 오라클과 다르다** — 오라클 `add_obj_crt`(`legacy/muhan/src/player.c:857-898`)는 EUC-KR `strcmp` 이름 사전순(동명 시 `adjustment` 순) 삽입으로 인벤 순서를 유지하지만, 포트는 `findByOwner`의 `_id` 오름차순이다. KS X 1001 완성형 배열이 Unicode Hangul Syllables 배열과 달라 JS 문자열 비교로 재현되지 않는 것이 원인이며, 방 대상 서수 divergence(#137)와 같은 성격이다. `_id` 정렬은 **결정적 순서를 보장하기 위한 것**이지 오라클 재현이 아니다(Mongo 자연 순서는 계약이 아니라 같은 인벤이 조회마다 다른 서수를 낼 수 있다). 추적 이슈 [#142](https://github.com/smalljiny/muhan/issues/142), 근거는 `world/liveCharacterEntry.ts` 헤더가 담당한다.
 - **인벤 변경의 영속 경로는 삭제뿐** — `study`의 비법서 소멸만 `markObjectDeleted`로 write-behind에 실린다. 착용 토글·`shotscur` 감소·줍기 같은 비-삭제 인벤 변경은 라이브 메모리에만 남고 영속되지 않는다. 해당 명령들이 연결될 때 함께 온다.
 - **pending overlay는 캐릭터 문서에 한한다(#124)** — hydrate가 합성하는 것은 `characters` 스냅샷뿐이고 `objectDeletions`는 합성하지 않는다. 그래서 grace 만료 재접속 시 삭제 마킹됐지만 아직 flush되지 않은 비법서가 인벤에 **유령으로 남는다**. 현재 무해하다 — 재연마 시 `setKnown`·`markObjectDeleted` 모두 멱등해 수렴하고, 줍기·버리기·건네주기 경로가 0건이라 복제 경로가 없다. #121(attack)은 전리품을 방에 드롭하지 않기로 결정해(주울 수단이 없다) 이 경로를 열지 않았다. #119(teach)가 건네주기를 열거나 #99가 전리품 드롭을 붙이면 재평가가 필요하다. 인벤 자체의 재접속 revert(위 항목)는 여전히 열려 있다 — 캐릭터 문서 쪽만 닫혔고 인벤은 닫히지 않았다.
-- **`world:room`은 스냅샷이지 델타가 아니다** — E11(#60)이 방 이름·설명·점유자·아이템·크리처를 실어 최소 통지에서 벗어났다. 그러나 발생 시점은 여전히 진입·이동 성공 두 곳뿐이라, 내가 가만히 있는 동안 다른 사람이 들어와도 목록이 갱신되지 않는다. 실시간 입·퇴장 델타는 #116이 담당한다.
+- **`world:room`은 스냅샷이지 델타가 아니다** — E11(#60)이 방 이름·설명·점유자·아이템·몬스터를 실어 최소 통지에서 벗어났다. 그러나 발생 시점은 여전히 진입·이동 성공 두 곳뿐이라, 내가 가만히 있는 동안 다른 사람이 들어와도 목록이 갱신되지 않는다. 실시간 입·퇴장 델타는 #116이 담당한다.
 - **스폰 정책 미완결** — orphan `currentRoom`은 `DEFAULT_START_ROOM = 1` 단일 폴백으로만 방어한다. 레벨·종족·소속별 시작지 정책은 별도다.
 - **채널 fan-out에 가시성 필터 없음** — 방 채널 fan-out은 occupants 전 멤버 대상이며 발화자 자신도 제외하지 않는다. PINVIS·어둠·투명 필터는 E5가 담당한다. (방 **표시**의 가시성 필터는 E11에서 별도로 들어왔다 — [`movement-rooms.md`](movement-rooms.md) §방 표시 가시성 필터. 두 필터는 다른 관심사다.)
 - **broadcast·yell 채널 미분화** — 실 방 어댑터가 붙었으므로 `broadcast`·`yell`도 방 단위로만 전달된다(전서버 방송·1홉 인접 전파 아님). 전역 fan-out과 `minLevel` 게이트 강제는 소셜·채널 에픽(#37)이 함께 담당한다.
-- **몬스터 측 live-ization 없음** — 크리처 틱 부트 연결·마나 재생은 별도 토픽이다.
+- **몬스터 측 live-ization 없음** — 몬스터 틱 부트 연결·마나 재생은 별도 토픽이다.
 
 ## 관련 문서
 

@@ -533,7 +533,7 @@
     <p class="eyebrow">muhan · github issues → roadmap · 2026-08-19 · <strong>develop 6920540</strong></p>
     <h1>지금 어디에 있나 — 무한 포팅 진행 궤도</h1>
     <p class="lede">1991–93년 Mordor에서 파생된 한국어 MUD "무한"을 Node.js와 웹으로 재구현하는 프로젝트입니다. 이 페이지는 에픽 E1~E13과 토픽·부채 이슈를 바탕으로 현황을 정리합니다. <strong>규칙 엔진의 순수 레이어(전투·마법·진행·스탯·아이템·경제)는 전부 닫혔습니다.</strong> 지금 남은 것은 그 규칙을 살아 있는 세션에 잇는 "연결"입니다. 크리티컬 패스는 여전히 라이브 명령 연결 체인입니다. 다만 체인의 첫 이슈였던 <a href="https://github.com/smalljiny/muhan/issues/118">#118</a>이 08-10에 닫히면서 체인의 모든 이슈에 착수할 수 있게 됐습니다. 이제 병목은 선행 이슈가 아니라 각 토픽 내부의 설계 결정입니다.</p>
-    <p class="lede" style="margin-top:8px"><strong>08-20 기준</strong> — 08-19 이후 <a href="https://github.com/smalljiny/muhan/issues/121">#121</a>이 닫혔습니다(PR #148). 이제 <strong>플레이어가 몬스터를 때릴 수 있습니다</strong>. 대상 지목, 전투 판정, 사망, 경험치 획득까지 한 바퀴가 라이브 세션에서 돕니다. 테스트가 아닌 코드에서 <code>initiateAttack</code>을 호출하는 곳이 0건이던 문제가 해소됐습니다. <code>combatRegistry</code>, 장비 해석 파이프, 크리처별 데미지 원장, 사망 확장 지점(seam)도 함께 만들어졌습니다. 프로토콜도 바뀝니다. <code>PROTOCOL_VERSION</code>이 5→6으로 올라가고, <code>ClientCommand</code>는 10종, <code>ServerEvent</code>는 14종이 됩니다. <code>combat:attack</code> 명령과 <code>combat:attacked</code>·<code>character:stats</code> 이벤트가 새로 생겼습니다. 이로써 <a href="https://github.com/smalljiny/muhan/issues/61">#61</a>(E12)의 게이트가 열렸고, <a href="https://github.com/smalljiny/muhan/issues/122">#122</a>(cast)의 유일한 선행 이슈가 사라졌습니다. CP1 잔여는 그대로 <a href="https://github.com/smalljiny/muhan/issues/116">#116</a>·<a href="https://github.com/smalljiny/muhan/issues/138">#138</a> 두 건입니다. 새 부채 <a href="https://github.com/smalljiny/muhan/issues/147">#147</a>(사망하지 않은 크리처의 원장 미회수)이 발행됐습니다.</p>
+    <p class="lede" style="margin-top:8px"><strong>08-20 기준</strong> — 08-19 이후 <a href="https://github.com/smalljiny/muhan/issues/121">#121</a>이 닫혔습니다(PR #148). 이제 <strong>플레이어가 몬스터를 때릴 수 있습니다</strong>. 대상 지목, 전투 판정, 사망, 경험치 획득까지 한 바퀴가 라이브 세션에서 돕니다. 테스트가 아닌 코드에서 <code>initiateAttack</code>을 호출하는 곳이 0건이던 문제가 해소됐습니다. <code>combatRegistry</code>, 장비 해석 파이프, 몬스터별 데미지 원장, 사망 확장 지점(seam)도 함께 만들어졌습니다. 프로토콜도 바뀝니다. <code>PROTOCOL_VERSION</code>이 5→6으로 올라가고, <code>ClientCommand</code>는 10종, <code>ServerEvent</code>는 14종이 됩니다. <code>combat:attack</code> 명령과 <code>combat:attacked</code>·<code>character:stats</code> 이벤트가 새로 생겼습니다. 이로써 <a href="https://github.com/smalljiny/muhan/issues/61">#61</a>(E12)의 게이트가 열렸고, <a href="https://github.com/smalljiny/muhan/issues/122">#122</a>(cast)의 유일한 선행 이슈가 사라졌습니다. CP1 잔여는 그대로 <a href="https://github.com/smalljiny/muhan/issues/116">#116</a>·<a href="https://github.com/smalljiny/muhan/issues/138">#138</a> 두 건입니다. 새 부채 <a href="https://github.com/smalljiny/muhan/issues/147">#147</a>(사망하지 않은 몬스터의 원장 미회수)이 발행됐습니다.</p>
     <p class="lede" style="margin-top:8px"><strong>릴리스 계획</strong> — <strong>CP1이 첫 릴리스 지점</strong>입니다. CP1을 통과하면 릴리스를 내고 <code>develop</code>을 <code>main</code>에 병합합니다. 그때까지는 원격에 <code>develop</code> 하나만 있는 것이 정상입니다.</p>
 
     <!-- ══ HERO 다이어그램 ══ -->
@@ -653,7 +653,7 @@
         <div class="s-t">#138 · #116</div>
         <ul class="s-list">
           <li><strong>#138</strong> 깨끗한 DB에서 e2e 통과 불가 — README 절차가 실패</li>
-          <li><strong>#116</strong> 이동 leave/join 방송 — <strong>전투가 연결되면서 중요도가 커졌습니다</strong>. 사망 통지가 공격자 소켓에만 가서, 같은 방의 다른 점유자에게는 죽은 크리처가 계속 보입니다</li>
+          <li><strong>#116</strong> 이동 leave/join 방송 — <strong>전투가 연결되면서 중요도가 커졌습니다</strong>. 사망 통지가 공격자 소켓에만 가서, 같은 방의 다른 점유자에게는 죽은 몬스터가 계속 보입니다</li>
         </ul>
       </div>
       <div class="s-card nextup">
@@ -719,14 +719,14 @@
           <div class="card d">
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">디스크 포맷 역설계 → JSON</span>
               <span class="card-num">이슈 밖</span></div>
-            <div class="kv"><span class="k">확정</span><span class="v">32비트 ABI · EUC-KR · <code>room</code>=480 · <code>exit_</code>=44 · <code>object</code>=352 · <code>creature</code>=1184. C oracle 대조로 object 907 + creature 1049 전 필드 일치</span></div>
+            <div class="kv"><span class="k">확정</span><span class="v">32비트 ABI · EUC-KR · <code>room</code>=480 · <code>exit_</code>=44 · <code>object</code>=352 · <code>creature</code>=1184. C 오라클 대조로 object 907 + creature 1049 전 필드 일치</span></div>
             <div class="kv"><span class="k">산출</span><span class="v"><code>port/</code> 파서·변환기 → <code>data/world/</code>(rooms·creatures·objects·events). 방 3216개 중 유효 <strong>2341</strong> · orphan 875 제외</span></div>
           </div>
           <div class="card d">
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">게임 분석 A1~A13</span>
               <span class="card-num">#1–#13</span></div>
             <div class="kv"><span class="k">범위</span><span class="v">런타임 틱 · 명령 체계 · 한글 I/O · 이동/방 · 전투 · 마법 · 진행 · 아이템/경제 · 몬스터 AI · 소셜 · 특수 훅 · 세션 · DM 기능</span></div>
-            <div class="kv"><span class="k">역할</span><span class="v"><code>legacy/muhan/src</code>는 이식 대상이 아니라 <strong>동작 명세(behavioral oracle)</strong>. 분석 노트가 이후 전 에픽의 콘텐츠 출처</span></div>
+            <div class="kv"><span class="k">역할</span><span class="v"><code>legacy/muhan/src</code>는 이식 대상이 아니라 <strong>동작 명세(오라클)</strong>. 분석 노트가 이후 전 에픽의 콘텐츠 출처</span></div>
           </div>
           <div class="card d">
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">스택·아키텍처 결정 게이트 ★</span>
@@ -762,7 +762,7 @@
             <div class="kv"><span class="k">결정</span><span class="v">D6 보정 — argon2id 대신 <strong>Firebase Auth 세션 쿠키</strong> + <code>SessionAuthPort</code> DIP seam</span></div>
           </div>
           <div class="card d">
-            <div class="card-top"><span class="chip d">완료</span><span class="card-title">E8 테스트 인프라 (oracle fixture)</span>
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">E8 테스트 인프라 (오라클 fixture)</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/33">#33</a></div>
             <div class="kv"><span class="k">토픽</span><span class="v"><code>golden-fixture-harness</code>(#70) · <code>property-testing</code>(#71) — E6의 <strong>선행 조건</strong>이라 앞당겨 배치</span></div>
             <div class="kv rest"><span class="k">부채</span><span class="v"><s><a href="https://github.com/smalljiny/muhan/issues/126">#126</a> turbo 해시가 상위 패키지 변경 미반영</s> — <strong>✅ 08-03 해소</strong>(PR #136, 계약 회귀 게이트 포함). <a href="https://github.com/smalljiny/muhan/issues/138">#138</a> e2e가 turbo·CI 어디에도 없어 회귀를 잡지 못함</span></div>
@@ -887,7 +887,7 @@
           <div class="card d">
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">E11 월드 뷰 (방·이동·주변)</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/60">#60</a></div>
-            <div class="kv"><span class="k">머지</span><span class="v">PR #128 (08-02) — <code>world:room</code>이 <code>roomId</code>+<code>exits</code> 2필드에서 <strong>방 전체 스냅샷 7필드</strong>(이름·설명·점유자·아이템·크리처)로 확장. <code>PROTOCOL_VERSION</code> 3→<strong>4</strong> · <code>projectRoomView</code> 표시 가시성 필터 · 클라 <code>RoomPanel</code> + 출구 버튼 이동</span></div>
+            <div class="kv"><span class="k">머지</span><span class="v">PR #128 (08-02) — <code>world:room</code>이 <code>roomId</code>+<code>exits</code> 2필드에서 <strong>방 전체 스냅샷 7필드</strong>(이름·설명·점유자·아이템·몬스터)로 확장. <code>PROTOCOL_VERSION</code> 3→<strong>4</strong> · <code>projectRoomView</code> 표시 가시성 필터 · 클라 <code>RoomPanel</code> + 출구 버튼 이동</span></div>
             <div class="kv rest"><span class="k">파생 부채 6건</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/129">#129</a> 수신자 인지 가시성 · <a href="https://github.com/smalljiny/muhan/issues/130">#130</a> <code>lastError</code> 미해제 · <a href="https://github.com/smalljiny/muhan/issues/131">#131</a> EventLog 비용 · <a href="https://github.com/smalljiny/muhan/issues/132">#132</a> <code>ServerEventPayload</code> 별칭 · <a href="https://github.com/smalljiny/muhan/issues/133">#133</a> seam 비대칭 · <a href="https://github.com/smalljiny/muhan/issues/134">#134</a> 표시/통행 비대칭 근거 주석. 점유자 실시간 갱신은 여전히 #116 대기</span></div>
           </div>
           <div class="card t">
@@ -938,7 +938,7 @@
           <div class="card d">
             <div class="card-top"><span class="chip d">완료 ★</span><span class="card-title">attack 명령 라이브 연결</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/121">#121</a></div>
-            <div class="kv"><span class="k">머지</span><span class="v">PR #148 (08-20) — <code>combat:attack</code> 연결. <code>assemblePlayerCombatState</code>(장비 페어링→유효 스탯 변환) · <code>creatureLedgers</code>(크리처별 원장 라우팅) · <code>applyVitals</code>(하한 0 클램프) · <code>defaultCombatRng</code> 신설 + 사망 seam 조립(exp 분배). <code>PROTOCOL_VERSION</code> 5→<strong>6</strong></span></div>
+            <div class="kv"><span class="k">머지</span><span class="v">PR #148 (08-20) — <code>combat:attack</code> 연결. <code>assemblePlayerCombatState</code>(장비 페어링→유효 스탯 변환) · <code>creatureLedgers</code>(몬스터별 원장 라우팅) · <code>applyVitals</code>(하한 0 클램프) · <code>defaultCombatRng</code> 신설 + 사망 seam 조립(exp 분배). <code>PROTOCOL_VERSION</code> 5→<strong>6</strong></span></div>
             <div class="kv"><span class="k">규모 정정</span><span class="v">이 카드는 "파이프 신규 구축"으로 예상했으나 <strong>전제가 틀렸습니다</strong>. <code>effectiveStat()</code> 호출자가 0건이고 능력치를 수정하는 항이 저장소에 0개라 <strong>유효 능력치 = 기본 능력치</strong>였습니다. 실제 걸림돌은 세 가지였습니다. HP 출처가 두 곳으로 나뉜 것, 사망 seam이 없던 것, <code>DamageLedger</code>가 방어자를 구분하지 못한 것입니다</span></div>
             <div class="kv"><span class="k">해제</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/122">#122</a>(cast)의 유일 선행과 <a href="https://github.com/smalljiny/muhan/issues/61">#61</a>(E12)의 이벤트 게이트가 <strong>함께 열렸습니다</strong>. <code>combat.md</code>가 <code>BLOCKING</code>으로 표시했던 ledger per-creature 스코핑도 닫혔습니다</span></div>
             <div class="kv rest"><span class="k">인계</span><span class="v">⚠️ <code>composeCharacterFlags</code> 함정은 <strong>동작을 바꾸지 않고 우회</strong>했습니다. PvP는 <code>checkPvpGate</code>에 도달하기 전에 사람 대상을 거부하는 fail-closed로 처리했습니다. <code>PUPDMG</code> 다중공격은 항상 1타라는 점을 소비 지점에 기록만 해 뒀습니다. 전투 이벤트는 <strong>공격자 소켓에만</strong> 갑니다(방 전파는 <a href="https://github.com/smalljiny/muhan/issues/116">#116</a>). 신규 부채 <a href="https://github.com/smalljiny/muhan/issues/147">#147</a></span></div>
@@ -1041,7 +1041,7 @@
           <span class="gate open">CP2 통과</span>
           <span class="gate open">#37 E7 소셜·채널</span>
           <span class="gate open">#62 E13 채널·귓속말 UI</span>
-          <span class="gate open">#108 known-divergence 해소</span>
+          <span class="gate open">#108 알려진 차이(known-divergence) 해소</span>
           <span class="gate open">#89 세션 revocation · banned 강제</span>
           <span class="gate open">#113 전이 취약점 · #51 타이머 소유권</span>
           <span class="gate held">⏸ FE-6 디자인 시스템 — 기능 freeze 후</span>
@@ -1076,19 +1076,19 @@
       <div class="debt-card">
         <div class="debt-top"><span class="sev">divergence</span><span class="debt-title">이름 서수 기준 — 방·인벤 3집합 (#142 통합)</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/137">#137</a></div>
-        <div class="debt-body">오라클은 방 플레이어, 방 크리처, 캐릭터 인벤 <strong>세 리스트 모두</strong>에 <code>strcmp</code> 이름 정렬 순으로 삽입합니다. 그래서 <code>고블린 2</code>·<code>비법서 2</code>의 "2"는 사전순 서수입니다. 포트는 방에서는 도착 순서(<code>occupants</code> Set 삽입 순 · <code>creatures</code> push 순)를, 인벤에서는 <code>findByOwner</code>의 <code>_id</code> 오름차순을 씁니다. 인벤 쪽 순서는 #120이 결정성을 확보하려고 넣은 것이지 오라클을 재현한 것이 아닙니다. 원인은 KS X 1001 배열과 Unicode 배열이 다르다는 것 하나입니다. 비교 함수 1개로 3집합이 함께 해결되므로 08-19에 <a href="https://github.com/smalljiny/muhan/issues/142">#142</a>를 이 이슈로 통합했습니다. 인벤에만 2차 정렬 키(이름이 같으면 <code>adjustment</code> 순)가 더 있습니다. <strong>이 순서를 쓰는 토픽 #119·#122는 오라클 순서를 전제로 구현하면 안 됩니다.</strong> #121(attack)은 08-20에 리졸버를 그대로 쓰고 규칙을 따로 구현하지 않는 방식으로 처리했습니다. 비교 함수가 들어오면 지목 순서도 함께 바로잡히도록 남겨 둔 것입니다.</div>
+        <div class="debt-body">오라클은 방 플레이어, 방 몬스터, 캐릭터 인벤 <strong>세 리스트 모두</strong>에 <code>strcmp</code> 이름 정렬 순으로 삽입합니다. 그래서 <code>고블린 2</code>·<code>비법서 2</code>의 "2"는 사전순 서수입니다. 포트는 방에서는 도착 순서(<code>occupants</code> Set 삽입 순 · <code>creatures</code> push 순)를, 인벤에서는 <code>findByOwner</code>의 <code>_id</code> 오름차순을 씁니다. 인벤 쪽 순서는 #120이 결정성을 확보하려고 넣은 것이지 오라클을 재현한 것이 아닙니다. 원인은 KS X 1001 배열과 Unicode 배열이 다르다는 것 하나입니다. 비교 함수 1개로 3집합이 함께 해결되므로 08-19에 <a href="https://github.com/smalljiny/muhan/issues/142">#142</a>를 이 이슈로 통합했습니다. 인벤에만 2차 정렬 키(이름이 같으면 <code>adjustment</code> 순)가 더 있습니다. <strong>이 순서를 쓰는 토픽 #119·#122는 오라클 순서를 전제로 구현하면 안 됩니다.</strong> #121(attack)은 08-20에 리졸버를 그대로 쓰고 규칙을 따로 구현하지 않는 방식으로 처리했습니다. 비교 함수가 들어오면 지목 순서도 함께 바로잡히도록 남겨 둔 것입니다.</div>
         <div class="debt-gate">▸ 게이트 없음 · 명령 연결 체인이 인계받음 · <a href="https://github.com/smalljiny/muhan/issues/142">#142</a> 통합·close</div>
       </div>
       <div class="debt-card">
         <div class="debt-top"><span class="sev high">열림</span><span class="debt-title">world:room 수신자 인지 가시성 필터 없음</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/129">#129</a></div>
-        <div class="debt-body"><code>projectRoomView</code>가 <strong>관찰자를 인자로 받지 않아서</strong> 오라클 <code>room.c</code>의 두 게이트(점유자 은신·투명 필터 / 광원·실명 게이트)를 구현하지 못합니다. 이 누락은 테스트 실패가 아니라 정보 과다 노출로 나타나기 때문에 회귀 테스트로 잡을 수 없습니다. 08-20 #121 연결로, 예고했던 위험이 실제로 생겼습니다. 보안 리뷰가 두 번째 누출 지점을 찾았습니다. <code>combat:attack</code>의 대상 지목은 2단계로 이뤄지는데, 크리처를 찾지 못하면 플레이어로 넘어가서 <code>player-target</code>과 <code>not-found</code>라는 서로 다른 오류를 돌려줍니다. 그래서 이름을 추측해 보면 방 목록에 뜨지 않는 캐릭터가 있는지 알아낼 수 있습니다. 아직 <code>PHIDDN</code>·<code>PINVIS</code>를 라이브로 쓰는 경로가 없어 실제 입력으로는 이 상황에 도달할 수 없습니다. 하지만 <strong>#129에서 <code>roomView</code>만 고치고 <code>resolveRoomPlayer</code>를 함께 고치지 않으면</strong>, "목록에서는 숨겼는데 공격 오류로는 드러나는" 회귀가 조용히 생깁니다.</div>
+        <div class="debt-body"><code>projectRoomView</code>가 <strong>관찰자를 인자로 받지 않아서</strong> 오라클 <code>room.c</code>의 두 게이트(점유자 은신·투명 필터 / 광원·실명 게이트)를 구현하지 못합니다. 이 누락은 테스트 실패가 아니라 정보 과다 노출로 나타나기 때문에 회귀 테스트로 잡을 수 없습니다. 08-20 #121 연결로, 예고했던 위험이 실제로 생겼습니다. 보안 리뷰가 두 번째 누출 지점을 찾았습니다. <code>combat:attack</code>의 대상 지목은 2단계로 이뤄지는데, 몬스터를 찾지 못하면 플레이어로 넘어가서 <code>player-target</code>과 <code>not-found</code>라는 서로 다른 오류를 돌려줍니다. 그래서 이름을 추측해 보면 방 목록에 뜨지 않는 캐릭터가 있는지 알아낼 수 있습니다. 아직 <code>PHIDDN</code>·<code>PINVIS</code>를 라이브로 쓰는 경로가 없어 실제 입력으로는 이 상황에 도달할 수 없습니다. 하지만 <strong>#129에서 <code>roomView</code>만 고치고 <code>resolveRoomPlayer</code>를 함께 고치지 않으면</strong>, "목록에서는 숨겼는데 공격 오류로는 드러나는" 회귀가 조용히 생깁니다.</div>
         <div class="debt-gate">▸ #121로 현실화 · <code>roomView</code>와 <code>resolveRoomPlayer</code>를 <strong>함께</strong> 고칠 것 · CP2</div>
       </div>
       <div class="debt-card">
-        <div class="debt-top"><span class="sev">신규</span><span class="debt-title">비사망 크리처 소멸 seam 없음 — 원장 미회수</span>
+        <div class="debt-top"><span class="sev">신규</span><span class="debt-title">비사망 몬스터 소멸 seam 없음 — 원장 미회수</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/147">#147</a></div>
-        <div class="debt-body"><code>creatureLedgers.discard</code>를 부르는 곳이 <strong>사망 경로 하나뿐</strong>입니다. 그래서 공격받던 크리처가 배회(<code>creatureTick</code>의 <code>wanderOut</code> splice)로 방을 떠나면 그 데미지 원장이 회수되지 않습니다. <code>instanceId</code>는 방별로 단조 증가(monotonic)하므로 키가 재사용되지도 않습니다. 따라서 Map은 가동 시간에 비례해 계속 커집니다. 엔트리당 비용은 작지만 상한이 없으므로, 오래 가동되는 프로세스에서는 이를 관측할 지점이 필요합니다. 지금 바로 고치지 못하는 이유는 두 가지입니다. <code>world/</code>가 <code>combat/</code>을 import하지 않는다는 레이어 규약이 있고, 사망 외의 이유로 크리처가 사라지는 것을 알리는 seam이 없습니다. 사망 seam과 짝을 이루는 수명 seam이 필요합니다.</div>
+        <div class="debt-body"><code>creatureLedgers.discard</code>를 부르는 곳이 <strong>사망 경로 하나뿐</strong>입니다. 그래서 공격받던 몬스터가 배회(<code>creatureTick</code>의 <code>wanderOut</code> splice)로 방을 떠나면 그 데미지 원장이 회수되지 않습니다. <code>instanceId</code>는 방별로 단조 증가(monotonic)하므로 키가 재사용되지도 않습니다. 따라서 Map은 가동 시간에 비례해 계속 커집니다. 엔트리당 비용은 작지만 상한이 없으므로, 오래 가동되는 프로세스에서는 이를 관측할 지점이 필요합니다. 지금 바로 고치지 못하는 이유는 두 가지입니다. <code>world/</code>가 <code>combat/</code>을 import하지 않는다는 레이어 규약이 있고, 사망 외의 이유로 몬스터가 사라지는 것을 알리는 seam이 없습니다. 사망 seam과 짝을 이루는 수명 seam이 필요합니다.</div>
         <div class="debt-gate">▸ 게이트 없음 · <a href="https://github.com/smalljiny/muhan/issues/99">#99</a>와 같은 수명 seam 영역 · 08-20 #121에서 발행</div>
       </div>
       <div class="debt-card">
@@ -1141,7 +1141,7 @@
       <div class="next-card">
         <div class="next-n">01</div>
         <div class="next-t">#116을 먼저 — 전투 때문에 중요해졌다</div>
-        <div class="next-d"><strong>#116의 우선순위가 올라갔습니다.</strong> 어제까지는 "같은 방 사람과 어울린다"는 CP1의 남은 절반이었습니다. 그런데 #121로 전투가 가능해지면서 <strong>상태 동기화 결함</strong>이 됐습니다. 몬스터가 죽어도 <code>world:room</code>이 공격자에게만 가기 때문에, 같은 방의 다른 플레이어는 죽은 크리처를 계속 목록에서 보고 지목합니다. 여럿이 함께 싸우면 바로 눈에 띕니다. 필요한 인프라는 이미 있습니다. <code>assembleRoomChannelPort</code>가 세션 색인으로 <code>chat:said</code>를 실제 소켓에 보내고 있고, 방송 seam만 <code>noopBroadcast</code>로 남아 있습니다. #138은 여전히 독립 항목이며, 다른 사람이 README를 따라 서버를 처음 띄우는 순간 바로 부딪힙니다.</div>
+        <div class="next-d"><strong>#116의 우선순위가 올라갔습니다.</strong> 어제까지는 "같은 방 사람과 어울린다"는 CP1의 남은 절반이었습니다. 그런데 #121로 전투가 가능해지면서 <strong>상태 동기화 결함</strong>이 됐습니다. 몬스터가 죽어도 <code>world:room</code>이 공격자에게만 가기 때문에, 같은 방의 다른 플레이어는 죽은 몬스터를 계속 목록에서 보고 지목합니다. 여럿이 함께 싸우면 바로 눈에 띕니다. 필요한 인프라는 이미 있습니다. <code>assembleRoomChannelPort</code>가 세션 색인으로 <code>chat:said</code>를 실제 소켓에 보내고 있고, 방송 seam만 <code>noopBroadcast</code>로 남아 있습니다. #138은 여전히 독립 항목이며, 다른 사람이 README를 따라 서버를 처음 띄우는 순간 바로 부딪힙니다.</div>
       </div>
       <div class="next-card">
         <div class="next-n">02</div>
@@ -1181,7 +1181,7 @@
     [30,  1, "done", 128, 214, "E1 monorepo 스캐폴딩", "pnpm workspaces 4패키지 · 이후 모든 작업의 선행"],
     [31,  1, "done", 216, 150, "E2 영속화 기반", "Mongo 연결·스키마·repository·세이브 정책"],
     [32,  1, "done", 216, 220, "E3 전송·세션 계층", "ws+TLS·세션 FSM·Zod 프로토콜·재연결"],
-    [33,  1, "done", 216, 290, "E8 테스트 인프라 (oracle fixture)", "골든 fixture·property 테스트 — E6의 선행"],
+    [33,  1, "done", 216, 290, "E8 테스트 인프라 (오라클 fixture)", "골든 fixture·property 테스트 — E6의 선행"],
     [34,  2, "done", 312, 160, "E4 월드 상태 엔진 ★", "방 그래프·tryMove·1Hz 틱·스폰 + 라이브 상태원(#114)"],
     [35,  2, "done", 312, 248, "E5 인증·계정", "account 1:N character · 생성 FSM · RBAC seam"],
     [58,  4, "done", 312, 342, "E9 웹 클라 전송 셸", "React + WS 레이어 · 버전 협상 · dev 인증"],

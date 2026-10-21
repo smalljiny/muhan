@@ -1,6 +1,6 @@
 # 런타임 기반 (월드 틱·타이머 확장 지점(seam)·shutdown 정리)
 
-> 무한 월드 상태 엔진(E4)의 기반이 되는 순수 런타임 인프라다. 1Hz 중앙 월드 틱, 타이머 주입 seam 단일화(`util/clock.ts`), graceful shutdown 때의 세션 일괄 종료로 이루어진다. 이동·방 채널(#69)과 스폰·크리처 AI(#68)는 이 기반에 register로 등록된다.
+> 무한 월드 상태 엔진(E4)의 기반이 되는 순수 런타임 인프라다. 1Hz 중앙 월드 틱, 타이머 주입 seam 단일화(`util/clock.ts`), graceful shutdown 때의 세션 일괄 종료로 이루어진다. 이동·방 채널(#69)과 스폰·몬스터 AI(#68)는 이 기반에 register로 등록된다.
 
 ## 개요
 
@@ -18,7 +18,7 @@ E3(전송·세션 계층)는 WS 핸드셰이크, 세션 FSM, 재연결 레지스
 
 세 축은 서로 의존한다. 월드 틱은 `util/clock.ts`를 clock으로 쓰고, shutdown 정리는 월드 틱을 정지 대상에 포함한다. `util/clock.ts` 통일은 월드 틱이라는 실제 소비자가 생기는 이 시점에야 의미가 있다. #50이 E4까지 미뤄진(defer) 이유가 이것이다. 또 월드 틱은 event loop를 붙잡는 referenced 타이머를 추가하므로, shutdown 정리를 함께 머지해야 hang을 막을 수 있다.
 
-이 계층은 **순수 프레임워크**다(YAGNI). 실제 슬롯(게임시간 진행, 크리처 큐, 출구 타이머)은 붙이지 않고, 소비자 등록 seam만 확정한다. 실제 소비는 후속 토픽(#69/#68)이 `register`로 연결한다.
+이 계층은 **순수 프레임워크**다(YAGNI). 실제 슬롯(게임시간 진행, 몬스터 큐, 출구 타이머)은 붙이지 않고, 소비자 등록 seam만 확정한다. 실제 소비는 후속 토픽(#69/#68)이 `register`로 연결한다.
 
 ## 구조 / 스키마
 
@@ -132,7 +132,7 @@ SIGTERM/SIGINT를 받으면 아래 순서로 진행한다. 캐시된 Promise를 
 - **실 슬롯 소비는 소비 토픽 담당**
   - `WorldClock`은 등록 프레임워크와 API를 확정한다.
   - E4-1b(#69)가 첫 실제 슬롯 소비자다. 게임시각(`gameTime`, `intervalSec=150`)과 출구 타이머(`checkExits`, `intervalSec=1`)를 boot에서 `register`한다([`movement-rooms.md`](./movement-rooms.md)).
-  - 나머지 실제 슬롯은 후속 소비 토픽이 붙인다. 크리처 큐·스폰(#68), 저빈도 `update_*` 게임시간 주야, moonstone 등이 여기에 해당한다.
+  - 나머지 실제 슬롯은 후속 소비 토픽이 붙인다. 몬스터 큐·스폰(#68), 저빈도 `update_*` 게임시간 주야, moonstone 등이 여기에 해당한다.
 - **소켓 ping/pong 정책 불변** — `ws/heartbeat`는 타이머 주입 seam만 `clock`으로 통일한다. 생존 판정 로직(미스 카운터, `maxMissed`, `terminate`)은 E3에서 확정한 그대로다.
 - **#51(ctx.heartbeat 타이머 단일 소유권) 범위 밖** — registry sweep 설계와 얽힌 별도 이슈다. 이 토픽은 타이머 *주입 seam*만 통일하고, 소유권 리팩터는 다루지 않는다.
 - **실 save 포트 연결 없음** — `SessionLifecyclePort`는 no-op으로 남는다. shutdown 정리 경로가 포트를 바인딩마다 정확히 1회 호출한다는 점만 확정한다. 실제 저장 어댑터는 라이브 월드 캐릭터가 생기는 후속 에픽(E4/E5)이 담당한다.

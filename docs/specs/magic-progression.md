@@ -53,7 +53,7 @@
 `study(char, book)`(`learning.ts`)는 비법서(SCROLL) 연마를 다음 게이트 순서로 평가한다.
 
 1. PBLIND(실명)
-2. 오브젝트 타입(SCROLL이 아님)
+2. 아이템 타입(SCROLL이 아님)
 3. 레벨(`book.ndice > level`)
 4. 성향(`OGOODO`이고 `alignment<-100`, 또는 `OEVILO`이고 `alignment>100`)
 5. 클래스(`OCLSEL`이 켜져 있고, 해당 클래스 비트가 없고, `class<CARETAKER`)
@@ -61,7 +61,7 @@
 
 통과하면 `setKnown(char.spells, book.magicpower-1)`을 적용한 새 store를 반환하고, 실패하면 원래 store를 그대로 반환한다.
 
-study의 **성향 게이트는 known-divergence로 동작하지 않는다.** `alignment`의 실제 값 범위가 `[0,2]`(생성 인터뷰의 1|2와 backfill 중립 sentinel 0)라 `<-100`·`>100` 두 분기가 모두 거짓이다. 그래서 지금은 어떤 캐릭터도 성향 때문에 연마를 거부당하지 않는다. 오라클 임계값은 **다시 조정하지 않는다**. 그대로 둬야 E6 성향 시스템([#123](https://github.com/smalljiny/muhan/issues/123))이 `-1000..+1000`을 도입할 때 코드를 고치지 않고 동작한다. 같은 이유로 동작하지 않는 게이트가 `combat/aggro.ts`·`combat/attackStats.ts`·`items/flags.ts`에도 있다([character-flags.md](character-flags.md)).
+study의 **성향 게이트는 알려진 차이(known-divergence)로 동작하지 않는다.** `alignment`의 실제 값 범위가 `[0,2]`(생성 인터뷰의 1|2와 backfill 중립 sentinel 0)라 `<-100`·`>100` 두 분기가 모두 거짓이다. 그래서 지금은 어떤 캐릭터도 성향 때문에 연마를 거부당하지 않는다. 오라클 임계값은 **다시 조정하지 않는다**. 그대로 둬야 E6 성향 시스템([#123](https://github.com/smalljiny/muhan/issues/123))이 `-1000..+1000`을 도입할 때 코드를 고치지 않고 동작한다. 같은 이유로 동작하지 않는 게이트가 `combat/aggro.ts`·`combat/attackStats.ts`·`items/flags.ts`에도 있다([character-flags.md](character-flags.md)).
 
 study와 teach가 읽는 PBLIND·PSILNC는 **`characterSchema.statusEffects`에 영속된 값에서 온다.** `composeCharacterFlags`가 세 변환 결과를 OR해, 소비하는 쪽이 `F_ISSET`으로 읽는 16자 hex를 만든다([character-flags.md](character-flags.md)). `study` 연결(#120)이 그 합성값을 게이트에 주입한다(`teach`는 #119 대기).
 
@@ -69,7 +69,7 @@ study와 teach가 읽는 PBLIND·PSILNC는 **`characterSchema.statusEffects`에 
 
 `ws/handlers/study.ts`가 순수 `study()`를 명령 경로에 연결한다. 핸들러는 게임 규칙을 다시 구현하지 않고 **조회, 합성, 메시지 매핑, 마킹**만 한다.
 
-1. 행위자의 라이브 엔트리를 레지스트리에서 꺼낸다. 대상 범위는 행위자의 소지품으로 한정된다. 오브젝트 id를 와이어로 받지 않으므로 다른 캐릭터의 오브젝트에 접근할 경로가 없다.
+1. 행위자의 라이브 엔트리를 레지스트리에서 꺼낸다. 대상 범위는 행위자의 소지품으로 한정된다. 아이템 id를 와이어로 받지 않으므로 다른 캐릭터의 아이템에 접근할 경로가 없다.
 2. `resolveCarriedObject`로 `target`·`ordinal`을 인벤토리 범위에서 해석한다([`items-equipment.md`](items-equipment.md)). 관찰자 flags는 `composeCharacterFlags(character, now)`로 합성해 넘긴다.
 3. 해석된 쌍의 템플릿을 `study()`에 넘겨 게이트를 평가한다. 실패 갈래는 `Record<Failure, string>`으로 한국어 거부 메시지에 매핑해 `error{rule_rejected}`로 답한다.
 4. 성공하면 라이브 엔트리를 `{ ...live, character }`로 바꾼다. 그다음 `markCharacterDirty` → `markObjectDeleted` 순서로 두 write를 마킹하고(순서 계약은 [`save-policy.md`](save-policy.md)), `progress:studied`를 본인에게 1회 보낸다.
@@ -200,7 +200,7 @@ study와 teach가 읽는 PBLIND·PSILNC는 **`characterSchema.statusEffects`에 
 
 ## 관련 문서
 
-- **oracle**: `docs/notes/game-analysis-20260625/a6-magic.md`(§5 realm 성장·§6 버프 타이머·§7 디버프·§8 학습전수·§9 마나·§11 구현 버그) · `legacy/muhan/src/magic1.c`(study/teach·addrealm)·`magic2~8.c`(개별 effect)
+- **오라클**: `docs/notes/game-analysis-20260625/a6-magic.md`(§5 realm 성장·§6 버프 타이머·§7 디버프·§8 학습전수·§9 마나·§11 구현 버그) · `legacy/muhan/src/magic1.c`(study/teach·addrealm)·`magic2~8.c`(개별 effect)
 - **의존 스펙**: [magic.md](magic.md)(#84 Caster·dispatch·gate·offensiveSpell·crtSpell — 이 계층이 확장) · [progression.md](progression.md)(#81 exp 파이프·마나 재생·dirtyTracker) · [combat.md](combat.md)(#83 `statusEffects` `until` 관례·DoT) · [persistence.md](persistence.md)(characterSchema 영속·backfill)
 - **후속**: #86(아이템 delivery) · #99(production boot 연결·몬스터 마나 재생·realm write 연결) · #100(offensive spell_fail 연결) · #106(라이브 command 라우팅·self-heal 마나 연결) · #108(self-heal healer-class 게이트)
 - **이슈**: #85(본 토픽) · 상위 #84(magic-core) · 에픽 #36(E6 규칙 엔진)

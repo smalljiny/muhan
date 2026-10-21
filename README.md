@@ -19,7 +19,7 @@
 | **충실히 이식** (콘텐츠) | 월드 데이터, 게임 규칙(전투 공식·thaco·마법·경제·레벨링), 명령 어휘·한글 의미론, 틱/라운드 타이밍 *의미* |
 | **자유롭게 재설계** (구현 방식) | 디스크 포맷 → MongoDB, `fork()+select` → 이벤트 루프+EventEmitter, `lasttime` → JS 스케줄러, telnet → WebSocket+구조화 JSON, 이름+평문 비번 → Firebase Auth 위임+세션 쿠키 |
 
-원본 `legacy/muhan/src`는 이식 *대상*이 아니라 **동작 명세(behavioral oracle)**다 — 코드를 옮기지 않고 게임이 *무엇을 하는지*를 읽어 관용적으로 재구현한다.
+원본 `legacy/muhan/src`는 이식 *대상*이 아니라 **동작 명세(오라클)**다 — 코드를 옮기지 않고 게임이 *무엇을 하는지*를 읽어 관용적으로 재구현한다.
 
 ---
 
@@ -33,7 +33,7 @@
 | **E1** monorepo 스캐폴딩·툴체인 | ✅ 완료 |
 | **E2** 영속화 — 기반(E2-1)·세이브 정책 엔진(E2-2) | ✅ 완료 |
 | **E3** 전송·세션 — 프로토콜(E3-1)·인증세션 FSM(E3-2)·연결 수명주기(E3-3)·자유채팅권한 확장 지점(seam, E3-4)·WS 하드닝(유량 제한·자원 가드) | ✅ 완료 |
-| **E4** 월드 상태 엔진 — 런타임 기반(1Hz 틱)·이동·방·크리처 스폰/AI | ✅ 완료 |
+| **E4** 월드 상태 엔진 — 런타임 기반(1Hz 틱)·이동·방·몬스터 스폰/AI | ✅ 완료 |
 | **E5** 계정·캐릭터 라이프사이클 (account 독립 모델·생성 인터뷰·진입/재개·soft-delete) | ✅ 완료 |
 | **E6** 게임 규칙 엔진 — 파생 스탯(stats-core)·전투(근접 + 특수공격·DoT·사망 분배·전투 AI)·진행 루프(progression)·아이템/장비(items) | ✅ 완료 |
 | **E6b** 마법 — 카탈로그·CAST 시전·공격 effect 20종·몬스터 시전(magic, #84) | ✅ 완료 |
@@ -49,7 +49,7 @@
 
 - **런타임**: Node.js 24, TypeScript, ESM
 - **서버**: Fastify(HTTP 호스트) + `@fastify/websocket`(게임 소켓) + in-process EventEmitter(채널·브로드캐스트)
-- **영속화**: MongoDB (라이브 권위 상태는 프로세스 메모리 객체 그래프, DB는 세이브 계층)
+- **영속화**: MongoDB (라이브 기준 상태(authoritative)는 프로세스 메모리 객체 그래프, DB는 세이브 계층)
 - **클라이언트**: Vite + 구조화 웹 UI
 - **프로토콜**: 구조화 JSON command/event 계약, Zod 단일 출처 + 공유 타입
 - **모노레포**: pnpm workspaces + Turborepo, 테스트 Vitest
@@ -69,14 +69,15 @@ muhan/
 │   ├── client/   # React 웹 클라이언트 (전송 셸·세션 진입 플로우)
 │   └── port/     # 1993 디스크 포맷 파서·변환기 (순수 JS)
 ├── data/world/   # port/로 변환된 JSON 월드 데이터 (산출물, 기준 데이터)
-├── legacy/muhan/ # 원본 C 소스·월드·세이브 (읽기 전용 oracle, EUC-KR)
+├── legacy/muhan/ # 원본 C 소스·월드·세이브 (읽기 전용 오라클, EUC-KR)
 └── docs/
     ├── specs/    # 기준 스펙 26종 (아키텍처·영속화·전송/세션·월드/게임규칙·아이템/마법·경제·클라이언트·테스트 인프라)
     ├── notes/    # 게임 분석 노트 A1–A13
-    └── research/ # 아키텍처·스캐폴딩 리서치 보고서
+    ├── research/ # 아키텍처·스캐폴딩 리서치 보고서
+    └── glossary.md # 문서·주석의 한국어 용어 기준
 ```
 
-`legacy/muhan/`은 빌드/실행 대상이 아니라 **읽기 전용 참조 oracle**이다 — 원본 C 소스(`src/`, EUC-KR), 도움말, 게시판, 월드 데이터, 테스트 캐릭터 세이브를 담는다.
+`legacy/muhan/`은 빌드/실행 대상이 아니라 **읽기 전용 참조 오라클**이다 — 원본 C 소스(`src/`, EUC-KR), 도움말, 게시판, 월드 데이터, 테스트 캐릭터 세이브를 담는다.
 
 ---
 
@@ -111,7 +112,7 @@ pnpm --filter server build && pnpm --filter server start   # tsc → node dist/i
 # 방 파일 1개 파싱 검사 (leftover=0 이어야 완벽 파싱)
 node packages/port/parseRoom.js legacy/muhan/rooms/r00/r00001 --json
 
-# objmon 템플릿 정규 라인 출력 (C oracle 대조용)
+# objmon 템플릿 정규 라인 출력 (C 오라클 대조용)
 node packages/port/templates.js obj legacy/muhan/objmon/o05
 
 # 전체 월드 → JSON 재변환 (멱등, data/world/ 덮어씀)
@@ -144,7 +145,7 @@ docker compose down
 
 - **32비트 ABI**: `long`=4B, 포인터=4B, little-endian. 텍스트는 **EUC-KR**(완성형).
 - **확정 구조체 크기**: `room`=480, `exit_`=44, `object`=352, `creature`=1184, `lasttime`=12.
-- 이 크기·필드 오프셋은 i386 Docker로 `sizeof`/`offsetof`를 추출하고, 원본 `mstruct.h`를 그대로 컴파일한 **C oracle**과 JS 파서 출력을 바이트 단위로 diff해 검증 완료(object 907 + creature 1049 전 필드 일치).
+- 이 크기·필드 오프셋은 i386 Docker로 `sizeof`/`offsetof`를 추출하고, 원본 `mstruct.h`를 그대로 컴파일한 **C 오라클**과 JS 파서 출력을 바이트 단위로 diff해 검증 완료(object 907 + creature 1049 전 필드 일치).
 - **방의 진짜 ID = 로드 경로 번호**(`rooms/r{N/1000}/r{N:05d}`)이지 구조체 내부 `rom_num`이 아니다. 경로 공식과 안 맞는 파일은 게임이 로드 못 하는 **orphan**(백업/구버전)이라 변환에서 제외한다 — 전체 3216 = 유효 2341 + orphan 875.
 
 세부는 `packages/port/`의 파서(`parseRoom.js`)와 검증된 오프셋 테이블(`templates.js`)을 참조한다.
@@ -196,7 +197,7 @@ docker compose down
 |------|------|
 | [`runtime-foundation.md`](docs/specs/runtime-foundation.md) | 1Hz 중앙 월드 틱·타이머 주입 seam·graceful shutdown 일괄 종료 (E4) |
 | [`movement-rooms.md`](docs/specs/movement-rooms.md) | 방 그래프·`tryMove`·문 상태머신·방=채널 방송·출구 자동 재잠금 |
-| [`creature-spawn.md`](docs/specs/creature-spawn.md) | 크리처 라이브 인스턴스·활성 집합·autonomic AI·스폰 3트리거·사망 라이프사이클 (E4-2) |
+| [`creature-spawn.md`](docs/specs/creature-spawn.md) | 몬스터 라이브 인스턴스·활성 집합·autonomic AI·스폰 3트리거·사망 라이프사이클 (E4-2) |
 | [`stats-core.md`](docs/specs/stats-core.md) | base+modifier 능력치·파생 스탯(AC·THAC0·소지량·HP/MP 최대치) 순수 계산 |
 | [`combat.md`](docs/specs/combat.md) | `resolveAttack` 전투 파이프·몬스터 라운드·플레이어 반격 + 특수공격 6종·상태이상 DoT·사망 exp 분배·전투 AI·#91 라운드순서 (E6a-1/E6a-2) |
 | [`progression.md`](docs/specs/progression.md) | 경험치 곡선·연마 레벨업·능력치 성장·HP/MP 재생·사망 페널티·승급 |
@@ -228,7 +229,7 @@ docker compose down
 
 | 문서 | 내용 |
 |------|------|
-| [`golden-fixture-harness.md`](docs/specs/golden-fixture-harness.md) | C oracle 대조 frozen 골든 fixture approval-test 인프라 |
+| [`golden-fixture-harness.md`](docs/specs/golden-fixture-harness.md) | C 오라클 대조 frozen 골든 fixture approval-test 인프라 |
 | [`property-testing.md`](docs/specs/property-testing.md) | RNG 시드 고정 입력 범위 불변식 검증 fast-check property 테스트 인프라 |
 
 **노트·리서치**

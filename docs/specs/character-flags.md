@@ -131,14 +131,14 @@ toPlayerCombatState(character, effectiveContext, weaponDamage, flags: string): P
 
 **값 범위 제약(`.min().max()`)을 두지 않는다.** 현재 실 값 범위 `[0,2]`(생성 인터뷰 1|2 + backfill sentinel 0)는 **한시적 인코딩**이다 — 오라클의 alignment는 부호 있는 int16이고(`port/templates.js`의 `readInt16LE`) 소비 규칙들이 이미 그 스케일의 임계값을 보존하고 있다. `.min(0).max(2)`를 걸면 (a) 부호가 목표 인코딩과 충돌하고 (b) 레거시 세이브 이식·E6 부분 롤아웃 시 문서가 로드 불가가 된다. 영속 경계는 인코딩 전환을 살아남아야 하므로 도메인은 상류(`sessionFsm`의 `refine(1|2)`)가 강제하고 스키마는 정수형만 본다.
 
-### alignment 게이트 4곳의 known-divergence
+### alignment 게이트 4곳의 알려진 차이(known-divergence)
 
 값 범위 `[0,2]`에서 동작하지 않는 alignment 게이트는 4곳이다. **전부 주석만 추가했고 임계값은 손대지 않았다.**
 
 | 위치 | 게이트 | 오라클 임계값 | `[0,2]`에서의 결과 |
 |---|---|---|---|
 | `magic/learning.ts` | study OGOODO/OEVILO | `< -100` / `> 100` | 두 분기 모두 거짓 — 성향으로 연마를 거부당하는 캐릭터 없음 |
-| `combat/aggro.ts` | MGAGGR/MEAGGR 선공 | `< 100` / `> -100` | 두 조건 모두 참 → early-return — 해당 몹이 아무도 선공하지 않음 |
+| `combat/aggro.ts` | MGAGGR/MEAGGR 선공 | `< 100` / `> -100` | 두 조건 모두 참 → early-return — 해당 몬스터가 아무도 선공하지 않음 |
 | `combat/attackStats.ts` | PALADIN 성향 보정 | `< 0` / `> 250` | 두 분기 모두 거짓 — 항상 `n` 반환 |
 | `items/flags.ts` | `alignmentAllowed` 착용 | `< -50` / `> 50` | 두 조건 모두 거짓 — 성향 착용 제한 동작하지 않음 |
 

@@ -1,12 +1,12 @@
 # A12 세션·인증·세이브 라이프사이클
 
-**이슈**: [#12](https://github.com/smalljiny/muhan/issues/12) · **분석 대상 oracle**: `io.c`(`accept_connect`/`init_connect`/`disconnect`/`handle_commands`), `command1.c`(`login`/`create_ply`/`command`/`first_han`/`checkdouble`), `files2.c`(`save_ply`/`load_ply`/`save_all_ply`), `command8.c`(`savegame`/`savegame_nomsg`), `command5.c`(`suicide`), `update.c`(`update_game`/`update_users`/`update_shutdown`), `player.c`(`init_ply`/`uninit_ply`/`update_ply`), `auth.c`(identd 클라이언트), `global.c`(명령 테이블), 플레이어 세이브 실측(`player/타/타이`).
+**이슈**: [#12](https://github.com/smalljiny/muhan/issues/12) · **분석 대상 오라클**: `io.c`(`accept_connect`/`init_connect`/`disconnect`/`handle_commands`), `command1.c`(`login`/`create_ply`/`command`/`first_han`/`checkdouble`), `files2.c`(`save_ply`/`load_ply`/`save_all_ply`), `command8.c`(`savegame`/`savegame_nomsg`), `command5.c`(`suicide`), `update.c`(`update_game`/`update_users`/`update_shutdown`), `player.c`(`init_ply`/`uninit_ply`/`update_ply`), `auth.c`(identd 클라이언트), `global.c`(명령 테이블), 플레이어 세이브 실측(`player/타/타이`).
 
 ## 개요
 
 접속·인증·캐릭터 생성·세이브·삭제의 전 라이프사이클을 정리한다. 결론부터: **무한에는 "계정"이라는 독립 객체가 없다.** 로그인 단위는 캐릭터 그 자체이며, **캐릭터 이름이 곧 크리덴셜의 키**다. 인증은 캐릭터 세이브 파일 안에 든 **평문 비밀번호를 `strcmp`로 비교**하는 방식이고(실측 확인), 세션은 telnet 소켓 위의 **함수 포인터 상태머신**(`io->fn`)으로 돌아간다. 세이브는 **주기적 자동세이브가 없고**(검증 완료), 로그아웃·셧다운·이벤트(은행·거래·레벨업 등) 시점에만 디스크에 기록된다.
 
-`auth.c`는 이슈가 인증 oracle로 지목했지만 실제로는 **계정 인증과 무관한 identd(RFC 1413) 클라이언트**다 — 접속자의 호스트명·userid를 조회하는 별도 fork 바이너리이며, 게임 로그인 로직은 전부 `command1.c`의 `login`/`create_ply` 상태머신에 있다. 이 오독을 바로잡는 것이 A12의 첫 발견이다.
+`auth.c`는 이슈가 인증 오라클로 지목했지만 실제로는 **계정 인증과 무관한 identd(RFC 1413) 클라이언트**다 — 접속자의 호스트명·userid를 조회하는 별도 fork 바이너리이며, 게임 로그인 로직은 전부 `command1.c`의 `login`/`create_ply` 상태머신에 있다. 이 오독을 바로잡는 것이 A12의 첫 발견이다.
 
 ## 핵심 발견 요약
 

@@ -41,7 +41,7 @@
 | `createCharacter(accountId, dto)` | `CharacterSummary` — 생성 후 요약 반환 |
 | `assertOwnership(accountId, characterId)` | `void` — 미소유 시 `OwnershipError` throw |
 
-`OwnershipError`는 not-found와 not-owned를 **하나의 결과로 collapse**한다(존재 비공개 — 열거 oracle 차단). 상세 메시지(accountId/characterId 포함)는 내부 전용이며 클라이언트로 나가지 않는다.
+`OwnershipError`는 not-found와 not-owned를 **하나의 결과로 collapse**한다(존재 비공개 — 열거 오라클 차단). 상세 메시지(accountId/characterId 포함)는 내부 전용이며 클라이언트로 나가지 않는다.
 
 `InMemorySessionAuthAdapter`는 **mock이 아니라 포트 전체 계약의 실 구현**이다 — 쿠키→accountId, accountId→캐릭터 요약을 자체 `Map`으로 소유한다(생성자 주입, 전역 싱글턴 미조회). `listCharacters`·`createCharacter`는 내부 참조를 노출하지 않고 얕은 복사본을 반환한다(불변성). `app.ts`의 `buildApp`이 `sessionAuth` 미주입 시 **빈** 어댑터로 폴백하므로, E3-2 시점의 부트 경로는 유효 쿠키가 0개다(fail-closed by omission).
 
@@ -98,7 +98,7 @@ E3-1 버전 협상(`system:ready`) 완료(`accept`) 시 셸이 `enterInitialStat
 
 ### prompt/response 상관
 
-서버가 `session:prompt{promptId, kind, options?}`를 push → 클라가 `session:reply{promptId, value}`로 상관 응답 → 핸들러가 `promptId` 일치를 확인하고 서브상태를 진행한다. create 진행 필드는 서버 권위(`createProgress`)이며 클라 reply로 왕복시키지 않는다.
+서버가 `session:prompt{promptId, kind, options?}`를 push → 클라가 `session:reply{promptId, value}`로 상관 응답 → 핸들러가 `promptId` 일치를 확인하고 서브상태를 진행한다. create 진행 필드는 서버가 기준인 값(`createProgress`)이며 클라 reply로 왕복시키지 않는다.
 
 ### 데드라인 수명주기
 

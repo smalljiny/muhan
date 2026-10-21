@@ -4,12 +4,12 @@
 
 ## 개요
 
-무한 포팅의 영속화 계층의 기반이다. [`monorepo.md`](monorepo.md)(E1)가 만든 pnpm workspace(`shared`/`server`/`port`/`client`)를 그대로 쓰고, ADR([`architecture.md`](architecture.md) D2)가 규정한 **인메모리 권위 그래프 + MongoDB DB-네이티브 세이브** 구조를 확립한다. 원작의 `load_rom` LRU+write-back 캐시(오라클 A4 §9)는 폐기한다. 대신 부팅 시 월드 전체를 인메모리로 읽어 라이브 그래프로 쓴다.
+무한 포팅의 영속화 계층의 기반이다. [`monorepo.md`](monorepo.md)(E1)가 만든 pnpm workspace(`shared`/`server`/`port`/`client`)를 그대로 쓰고, ADR([`architecture.md`](architecture.md) D2)가 규정한 **인메모리 기준 그래프(authoritative) + MongoDB DB-네이티브 세이브** 구조를 확립한다. 원작의 `load_rom` LRU+write-back 캐시(오라클 A4 §9)는 폐기한다. 대신 부팅 시 월드 전체를 인메모리로 읽어 라이브 그래프로 쓴다.
 
 두 경계가 이 토픽의 핵심이다.
 
-1. **인메모리 권위 그래프 ↔ MongoDB 경계** — `data/world` JSON이 콘텐츠 기준이며, 부팅 시 `Map<roomNumber, RoomNode>`로 전량 로드된다. MongoDB는 플레이어 소유 상태(character, object, bankAccount)와 방 런타임 상태(roomState)만 담당한다.
-2. **단일소유 `object.owner` ↔ 파생 뷰 경계** — character와 bankAccount는 인벤토리/보관 배열을 권위 데이터로 저장하지 않는다. 대신 `object.owner`를 역참조해 조회 시점에 파생한다.
+1. **인메모리 기준 그래프 ↔ MongoDB 경계** — `data/world` JSON이 콘텐츠 기준이며, 부팅 시 `Map<roomNumber, RoomNode>`로 전량 로드된다. MongoDB는 플레이어 소유 상태(character, object, bankAccount)와 방 런타임 상태(roomState)만 담당한다.
+2. **단일소유 `object.owner` ↔ 파생 뷰 경계** — character와 bankAccount는 인벤토리/보관 배열을 기준 데이터로 저장하지 않는다. 대신 `object.owner`를 역참조해 조회 시점에 파생한다.
 
 **범위 밖**(후속 토픽):
 
@@ -21,7 +21,7 @@
 
 ### 영속 문서 스키마 (`packages/shared/src/schema/`)
 
-네 스키마 모두 Zod를 단일 출처로 쓴다. TS 타입은 `z.infer`로만 파생하고, 병렬 `type`/`interface` 선언을 두지 않는다(`packages/shared/src/schema/index.ts` 배럴이 스키마와 타입을 함께 재노출). 또 모두 `z.strictObject`로 봉인해 unknown 키를 파싱 에러로 거부한다. 그래서 character나 bankAccount에 권위 인벤토리/보관 배열이 조용히 들어오는 것을 구조적으로 막는다.
+네 스키마 모두 Zod를 단일 출처로 쓴다. TS 타입은 `z.infer`로만 파생하고, 병렬 `type`/`interface` 선언을 두지 않는다(`packages/shared/src/schema/index.ts` 배럴이 스키마와 타입을 함께 재노출). 또 모두 `z.strictObject`로 봉인해 unknown 키를 파싱 에러로 거부한다. 그래서 character나 bankAccount에 기준 인벤토리/보관 배열이 조용히 들어오는 것을 구조적으로 막는다.
 
 **`character.ts`** — `characterSchema`:
 
@@ -47,7 +47,7 @@
 | `weapon` | `int().optional()` | 생성 인터뷰 주력 무기 1~5(도/검/봉/창/궁) |
 | `schemaVersion` | `int()` | |
 
-권위 인벤토리 배열은 없다. `object.owner={type:'character'}`를 역참조해 파생한다. 게임 비밀번호는 담지 않는다(인증은 Firebase 담당).
+기준 인벤토리 배열은 없다. `object.owner={type:'character'}`를 역참조해 파생한다. 게임 비밀번호는 담지 않는다(인증은 Firebase 담당).
 
 - **E5 링크 필드**([`account-character.md`](account-character.md)): `accountId`(소유 계정 필수 FK), `status`(active/deleted soft-delete)·`deletedAt`, 생성 인터뷰 스칼라 `gender`/`weapon`/`alignment` 3종이 추가됐다. 당시에는 전부 optional이었고, `alignment`는 이후 v6에서 required로 바뀌었다(아래 E6 P-flag 필드 참조). 이 표는 E5 이후 5번째 스키마 `account.ts`와 함께 확장됐다.
 - **E6 전투 필드**([`combat.md`](combat.md)): `hpCurrent`/`mpCurrent`/`level` 3종이 전투 resolver의 매 라운드 operand로 required 추가됐다. `gender`/`weapon`이 optional인 것과 달리 required인 이유는 전투가 항상 값을 요구하기 때문이다. E6은 정의와 시딩만 담당하고, 변이 의미론(레벨업, 재생, exp)은 진행 루프(#81)가 더한다.
@@ -90,9 +90,9 @@
   - `shotscur`: `int()`, 런타임에 바뀌는 현재 사용/충전 횟수
   - `schemaVersion`: `int()`
 
-방, 몹, 플레이어, 은행이 함께 쓰는 단일 스키마다. 변하지 않는 템플릿 스탯(ndice, armor 등)은 담지 않고 `objnum`으로 따로 조회한다(objmon 카탈로그 조회는 E4 범위).
+방, 몬스터, 플레이어, 은행이 함께 쓰는 단일 스키마다. 변하지 않는 템플릿 스탯(ndice, armor 등)은 담지 않고 `objnum`으로 따로 조회한다(objmon 카탈로그 조회는 E4 범위).
 
-**`bankAccount.ts`** — `bankAccountSchema`: `_id`(`string().min(1)`), `owner`(`string().min(1)`, 소유 캐릭터 `_id`), `gold`(`int().min(0).max(300_000_000)`, 불변식 6), `schemaVersion`(`int()`). 권위 보관 배열은 없고, `object.owner={type:'bank'}`를 역참조해 파생한다.
+**`bankAccount.ts`** — `bankAccountSchema`: `_id`(`string().min(1)`), `owner`(`string().min(1)`, 소유 캐릭터 `_id`), `gold`(`int().min(0).max(300_000_000)`, 불변식 6), `schemaVersion`(`int()`). 기준 보관 배열은 없고, `object.owner={type:'bank'}`를 역참조해 파생한다.
 
 **`roomState.ts`** — `exitStateSchema`(`direction`, `closed`, `locked`) + `respawnStateSchema`(`interval`, `lastDeathTime`, `mobId`) + `roomStateSchema`: `roomId`(`int().min(0)`, 자연키, 합성 `_id` 없음), `exits`(`exitStateSchema[]`), `respawn`(`respawnStateSchema[]`), `schemaVersion`(`int()`). 문·출구 상태와 리스폰 타이밍까지 스키마는 완전히 정의하지만, 실제 flush 메커니즘은 E2-2가 담당한다.
 
@@ -184,5 +184,5 @@ objmon 템플릿 카탈로그(`objects.json`/`creatures.json`) 로딩과 몬스�
   - 지금은 모든 caller가 검증된 문자열을 넘기므로 악용되지 않는다. 하지만 사용자가 제어하는 id가 route 경계에서 repository로 바로 전달되기 시작하면(E5 인증·HTTP route) NoSQL operator 주입 가능성이 생긴다.
   - write body는 이미 `schema.partial().parse`로 안전하다(strictObject가 `$`-키를 차단). `WorldRepository`는 `roomId: number`라 안전하다.
   - E2-2([`save-policy.md`](save-policy.md))의 `BankTransactionService`·`saveNow`는 repo 계층을 우회하는 money·세이브 진입점이라 id 문자열 가드를 자체적으로 추가했다. 그러나 repository 계층 자체의 필터는 여전히 검증하지 않는다. E5 route 경계에서 통합 검증이 필요하다.
-- **테스트 전략** — 스키마 검증(unit), env 파싱 fail-fast(unit), 그래프 구성(unit)은 순수 함수 테스트다. 연결·ping·재연결, `ObjectRepository` owner 조회와 인덱스, 하이드레이트·unique·금화 가드는 `mongodb-memory-server` 통합 테스트로 확인한다. 각 패키지에 vitest 커버리지 80%+ 게이트를 둔다(연결 엔트리 `index.ts` 제외).
+- **테스트 전략** — 스키마 검증(unit), env 파싱 fail-fast(unit), 그래프 구성(unit)은 순수 함수 테스트다. 연결·ping·재연결, `ObjectRepository` owner 조회와 인덱스, hydrate·unique·금화 가드는 `mongodb-memory-server` 통합 테스트로 확인한다. 각 패키지에 vitest 커버리지 80%+ 게이트를 둔다(연결 엔트리 `index.ts` 제외).
 - **`character.gold`는 상한 없음** — `bankAccount.gold`(3억 상한, 불변식 6)와 달리 캐릭터 소지 gold에는 `z.int().min(0)`만 강제한다. 원작 오라클이 소지 gold에도 상한을 뒀는지는 확인하지 못했다. 확인한 뒤 후속 토픽에서 조정할 수 있다.

@@ -6,7 +6,7 @@
 
 CP1("걸어볼 수 있는 무한")이 요구하는 "방 설명을 읽고 이동한다"를 닫는 계층이다. 이슈 **#60**(E11).
 
-착수 시점의 병목은 프론트엔드가 아니라 **프로토콜 한 겹**이었다. 데이터(`data/world/rooms.json` 2341방)와 서버 상태(`RoomNode`)는 이름·설명·출구·아이템·점유자·크리처를 모두 보유했으나, `world:room` 이벤트가 `{roomId, exits}`만 날랐고 클라이언트에는 `world:room`·`world:move` 처리가 0건이었다. 따라서 이 계층은 `shared`(와이어 계약) · `server`(파생 확장 + 가시성 필터) · `client`(수신·렌더·송신) 세 계층을 걸친다.
+착수 시점의 병목은 프론트엔드가 아니라 **프로토콜 한 겹**이었다. 데이터(`data/world/rooms.json` 2341방)와 서버 상태(`RoomNode`)는 이름·설명·출구·아이템·점유자·몬스터를 모두 보유했으나, `world:room` 이벤트가 `{roomId, exits}`만 날랐고 클라이언트에는 `world:room`·`world:move` 처리가 0건이었다. 따라서 이 계층은 `shared`(와이어 계약) · `server`(파생 확장 + 가시성 필터) · `client`(수신·렌더·송신) 세 계층을 걸친다.
 
 세 계층을 한 단위로 묶는 이유는 부분 머지가 성립하지 않기 때문이다 — 스키마만 넣으면 관측 가능한 변화가 0이고, 클라만 넣는 것은 필드가 없어 불가능하며, `PROTOCOL_VERSION` bump가 동시 머지를 강제한다(서버만 올리면 구버전 클라 핸드셰이크가 거부되고 그 역도 같다).
 
@@ -46,7 +46,7 @@ CP1("걸어볼 수 있는 무한")이 요구하는 "방 설명을 읽고 이동�
 ```
 WsClientSnapshot
 ├─ status, events, errors …        전송 라이프사이클
-├─ room: RoomState | null          ← 서버 권위 월드 스냅샷 (E11이 추가)
+├─ room: RoomState | null          ← 서버가 기준인 월드 스냅샷 (E11이 추가)
 └─ session: { phase, characterList, activePrompt, lastError, characterId }
 ```
 
@@ -56,11 +56,11 @@ WsClientSnapshot
 
 ### 서버 — 단일 변환을 두 생산자가 공유
 
-`world:room` 이벤트 발생 경로는 진입(`sessionFsm.enterCommand`)과 이동(`handlers/move.ts`) 둘뿐이다. 양쪽 모두 `{ type: 'world:room', ...projectRoomView(room, resolveCharacterName) }` 스프레드만 쓰고 필드를 손으로 열거하지 않는다 — 열거하면 두 경로의 페이로드가 조용히 분기한다. 통합 테스트가 같은 방에 대해 두 경로 산출이 동일함을 실물 점유자·아이템·크리처로 단정한다.
+`world:room` 이벤트 발생 경로는 진입(`sessionFsm.enterCommand`)과 이동(`handlers/move.ts`) 둘뿐이다. 양쪽 모두 `{ type: 'world:room', ...projectRoomView(room, resolveCharacterName) }` 스프레드만 쓰고 필드를 손으로 열거하지 않는다 — 열거하면 두 경로의 페이로드가 조용히 분기한다. 통합 테스트가 같은 방에 대해 두 경로 산출이 동일함을 실물 점유자·아이템·몬스터로 단정한다.
 
 `resolveCharacterName: (characterId) => string | undefined`는 `createLiveWorldWiring`이 `liveRegistry.get(id)?.character.name`으로 **1회 생성**해 `liveWorldBinding`과 `moveDeps`에 같은 참조로 넘긴다(파일이 선언한 단일 공유 불변식). 레지스트리를 통째로 넘기지 않아 바인딩이 레지스트리 전체 인터페이스에 의존하지 않는다.
 
-가시성 필터 규칙(숨김 아이템·숨김 크리처·죽은 개체·비밀 출구 제외)과 관찰자 비의존 계약은 [`movement-rooms.md`](movement-rooms.md) §방 표시 가시성 필터가 기준이다.
+가시성 필터 규칙(숨김 아이템·숨김 몬스터·죽은 개체·비밀 출구 제외)과 관찰자 비의존 계약은 [`movement-rooms.md`](movement-rooms.md) §방 표시 가시성 필터가 기준이다.
 
 ### 클라이언트 — 수신·렌더·송신
 
@@ -90,12 +90,12 @@ WsClientSnapshot
 
 | 게이트 | 표시(`roomView`) | 지목(`find_crt`) |
 |---|---|---|
-| `MINVIS`(크리처 투명) | 거름 | 거름 (관찰자 `PDINVI` 보유 시 통과) |
-| `MHIDDN`(크리처 은신) | 거름 | **거르지 않음** — `find_crt`에 없다 |
+| `MINVIS`(몬스터 투명) | 거름 | 거름 (관찰자 `PDINVI` 보유 시 통과) |
+| `MHIDDN`(몬스터 은신) | 거름 | **거르지 않음** — `find_crt`에 없다 |
 | 사망(`hpcur <= 0`) | 거름 | 거르지 않음 (제거는 `creatureDeath` 담당) |
 | 플레이어 `PHIDDN`·`PINVIS` | 미구현 (#129) | 미구현 (#129) |
 
-즉 **숨은 크리처는 방 목록에 안 보여도 이름으로는 지목된다**. 오라클 그대로이므로 여기서 맞추지 않는다. 플레이어 가시성은 두 경로가 같은 관찰자 인자 설계를 공유해야 하므로 #129가 표시·지목을 함께 연다.
+즉 **숨은 몬스터는 방 목록에 안 보여도 이름으로는 지목된다**. 오라클 그대로이므로 여기서 맞추지 않는다. 플레이어 가시성은 두 경로가 같은 관찰자 인자 설계를 공유해야 하므로 #129가 표시·지목을 함께 연다.
 
 ### 표시 안전
 
@@ -107,9 +107,9 @@ WsClientSnapshot
 
 - **`occupants`는 스냅샷이지 델타가 아니다** — 발생 시점이 진입·이동 성공 두 곳뿐이라, 내가 가만히 있는 동안 다른 사람이 들어와도 목록이 갱신되지 않는다. 실시간 입·퇴장 통지는 **#116** 담당이다.
 - **`creatures`는 정적** — 몬스터 실시간 이동·전투(**#99**) 미연결. `name`·`level`만 싣는다(hp·전투 스탯은 E12 **#61**).
-- **크리처 표시 문구가 근사** — 오라클 방 표시는 몬스터를 `description`으로 출력하고 동명 개체를 `(xN)`으로 묶는다. 이 계층은 `name`을 쓴다 — `CreatureInstance`에 `description` 필드가 없어 월드 로더·타입 변경이 동반되기 때문이다. 오라클 이식이 아니라 근사다.
+- **몬스터 표시 문구가 근사** — 오라클 방 표시는 몬스터를 `description`으로 출력하고 동명 개체를 `(xN)`으로 묶는다. 이 계층은 `name`을 쓴다 — `CreatureInstance`에 `description` 필드가 없어 월드 로더·타입 변경이 동반되기 때문이다. 오라클 이식이 아니라 근사다.
 - **`items`는 표시 전용** — 집기·버리기는 **#120**.
-- **automap 없음** — 현재 방만 렌더한다. 좌표 합성은 서버가 그래프+방향 힌트만 권위이므로 별도 파생이 필요하다.
+- **automap 없음** — 현재 방만 렌더한다. 좌표 합성은 서버는 그래프+방향 힌트만 기준으로 삼으므로 별도 파생이 필요하다.
 - **텍스트 명령 파서 없음** — 이동 입력은 출구 버튼뿐이다. 파서는 E12·E13도 요구하는 공통 관심사라 소비자가 셋일 때 한 번에 설계한다.
 - **방향 별칭 단축키 없음** — numpad·자모·대각선은 향후 사용자 커스텀 단축키 기능이 흡수한다.
 - **디자인 시스템 없음** — 기능-우선이며 스타일은 FE-6 담당이다. `RoomPanel`은 `aria-label`만 두고 클래스·스타일을 두지 않는다.

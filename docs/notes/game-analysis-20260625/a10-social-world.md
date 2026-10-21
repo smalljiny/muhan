@@ -11,7 +11,7 @@
 >
 > 이슈 #10. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)의 `io.c`, `command4.c`, `command6.c`, `command9.c`, `command11.c`, `command12.c`, `board.c`, `post.c`, `finger.c`, `global.c`, `player.c`, `dm3.c`다. 코드를 이식하지 않고 동작만 추출한다.
 >
-> **oracle 읽기 주의**: 하네스의 `grep` 래퍼는 `-I`(binary skip)를 붙이므로 EUC-KR 파일을 건너뛴다. `command grep -a`를 쓰거나 `iconv -f EUC-KR -t UTF-8 -c … | grep`으로 우회한다([[muhan-oracle-toolchain]]).
+> **오라클 읽기 주의**: 하네스의 `grep` 래퍼는 `-I`(binary skip)를 붙이므로 EUC-KR 파일을 건너뛴다. `command grep -a`를 쓰거나 `iconv -f EUC-KR -t UTF-8 -c … | grep`으로 우회한다([[muhan-oracle-toolchain]]).
 >
 > **as-shipped의 기준은 컴파일 플래그다**: `src/Makefile` CFLAGS = `-m32 -g -O2 -fcommon -DFINGERACCT -DCHECKDOUBLE -DSUICIDE -DOBJLEVEL -DDEBUG`. **`-DCHECKFAMILY`는 없다.** 패거리 코드의 상당 부분이 `#ifdef CHECKFAMILY`로 감싸여 있어서, 컴파일된 동작이 소스에 보이는 동작과 다르다(§6.5). 이 비대칭은 데드 스캐폴드([[a9-monster-ai]]의 MFLEER/MSAYTLK)와 같은 종류의 결정 게이트 항목으로 다룬다. 추측으로 결론 내리지 않는다.
 >
@@ -65,7 +65,7 @@
 | 4 | **공간 채널 = 인접 방 전파.** 외쳐(`yell`)는 현재 방(`broadcast_rom`)과, 모든 출구 너머의 로드된 인접 방에 "누군가가 …라고 외쳤습니다"를 전한다. PHIDDN이 풀린다(자기 노출) | 콘텐츠(전파 규칙) |
 | 5 | **개인 채널 이중 차단.** 얘기/이야기(`sendman`)는 수신자의 PIGNOR(전면 거부)와 `first_ignore` 개인 리스트(듣기거부=`ignore`), 발신자의 PSILNC, PINVIS/PDMINV 가시성으로 막힌다. DM이 도청할 수 있고(`broadcast_eaves`), 양쪽 다 CARETAKER 이상이면 도청에서 빠진다 | 콘텐츠(권한) |
 | 6 | **우편 = 대상 파일에 append.** 우체국 방(RPOSTO)에서 편지보내기(`postsend`)→`postedit`가 **입력 줄마다 대상 파일에 즉시 append**한다(소스 주석 "major flaw"). 받기는 파일 전체를 보여 주고, 삭제는 `unlink`. 읽음 판정은 atime>ctime | 이식(기능) / 재설계(파일 I/O) |
-| 7 | **게시판 = 방 오브젝트 + 인덱스 파일.** 게시판 오브젝트의 `type`으로 `board_dir[]`을 고른다(정보 100 / 패거리1~15는 101~115 / 유저 120). 256B 고정 `BOARD_INDEX` 레코드와 `board.N` 텍스트로 구성된다. **소프트삭제는 readnum의 부호를 뒤집는다**(음수=삭제, DM만 열람). 삭제권은 작성자\|DM | 이식(규칙) / 재설계(파일 포맷) |
+| 7 | **게시판 = 방 객체 + 인덱스 파일.** 게시판 객체의 `type`으로 `board_dir[]`을 고른다(정보 100 / 패거리1~15는 101~115 / 플레이어 120). 256B 고정 `BOARD_INDEX` 레코드와 `board.N` 텍스트로 구성된다. **소프트삭제는 readnum의 부호를 뒤집는다**(음수=삭제, DM만 열람). 삭제권은 작성자\|DM | 이식(규칙) / 재설계(파일 포맷) |
 | 8 | **게시판 쓰기가 셸을 호출.** 등록을 확정하면 `sprintf(name,"mv -f %s/%s …") ; system(name)`에 **플레이어 이름을 끼워 넣고** `creat(dir/name)`한다. 셸 인젝션과 경로 조작의 통로가 된다 | 재설계(보안상 필수) |
 | 9 | **패거리 소속 = 필드를 다른 용도로 재사용.** 소속 번호는 `daily[DL_EXPND].max`, 초대 그룹은 `daily[DL_MARRI].max`에 저장한다. 플래그는 PFAMIL(가입), PRDFML(신청 중), PFMBOS(두목). 명부는 `family_member_<n>` 텍스트 | 재설계(데이터 모델) |
 | 10 | **패거리 경제 = 축하금 + 탈퇴비.** 가입을 승인하면(`boss_family`) **두목이 신입에게 `gold×10000` 축하금을 준다**(boss→member 이체). 스스로 탈퇴하면(`exit_family`) `gold×20000`이 소각된다. 추방(`fm_out`)은 무료 | 콘텐츠(경제) |
@@ -158,16 +158,16 @@
 
 **우편의 기능(우체국 방 한정, 대상별 우편함, 헤더+날짜, DM 메모, 패거리 공지)은 콘텐츠**다. 평면 파일 append, 우편함 통째 삭제, atime>ctime 읽음 판정, 원자적이지 않은 동시 쓰기 결함은 구현 방식이다. 신규 스택은 편지를 **메시지 단위 문서**(sender·recipient·body·sentAt·readAt)로 분리해 동시성 결함을 없애고, "우체국 방에서만 열람"하는 제약은 유지한다. pfinger의 편지 도착 알림(§8.1)도 readAt 필드로 대응시킨다.
 
-## 5. 게시판: 방-오브젝트 부착 게시판 (board.c)
+## 5. 게시판: 방-객체 부착 게시판 (board.c)
 
-게시판은 **방에 놓인 오브젝트**(`find_obj "게시판"`, `special == SP_BOARD`)이고, 오브젝트의 `type` 필드가 어느 게시판인지 정한다. `board_dir[]` 매핑(board.c:33)은 다음과 같다.
+게시판은 **방에 놓인 객체**(`find_obj "게시판"`, `special == SP_BOARD`)이고, 객체의 `type` 필드가 어느 게시판인지 정한다. `board_dir[]` 매핑(board.c:33)은 다음과 같다.
 
 | type | 디렉터리 | 용도 |
 |------|----------|------|
 | 100 | `board/info` | 공지 게시판 |
 | 101~115 | `board/family1`~`family15` | **패거리별 전용 게시판**(§6과 연동) |
 | 116 | `board/family` | 패거리 공용 |
-| 120 | `board/user` | 유저 자유 게시판 |
+| 120 | `board/user` | 플레이어 자유 게시판 |
 
 디렉터리마다 **256바이트 고정 `BOARD_INDEX` 레코드 배열**(`board_index`)과 게시물별 `board.N` 텍스트 파일이 있다. `BOARD_INDEX`는 {num, upload(작성자 16B), 날짜(y/m/d/h/m/s), line(줄수), readnum(조회수), title(40B), extra[41]}이다.
 
@@ -176,7 +176,7 @@
 - **게시판 읽기**(`read_board`, board.c:323): 번호로 `board.N`을 보여 주고 **조회수를 올린다**(작성자 본인이 읽으면 세지 않는다).
 - **글삭제**(`del_board`, board.c:390): **소프트삭제는 `readnum`의 부호를 뒤집는 방식**이다(음수=삭제 상태, 다시 실행하면 복구). 권한은 **작성자 본인 또는 class≥DM**에게 있다.
 
-**게시판 기능(방 부착, 패거리별 분리, 페이지네이션, 소프트삭제, 조회수, 작성자/DM 삭제권)은 콘텐츠**다. 256B 레코드 포맷, `lseek` 오프셋, 부호 반전 삭제, 별도 텍스트 파일은 구현 방식이다. 신규 스택은 board 컬렉션(boardId·author·title·body·postedAt·views·deleted)을 만들고, 방 오브젝트가 boardId를 참조하도록 이식한다.
+**게시판 기능(방 부착, 패거리별 분리, 페이지네이션, 소프트삭제, 조회수, 작성자/DM 삭제권)은 콘텐츠**다. 256B 레코드 포맷, `lseek` 오프셋, 부호 반전 삭제, 별도 텍스트 파일은 구현 방식이다. 신규 스택은 board 컬렉션(boardId·author·title·body·postedAt·views·deleted)을 만들고, 방 객체가 boardId를 참조하도록 이식한다.
 
 **보안 관련 구현 방식(§8 아키텍처 시사점으로 올림)**: `write_board` case 2는 등록을 확정할 때 `sprintf(name, "mv -f %s/%s %s/board.%ld", dir, ply->name, …); system(name)`을 실행한다. 즉 **플레이어 이름을 셸 명령에 끼워 넣는다.** 또 `creat("%s/%s", dir, ply->name)`로 이름을 경로에 그대로 쓴다. 플레이어 이름이 한글이라 당장 인젝션할 수 있는 범위는 좁다. 그래도 **이식할 때 절대 재현하지 않는다.** 서버 측 파일 I/O(또는 DB write)로 대체한다([[muhan-oracle-toolchain]] 및 프로젝트 `security.md`의 shell injection 방어).
 
@@ -231,7 +231,7 @@
 
 정리하면 컴파일된 동작은 **"패거리가 꺼진 상태"가 아니라 "로스터 로딩과 두목 판정이 실행 순서에 따라 달라지는 degraded 상태"**다. 로그인 훅(player.c:70)에서도 `load_family()`만 ifdef 안에 있고, PFMBOS 판정 자체는 ifdef **밖**에 있다. 그래서 로스터가 채워지지 않은 상태로 로그인하면 두목 이름이 빈 문자열과 비교돼 PFMBOS가 항상 꺼진다.
 
-**처음에 누가 어떻게 PFMBOS를 얻는지는 oracle만으로는 알 수 없다(open ambiguity).** 처리 방침은 [[a9-monster-ai]]의 MFLEER/MSAYTLK 데드 스캐폴드와 같다. 다음 둘 중 하나를 **결정 게이트 항목**으로 남긴다.
+**처음에 누가 어떻게 PFMBOS를 얻는지는 오라클만으로는 알 수 없다(open ambiguity).** 처리 방침은 [[a9-monster-ai]]의 MFLEER/MSAYTLK 데드 스캐폴드와 같다. 다음 둘 중 하나를 **결정 게이트 항목**으로 남긴다.
 - (a) as-compiled(degraded)를 재현한다. 패거리 기능 대부분이 무력해진다.
 - (b) **as-intended(CHECKFAMILY-on)**를 재현한다. `family_list` 데이터가 채워져 있으므로 정상적인 패거리로 이식한다.
 
@@ -337,8 +337,8 @@
 
 4. **다른 용도로 재사용한 필드는 명시적인 스키마로 정리한다.** 패거리 번호(`daily[DL_EXPND].max`), 초대 그룹(`daily[DL_MARRI].max`), 배우자(`key[2]`)는 원본이 남는 필드를 재활용한 것이다. MongoDB 스키마에서는 `family: {id, role}`, `spouse: string`, `houseGuests: string[]`, `ignoreList: string[]` 같은 **독립 필드**로 옮긴다. 어느 daily 슬롯이 무엇을 뜻하는지 같은 재사용 의미를 코드 속에 숨겨 두지 않는다.
 
-5. **비동기 메시지는 문서 단위로 저장한다.** 우편이 "대상 파일에 줄 단위로 바로 append"하는 방식은 동시에 보내면 내용이 뒤섞이는 결함이 있다(소스 주석도 인정한다). **메시지 단위 문서**(sender·recipient·body·sentAt·readAt)로 이식해 원자성을 확보하고, 읽음 상태(atime>ctime)는 `readAt`으로 정리한다. 게시판도 board 문서(views, deleted 플래그, author)로 옮기고, 소프트삭제(readnum 부호 반전)는 `deleted: bool`로 바꾼다. "우체국 방이나 게시판 오브젝트가 있어야 접근"하는 제약은 유지한다.
+5. **비동기 메시지는 문서 단위로 저장한다.** 우편이 "대상 파일에 줄 단위로 바로 append"하는 방식은 동시에 보내면 내용이 뒤섞이는 결함이 있다(소스 주석도 인정한다). **메시지 단위 문서**(sender·recipient·body·sentAt·readAt)로 이식해 원자성을 확보하고, 읽음 상태(atime>ctime)는 `readAt`으로 정리한다. 게시판도 board 문서(views, deleted 플래그, author)로 옮기고, 소프트삭제(readnum 부호 반전)는 `deleted: bool`로 바꾼다. "우체국 방이나 게시판 객체가 있어야 접근"하는 제약은 유지한다.
 
-6. **패거리 CHECKFAMILY는 결정 게이트로 다룬다.** 컴파일된 상태는 로스터 로딩과 두목 판정이 실행 순서에 따라 달라지는 degraded 상태(§6.5)다. 하지만 `family_list` 데이터에는 정상적인 패거리가 들어 있다. 그래서 **as-intended(정상 패거리) 이식을 기준으로 채택**한다. 다만 PFMBOS를 얻는 경로는 oracle만으로 알 수 없으므로(open ambiguity), 두목 임명 규칙(최초 생성자? DM 지정?)은 신규 설계로 확정한다. [[a9-monster-ai]]의 데드 스캐폴드와 같은 "재현 vs 되살림" 결정 게이트다.
+6. **패거리 CHECKFAMILY는 결정 게이트로 다룬다.** 컴파일된 상태는 로스터 로딩과 두목 판정이 실행 순서에 따라 달라지는 degraded 상태(§6.5)다. 하지만 `family_list` 데이터에는 정상적인 패거리가 들어 있다. 그래서 **as-intended(정상 패거리) 이식을 기준으로 채택**한다. 다만 PFMBOS를 얻는 경로는 오라클만으로 알 수 없으므로(open ambiguity), 두목 임명 규칙(최초 생성자? DM 지정?)은 신규 설계로 확정한다. [[a9-monster-ai]]의 데드 스캐폴드와 같은 "재현 vs 되살림" 결정 게이트다.
 
 7. **finger.c는 이식하지 않는다.** outbound 인터넷 finger(1) 클라이언트는 게임 콘텐츠가 아니라 1990년대 인프라의 잔재다(drop). 인게임 pfinger(프로필, 편지 알림, 권한 티어)만 플레이어 조회 API로 이식한다. 관리 진단(접속 IP, 시각)은 서버 로그와 admin 도구로 대체한다.

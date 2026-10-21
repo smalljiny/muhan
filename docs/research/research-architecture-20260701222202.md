@@ -8,23 +8,23 @@
 1. 무한의 조상인 DikuMUD 계열 서버는 단일 스레드 이벤트 루프를 쓴다. 초당 ~10pulse로 도는 heartbeat를 modulo 연산으로 서브시스템마다 나눠 준다. 현대 엔진(Evennia)은 전역 틱 대신, 필요한 객체만 구독하는 모델을 쓴다.
 2. Node 프로세스 하나가 WebSocket 동시 연결을 3만~10만 개까지 처리한다. 따라서 소규모 MUD는 단일 프로세스와 in-process EventEmitter로 충분하고, Redis는 나중에 도입하는 것이 맞다.
 3. 게임 프로토콜에서는 command 계약과 event 계약을 나누는 것이 자리 잡은 패턴이다. 메시지마다 Zod 스키마를 하나씩 두고 `z.infer`로 타입을 얻으며, 이를 monorepo 공유 패키지에 둔다.
-4. 레거시 공식을 포팅할 때의 테스트는 golden master, characterization, approval test로 불린다. 셋은 같은 기법이다. 원본을 behavioral oracle로 삼아 fixture를 동결하고, 버그도 bug-for-bug로 재현하며, fixture는 함수별로 좁게 유지한다.
+4. 레거시 공식을 포팅할 때의 테스트는 golden master, characterization, approval test로 불린다. 셋은 같은 기법이다. 원본을 동작 명세(오라클)로 삼아 fixture를 동결하고, 버그도 bug-for-bug로 재현하며, fixture는 함수별로 좁게 유지한다.
 
 ## 1. 런타임 루프·틱 모델 (D1 검증)
 
 - 무한의 조상인 DikuMUD/CircleMUD 계열(LuminariMUD)은 **단일 스레드 이벤트 루프가 초당 ~10 pulse(0.1초)** 로 돈다. 매 pulse마다 network select, 입력 처리, 명령 실행, 출력 flush, heartbeat를 차례로 수행한다 ([LuminariMUD CORE_SERVER_ARCHITECTURE](https://github.com/LuminariMUD/Luminari-Source/blob/master/docs/systems/CORE_SERVER_ARCHITECTURE.md)). 이는 무한 A1 노트의 `sock_loop`+`update_game` 구조와 같다.
 - Heartbeat에서는 **타이머 하나가 `pulse % N` modulo 연산으로 서브시스템마다 다른 간격을 나눠 준다**. 이벤트는 매 pulse, 스크립트는 0.5초, 이동과 타이머는 1초, NPC 활동은 5초, 존 리셋은 30초, 게임 시간은 75초 간격이다 ([LuminariMUD](https://github.com/LuminariMUD/Luminari-Source/blob/master/docs/systems/CORE_SERVER_ARCHITECTURE.md)). 무한의 `update_*` 간격 검사와 정확히 같은 패턴이다. 그래서 중앙 1Hz heartbeat를 두고 서브시스템을 modulo로 나누는 결정을 뒷받침한다.
-- LPMud 계열(LDMUD)은 heartbeat를 **시간 예산 안에서, 중단 후 재개할 수 있게, 협력적으로** 처리한다. living object가 없으면 heartbeat를 아예 실행하지 않는다 ([ldmud/heartbeat.c](https://github.com/ldmud/ldmud/blob/master/src/heartbeat.c)). 무한 A9의 "빈 방=시간 정지"와, 활성 크리처만 next-action 큐에 두도록 다듬은 방향과 일치한다.
+- LPMud 계열(LDMUD)은 heartbeat를 **시간 예산 안에서, 중단 후 재개할 수 있게, 협력적으로** 처리한다. living object가 없으면 heartbeat를 아예 실행하지 않는다 ([ldmud/heartbeat.c](https://github.com/ldmud/ldmud/blob/master/src/heartbeat.c)). 무한 A9의 "빈 방=시간 정지"와, 활성 몬스터만 next-action 큐에 두도록 다듬은 방향과 일치한다.
 - 현대 엔진 Evennia에는 **반드시 도는 전역 틱이 없다**. 대신 구독 모델(`TICKER_HANDLER`)을 제공한다. 객체가 공유 인터벌을 subscribe하면, 타이머 하나가 모든 구독자를 처리하며, 이 구독은 reboot 후에도 유지된다 ([Evennia TickerHandler](https://www.evennia.com/docs/latest/Components/TickerHandler.html)). D1의 "엔티티별 next-action 큐(setTimeout 남발 금지)" 결정의 현대적 선례다.
 - Node.js 실시간 서버는 `select()` 대신 이벤트 루프와 **고정 인터벌마다 비우는 메시지 큐**를 쓴다. 예를 들어 50ms마다 큐의 메시지를 순서대로 처리하고, 상태를 진행하고, 델타를 방송한 뒤 큐를 비운다 ([SO: Node.js/Mongo/Socket.IO game loop](https://stackoverflow.com/questions/32137681/real-time-multiplayer-game-using-node-js-mongodb-and-socket-io-game-loop-and)). 순수 JS MUD 엔진인 RanvierMUD를 참조 구현으로 볼 수 있다 ([RanvierMUD](https://github.com/RanvierMUD/ranviermud)). 게임 루프 자체는 기본 패턴이다 ([Game Programming Patterns](https://gameprogrammingpatterns.com/game-loop.html)).
 
-## 2. 인메모리 권위 상태 ↔ DB 영속화 경계 (D2 검증)
+## 2. 인메모리 기준 상태(authoritative) ↔ DB 영속화 경계 (D2 검증)
 
-- **시뮬레이션은 메모리에서 하고, DB에는 정해진 시점에 의도한 스냅샷만 쓴다.** 상태가 바뀔 때마다 블로킹 I/O를 바로 하면 안 된다. 그래서 Network, Session, 권위 월드 틱, 도메인 변경, 영속화 경계, 저장 어댑터 순으로 계층 경계를 둔다 ([AlgoDaily: Game Server Persistence](https://algodaily.com/lessons/lesson-5-game-server-persistence-083ca31a)). D2의 "메모리 그래프 권위, DB 왕복 금지"와 일치한다.
+- **시뮬레이션은 메모리에서 하고, DB에는 정해진 시점에 의도한 스냅샷만 쓴다.** 상태가 바뀔 때마다 블로킹 I/O를 바로 하면 안 된다. 그래서 Network, Session, 서버가 기준인 월드 틱, 도메인 변경, 영속화 경계, 저장 어댑터 순으로 계층 경계를 둔다 ([AlgoDaily: Game Server Persistence](https://algodaily.com/lessons/lesson-5-game-server-persistence-083ca31a)). D2의 "메모리 그래프가 기준, DB 왕복 금지"와 일치한다.
 - **"객체 그래프가 아니라 값을 저장하라"** 는 원칙도 있다. 포인터 대신 안정된 ID를, 엔진 객체 대신 평문 값을 저장하고, 마이그레이션용 version 필드를 둔다 ([AlgoDaily](https://algodaily.com/lessons/lesson-5-game-server-persistence-083ca31a)). 무한이 1993 raw-struct 덤프를 버리고 MongoDB 네이티브 문서로 가는 결정([[muhan-mud-port]])을 직접 검증한다.
 - **세이브는 틱과 분리해 snapshot → queue → async worker 순서로 처리한다.** 틱이 안전한 시점에 불변 스냅샷을 만들어 영속화 큐에 넣으면, 저장 워커가 로깅과 재시도를 하며 기록한다 ([AlgoDaily](https://algodaily.com/lessons/lesson-5-game-server-persistence-083ca31a)).
 - **autosave의 정석은 dirty-flag를 써서 선택적으로, 개별로, 비동기로 저장하는 것이다.** 바뀐 것(dirty=true)만, 엔티티마다 따로(시간을 분산해), 비동기로 저장한다 ([gamedev.stackexchange](https://gamedev.stackexchange.com/questions/31944/best-practices-for-periodically-saving-game-state-to-disk)). D2의 "DB 네이티브 신규 세이브 정책(dirty 주기 flush + 이벤트 즉시 write)"과 정확히 일치한다. fork/COW 스냅샷은 C/Unix 기법이라 단일 프로세스 Node 포팅에는 맞지 않아 대안으로만 적어 둔다.
-- **플레이어 프로필 저장에는 MongoDB가 사실상 표준이다.** 스키마가 유연하고, 캐릭터 스폰이 단일 문서 읽기 1쿼리로 끝난다(SQL은 4+ 조인). 이 출처는 "DB가 절대 진실 원천"이라고 하며, 크래시 때 ~30초 롤백은 감수하되 DB가 손상되어서는 안 된다고 한다 ([Player Data Schema 2026](https://crux.supercraft.host/blog/player-data-schema-design-nosql-vs-sql/)). 다만 벤더 블로그라 홍보 성격을 감안해야 한다. 인벤토리, 통화, 업적은 플레이어 문서에 임베드한다 ([Reintech: MongoDB for Gaming](https://reintech.io/blog/mongodb-for-gaming-storing-querying-player-data)). player-scoped 문서와 project-scoped 공유 문서를 나누고, write는 서버 권위로 한다 ([Crux: Persistent Data](https://crux.supercraft.host/blog/persistent-data-and-shared-state/)). D8 monorepo와 D2 스키마 설계에서 참조한다.
+- **플레이어 프로필 저장에는 MongoDB가 사실상 표준이다.** 스키마가 유연하고, 캐릭터 스폰이 단일 문서 읽기 1쿼리로 끝난다(SQL은 4+ 조인). 이 출처는 "DB가 절대 진실 원천"이라고 하며, 크래시 때 ~30초 롤백은 감수하되 DB가 손상되어서는 안 된다고 한다 ([Player Data Schema 2026](https://crux.supercraft.host/blog/player-data-schema-design-nosql-vs-sql/)). 다만 벤더 블로그라 홍보 성격을 감안해야 한다. 인벤토리, 통화, 업적은 플레이어 문서에 임베드한다 ([Reintech: MongoDB for Gaming](https://reintech.io/blog/mongodb-for-gaming-storing-querying-player-data)). player-scoped 문서와 project-scoped 공유 문서를 나누고, write는 서버가 기준이 되어 처리한다 ([Crux: Persistent Data](https://crux.supercraft.host/blog/persistent-data-and-shared-state/)). D8 monorepo와 D2 스키마 설계에서 참조한다.
 
 ## 3. WebSocket 구조화 프로토콜·공유 타입 (D4 검증)
 
@@ -45,9 +45,9 @@
 ## 5. 레거시 공식 포팅 테스트 전략 (D7 검증)
 
 - **golden master, characterization, approval test는 같은 기법의 다른 이름이다.** 명세가 아니라 *실제* 동작을 기록해 두고, 동작이 바뀌면 테스트가 실패한다. 단계는 3개다. (1) 코드를 자동 테스트에 넣는다(의존성을 끊는 것이 어렵다). (2) 출력을 기록한다. (3) 입력을 바꿔 가며 시나리오를 넓힌다. 일부러 버그를 넣어 최소 1개 테스트가 실제로 실패하는지 확인한다 ([understandlegacycode](https://understandlegacycode.com/blog/characterization-tests-or-approval-tests/); [Wikipedia](https://en.wikipedia.org/wiki/Characterization_test)).
-- 이 용어를 만든 Michael Feathers("테스트 없는 코드=레거시")는 이를 **"해야 할 것"이 아니라 "실제 하는 것"을 기록하는** 가설 주도 방식으로 정의한다. 관측한 출력을 expected 값으로 붙여 넣는 식이다 ([Michael Feathers](https://michaelfeathers.silvrback.com/characterization-testing)). `legacy/muhan/src`를 behavioral oracle로 쓰는 D7 접근과 정확히 일치한다.
+- 이 용어를 만든 Michael Feathers("테스트 없는 코드=레거시")는 이를 **"해야 할 것"이 아니라 "실제 하는 것"을 기록하는** 가설 주도 방식으로 정의한다. 관측한 출력을 expected 값으로 붙여 넣는 식이다 ([Michael Feathers](https://michaelfeathers.silvrback.com/characterization-testing)). `legacy/muhan/src`를 동작 명세(오라클)로 쓰는 D7 접근과 정확히 일치한다.
 - **approval 도구는 snapshot/freeze fixture를 자동으로 만들고, "combination approvals"로 공식의 입력 공간을 넓게 다룬다.** 그래서 파라미터가 여럿인 수치 공식(전투, thaco, 마법 테이블)에 알맞다 ([8th Light](https://8thlight.com/insights/add-approval-testing-to-your-toolbox); [ApprovalTests.com](https://approvaltests.com/); [Codurance](https://www.codurance.com/publications/2012/11/11/testing-legacy-code-with-golden-master)).
-- **differential/oracle 대조는 기존 구현을 oracle로 삼아 나란히 실행하고 불일치를 저장하는 방식이다.** 진짜 위험은 *semantic drift*다. 컴파일과 유닛 테스트를 통과하고 성능도 좋아졌는데 로직이 조용히 어긋나는 경우를 말한다. 이 출처는 "동등성 증명이 제품이고 코드는 산출물일 뿐; AI가 oracle을 *운영*하되 oracle *이 되게* 하지 말라"고 한다 ([Adnan Masood/Medium](https://medium.com/@adnanmasood/architectural-testing-patterns-for-agentic-sdlc-in-legacy-modernization-5e8ffa1e0299)). 실무 블로그이고 일부는 유료 공개다. 문헌에서는 독립된 구현끼리 비교해 편차를 찾는 것으로 정의한다 ([Emergent Mind](https://www.emergentmind.com/topics/differential-testing); [Gulzar et al. PDF](https://people.cs.vt.edu/~gulzar/assets/pdf/p71-gulzar.pdf)). 무한의 기존 JS 파서를 C oracle과 바이트 단위로 diff해 검증한 방식과 같은 구조다.
+- **differential/오라클 대조는 기존 구현을 오라클로 삼아 나란히 실행하고 불일치를 저장하는 방식이다.** 진짜 위험은 *semantic drift*다. 컴파일과 유닛 테스트를 통과하고 성능도 좋아졌는데 로직이 조용히 어긋나는 경우를 말한다. 이 출처는 "동등성 증명이 제품이고 코드는 산출물일 뿐; AI가 오라클을 *운영*하되 오라클 *이 되게* 하지 말라"고 한다 ([Adnan Masood/Medium](https://medium.com/@adnanmasood/architectural-testing-patterns-for-agentic-sdlc-in-legacy-modernization-5e8ffa1e0299)). 실무 블로그이고 일부는 유료 공개다. 문헌에서는 독립된 구현끼리 비교해 편차를 찾는 것으로 정의한다 ([Emergent Mind](https://www.emergentmind.com/topics/differential-testing); [Gulzar et al. PDF](https://people.cs.vt.edu/~gulzar/assets/pdf/p71-gulzar.pdf)). 무한의 기존 JS 파서를 C 오라클과 바이트 단위로 diff해 검증한 방식과 같은 구조다.
 - **property-based 테스트는 수치 공식의 범위를 검사하는 데 알맞으며, 결정성이 전제다.** 한 게임 엔진 사례는 fast-check로 CI마다 2,000~10,000개 시드의 전투를 돌려 전투 불변식을 증명한다. ambient `Math.random()`이나 부동소수 drift가 있으면 shrinker, 리플레이, 밸런스 근거가 한꺼번에 무너진다("nondeterminism becomes poison") ([Forges of Karinth](https://danjohnson.dev/work/forges-of-karinth), 단일 출처). 우리는 RNG 시드를 고정하고 불변식(데미지≥0, 명중률 범위)을 assert하는 데 적용한다.
 - **bug-for-bug 호환에는 forensic 재구성과 재구현이라는 두 층이 있다.** Fallout2-re는 컴파일러 출력까지 맞추는 forensic 재구성이다(reccmp로 함수를 diff한다). OpenTTD와 OpenMW는 재구현이다 ([brightcoding](https://converter.brightcoding.dev/blog/i-reverse-engineered-fallout-2-heres-the-insane-technical-story); [isledecomp/reccmp](https://github.com/isledecomp/reccmp?tab=readme-ov-file)). 무한 포팅은 1:1 트랜스파일이 아니다. 방침은 **관측된 동작(공식, 반올림, off-by-one)은 bug-for-bug로 재현하되 소프트웨어 구현 방식은 자유롭게 재설계하는 것**이다. 즉 binary parity가 아니라 behavioral parity다. §1.7 as-shipped 정책과 정확히 일치한다.
 - fixture를 유지보수할 때 주의할 점이 있다. 큰 공유 fixture는 code smell이 될 수 있으니 **함수별, 입력 범위별로 좁게** 유지한다 ([HN 2024+](https://news.ycombinator.com/item?id=46203948), 포럼이라 신뢰도가 낮다). D7의 "frozen 골든 fixture"를 함수 단위로 설계할 근거다.
@@ -55,10 +55,10 @@
 ## Key Takeaways
 
 - **D1·D3를 수치로 확인했다**: Node 프로세스 하나가 WS 연결 3만~10만 개를 처리한다. 따라서 무한의 목표(수십~수백)는 단일 프로세스와 in-process EventEmitter로 충분하고도 크게 남으며, Redis를 나중으로 미루는 것이 맞다. Colyseus를 쓰지 않기로 한 결정과도 맞는다. 애초에 스케일링 문제가 없기 때문이다.
-- **D1 heartbeat 패턴은 DikuMUD 계열의 표준이다**(타이머 하나와 modulo 서브시스템 분배). 그래서 무한 A1 구조를 그대로 현대 스케줄러로 옮기면 된다. Evennia 구독 모델과 LPMud 시간 예산 heartbeat는 "활성 크리처 next-action 큐"로 다듬은 방향의 선례다.
-- **D2 세이브 정책의 신규 설계는 업계 정석과 일치한다**: 인메모리 상태를 권위로 두고, snapshot→queue→async worker로 저장하며, dirty-flag로 골라 개별로 비동기 flush한다. "객체 그래프 말고 값 저장" 원칙이 raw-struct→MongoDB 문서 결정을 검증한다.
+- **D1 heartbeat 패턴은 DikuMUD 계열의 표준이다**(타이머 하나와 modulo 서브시스템 분배). 그래서 무한 A1 구조를 그대로 현대 스케줄러로 옮기면 된다. Evennia 구독 모델과 LPMud 시간 예산 heartbeat는 "활성 몬스터 next-action 큐"로 다듬은 방향의 선례다.
+- **D2 세이브 정책의 신규 설계는 업계 정석과 일치한다**: 인메모리 상태를 기준으로 두고, snapshot→queue→async worker로 저장하며, dirty-flag로 골라 개별로 비동기 flush한다. "객체 그래프 말고 값 저장" 원칙이 raw-struct→MongoDB 문서 결정을 검증한다.
 - **D4·D8 프로토콜에는 자리 잡은 패턴이 있다**: command/event 계약 분리, 메시지당 Zod 스키마와 `z.infer`, monorepo 공유 패키지, `domain:action` discriminator다. 직접 구현하는 것이 검증된 방법이며 프레임워크는 필요 없다.
-- **D7은 characterization, golden master, oracle 대조를 교과서대로 적용한 것이다**: 원본을 behavioral oracle로 쓰고, frozen fixture는 함수별로 두며, 버그는 §1.7대로 bug-for-bug로 재현한다(behavioral parity). property-based 테스트는 RNG 시드 고정을 전제로 공식의 범위를 다룬다. combination approvals는 파라미터가 여럿인 전투/마법 테이블에 알맞다.
+- **D7은 characterization, golden master, 오라클 대조를 교과서대로 적용한 것이다**: 원본을 동작 명세(오라클)로 쓰고, frozen fixture는 함수별로 두며, 버그는 §1.7대로 bug-for-bug로 재현한다(behavioral parity). property-based 테스트는 RNG 시드 고정을 전제로 공식의 범위를 다룬다. combination approvals는 파라미터가 여럿인 전투/마법 테이블에 알맞다.
 
 ## Sources
 
@@ -72,7 +72,7 @@
 8. [AlgoDaily: Game Server Persistence](https://algodaily.com/lessons/lesson-5-game-server-persistence-083ca31a) — 인메모리 시뮬레이션과 스냅샷 경계, 값 저장, snapshot→queue→worker.
 9. [gamedev.stackexchange: periodic save](https://gamedev.stackexchange.com/questions/31944/best-practices-for-periodically-saving-game-state-to-disk) — dirty-flag로 골라 개별로 비동기 저장하는 autosave.
 10. [Player Data Schema MongoDB vs Postgres 2026](https://crux.supercraft.host/blog/player-data-schema-design-nosql-vs-sql/) — DB를 진실 원천으로 두는 NoSQL 프로필 (벤더 블로그).
-11. [Crux: Persistent Data and Shared State](https://crux.supercraft.host/blog/persistent-data-and-shared-state/) — player-scoped와 project-scoped 분리, 서버 권위 write.
+11. [Crux: Persistent Data and Shared State](https://crux.supercraft.host/blog/persistent-data-and-shared-state/) — player-scoped와 project-scoped 분리, 서버가 기준인 write.
 12. [Reintech: MongoDB for Gaming](https://reintech.io/blog/mongodb-for-gaming-storing-querying-player-data) — 인벤토리/통화/업적 임베드.
 13. [Ernest.dev: 4X multiplayer](https://ernest.dev/2026/05/31/aonw-how-i-built-multiplayer-for-a-turn-based-4x-game-with-flutter-dart-websockets-and-postgresql/) — 공유 코어의 GameCommand/GameEvent, HTTP+WS+event_offset.
 14. [RobinTail/zod-sockets](https://github.com/RobinTail/zod-sockets) — Action(incoming)/Emission(outgoing) Zod 검증, 계약 export.
