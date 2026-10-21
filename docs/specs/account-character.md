@@ -1,18 +1,18 @@
 # 계정·캐릭터 라이프사이클 (E5)
 
-> [`auth-session.md`](auth-session.md)(E3-2)가 세운 `SessionAuthPort` DIP seam·세션 FSM의 **실 구현**. account 1급 모델(accounts 컬렉션 + accountRepository)·character↔account 링크·firebase 세션쿠키 실 어댑터(주입 verifier seam)·8단계 캐릭터 생성 인터뷰·선택/진입/재개 배선·soft-delete(자살) FSM·RBAC `assertRole` seam을 얹고, 포트 계약을 sync→async로 마이그레이션한다. 게임 규칙(E6)·DM 권한 명령(A13)·파생 스탯(#80)은 범위 밖이다.
+> [`auth-session.md`](auth-session.md)(E3-2)가 세운 `SessionAuthPort` DIP 확장 지점(seam)·세션 FSM의 **실 구현**. account 독립 모델(accounts 컬렉션 + accountRepository)·character↔account 링크·firebase 세션쿠키 실 어댑터(주입 verifier seam)·8단계 캐릭터 생성 인터뷰·선택/진입/재개 연결·soft-delete(자살) FSM·RBAC `assertRole` seam을 얹고, 포트 계약을 sync→async로 마이그레이션한다. 게임 규칙(E6)·DM 권한 명령(A13)·파생 스탯(#80)은 범위 밖이다.
 
 ## 개요
 
-무한 포팅의 계정·캐릭터 도메인 계층이다. [`auth-session.md`](auth-session.md)(E3-2)가 인증 게이트·3층 세션 FSM(`characterSelect → create → command`)·`SessionAuthPort` seam·in-memory 어댑터를, [`persistence.md`](persistence.md)(E2-1)가 repository 계층·문서 스키마를 확립했다. E3-2는 실 firebase-admin 어댑터·`accountId` Mongo 영구화를 E5로 명시 위임했고, 이 계층이 그 실 구현이다. 클라 진입 UI([`session-entry.md`](session-entry.md), E10)가 소비하는 characterList·selectCharacter·createField·resumed 동작에 실 백엔드를 배선한다.
+무한 포팅의 계정·캐릭터 도메인 계층이다. [`auth-session.md`](auth-session.md)(E3-2)가 인증 게이트·3층 세션 FSM(`characterSelect → create → command`)·`SessionAuthPort` seam·in-memory 어댑터를, [`persistence.md`](persistence.md)(E2-1)가 repository 계층·문서 스키마를 확립했다. E3-2는 실 firebase-admin 어댑터·`accountId` Mongo 영구화를 E5로 명시 위임했고, 이 계층이 그 실 구현이다. 클라 진입 UI([`session-entry.md`](session-entry.md), E10)가 소비하는 characterList·selectCharacter·createField·resumed 동작에 실 백엔드를 연결한다.
 
-원작 무한은 account 1급 객체 없이 "이름=크리덴셜=파일키" flat namespace였고(게임 분석 A12 §5), 재설계는 account(1)→character(N)로 승급한다(A12 §9). 원작 캐릭터 생성은 create_ply 8단계 대화형 상태머신(A12 §3·A7 §8)이며 이름은 그 앞 login 상태머신에서 받았다(이름=인증 크리덴셜). 재설계는 Firebase가 인증을 소유하므로 **비밀번호(원작 구현 방식)를 제거**하고 이름(더 이상 크리덴셜 아님)을 인터뷰로 이동시킨다. 자살(suicide)의 `system("mv")` 무덤 이동 셸(원작 구현 방식)도 제거하고 status 플래그 soft-delete로 대체한다.
+원작 무한은 account 독립 객체 없이 "이름=크리덴셜=파일키" flat namespace였고(게임 분석 A12 §5), 재설계는 account(1)→character(N)로 승급한다(A12 §9). 원작 캐릭터 생성은 create_ply 8단계 대화형 상태머신(A12 §3·A7 §8)이며 이름은 그 앞 login 상태머신에서 받았다(이름=인증 크리덴셜). 재설계는 Firebase가 인증을 담당하므로 **비밀번호(원작 구현 방식)를 제거**하고 이름(더 이상 크리덴셜 아님)을 인터뷰로 이동시킨다. 자살(suicide)의 `system("mv")` 무덤 이동 셸(원작 구현 방식)도 제거하고 status 플래그 soft-delete로 대체한다.
 
 계층 경계는 세 가지다.
 
 1. **firebase 결합 ↔ 어댑터 로직** — 어댑터는 firebase-admin을 직접 import하지 않고 주입된 `SessionCookieVerifier`(`(cookie)=>Promise<{uid}|null>`) seam 뒤에 둔다. concrete verifier는 부팅(index.ts)에서만 firebase-admin을 조립한다(DIP — 실 creds 없이 어댑터 전체 테스트 가능).
 2. **account 신원 ↔ character 소유** — firebase uid=accountId로 account를 upsert 승급하고, character는 `accountId` FK로 소유 계정을 역참조한다(1:N). 소유권은 `assertOwnership(accountId, characterId)`로만 판정한다.
-3. **순수 결정 ↔ 부수효과(async)** — E3-2의 3층 FSM(순수 decider → 주입 emit StateHandler → 배선)을 보존하되, 포트 I/O가 실 Mongo·firebase가 되면서 StateHandler·배선층을 Promise 기반으로 전환한다. 순수 decider는 포트를 호출하지 않아 sync로 유지한다.
+3. **순수 결정 ↔ 부수효과(async)** — E3-2의 3층 FSM(순수 decider → 주입 emit StateHandler → 연결)을 보존하되, 포트 I/O가 실 Mongo·firebase가 되면서 StateHandler·연결층을 Promise 기반으로 전환한다. 순수 decider는 포트를 호출하지 않아 sync로 유지한다.
 
 ## 구조 / 스키마
 
@@ -28,7 +28,7 @@
 | `status` | `enum(['active','banned']).default('active')` | 계정 상태 |
 | `createdAt` | `coerce.date()` | 최초 upsert 시각 |
 
-role enum 선언 순서는 assertRole 서열(player < builder < dm < admin)과 일치시킨다 — enum index는 검증에 무관하나 소비자가 index를 rank로 오용하는 함정을 없앤다(rank는 명시 `ROLE_RANK` 맵이 소유).
+role enum 선언 순서는 assertRole 서열(player < builder < dm < admin)과 일치시킨다 — enum index는 검증에 무관하나 소비자가 index를 rank로 오용하는 함정을 없앤다(rank는 명시 `ROLE_RANK` 맵이 담당).
 
 ### character 스키마 링크 (`packages/shared/src/schema/character.ts`)
 
@@ -36,15 +36,15 @@ E2-1 `characterSchema`에 계정 링크·soft-delete·생성 인터뷰 스칼라
 
 - `accountId: string().min(1)` — 소유 계정 필수 FK(`account._id`).
 - `status: enum(['active','deleted']).default('active')` + `deletedAt: coerce.date().optional()` — soft-delete graveyard 필드.
-- `gender`·`weapon: int().optional()` — 생성 인터뷰가 고른 원시 스칼라. `.default()`가 아닌 `.optional()`이라(deletedAt 선례) 기존 fixture를 깨지 않고 `createCharacter`가 항상 채운다. proficiency[5] 배열 모델링은 E6 소관.
-- `alignment: int()` — **required**. 같은 생성 인터뷰 스칼라지만 gender·weapon과 달리 필수다: 학습 게이트(study OGOODO/OEVILO)와 전투 상태(`PlayerCombatState.alignment`)가 매 판정마다 값을 요구해, 부재를 허용하면 소비 지점마다 폴백이 흩어진다. v5 이하 문서는 load 직전 `backfillCharacterV6`가 중립 sentinel `0`으로 시딩한다. 생성 경로(`FirebaseSessionAuthAdapter`)는 인터뷰 선택값을 그대로 싣는다 — 여기에 `?? undefined` 같은 선택 필드 관용을 도입하면 insert 경로의 `characterSchema.parse`가 throw한다. 값역 제약(`.min().max()`)은 의도적으로 두지 않으며 도메인 강제는 상류 `sessionFsm`의 `refine(1|2)`이 담당한다. 성향 시스템(`-1000..+1000`) 모델링은 [#123](https://github.com/smalljiny/muhan/issues/123) 소관이다 — 상세는 [character-flags.md](character-flags.md).
+- `gender`·`weapon: int().optional()` — 생성 인터뷰가 고른 원시 스칼라. `.default()`가 아닌 `.optional()`이라(deletedAt 선례) 기존 fixture를 깨지 않고 `createCharacter`가 항상 채운다. proficiency[5] 배열 모델링은 E6 담당.
+- `alignment: int()` — **required**. 같은 생성 인터뷰 스칼라지만 gender·weapon과 달리 필수다: 학습 게이트(study OGOODO/OEVILO)와 전투 상태(`PlayerCombatState.alignment`)가 매 판정마다 값을 요구해, 값이 없는 것을 허용하면 소비 지점마다 폴백이 흩어진다. v5 이하 문서는 load 직전 `backfillCharacterV6`가 중립 sentinel `0`으로 시딩한다. 생성 경로(`FirebaseSessionAuthAdapter`)는 인터뷰 선택값을 그대로 싣는다 — 여기에 `?? undefined` 같은 선택 필드 관용을 도입하면 insert 경로의 `characterSchema.parse`가 throw한다. 값 범위 제약(`.min().max()`)은 의도적으로 두지 않으며 도메인 강제는 상류 `sessionFsm`의 `refine(1|2)`이 담당한다. 성향 시스템(`-1000..+1000`) 모델링은 [#123](https://github.com/smalljiny/muhan/issues/123) 담당이다 — 상세는 [character-flags.md](character-flags.md).
 
 ### accountRepository (`packages/server/src/repo/accountRepository.ts`)
 
 accounts 컬렉션(`_id`=firebase uid) 저장소. 생성자 주입(`Db`), insert 직후·find 직후 `accountSchema.parse` 경계 검증([`persistence.md`](persistence.md) repository 관례).
 
 - `upsert(input)` — `findOneAndUpdate({_id}, {$setOnInsert: {role:'player', status:'active', createdAt, email?}}, {upsert:true, returnDocument:'after'})`. `$setOnInsert`라 이미 존재하면 role·status를 덮지 않는다(멱등 — 최초 인증 승급 경로).
-- `findById`·`updateRole`·`setStatus` — patch는 `accountSchema.shape.role/status.removeDefault()`로 검증한다. `.partial()`을 쓰면 default가 patch에 없는 반대 필드에 재발화해 `$set`이 그 필드를 기본값으로 덮는 silent lost-write가 나므로 default를 벗긴 스키마로 넘긴 값만 검증한다. matchedCount===0이면 `DocumentNotFoundError`.
+- `findById`·`updateRole`·`setStatus` — patch는 `accountSchema.shape.role/status.removeDefault()`로 검증한다. `.partial()`을 쓰면 default가 patch에 없는 반대 필드에 다시 동작해 `$set`이 그 필드를 기본값으로 덮는 silent lost-write가 나므로 default를 벗긴 스키마로 넘긴 값만 검증한다. matchedCount===0이면 `DocumentNotFoundError`.
 - `init()` — no-op. `_id`가 firebase uid 자연키라 Mongo 기본 `_id` 인덱스로 유일성이 충족된다(별도 인덱스 불필요, email 인덱스는 소비자로 defer).
 
 ### characterRepository 확장 (`packages/server/src/repo/characterRepository.ts`)
@@ -59,8 +59,8 @@ E2-1 저장소에 계정 조회·soft-delete를 더한다:
 ### 실 어댑터 + verifier seam (`packages/server/src/auth/`)
 
 - `sessionCookieVerifier.ts` — `SessionCookieVerifier = (cookie: string) => Promise<{ uid: string } | null>` 주입 seam 타입. 어댑터는 이 함수만 주입받고 firebase-admin을 import하지 않는다.
-- `firebaseSessionAuthAdapter.ts` — `SessionAuthPort` 실 구현. 생성자 주입(verifier, accountRepository, characterRepository, 전역 싱글턴 미조회). 매핑 규약: `CharacterSummary.characterId = Character._id`, 요약 `level`은 파생 미존재라 dev 기본값 1(#80 정합 전).
-- `firebaseVerifier.ts` — `createFirebaseVerifier(projectId)` 팩토리가 firebase-admin `getAuth().verifySessionCookie`를 `SessionCookieVerifier` 형태로 감싼다. `getApps().length` 가드로 `initializeApp({ projectId })` 1회 초기화. **firebase-admin import는 이 파일과 index.ts로만 국한**(어댑터는 firebase-agnostic). 실 creds가 필요해 단위 테스트가 비실용적이라 커버리지에서 제외(index.ts와 동일 배선 코드 취급, seam은 통합 테스트가 FAKE verifier로 관통 검증).
+- `firebaseSessionAuthAdapter.ts` — `SessionAuthPort` 실 구현. 생성자 주입(verifier, accountRepository, characterRepository, 전역 싱글턴 미조회). 매핑 규약: `CharacterSummary.characterId = Character._id`, 요약 `level`은 파생 미존재라 dev 기본값 1(#80과 일치시키기 전).
+- `firebaseVerifier.ts` — `createFirebaseVerifier(projectId)` 팩토리가 firebase-admin `getAuth().verifySessionCookie`를 `SessionCookieVerifier` 형태로 감싼다. `getApps().length` 가드로 `initializeApp({ projectId })` 1회 초기화. **firebase-admin import는 이 파일과 index.ts로만 국한**(어댑터는 firebase-agnostic). 실 creds가 필요해 단위 테스트가 비실용적이라 커버리지에서 제외(index.ts와 동일 연결 코드 취급, seam은 통합 테스트가 FAKE verifier로 관통 검증).
 - `assertRole.ts` — `assertRole(account, requiredRole)` 순수 함수. `ROLE_RANK` 맵(player=0<builder<dm<admin)으로 `rank(account.role) >= rank(requiredRole)`면 void, 미달이면 `RoleError`. 위계 비교(정확 일치 아님 — dm은 builder 게이트 통과). 비-enum role 누출 시 `undefined >= n`이 false라 fail-closed.
 - `raceModifiers.ts` — 종족 스탯 보정 순수 함수(a7 §7 테이블). **server E5 코드에 둔다**(shared/stats 아님 — #80 병렬 토픽 파일 충돌 회피). stats 순서 [str,dex,con,int,piety], 보정 후 새 튜플 반환(불변성).
 
@@ -72,10 +72,10 @@ E3-2의 `ConnectionState` 핸들러 맵에 `delete` 상태를 더하고, create 
 - `DELETE_SENTINEL='delete'`(선택 화면 삭제 진입 신호), `DELETE_CONFIRM_VALUE='찐짜로'`(삭제 확정값 — 원작 command5.c suicide "찐짜로? (찐짜로/뻥으로)" strcmp 충실 이식), `DELETE_CONFIRM_PROMPT_ID`(확인 입력 prompt).
 - `createProgress`(create 대화)·`deleteProgress`(삭제 대상 characterId)는 소켓 수명 `FsmContext` 서브상태에 둔다(각 상태 밖에선 null 불변식, onExit이 정리).
 
-### env·부팅 배선 (`packages/server/src/config/env.ts`, `index.ts`)
+### env·부팅 연결 (`packages/server/src/config/env.ts`, `index.ts`)
 
-- `FIREBASE_PROJECT_ID: z.string().optional()` — 실 세션쿠키 검증 어댑터(`DEV_LOGIN_ENABLED=false` 경로) 조립에만 쓰인다. dev 부팅은 요구하지 않아 optional이나, 실 어댑터 조립 시점에 부재면 fail-fast로 방어.
-- `index.ts` — `DEV_LOGIN_ENABLED` off면 accountRepository·characterRepository + concrete verifier로 `FirebaseSessionAuthAdapter`를 조립해 주입하고, on이면 dev 시드 인메모리 어댑터를 배선한다(기존 dev 경로 보존). 부팅 init 배치에 `accountRepository.init()`을 추가(기존 objects·characters·bank init 보존).
+- `FIREBASE_PROJECT_ID: z.string().optional()` — 실 세션쿠키 검증 어댑터(`DEV_LOGIN_ENABLED=false` 경로) 조립에만 쓰인다. dev 부팅은 요구하지 않아 optional이나, 실 어댑터 조립 시점에 없으면 fail-fast로 방어.
+- `index.ts` — `DEV_LOGIN_ENABLED` off면 accountRepository·characterRepository + concrete verifier로 `FirebaseSessionAuthAdapter`를 조립해 주입하고, on이면 dev 시드 인메모리 어댑터를 연결한다(기존 dev 경로 보존). 부팅 init 배치에 `accountRepository.init()`을 추가(기존 objects·characters·bank init 보존).
 
 ## 동작
 
@@ -110,13 +110,13 @@ emit 순서(예: characterSelect 진입 시 `session:characterList`가 select pr
 
 ### RBAC seam
 
-`assertRole`은 role 위계 판정 함수만 제공한다 — 실제 권한 게이트 명령은 소비자(A13 DM·모더레이션)로 defer한다. `plugin.ts`의 `permissivePermissionAdapter`는 permissive 기본값을 유지한다(실 RBAC 어댑터 미배선).
+`assertRole`은 role 위계 판정 함수만 제공한다 — 실제 권한 게이트 명령은 소비자(A13 DM·모더레이션)로 defer한다. `plugin.ts`의 `permissivePermissionAdapter`는 permissive 기본값을 유지한다(실 RBAC 어댑터 미연결).
 
 ## 제약사항
 
-- **세션 revocation·`banned` 강제는 하드닝 defer([#89](https://github.com/smalljiny/muhan/issues/89))** — `firebaseVerifier`는 `checkRevoked` 없이 서명·만료만 검증하므로 revoke된 세션이 자연 만료(최대 ~2주)까지 인증을 통과한다. `account.status='banned'`도 연결 게이트가 강제하지 않는다(setStatus 저장 경로는 존재). 둘 다 현재 트리거 불가한 잠복 갭이며, `checkRevoked=true`가 요구하는 서비스 계정 credential 프로비저닝과 함께 랜딩한다. banned 강제는 `validateSessionCookie` 본체에 두어야 하며 dedup 캐시 경로에 얹으면 재검증에서 건너뛴다.
-- **게임 비밀번호 없음** — 인증은 Firebase 세션쿠키가 소유(ADR D6). account/character 스키마·repository·로그·프로토콜 어디에도 게임 비밀번호를 저장·노출하지 않는다.
-- **파생 스탯·HP/MP 계산은 #80 stats-core** — 생성은 base 스탯(종족 보정 포함)만 채우고, up_level·HP/MP 파생과 read-time clamp는 병렬 토픽 소관이다. 요약 `level`은 dev 기본값 1.
+- **세션 revocation·`banned` 강제는 하드닝 defer([#89](https://github.com/smalljiny/muhan/issues/89))** — `firebaseVerifier`는 `checkRevoked` 없이 서명·만료만 검증하므로 revoke된 세션이 자연 만료(최대 ~2주)까지 인증을 통과한다. `account.status='banned'`도 연결 게이트가 강제하지 않는다(setStatus 저장 경로는 존재). 둘 다 현재 트리거 불가한 잠복 갭이며, `checkRevoked=true`가 요구하는 서비스 계정 credential 프로비저닝과 함께 반영한다. banned 강제는 `validateSessionCookie` 본체에 두어야 하며 dedup 캐시 경로에 얹으면 재검증에서 건너뛴다.
+- **게임 비밀번호 없음** — 인증은 Firebase 세션쿠키가 담당(ADR D6). account/character 스키마·repository·로그·프로토콜 어디에도 게임 비밀번호를 저장·노출하지 않는다.
+- **파생 스탯·HP/MP 계산은 #80 stats-core** — 생성은 base 스탯(종족 보정 포함)만 채우고, up_level·HP/MP 파생과 read-time clamp는 병렬 토픽이 담당한다. 요약 `level`은 dev 기본값 1.
 - **DM/빌더 권한 명령은 A13** — E5는 `role` 필드 + `assertRole` seam만 제공하고 실제 권한 게이트 명령(*delete 등)·모더레이션 도구는 별도 에픽이다.
 - **class/race 범위 코드 테이블 검증은 E6** — 생성 인터뷰는 gender·weapon·alignment·point-buy를 서버 검증하나 class는 `port/templates.js` 코드 테이블 대조 전까지 자유값이다.
 - **Mongo 런타임 마이그레이션 없음** — 영속 프로덕션 character 문서가 없고(legacy 타이/테스토스는 디스크 포맷 픽스처이지 Mongo 문서 아님) `accountId` required 전환은 스키마 개정만으로 충분하다.

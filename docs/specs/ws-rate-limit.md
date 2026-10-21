@@ -4,12 +4,12 @@
 
 ## 개요
 
-E3 하드닝 후속(#64). [`ws-resource-guard.md`](ws-resource-guard.md)(#54)가 **연결 수**(정원 게이트)와 **아웃바운드 큐**(backpressure)를 상한했지만, 인증된 클라이언트가 **읽기는 정상**이면서 프레임을 고속으로 flood하면 인바운드 처리 CPU(파싱·dispatch·핸들러)를 소진시킬 수 있다. 기존 완화는 이 표면을 덮지 못한다.
+E3 하드닝 후속(#64). [`ws-resource-guard.md`](ws-resource-guard.md)(#54)가 **연결 수**(정원 게이트)와 **아웃바운드 큐**(backpressure)를 상한했지만, 인증된 클라이언트가 **읽기는 정상**이면서 프레임을 고속으로 flood하면 인바운드 처리 CPU(파싱·dispatch·핸들러)를 소진시킬 수 있다. 기존 완화는 이 범위를 덮지 못한다.
 
 - `maxPayload`(`MAX_FRAME_BYTES = 64KB`)는 **프레임 크기**만 막고 **도착률**을 막지 않는다.
 - backpressure는 **아웃바운드** 큐만 막고 인바운드 처리율을 막지 않는다.
 
-이 문서는 인바운드 유량 상한과 이를 튜닝하는 `WS_MSG_RATE_*` env 정책값을 정본으로 소유한다. 게이트가 걸리는 지점은 [`transport-protocol.md`](transport-protocol.md)의 message 처리 파이프라인(`JSON.parse` 최상단)이며, `error{code:'rate_limited'}` 통지는 같은 문서의 `errorCodeSchema` 계약을 쓴다.
+이 문서는 인바운드 유량 상한과 이를 튜닝하는 `WS_MSG_RATE_*` env 정책값의 기준을 담당한다. 게이트가 걸리는 지점은 [`transport-protocol.md`](transport-protocol.md)의 message 처리 파이프라인(`JSON.parse` 최상단)이며, `error{code:'rate_limited'}` 통지는 같은 문서의 `errorCodeSchema` 계약을 쓴다.
 
 이 방어는 기존 자원 방어와 **다른 층**이다: `maxPayload`(프레임 크기) → **rate limit(도착률, 신규)** → backpressure(아웃바운드 큐) → idle-nonrearm(유휴 종료). rate limit 드롭이 idle 타이머를 재-arm하지 않는 것은 rejected-nonrearm과 같은 원리 — flood는 유휴 종료를 앞당겨야지 연장해선 안 된다.
 
@@ -20,7 +20,7 @@ E3 하드닝 후속(#64). [`ws-resource-guard.md`](ws-resource-guard.md)(#54)가
 `createMessageRateLimiterFactory(getLimits)` 팩토리가 계정별 공유 버킷 레지스트리(`Map<accountId, AccountEntry>`)를 클로저에 캡슐화하고 `MessageRateLimiterFactory` 핸들을 반환한다(`connectionQuota` factory+thunk+공유 회계 관례 미러 — 정원 카운터에 얹지 않는 별도 레지스트리다).
 
 - `createConnection(accountId, now): ConnectionRateLimiter` — 연결 하나의 유량 제한 핸들을 발급한다. 단조 시각 `now`를 받아 (1) zero-refcount 엔트리를 `now`로 lazy sweep하고(§"계정 버킷 소유·정리"), (2) hard size cap을 backstop하며, (3) 대상 계정 엔트리가 잔존하면 refCount를 올려 공유 버킷을 `now`로 refill 후 **재사용**, 없으면 새 버킷을 refCount=1로 등록한다. 연결 전용 버킷과 위반 카운터는 이 핸들이 소유한다(항상 fresh).
-- `releaseAccount(accountId): void` — 계정 참조 반납. refCount를 내리되 0 도달 시에도 **Map 엔트리를 삭제하지 않고** zero-refcount로 남긴다(keep-until-refilled). 부재 계정 release·이중 반납은 완전 no-op(음수·누수 없음).
+- `releaseAccount(accountId): void` — 계정 참조 반납. refCount를 내리되 0 도달 시에도 **Map 엔트리를 삭제하지 않고** zero-refcount로 남긴다(keep-until-refilled). 없는 계정 release·이중 반납은 완전 no-op(음수·누수 없음).
 - `activeAccountCount(): number` — 테스트 전용 인스펙터(레지스트리의 전체 엔트리 수 = live + 미회복 zero-refcount). 프로덕션 회계 미참여.
 - `liveAccountCount(): number` — 테스트 전용 인스펙터(refCount>0 엔트리 수). 프로덕션 회계 미참여.
 
@@ -36,9 +36,9 @@ E3 하드닝 후속(#64). [`ws-resource-guard.md`](ws-resource-guard.md)(#54)가
 
 ### 컨텍스트 슬롯 (`packages/server/src/ws/connection.ts`)
 
-`ConnectionContext`에 `rateLimiter: ConnectionRateLimiter | null` 슬롯을 추가한다(`deadline`/`idle` 슬롯 관례 미러). 소켓 open 시 팩토리가 핸들을 대입하고, `cleanupConnection`이 슬롯을 null로 비운다 — 순수 회계 핸들이라 clear할 타이머가 없어(heartbeat/deadline/idle과 달리 null 전 부수효과가 없다) 무조건 대입으로 충분하다. **계정 버킷 반납은 여기서 하지 않는다** — 별도 close 리스너(`releaseAccount`)가 소유한다(여기서 반납하면 이중 감소로 형제 연결의 계정 엔트리를 지운다).
+`ConnectionContext`에 `rateLimiter: ConnectionRateLimiter | null` 슬롯을 추가한다(`deadline`/`idle` 슬롯 관례 미러). 소켓 open 시 팩토리가 핸들을 대입하고, `cleanupConnection`이 슬롯을 null로 비운다 — 순수 회계 핸들이라 clear할 타이머가 없어(heartbeat/deadline/idle과 달리 null 전 부수효과가 없다) 무조건 대입으로 충분하다. **계정 버킷 반납은 여기서 하지 않는다** — 별도 close 리스너(`releaseAccount`)가 담당한다(여기서 반납하면 이중 감소로 형제 연결의 계정 엔트리를 지운다).
 
-### 게이트 배선 (`packages/server/src/ws/plugin.ts`)
+### 게이트 연결 (`packages/server/src/ws/plugin.ts`)
 
 `registerWebsocket` 스코프에서 팩토리를 1회 인스턴스화해 `app.wsMessageRateLimiter`로 노출한다(진단·테스트 관찰의 단일 출처, `wsSessionRegistry` 관례 미러). 상한 projection은 첫 `check`에서 한 번만 만들어 캐시한다 — `check`는 매 프레임 도는 hot path라 프레임마다 새 5-필드 객체를 할당하면 flood 시 공격률에 비례한 GC garbage가 된다. config는 첫 파싱 후 불변이므로 캐시 수명(=팩토리 수명)에 staleness가 없다.
 
@@ -73,10 +73,10 @@ E3 하드닝 후속(#64). [`ws-resource-guard.md`](ws-resource-guard.md)(#54)가
 
 계정 버킷은 연결 간 공유 상태다. `createConnection`이 계정 엔트리 refCount를 올리고, close 리스너가 `releaseAccount`로 내린다. refCount가 0에 도달해도 **엔트리를 삭제하지 않고 zero-refcount로 유지**한다(keep-until-refilled) — 재접속이 fresh full 버킷이 아니라 경과 시간만큼만 회복된 기존 버킷을 재사용하게 해, disconnect/reconnect churn으로 계정 유량 상한을 우회하는 갭을 닫는다(즉시 재접속은 여전히 depleted, 충분한 시간 경과 후 재접속만 full). 엔트리를 계속 유지하면 Map이 무한 성장할 수 있어, 두 backstop이 스케줄러·타이머 없이 순수 코어로 크기를 경계한다:
 
-- **lazy sweep**: `createConnection`이 매 접근마다 레지스트리를 O(n) 훑어, 대상 accountId·live(refCount>0) 엔트리를 제외한 zero-refcount 엔트리를 `now`로 refill하고 `tokens >= accountCapacity`(완전 회복 = 부재와 상태 동등)면 삭제한다.
+- **lazy sweep**: `createConnection`이 매 접근마다 레지스트리를 O(n) 훑어, 대상 accountId·live(refCount>0) 엔트리를 제외한 zero-refcount 엔트리를 `now`로 refill하고 `tokens >= accountCapacity`(완전 회복 = 엔트리가 없는 것과 상태 동등)면 삭제한다.
 - **hard size cap backstop**: sweep 후에도 cap(`WS_MSG_RATE_ACCOUNT_MAX_ENTRIES`) 초과면 zero-refcount 엔트리를 most-refilled 우선으로 evict한다(live·대상 불가침, 정렬은 이 드문 경로에서만). 축출 임계는 이 호출이 엔트리를 추가하는지(`willAdd = !accounts.has(accountId)`)로 갈린다 — **신규 계정**은 1개가 추가되므로 `size >= cap`일 때 캡 미만까지 evict해 최종 `size <= cap` 보장, **기존 계정 재연결**은 reuse 경로라 추가가 없으므로 `size > cap`일 때만 evict한다(재연결이 무관한 고갈 계정을 과잉 축출해 그 계정의 churn 우회를 재노출하지 않게 하는 load-bearing 구분).
 
-Map 크기는 (live 계정 수 + 미회복 zero-refcount)로 경계된다. ws `'close'`가 2회 이상 발화할 수 있어(그래서 `releaseQuota`도 `releaseOnce`다) `rateReleased` once-guard 플래그가 load-bearing이다 — 가드가 없으면 `releaseAccount`가 이중 감소해 refCount를 조기에 0으로 만들어(음수 방지 가드가 있어도 sibling 회계가 깨진다) 살아 있는 형제 연결의 계정 상한을 우회한다.
+Map 크기는 (live 계정 수 + 미회복 zero-refcount)로 경계된다. ws `'close'`가 2회 이상 발생할 수 있어(그래서 `releaseQuota`도 `releaseOnce`다) `rateReleased` once-guard 플래그가 load-bearing이다 — 가드가 없으면 `releaseAccount`가 이중 감소해 refCount를 조기에 0으로 만들어(음수 방지 가드가 있어도 sibling 회계가 깨진다) 살아 있는 형제 연결의 계정 상한을 우회한다.
 
 극단 cardinality(수천 개의 서로 다른 인증 계정이 동시에 drain)에서 cap 초과로 아직 미회복인 zero-refcount 엔트리까지 evict되면 **그 계정 한정 churn 우회가 재노출**될 수 있다 — 다수의 유효 계정 확보라는 높은 비용을 전제로 한 accepted degradation이며, most-refilled 우선 축출이 페널티 상태에 가장 가까운(가장 덜 회복된) 엔트리를 마지막에 버려 이를 완화한다.
 
@@ -112,7 +112,7 @@ socket.on('message', (data) => {
 
 ## 관련 문서
 
-- [`transport-protocol.md`](transport-protocol.md) — 유량 게이트가 얹히는 message 처리 파이프라인·`errorCodeSchema` 계약 정본.
-- [`ws-resource-guard.md`](ws-resource-guard.md) — 형제 방어 계층(연결 정원 + 아웃바운드 backpressure) 정본.
-- [`auth-session.md`](auth-session.md) — arm 대상이 되는 인증된 연결의 게이트 정본.
+- [`transport-protocol.md`](transport-protocol.md) — 유량 게이트가 얹히는 message 처리 파이프라인·`errorCodeSchema` 계약 기준.
+- [`ws-resource-guard.md`](ws-resource-guard.md) — 형제 방어 계층(연결 정원 + 아웃바운드 backpressure) 기준 문서.
+- [`auth-session.md`](auth-session.md) — arm 대상이 되는 인증된 연결의 게이트 기준.
 - 이슈 #64(인바운드 유량 상한), #77(계정 버킷 keep-until-refilled churn 우회 차단), #54(선행: 연결 정원 + backpressure). ADR #14(D1 단일프로세스).

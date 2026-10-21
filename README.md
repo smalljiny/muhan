@@ -32,9 +32,9 @@
 | 스택·아키텍처 결정 (ADR, 이슈 #14) | ✅ 확정 |
 | **E1** monorepo 스캐폴딩·툴체인 | ✅ 완료 |
 | **E2** 영속화 — 기반(E2-1)·세이브 정책 엔진(E2-2) | ✅ 완료 |
-| **E3** 전송·세션 — 프로토콜(E3-1)·인증세션 FSM(E3-2)·연결 수명주기(E3-3)·자유채팅권한 seam(E3-4)·WS 하드닝(유량 제한·자원 가드) | ✅ 완료 |
+| **E3** 전송·세션 — 프로토콜(E3-1)·인증세션 FSM(E3-2)·연결 수명주기(E3-3)·자유채팅권한 확장 지점(seam, E3-4)·WS 하드닝(유량 제한·자원 가드) | ✅ 완료 |
 | **E4** 월드 상태 엔진 — 런타임 기반(1Hz 틱)·이동·방·크리처 스폰/AI | ✅ 완료 |
-| **E5** 계정·캐릭터 라이프사이클 (account 1급 모델·생성 인터뷰·진입/재개·soft-delete) | ✅ 완료 |
+| **E5** 계정·캐릭터 라이프사이클 (account 독립 모델·생성 인터뷰·진입/재개·soft-delete) | ✅ 완료 |
 | **E6** 게임 규칙 엔진 — 파생 스탯(stats-core)·전투(근접 + 특수공격·DoT·사망 분배·전투 AI)·진행 루프(progression)·아이템/장비(items) | ✅ 완료 |
 | **E6b** 마법 — 카탈로그·CAST 시전·공격 effect 20종·몬스터 시전(magic, #84) | ✅ 완료 |
 | **E6b** 마법 지속·성장 — spell store·학습/전수·realm 성장·버프/디버프 타이머·비-offensive effect 36종(magic-progression, #85) | 🔄 현재 PR |
@@ -68,10 +68,10 @@ muhan/
 │   ├── server/   # Fastify 부팅, MongoDB 연결·repository, 월드 틱·세션 FSM·전투·진행 seam 소비
 │   ├── client/   # React 웹 클라이언트 (전송 셸·세션 진입 플로우)
 │   └── port/     # 1993 디스크 포맷 파서·변환기 (순수 JS)
-├── data/world/   # port/로 변환된 JSON 월드 데이터 (산출물, 정본)
+├── data/world/   # port/로 변환된 JSON 월드 데이터 (산출물, 기준 데이터)
 ├── legacy/muhan/ # 원본 C 소스·월드·세이브 (읽기 전용 oracle, EUC-KR)
 └── docs/
-    ├── specs/    # 정본 스펙 26종 (아키텍처·영속화·전송/세션·월드/게임규칙·아이템/마법·경제·클라이언트·테스트 인프라)
+    ├── specs/    # 기준 스펙 26종 (아키텍처·영속화·전송/세션·월드/게임규칙·아이템/마법·경제·클라이언트·테스트 인프라)
     ├── notes/    # 게임 분석 노트 A1–A13
     └── research/ # 아키텍처·스캐폴딩 리서치 보고서
 ```
@@ -118,7 +118,7 @@ node packages/port/templates.js obj legacy/muhan/objmon/o05
 node packages/port/convertWorld.js legacy/muhan data/world --pretty
 ```
 
-**전송 왕복 e2e** (`packages/client/e2e`, Playwright 실브라우저) — compose 스택(server+mongo)을 SUT로 삼아 인증 접속(G1)·버전 협상(G2)·`debug:echo` 왕복(G3)을 end-to-end 검증한다. compose는 e2e 실행 전 외부에서 미리 부팅하고(server:3000+mongo), Playwright는 호스트 Vite(5173)만 기동한다 — Vite가 `/game`·`/dev/login`을 서버로 프록시해 브라우저가 same-origin으로만 통신한다.
+**전송 왕복 e2e** (`packages/client/e2e`, Playwright 실브라우저) — compose 스택(server+mongo)을 SUT로 삼아 인증 접속(G1)·버전 협상(G2)·`debug:echo` 왕복(G3)을 end-to-end 검증한다. compose는 e2e 실행 전 외부에서 미리 부팅하고(server:3000+mongo), Playwright는 호스트 Vite(5173)만 실행한다 — Vite가 `/game`·`/dev/login`을 서버로 프록시해 브라우저가 same-origin으로만 통신한다.
 
 ```bash
 # 최초 1회: chromium 브라우저 설치
@@ -127,7 +127,7 @@ pnpm --filter client exec playwright install chromium
 # 1. compose 스택 부팅 (server:3000 + mongo, dev 로그인·시드 인증 활성)
 docker compose up -d --build
 
-# 2. e2e 실행 (호스트 Vite 5173 자동 기동 + Playwright)
+# 2. e2e 실행 (호스트 Vite 5173 자동 시작 + Playwright)
 pnpm --filter client e2e
 
 # 3. 정리
@@ -145,7 +145,7 @@ docker compose down
 - **32비트 ABI**: `long`=4B, 포인터=4B, little-endian. 텍스트는 **EUC-KR**(완성형).
 - **확정 구조체 크기**: `room`=480, `exit_`=44, `object`=352, `creature`=1184, `lasttime`=12.
 - 이 크기·필드 오프셋은 i386 Docker로 `sizeof`/`offsetof`를 추출하고, 원본 `mstruct.h`를 그대로 컴파일한 **C oracle**과 JS 파서 출력을 바이트 단위로 diff해 검증 완료(object 907 + creature 1049 전 필드 일치).
-- **방의 진짜 ID = 로드 경로 번호**(`rooms/r{N/1000}/r{N:05d}`)이지 구조체 내부 `rom_num`이 아니다. 경로 공식과 안 맞는 파일은 게임이 로드 못 하는 **orphan**(백업/구버전)이라 변환에서 제외한다 — 전체 3216 = 정본 2341 + orphan 875.
+- **방의 진짜 ID = 로드 경로 번호**(`rooms/r{N/1000}/r{N:05d}`)이지 구조체 내부 `rom_num`이 아니다. 경로 공식과 안 맞는 파일은 게임이 로드 못 하는 **orphan**(백업/구버전)이라 변환에서 제외한다 — 전체 3216 = 유효 2341 + orphan 875.
 
 세부는 `packages/port/`의 파서(`parseRoom.js`)와 검증된 오프셋 테이블(`templates.js`)을 참조한다.
 
@@ -156,8 +156,8 @@ docker compose down
 별도 progress/backlog 문서를 두지 않는다. 다음이 단일 출처다.
 
 - **GitHub 이슈** = 백로그 (에픽 → 토픽, 1 토픽 = 1 항목)
-- **PR** = 완료 항목의 투영 (해당 이슈를 close)
-- **`docs/specs/`** = 정본 스펙 (프로젝트 최종 상태와 항상 일치)
+- **PR** = 완료 항목의 뷰 (해당 이슈를 close)
+- **`docs/specs/`** = 기준 스펙 (프로젝트 최종 상태와 항상 일치)
 
 용어 위계: **에픽**(서브시스템 단위 작업 묶음) → **토픽**(spec 1개·PR 1개 단위) → **Story**(단일 커밋 단위). 
 
@@ -169,7 +169,7 @@ docker compose down
 
 | 문서 | 내용 |
 |------|------|
-| [`architecture.md`](docs/specs/architecture.md) | 서버·클라이언트 스택과 8개 결정 축의 정본 ADR (이슈 #14) |
+| [`architecture.md`](docs/specs/architecture.md) | 서버·클라이언트 스택과 8개 결정 축의 기준 ADR (이슈 #14) |
 | [`monorepo.md`](docs/specs/monorepo.md) | pnpm + Turborepo 4패키지 스캐폴딩·툴체인 (E1) |
 
 **영속화**
@@ -183,9 +183,9 @@ docker compose down
 
 | 문서 | 내용 |
 |------|------|
-| [`transport-protocol.md`](docs/specs/transport-protocol.md) | WS 게임 소켓 배선·Zod 프로토콜 계약·버전 협상·하트비트·라우터 (E3-1) |
+| [`transport-protocol.md`](docs/specs/transport-protocol.md) | WS 게임 소켓 연결·Zod 프로토콜 계약·버전 협상·하트비트·라우터 (E3-1) |
 | [`auth-session.md`](docs/specs/auth-session.md) | 인증 게이트·세션 FSM(select→create→command)·SessionAuthPort DIP seam (E3-2) |
-| [`session-lifecycle.md`](docs/specs/session-lifecycle.md) | 세션 레지스트리·link-dead grace 재연결·idle timeout·disconnect 수렴 seam (E3-3) |
+| [`session-lifecycle.md`](docs/specs/session-lifecycle.md) | 세션 레지스트리·link-dead grace 재연결·idle timeout·disconnect 일괄 정리 seam (E3-3) |
 | [`freechat-permission-seam.md`](docs/specs/freechat-permission-seam.md) | actor-context threading·ChannelPort·PermissionPort seam+skeleton (E3-4) |
 | [`ws-rate-limit.md`](docs/specs/ws-rate-limit.md) | 인바운드 프레임 토큰 버킷 유량 제한 (WS 하드닝) |
 | [`ws-resource-guard.md`](docs/specs/ws-resource-guard.md) | 연결 정원 + 아웃바운드 backpressure 자원 고갈 방어 (WS 하드닝) |
@@ -194,7 +194,7 @@ docker compose down
 
 | 문서 | 내용 |
 |------|------|
-| [`runtime-foundation.md`](docs/specs/runtime-foundation.md) | 1Hz 중앙 월드 틱·타이머 주입 seam·graceful shutdown 수렴 (E4) |
+| [`runtime-foundation.md`](docs/specs/runtime-foundation.md) | 1Hz 중앙 월드 틱·타이머 주입 seam·graceful shutdown 일괄 종료 (E4) |
 | [`movement-rooms.md`](docs/specs/movement-rooms.md) | 방 그래프·`tryMove`·문 상태머신·방=채널 방송·출구 자동 재잠금 |
 | [`creature-spawn.md`](docs/specs/creature-spawn.md) | 크리처 라이브 인스턴스·활성 집합·autonomic AI·스폰 3트리거·사망 라이프사이클 (E4-2) |
 | [`stats-core.md`](docs/specs/stats-core.md) | base+modifier 능력치·파생 스탯(AC·THAC0·소지량·HP/MP 최대치) 순수 계산 |
@@ -205,7 +205,7 @@ docker compose down
 
 | 문서 | 내용 |
 |------|------|
-| [`items-equipment.md`](docs/specs/items-equipment.md) | object 템플릿 위 착용 게이트(wear/ready/hold)·파생 스탯 투영·rand_enchant·소비 아이템 magic 배달 순수 함수 + seam |
+| [`items-equipment.md`](docs/specs/items-equipment.md) | object 템플릿 위 착용 게이트(wear/ready/hold)·파생 스탯 변환·rand_enchant·소비 아이템 magic 배달 순수 함수 + seam |
 | [`magic.md`](docs/specs/magic.md) | 주문 카탈로그(56+20)·effect/delivery 분리·CAST 시전 게이트·공격 effect 20종·몬스터 시전 seam (E6b-1 #84) |
 | [`magic-progression.md`](docs/specs/magic-progression.md) | 플레이어 spell store(v5)·학습/전수·realm 숙련 성장·버프/디버프 타이머·비-offensive effect 36종·몬스터 self-heal (E6b-2 #85) |
 
@@ -220,9 +220,9 @@ docker compose down
 
 | 문서 | 내용 |
 |------|------|
-| [`account-character.md`](docs/specs/account-character.md) | account 1급 모델·캐릭터 생성 인터뷰·진입/재개·soft-delete FSM·RBAC seam (E5) |
+| [`account-character.md`](docs/specs/account-character.md) | account 독립 모델·캐릭터 생성 인터뷰·진입/재개·soft-delete FSM·RBAC seam (E5) |
 | [`transport-shell.md`](docs/specs/transport-shell.md) | React 클라이언트 WS 인증 접속·프로토콜 왕복·Docker 개발 하네스 (E9-1) |
-| [`session-entry.md`](docs/specs/session-entry.md) | 캐릭터 목록·선택·생성·진입/재개 사용자 구동 UI 진입 계층 (E10-1) |
+| [`session-entry.md`](docs/specs/session-entry.md) | 캐릭터 목록·선택·생성·진입/재개 사용자 조작 기반 UI 진입 계층 (E10-1) |
 
 **테스트 인프라**
 

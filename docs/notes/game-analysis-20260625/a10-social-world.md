@@ -1,12 +1,12 @@
 # A10 소셜·세계 시스템
 
-> 무한의 플레이어가 서로 어떻게 연결되는지 — 어떤 채널로 말하고(전역/공간/개인/그룹/배우자/패거리), 편지와 게시판으로 무엇을 남기며, 패거리(길드)와 결혼으로 어떤 사회 구조를 만드는지, 그리고 이 모든 것에 걸린 가시성·권한 규칙을 규명한다. 채널의 대상 필터·비용(HP·레벨·일일한도)·패거리 가입/탈퇴 경제·결혼 나이·성별 게이트·게시판 삭제 권한은 게임 규칙이므로 충실히 이식하고, `broadcast_*` 6종 fd 순회·`system()`으로 파일 이동·`daily[]` 필드 재용도·`key[2]` 배우자 저장·평면 텍스트 파일 I/O·outbound `finger(1)` 실행은 원작의 구현 방식이므로 자유롭게 재설계한다. 이슈 #10. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)의 `io.c`·`command4.c`·`command6.c`·`command9.c`·`command11.c`·`command12.c`·`board.c`·`post.c`·`finger.c`·`global.c`·`player.c`·`dm3.c`. 코드 이식이 아니라 동작 추출.
+> 무한의 플레이어가 서로 어떻게 연결되는지 — 어떤 채널로 말하고(전역/공간/개인/그룹/배우자/패거리), 편지와 게시판으로 무엇을 남기며, 패거리(길드)와 결혼으로 어떤 사회 구조를 만드는지, 그리고 이 모든 것에 걸린 가시성·권한 규칙을 정리한다. 채널의 대상 필터·비용(HP·레벨·일일한도)·패거리 가입/탈퇴 경제·결혼 나이·성별 게이트·게시판 삭제 권한은 게임 규칙이므로 충실히 이식하고, `broadcast_*` 6종 fd 순회·`system()`으로 파일 이동·`daily[]` 필드의 다른 용도 재사용·`key[2]` 배우자 저장·평면 텍스트 파일 I/O·outbound `finger(1)` 실행은 원작의 구현 방식이므로 자유롭게 재설계한다. 이슈 #10. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)의 `io.c`·`command4.c`·`command6.c`·`command9.c`·`command11.c`·`command12.c`·`board.c`·`post.c`·`finger.c`·`global.c`·`player.c`·`dm3.c`. 코드 이식이 아니라 동작 추출.
 >
 > **oracle 읽기 주의**: 하네스 `grep` 래퍼가 `-I`(binary skip)로 EUC-KR 파일을 스킵한다. `command grep -a` 또는 `iconv -f EUC-KR -t UTF-8 -c … | grep`으로 우회한다([[muhan-oracle-toolchain]]).
 >
-> **as-shipped 기준은 컴파일 플래그다**: `src/Makefile` CFLAGS = `-m32 -g -O2 -fcommon -DFINGERACCT -DCHECKDOUBLE -DSUICIDE -DOBJLEVEL -DDEBUG`. **`-DCHECKFAMILY`는 없다.** 패거리 코드의 상당수가 `#ifdef CHECKFAMILY`로 감싸여 있어 as-compiled 동작이 소스 표면과 다르다(§6.5). 이 비대칭을 데드 스캐폴드([[a9-monster-ai]]의 MFLEER/MSAYTLK)와 같은 장르의 **결정 게이트 항목**으로 다룬다 — 추측으로 해소하지 않는다.
+> **as-shipped 기준은 컴파일 플래그다**: `src/Makefile` CFLAGS = `-m32 -g -O2 -fcommon -DFINGERACCT -DCHECKDOUBLE -DSUICIDE -DOBJLEVEL -DDEBUG`. **`-DCHECKFAMILY`는 없다.** 패거리 코드의 상당수가 `#ifdef CHECKFAMILY`로 감싸여 있어 as-compiled 동작이 소스에 보이는 동작과 다르다(§6.5). 이 비대칭을 데드 스캐폴드([[a9-monster-ai]]의 MFLEER/MSAYTLK)와 같은 장르의 **결정 게이트 항목**으로 다룬다 — 추측으로 해소하지 않는다.
 >
-> **명령 어휘·한글 동사는 a2 소관**: 각 기능의 한글 명령어(잡담·외쳐·얘기 등)는 본 노트가 `global.c` 디스패치 표에서 확인해 기록하되, 전체 명령 카탈로그·별칭·품사 규칙은 [[a2-command-catalog]]에 확정돼 있다. 방 플래그(RPOSTO·RMARRI·RONMAR) 의미와 방 입장 규칙은 [[a4-movement-rooms]], gold 경제 수치는 [[a8-items-economy]] 소관이다.
+> **명령 어휘·한글 동사는 a2 담당**: 각 기능의 한글 명령어(잡담·외쳐·얘기 등)는 본 노트가 `global.c` 디스패치 표에서 확인해 기록하되, 전체 명령 카탈로그·별칭·품사 규칙은 [[a2-command-catalog]]에 확정돼 있다. 방 플래그(RPOSTO·RMARRI·RONMAR) 의미와 방 입장 규칙은 [[a4-movement-rooms]], gold 경제 수치는 [[a8-items-economy]] 담당이다.
 
 ## 개요
 
@@ -16,7 +16,7 @@
 
 **지속 사회 구조는 둘**이다. **패거리(family)** — 최대 15개 길드, 각각 두목(boss)·가입축하금·전용 게시판·공지·멤버 명부를 가진다. 소속은 플레이어의 `daily[DL_EXPND].max` 필드에 번호로 저장되고, 두목 여부(PFMBOS)·가입(PFAMIL)·신청중(PRDFML) 플래그로 상태가 표현된다. **결혼(marriage)** — 나이(플레이 7일)·이성 게이트를 통과한 두 플레이어가 신청/수락 2단계로 맺어지고, 배우자 이름은 `key[2]`에 `"m"+이름`으로 저장된다. 결혼하면 배우자 전용 대화(사랑말)와 집 초대(초대=`invite`, RONMAR 방)가 열린다.
 
-핵심 분리: **채널 도달 범위·비용 규칙(잡담 HP·레벨20·일일한도)·ignore/PSILNC 게이트·패거리 가입 경제(축하금=boss→member, 탈퇴비 20000×gold)·결혼 나이/이성 규칙·게시판 소프트삭제·삭제 권한(작성자|DM)·finger 가시성(DM 정보 차단)은 콘텐츠**(충실히 이식), **broadcast_* fd 순회·`daily[]`/`key[2]` 필드 재용도·평면 텍스트 파일 I/O·`system("mv …%s")` 셸 호출·마리지 파일 주석처리 잔재·outbound finger(1) execl·CHECKFAMILY degraded 상태는 구현 방식**(재설계).
+핵심 분리: **채널 도달 범위·비용 규칙(잡담 HP·레벨20·일일한도)·ignore/PSILNC 게이트·패거리 가입 경제(축하금=boss→member, 탈퇴비 20000×gold)·결혼 나이/이성 규칙·게시판 소프트삭제·삭제 권한(작성자|DM)·finger 가시성(DM 정보 차단)은 콘텐츠**(충실히 이식), **broadcast_* fd 순회·`daily[]`/`key[2]` 필드의 다른 용도 재사용·평면 텍스트 파일 I/O·`system("mv …%s")` 셸 호출·마리지 파일 주석처리 잔재·outbound finger(1) execl·CHECKFAMILY degraded 상태는 구현 방식**(재설계).
 
 ## 핵심 발견 요약
 
@@ -30,7 +30,7 @@
 | 6 | **우편 = 대상 파일 append.** 우체국 방(RPOSTO)에서 편지보내기(`postsend`)→`postedit`가 **입력 줄마다 대상 파일에 즉시 append**(소스 주석 "major flaw"). 받기=파일 통째 뷰, 삭제=`unlink`. 읽음판정 atime>ctime | 이식(기능) / 재설계(파일 I/O) |
 | 7 | **게시판 = 방-오브젝트 + 인덱스 파일.** 게시판 오브젝트 `type`→`board_dir[]`(정보 100 / 패거리1~15 101~115 / 유저 120). 256B 고정 `BOARD_INDEX` 레코드 + `board.N` 텍스트. **소프트삭제=readnum 부호반전**(음수=삭제, DM만 열람), 삭제권=작성자\|DM | 이식(규칙) / 재설계(파일 포맷) |
 | 8 | **게시판 쓰기가 셸 호출.** 등록 확정 시 `sprintf(name,"mv -f %s/%s …") ; system(name)`에 **플레이어 이름 보간** + `creat(dir/name)`. 셸 인젝션·경로 조작 벡터 | 재설계(보안상 필수) |
-| 9 | **패거리 소속 = 필드 재용도.** 소속 번호는 `daily[DL_EXPND].max`, 초대 그룹은 `daily[DL_MARRI].max`에 저장. 플래그 PFAMIL(가입)·PRDFML(신청중)·PFMBOS(두목). 명부는 `family_member_<n>` 텍스트 | 재설계(데이터 모델) |
+| 9 | **패거리 소속 = 필드를 다른 용도로 재사용.** 소속 번호는 `daily[DL_EXPND].max`, 초대 그룹은 `daily[DL_MARRI].max`에 저장. 플래그 PFAMIL(가입)·PRDFML(신청중)·PFMBOS(두목). 명부는 `family_member_<n>` 텍스트 | 재설계(데이터 모델) |
 | 10 | **패거리 경제 = 축하금 + 탈퇴비.** 가입 승인(`boss_family`) 시 **두목이 `gold×10000` 축하금을 신입에게 지급**(boss→member 이체). 자진탈퇴(`exit_family`)는 `gold×20000` 소각. 추방(`fm_out`)은 무료 | 콘텐츠(경제) |
 | 11 | **패거리 CHECKFAMILY degraded.** `load_family()`(로스터 로딩)·PFMBOS 자동판정이 `#ifdef CHECKFAMILY` 안. as-compiled에서 **로스터 배열이 비어 두목 인식·가입 목록이 order-dependent**. `list_family`만 무조건 로딩 | 재설계(as-compiled 비대칭) / 결정 게이트 |
 | 12 | **결혼 게이트 = 나이·이성.** RMARRI 방, `(18 + LT_HOURS.interval/86400) ≥ 25`(플레이 7일↑) 양측, PMALES 이성만. 신청(PRDMAR)/수락 2단계, 배우자=`key[2]`에 `"m"+이름` | 콘텐츠(규칙) |
@@ -56,7 +56,7 @@
 
 **필터 규칙은 콘텐츠**(누가 무엇을 안 받는지 = 게임 정책), **순회·`print` 가변인자·`fmt2[1024]` 복사는 구현 방식**이다. 신규 스택에서는 방송을 **EventEmitter 채널 + 구독자 필터**로 재설계한다 — 채널별(global/room/family/marriage/wiz) 토픽에 소켓을 구독시키고, 수신자 플래그(PNOBRD 등)는 구독 필터 술어로 옮긴다. `broadcast_rom`은 방 엔티티에 붙은 room-scoped 이벤트가 된다([[a9-monster-ai]]도 몬스터 행동 방송에 이를 씀).
 
-`%C…%D`, `%M`, `%j` 등 포맷 토큰은 색상(ANSI)·이름·조사 처리로, [[a3-hangul-io]]의 `print` 계층 소관이다.
+`%C…%D`, `%M`, `%j` 등 포맷 토큰은 색상(ANSI)·이름·조사 처리로, [[a3-hangul-io]]의 `print` 계층 담당이다.
 
 ## 2. 전역·공간 채널 (콘텐츠: 비용·전파 규칙)
 
@@ -112,7 +112,7 @@
 - **DM 메모장** (`notepad`, post.c:198): CARETAKER+ 전용. `POSTPATH/DM_pad`에 append(`a` 옵션)/삭제(`d`)/열람. 관리자 공용 메모.
 - **패거리 공지** (`family_news`, post.c:287): PFAMIL 필요. `PLAYERPATH/family/family_news_<번호>`에 두목(PFMBOS)만 append/삭제, 멤버는 열람. `#ifdef CHECKFAMILY` 하에 두목 재판정(§6.5).
 
-**우편의 기능 의미(우체국 방 한정, 대상별 우편함, 헤더+날짜, DM 메모, 패거리 공지)는 콘텐츠**, **평면 파일 append·wholesale 삭제·atime>ctime 읽음판정·비원자적 동시쓰기 결함은 구현 방식**. 신규 스택은 **메시지 단위 문서**(sender·recipient·body·sentAt·readAt)로 승격해 동시성 결함을 제거하고, "우체국 방에서만 열람" 제약은 유지한다. pfinger의 편지 도착 알림(§8.1)도 readAt 필드로 매핑된다.
+**우편의 기능 의미(우체국 방 한정, 대상별 우편함, 헤더+날짜, DM 메모, 패거리 공지)는 콘텐츠**, **평면 파일 append·wholesale 삭제·atime>ctime 읽음판정·비원자적 동시쓰기 결함은 구현 방식**. 신규 스택은 **메시지 단위 문서**(sender·recipient·body·sentAt·readAt)로 독립시켜 동시성 결함을 제거하고, "우체국 방에서만 열람" 제약은 유지한다. pfinger의 편지 도착 알림(§8.1)도 readAt 필드로 매핑된다.
 
 ## 5. 게시판: 방-오브젝트 부착 게시판 (board.c)
 
@@ -134,14 +134,14 @@
 
 **게시판 기능(방 부착, 패거리별 분리, 페이지네이션, 소프트삭제, 조회수, 작성자/DM 삭제권)은 콘텐츠**, **256B 레코드 포맷·`lseek` 오프셋·부호반전 삭제·별도 텍스트 파일은 구현 방식**. 신규 스택은 board 컬렉션(boardId·author·title·body·postedAt·views·deleted) + 방 오브젝트에 boardId 참조로 이식한다.
 
-**보안 관련 구현 방식(§8 아키텍처 함의로 승격)**: `write_board` case 2가 등록 확정 시 `sprintf(name, "mv -f %s/%s %s/board.%ld", dir, ply->name, …); system(name)` — **플레이어 이름을 셸 명령에 보간**한다. 또한 `creat("%s/%s", dir, ply->name)`로 이름을 경로에 직접 사용한다. 플레이어 이름은 한글이라 즉각적 인젝션 표면은 좁으나, **이식 시 절대 재현 금지** — 서버측 파일 I/O(또는 DB write)로 대체한다([[muhan-oracle-toolchain]] 및 프로젝트 `security.md` shell injection 방어).
+**보안 관련 구현 방식(§8 아키텍처 시사점으로 올림)**: `write_board` case 2가 등록 확정 시 `sprintf(name, "mv -f %s/%s %s/board.%ld", dir, ply->name, …); system(name)` — **플레이어 이름을 셸 명령에 보간**한다. 또한 `creat("%s/%s", dir, ply->name)`로 이름을 경로에 직접 사용한다. 플레이어 이름은 한글이라 즉각적 인젝션 표면은 좁으나, **이식 시 절대 재현 금지** — 서버측 파일 I/O(또는 DB write)로 대체한다([[muhan-oracle-toolchain]] 및 프로젝트 `security.md` shell injection 방어).
 
 ## 6. 패거리(family): 길드 시스템 (규칙은 이식 / 데이터·CHECKFAMILY는 재설계)
 
 ### 6.1 데이터 모델 (원작 구현 방식)
 
 - **로스터**: `PLAYERPATH/family/family_list` — 줄당 `번호 이름 두목 가입금`(가입금은 ×10000이 실제 냥). `load_family()`(command11.c:474)가 `family_num[]`/`family_str[]`/`fmboss_str[]`/`family_gold[]` 전역 배열에 로드, `번호==16`(MAXFAMILY 센티넬)에서 종료. 실제 데이터에 "사악파 타이 100"(두목 타이, 가입금 100만냥) 등이 채워져 있어 **의도는 동작하는 패거리**다.
-- **소속 저장**: 플레이어의 **`daily[DL_EXPND].max` 필드에 패거리 번호**를 재용도로 저장. 초대 그룹은 `daily[DL_MARRI].max`.
+- **소속 저장**: 플레이어의 **`daily[DL_EXPND].max` 필드에 패거리 번호**를 다른 용도로 재사용해 저장. 초대 그룹은 `daily[DL_MARRI].max`.
 - **상태 플래그**: `PFAMIL`(가입 완료)·`PRDFML`(가입 신청중)·`PFMBOS`(두목).
 - **멤버 명부**: `family/family_member_<번호>` — 줄당 `class 이름`, `edit_member()`(command12.c:237)가 param 1(가입 추가)/2(탈퇴·추방 제거)/3(수정)으로 재작성.
 
@@ -176,7 +176,7 @@
 
 따라서 as-compiled 동작은 **"패거리 비활성"이 아니라 "로스터 로딩·두목 판정이 order-dependent한 degraded 상태"**다. 로그인 훅(player.c:70)도 `load_family()`만 ifdef 안이고 PFMBOS 판정 자체는 ifdef **밖**이라, 로스터가 안 채워진 상태로 로그인하면 두목이 빈 문자열과 비교돼 항상 PFMBOS가 꺼진다.
 
-**PFMBOS를 애초에 누가 어떻게 얻는지는 오라클상 불명(open ambiguity)**. 처리 방침은 [[a9-monster-ai]]의 MFLEER/MSAYTLK 데드 스캐폴드와 동일하게 **결정 게이트 항목**으로 남긴다: (a) as-compiled(degraded) 재현 = 대부분 무력화, 또는 (b) **as-intended(CHECKFAMILY-on)** 재현 = `family_list` 데이터가 채워져 있으니 정상 패거리로 이식. 포팅 원칙([[muhan-port-principle]])상 "동작은 충실히 재현"이 기준이나, 여기서는 **as-intended가 데이터 의도와 부합**하므로 정본 채택이 유력 — 명시 결정으로 확정한다. 추측으로 해소하지 않는다.
+**PFMBOS를 애초에 누가 어떻게 얻는지는 오라클상 불명(open ambiguity)**. 처리 방침은 [[a9-monster-ai]]의 MFLEER/MSAYTLK 데드 스캐폴드와 동일하게 **결정 게이트 항목**으로 남긴다: (a) as-compiled(degraded) 재현 = 대부분 무력화, 또는 (b) **as-intended(CHECKFAMILY-on)** 재현 = `family_list` 데이터가 채워져 있으니 정상 패거리로 이식. 포팅 원칙([[muhan-port-principle]])상 "동작은 충실히 재현"이 기준이나, 여기서는 **as-intended가 데이터 의도와 부합**하므로 기준 채택이 유력 — 명시 결정으로 확정한다. 추측으로 해소하지 않는다.
 
 ## 7. 결혼(marriage): 부부 관계 시스템 (규칙은 이식 / 저장은 재설계)
 
@@ -198,7 +198,7 @@
 - **이혼**(`divorce`, command11.c:1279): 결혼과 대칭인 2단계(`PRDDIV`). 배우자가 존재하지 않으면(`load_ply` 실패) PMARRI 자동 해제·`key[2]` 클리어. 상호 수락 시 양측 PMARRI/PRDMAR/PRDDIV 해제, `broadcast`(PNOBRD 존중) 공지.
 - **초대**(`invite`, command12.c:301+): `daily[DL_MARRI].max`(초대 그룹 번호)·`RONMAR`(부부 집) 방 필요. `invite/invite_<번호>` 파일에 손님 이름(한글만) 등록/조회/삭제. 부부가 자기 집에 손님을 들이는 접근 제어 명부.
 
-**결혼 규칙(나이=플레이7일·이성·2단계 신청수락·이혼 대칭·집 초대)은 콘텐츠**, **`key[2]` 저장·마리지 파일 주석 잔재·`daily` 필드 재용도는 구현 방식**.
+**결혼 규칙(나이=플레이7일·이성·2단계 신청수락·이혼 대칭·집 초대)은 콘텐츠**, **`key[2]` 저장·마리지 파일 주석 잔재·`daily` 필드의 다른 용도 재사용은 구현 방식**.
 
 ## 8. finger 2종: 인게임 조회 vs outbound 클라이언트
 
@@ -251,7 +251,7 @@
 | 개인 채널 | tell + PIGNOR/first_ignore/PSILNC/가시성, DM 도청, 대답 대상 | etag ignore 리스트, talksend, 접두 매칭 |
 | 우편 | 우체국 방 한정, 대상별 우편함, 헤더+날짜, DM 메모, 패거리 공지 | 평면 파일 즉시 append(비원자적), wholesale unlink, atime>ctime |
 | 게시판 | 방 부착, 패거리별 분리, 페이지네이션, 소프트삭제, 조회수, 작성자/DM 삭제권 | 256B BOARD_INDEX·lseek, board.N 텍스트, **system()·creat() 셸/경로** |
-| 패거리 소속 | 길드 소속·두목·명부·전용 게시판/공지 | **daily[DL_EXPND].max 필드 재용도**, family_member 텍스트 |
+| 패거리 소속 | 길드 소속·두목·명부·전용 게시판/공지 | **daily[DL_EXPND].max 필드를 다른 용도로 재사용**, family_member 텍스트 |
 | 패거리 경제 | 가입 축하금(boss→member gold×10000), 탈퇴비(×20000 소각), 추방 무료 | gold 직접 증감 |
 | 패거리 채널 | 같은 소속 대상 전송(황색), 두목 전용 명령 | Tablesize 순회, **CHECKFAMILY degraded(§6.5)** |
 | 결혼 | 나이(플레이7일)·이성 게이트, 2단계 신청수락, 이혼 대칭, 집 초대 | **key[2] "m"+이름 저장, 마리지 파일 주석 잔재** |
@@ -259,7 +259,7 @@
 | finger | 인게임 pfinger(프로필·편지·권한 티어) | **outbound finger.c(vfork/execl 79포트) = drop** |
 | 가시성·권한 | §9 통합표 전체 | 플래그 비트 인덱스 |
 
-## 아키텍처 함의
+## 아키텍처 시사점
 
 1. **채널 = EventEmitter 토픽 + 구독 필터.** broadcast_* 6종을 채널 토픽(global-chat/global-cheer/room/family/marriage/wiz/eaves)으로 재설계하고, 수신자 플래그(PNOBRD·PNOBR2·PEAVES·class)를 **구독 술어**로 옮긴다. `broadcast_rom`은 방 엔티티의 room-scoped 이벤트, 패거리말은 패거리 채널 구독으로 자연스럽게 매핑된다. 전 소켓 O(n) 순회는 토픽별 구독자 집합으로 대체한다.
 
@@ -267,10 +267,10 @@
 
 3. **보안 관련 구현 방식은 그대로 이식 금지.** `board.c`의 `system("mv -f …%s…")` + `creat(dir/name)`은 **플레이어 이름을 셸·경로에 보간**하는 인젝션/경로 조작 벡터다(프로젝트 `security.md` shell injection 방어 직결). 우편·게시판·명부의 모든 파일 I/O를 서버측 안전 I/O 또는 DB write로 대체하고, 사용자 입력(이름·제목·본문)은 경로·명령에 절대 직접 사용하지 않는다.
 
-4. **필드 재용도를 명시 스키마로 정규화.** 패거리 번호(`daily[DL_EXPND].max`)·초대 그룹(`daily[DL_MARRI].max`)·배우자(`key[2]`)는 원본이 여유 필드를 재활용한 것이다. MongoDB 스키마에서는 `family: {id, role}`, `spouse: string`, `houseGuests: string[]`, `ignoreList: string[]` 같은 **1급 필드**로 승격한다 — 재용도의 의미(어느 daily 슬롯이 무엇을 뜻하는지)를 코드에 숨기지 않는다.
+4. **다른 용도로 재사용한 필드를 명시 스키마로 정규화.** 패거리 번호(`daily[DL_EXPND].max`)·초대 그룹(`daily[DL_MARRI].max`)·배우자(`key[2]`)는 원본이 여유 필드를 재활용한 것이다. MongoDB 스키마에서는 `family: {id, role}`, `spouse: string`, `houseGuests: string[]`, `ignoreList: string[]` 같은 **독립 필드**로 올린다 — 다른 용도로 재사용한 의미(어느 daily 슬롯이 무엇을 뜻하는지)를 코드에 숨기지 않는다.
 
 5. **비동기 메시지는 문서 단위로.** 우편의 "대상 파일에 줄 단위 즉시 append"는 동시 발신 시 뒤섞이는 결함(소스 주석 인정)이다. **메시지 단위 문서**(sender·recipient·body·sentAt·readAt)로 이식해 원자성을 확보하고, 읽음 상태(atime>ctime)를 `readAt`로 정규화한다. 게시판도 board 문서(views·deleted 플래그·author)로, 소프트삭제(readnum 부호반전)는 `deleted: bool`로 옮긴다. "우체국 방·게시판 오브젝트가 있어야 접근" 제약은 유지한다.
 
-6. **패거리 CHECKFAMILY는 결정 게이트.** as-compiled는 로스터 로딩·두목 판정이 order-dependent한 degraded 상태(§6.5)이나 `family_list` 데이터는 정상 패거리를 담고 있다. **as-intended(정상 패거리) 이식을 정본으로 채택**하되, PFMBOS 획득 경로가 오라클상 불명(open ambiguity)이므로 두목 임명 규칙(최초 생성자? DM 지정?)을 신규 설계로 확정한다 — [[a9-monster-ai]]의 데드 스캐폴드와 동일한 "재현 vs 되살림" 결정 게이트다.
+6. **패거리 CHECKFAMILY는 결정 게이트.** as-compiled는 로스터 로딩·두목 판정이 order-dependent한 degraded 상태(§6.5)이나 `family_list` 데이터는 정상 패거리를 담고 있다. **as-intended(정상 패거리) 이식을 기준으로 채택**하되, PFMBOS 획득 경로가 오라클상 불명(open ambiguity)이므로 두목 임명 규칙(최초 생성자? DM 지정?)을 신규 설계로 확정한다 — [[a9-monster-ai]]의 데드 스캐폴드와 동일한 "재현 vs 되살림" 결정 게이트다.
 
 7. **finger.c는 이식 대상 아님.** outbound 인터넷 finger(1) 클라이언트는 게임 콘텐츠가 아닌 1990년대 인프라 잔재다(drop). 인게임 pfinger(프로필·편지 알림·권한 티어)만 플레이어 조회 API로 이식한다. 관리 진단(접속 IP·시각)은 서버 로그·admin 도구로 대체한다.

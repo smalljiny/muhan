@@ -13,11 +13,11 @@
 
 ---
 
-## Theme 1 — @fastify/websocket + TLS transport 배선 (핸드셰이크 인증 없이)
+## Theme 1 — @fastify/websocket + TLS transport 연결 (핸드셰이크 인증 없이)
 
 ### 1.1 라우트 마운트와 연결 라이프사이클
 
-`@fastify/websocket`은 플러그인 등록 후 라우트 옵션에 `websocket: true`를 붙이면 해당 라우트를 WS 서버로 승격시킨다. 핸들러는 `(socket, req)` 두 인자를 받으며, `socket.on('message', ...)`로 프레임을 수신한다 ([@fastify/websocket](https://www.npmjs.com/package/@fastify/websocket)). 핵심 배선 규칙:
+`@fastify/websocket`은 플러그인 등록 후 라우트 옵션에 `websocket: true`를 붙이면 해당 라우트를 WS 서버로 올린다. 핸들러는 `(socket, req)` 두 인자를 받으며, `socket.on('message', ...)`로 프레임을 수신한다 ([@fastify/websocket](https://www.npmjs.com/package/@fastify/websocket)). 핵심 연결 규칙:
 
 - **등록 순서**: 플러그인은 모든 라우트보다 **먼저** 등록해야 한다 — 그래야 기존 라우트로 오는 upgrade 요청을 가로채고, 비-WS 라우트로 온 연결은 닫을 수 있다 ([@fastify/websocket](https://www.npmjs.com/package/@fastify/websocket)).
 - **미등록 라우트**: 등록되지 않은 경로의 upgrade 요청에는 404로 응답하고 연결을 닫는다. 필요 시 wildcard 라우트를 기본 핸들러로 둘 수 있다 ([@fastify/websocket](https://www.npmjs.com/package/@fastify/websocket)).
@@ -28,13 +28,13 @@
 
 ### 1.2 Transport-only: handshake에서 인증 게이팅하지 않기 (설계 정당성)
 
-본 토픽의 명시적 요구(인증은 별도 토픽)와 라이브러리 방향이 일치한다. `ws`의 `verifyClient`는 fastify-websocket에서 "Reply already sent" 오류를 유발했고, 이슈 #182는 `wontfix`(behavior is intended)로 닫히며 "`ws` 문서 자체가 verifyClient 사용을 만류한다"고 기록한다 ([fastify-websocket#182](https://github.com/fastify/fastify-websocket/issues/182)). 따라서 handshake 단계에서 인증을 막지 않고 소켓을 열어 두는 것이 이 플러그인의 권장 경로다. 인증이 필요한 미래 토픽에서는 handshake 이전 단계(`onRequest`/`preValidation` 훅)에서 처리하도록 설계 여지를 남긴다 — 플러그인 문서도 "WS 연결이 established 되기 *전에* 발생한 에러(onRequest 훅, preValidation 핸들러 등)는 Fastify의 일반 에러 처리 메커니즘을 타고, established 이후에는 fastify-websocket의 `errorHandler`가 인계받는다"고 경계를 명확히 한다 ([@fastify/websocket](https://www.npmjs.com/package/@fastify/websocket)). 즉 transport 계층은 소켓 수립까지만 책임지고, 인증 seam은 pre-established 훅으로 자연스럽게 분리된다.
+본 토픽의 명시적 요구(인증은 별도 토픽)와 라이브러리 방향이 일치한다. `ws`의 `verifyClient`는 fastify-websocket에서 "Reply already sent" 오류를 유발했고, 이슈 #182는 `wontfix`(behavior is intended)로 닫히며 "`ws` 문서 자체가 verifyClient 사용을 만류한다"고 기록한다 ([fastify-websocket#182](https://github.com/fastify/fastify-websocket/issues/182)). 따라서 handshake 단계에서 인증을 막지 않고 소켓을 열어 두는 것이 이 플러그인의 권장 경로다. 인증이 필요한 미래 토픽에서는 handshake 이전 단계(`onRequest`/`preValidation` 훅)에서 처리하도록 설계 여지를 남긴다 — 플러그인 문서도 "WS 연결이 established 되기 *전에* 발생한 에러(onRequest 훅, preValidation 핸들러 등)는 Fastify의 일반 에러 처리 메커니즘을 타고, established 이후에는 fastify-websocket의 `errorHandler`가 인계받는다"고 경계를 명확히 한다 ([@fastify/websocket](https://www.npmjs.com/package/@fastify/websocket)). 즉 transport 계층은 소켓 수립까지만 책임지고, 인증 확장 지점(seam)은 pre-established 훅으로 자연스럽게 분리된다.
 
 ### 1.3 TLS 종단 옵션
 
 `@fastify/websocket`은 별도 `server` 옵션이 없으면 WS 서버를 Fastify 인스턴스에 바인딩한다. 두 가지 표준 종단 전략:
 
-1. **Fastify에서 직접 종단**: Fastify를 `https` 옵션(키/인증서)으로 기동하면 동일 서버에 바인딩된 WS도 자동으로 `wss://`가 된다. 플러그인이 Fastify 서버에 붙으므로 별도 WSS 설정이 불필요하다 ([@fastify/websocket](https://www.npmjs.com/package/@fastify/websocket), [issue with @fastify/websocket and HTTPS](https://stackoverflow.com/questions/76850584/issue-with-fastify-websocket-and-https)).
+1. **Fastify에서 직접 종단**: Fastify를 `https` 옵션(키/인증서)으로 실행하면 동일 서버에 바인딩된 WS도 자동으로 `wss://`가 된다. 플러그인이 Fastify 서버에 붙으므로 별도 WSS 설정이 불필요하다 ([@fastify/websocket](https://www.npmjs.com/package/@fastify/websocket), [issue with @fastify/websocket and HTTPS](https://stackoverflow.com/questions/76850584/issue-with-fastify-websocket-and-https)).
 2. **프록시에서 종단(권장 프로덕션)**: nginx/ALB/Cloudflare 등 리버스 프록시에서 TLS를 종단하고 내부는 평문 `ws`로 둔다. `wss`는 TLS 위의 WebSocket이며, 브라우저는 HTTPS 페이지에서 평문 `ws`를 혼합 콘텐츠로 차단하므로 공개 엔드포인트는 반드시 `wss`여야 한다 ([wss vs ws](https://websocket.org/reference/wss-vs-ws/)). 프록시 종단 시에는 프록시의 idle timeout이 heartbeat 설계(Theme 3)에 직접 영향을 준다.
 
 ---
@@ -47,7 +47,7 @@
 
 ### 2.2 command(client→server) vs event(server→client) 유니온 분리
 
-인바운드와 아웃바운드를 별도 유니온으로 나누는 것이 검증된 구조다. Jsonic 예시는 `ClientMessage = PingMessage | ChatMessage | SubscribeMessage`와 `ServerMessage = PongMessage | ChatBroadcast | ErrorMessage`를 분리한다 ([Jsonic](https://jsonic.io/guides/json-websocket)). zod-sockets는 이 분리를 라이브러리 1급 개념으로 승격한다 — **인바운드를 "Actions", 아웃바운드를 "Emission"**이라 부르고, Emission을 먼저 구성한 뒤 그 타입을 인지하는 Actions Factory로 Action을 만든다. 이 계약은 프론트엔드로 export되어 client·server가 동일 스키마를 공유한다 ([zod-sockets](https://github.com/RobinTail/zod-sockets)). MUD의 command/event 이분법에 그대로 대응된다.
+인바운드와 아웃바운드를 별도 유니온으로 나누는 것이 검증된 구조다. Jsonic 예시는 `ClientMessage = PingMessage | ChatMessage | SubscribeMessage`와 `ServerMessage = PongMessage | ChatBroadcast | ErrorMessage`를 분리한다 ([Jsonic](https://jsonic.io/guides/json-websocket)). zod-sockets는 이 분리를 라이브러리의 독립 개념으로 올린다 — **인바운드를 "Actions", 아웃바운드를 "Emission"**이라 부르고, Emission을 먼저 구성한 뒤 그 타입을 인지하는 Actions Factory로 Action을 만든다. 이 계약은 프론트엔드로 export되어 client·server가 동일 스키마를 공유한다 ([zod-sockets](https://github.com/RobinTail/zod-sockets)). MUD의 command/event 이분법에 그대로 대응된다.
 
 ### 2.3 z.infer 타입 파생 (병렬 수기 타입 금지)
 
@@ -55,7 +55,7 @@
 
 ### 2.4 공통 에러 봉투 `{code, message, correlationId?}`
 
-에러도 유니온의 한 variant(`type: "error"`)로 두고 구조화한다. Jsonic 디스패처는 `{ type: "error", code: 1003, message: "Invalid JSON" }`, `{ type: "error", code: 1004, message: "Unknown type: ..." }`를 반환한다 ([Jsonic](https://jsonic.io/guides/json-websocket)). Server-Side Routing 가이드는 `{ type: 'ERROR', code, ts }` 형태의 `sendError`를 표준 실패 응답으로 쓴다 ([Server-Side Routing](https://www.real-time-websocket.com/backend-websocket-connection-management/server-side-routing-patterns/)). `correlationId`는 요청/응답 상관에 쓰이며(Theme 4), WS-Kit은 `timestamp`와 `correlationId`를 **예약 meta 필드**로 지정해 봉투 표준의 일부로 취급한다 ([WS-Kit schema](https://kriasoft.com/ws-kit/specs/schema)). 따라서 `{code, message, correlationId?}` 에러 래퍼는 프레임워크 관행과 정합한다.
+에러도 유니온의 한 variant(`type: "error"`)로 두고 구조화한다. Jsonic 디스패처는 `{ type: "error", code: 1003, message: "Invalid JSON" }`, `{ type: "error", code: 1004, message: "Unknown type: ..." }`를 반환한다 ([Jsonic](https://jsonic.io/guides/json-websocket)). Server-Side Routing 가이드는 `{ type: 'ERROR', code, ts }` 형태의 `sendError`를 표준 실패 응답으로 쓴다 ([Server-Side Routing](https://www.real-time-websocket.com/backend-websocket-connection-management/server-side-routing-patterns/)). `correlationId`는 요청/응답 상관에 쓰이며(Theme 4), WS-Kit은 `timestamp`와 `correlationId`를 **예약 meta 필드**로 지정해 봉투 표준의 일부로 취급한다 ([WS-Kit schema](https://kriasoft.com/ws-kit/specs/schema)). 따라서 `{code, message, correlationId?}` 에러 래퍼는 프레임워크 관행과 일치한다.
 
 ---
 
@@ -88,7 +88,7 @@ wss.on('connection', (ws) => {
 wss.on('close', () => clearInterval(interval));
 ```
 
-**인터벌 산정 — 75% 규칙**: heartbeat 인터벌을 "가장 짧은 프록시 idle timeout의 75%"로 잡는다. Nginx/ALB/Azure 60초 → 45초, Google Cloud LB 30초 → 22초 ([WebSocket Heartbeat](https://websocket.org/guides/heartbeat/)). 본 토픽이 제시한 25~30초 ping은 대부분의 프록시(60초 이상)에서 안전하며, GCLB 경로가 아니라면 여유가 있다. 참고로 Python `websockets`의 기본은 `ping_interval=20`, `ping_timeout=20`, 표준 문서는 20초 ping/20초 timeout을 예로 든다 ([websockets keepalive](https://websockets.readthedocs.io/en/stable/topics/keepalive.html)). **3-miss 감지**: 위 캐노니컬 패턴은 "직전 ping에 응답 안 한" 연결을 매 인터벌마다 terminate하므로 사실상 1-miss + 1 인터벌 유예다. 본 토픽의 "3회 미수신 후 disconnect"를 원하면 `missedPongs` 카운터를 두어 인터벌마다 pong 없으면 증가시키고 임계(3)에서 terminate하는 변형이 필요하다 — 즉 캐노니컬 패턴을 카운터로 확장한다 ([Implementing WebSocket Ping-Pong in Node.js](https://www.real-time-websocket.com/backend-websocket-connection-management/connection-lifecycle-heartbeats/implementing-websocket-ping-pong-in-nodejs/)). 애플리케이션 레벨(`{"type":"ping"}`) vs 프로토콜 레벨 선택: `ws`는 프로토콜 레벨 `ping()`/`pong` 이벤트를 직접 노출하므로 서버-서버/네이티브 클라이언트 간에는 프로토콜 레벨이 효율적이고, 브라우저 클라이언트가 heartbeat 타이밍을 앱 로직에서 봐야 하면 애플리케이션 레벨을 추가한다 ([WebSocket Heartbeat](https://websocket.org/guides/heartbeat/)).
+**인터벌 산정 — 75% 규칙**: heartbeat 인터벌을 "가장 짧은 프록시 idle timeout의 75%"로 잡는다. Nginx/ALB/Azure 60초 → 45초, Google Cloud LB 30초 → 22초 ([WebSocket Heartbeat](https://websocket.org/guides/heartbeat/)). 본 토픽이 제시한 25~30초 ping은 대부분의 프록시(60초 이상)에서 안전하며, GCLB 경로가 아니라면 여유가 있다. 참고로 Python `websockets`의 기본은 `ping_interval=20`, `ping_timeout=20`, 표준 문서는 20초 ping/20초 timeout을 예로 든다 ([websockets keepalive](https://websockets.readthedocs.io/en/stable/topics/keepalive.html)). **3-miss 감지**: 위 캐노니컬 패턴은 "직전 ping에 응답 안 한" 연결을 매 인터벌마다 terminate하므로 사실상 1-miss + 1 인터벌 여유다. 본 토픽의 "3회 미수신 후 disconnect"를 원하면 `missedPongs` 카운터를 두어 인터벌마다 pong 없으면 증가시키고 임계(3)에서 terminate하는 변형이 필요하다 — 즉 캐노니컬 패턴을 카운터로 확장한다 ([Implementing WebSocket Ping-Pong in Node.js](https://www.real-time-websocket.com/backend-websocket-connection-management/connection-lifecycle-heartbeats/implementing-websocket-ping-pong-in-nodejs/)). 애플리케이션 레벨(`{"type":"ping"}`) vs 프로토콜 레벨 선택: `ws`는 프로토콜 레벨 `ping()`/`pong` 이벤트를 직접 노출하므로 서버-서버/네이티브 클라이언트 간에는 프로토콜 레벨이 효율적이고, 브라우저 클라이언트가 heartbeat 타이밍을 앱 로직에서 봐야 하면 애플리케이션 레벨을 추가한다 ([WebSocket Heartbeat](https://websocket.org/guides/heartbeat/)).
 
 ---
 
@@ -122,7 +122,7 @@ Server-Side Routing 가이드는 이 맵 패턴을 프로덕션 품질로 강화
 
 ### 4.3 correlationId 요청/응답 에코
 
-봉투에 상관 ID(`id` 또는 `correlationId`)를 두면 단일 WS 연결 위에서 요청/응답을 구현할 수 있다 — 서버가 응답에 같은 `id`를 에코하고, 클라이언트는 그 ID로 keying된 대기 중 `Promise`를 resolve한다. 이는 서버의 비요청(unsolicited) 이벤트 푸시 능력을 유지하면서 WS를 요청/응답 프로토콜로 전환한다 ([Jsonic](https://jsonic.io/guides/json-websocket)). WS-Kit은 이 개념을 `rpc("QUERY", {...}, "QUERY_RESULT", {...})` 헬퍼로 승격해 요청·응답 스키마를 바인딩하고 `correlationId`를 예약 meta로 관리한다 ([WS-Kit schema](https://kriasoft.com/ws-kit/specs/schema)). 표준 request/reply 모델링의 상위 레퍼런스로 AsyncAPI의 WebSocket request/reply 튜토리얼도 correlation을 1급으로 다룬다 ([AsyncAPI request/reply](https://www.asyncapi.com/docs/tutorials/websocket/websocket-request-reply)). 권고: MUD command 대부분은 fire-and-forget이되, "인벤토리 조회" 같은 질의형 command에 한해 `correlationId`를 선택 필드로 두고 event 응답에 에코한다.
+봉투에 상관 ID(`id` 또는 `correlationId`)를 두면 단일 WS 연결 위에서 요청/응답을 구현할 수 있다 — 서버가 응답에 같은 `id`를 에코하고, 클라이언트는 그 ID로 keying된 대기 중 `Promise`를 resolve한다. 이는 서버의 비요청(unsolicited) 이벤트 푸시 능력을 유지하면서 WS를 요청/응답 프로토콜로 전환한다 ([Jsonic](https://jsonic.io/guides/json-websocket)). WS-Kit은 이 개념을 `rpc("QUERY", {...}, "QUERY_RESULT", {...})` 헬퍼로 독립시켜 요청·응답 스키마를 바인딩하고 `correlationId`를 예약 meta로 관리한다 ([WS-Kit schema](https://kriasoft.com/ws-kit/specs/schema)). 표준 request/reply 모델링의 상위 레퍼런스로 AsyncAPI의 WebSocket request/reply 튜토리얼도 correlation을 핵심 개념으로 다룬다 ([AsyncAPI request/reply](https://www.asyncapi.com/docs/tutorials/websocket/websocket-request-reply)). 권고: MUD command 대부분은 fire-and-forget이되, "인벤토리 조회" 같은 질의형 command에 한해 `correlationId`를 선택 필드로 두고 event 응답에 에코한다.
 
 ---
 
@@ -133,7 +133,7 @@ Server-Side Routing 가이드는 이 맵 패턴을 프로덕션 품질로 강화
 3. **TLS는 Fastify `https` 옵션 종단 또는 프록시 종단** 중 택1. 공개 엔드포인트는 반드시 `wss`. 프록시 idle timeout이 heartbeat 인터벌을 결정한다 ([wss vs ws](https://websocket.org/reference/wss-vs-ws/)).
 4. **`discriminatedUnion("type")` 봉투 + command/event 유니온 분리 + `z.infer` 파생**이 검증된 최신 패턴이며, WS-Kit·zod-sockets가 라이브러리로 구현(Actions=인바운드, Emission=아웃바운드) ([WS-Kit](https://kriasoft.com/ws-kit/specs/schema), [zod-sockets](https://github.com/RobinTail/zod-sockets)).
 5. **스키마는 `shared` 패키지를 단일 canonical source로** — validator를 섞으면 타입 호환성이 깨지므로 client·server가 동일 Zod 인스턴스를 공유한다 ([WS-Kit](https://kriasoft.com/ws-kit/specs/schema)).
-6. **에러 봉투 `{code, message, correlationId?}`는 관행과 정합** — 에러를 `type:"error"` variant로 두고, `correlationId`·`timestamp`를 예약 meta로 취급 ([Jsonic](https://jsonic.io/guides/json-websocket), [WS-Kit](https://kriasoft.com/ws-kit/specs/schema)).
+6. **에러 봉투 `{code, message, correlationId?}`는 관행과 일치** — 에러를 `type:"error"` variant로 두고, `correlationId`·`timestamp`를 예약 meta로 취급 ([Jsonic](https://jsonic.io/guides/json-websocket), [WS-Kit](https://kriasoft.com/ws-kit/specs/schema)).
 7. **버전 협상은 연결 직후 welcome/hello 프레임에** 버전을 실어 불일치 시 명시적 에러 후 close ([Jsonic](https://jsonic.io/guides/json-websocket), [Socket.IO](https://socket.io/docs/v4/how-it-works/)).
 8. **Heartbeat은 server-initiated `isAlive`/`ping`/`terminate` 캐노니컬 패턴** + 75% 규칙(25~45초) + 10초 pong timeout. "3-miss disconnect"는 캐노니컬 패턴에 `missedPongs` 카운터를 더한 변형으로 구현 ([WebSocket Heartbeat](https://websocket.org/guides/heartbeat/), [websockets/ws](https://github.com/websockets/ws)).
 9. **라우터는 `Map<type,handler>` O(1) + lookup 전 allowlist + `MAX_FRAME_BYTES` 거부 + 핸들러 예외 격리 + `WeakMap` 컨텍스트**로 하드닝. 미지 타입 키 차단은 prototype-pollution 방어와 겹친다 ([Server-Side Routing](https://www.real-time-websocket.com/backend-websocket-connection-management/server-side-routing-patterns/)).

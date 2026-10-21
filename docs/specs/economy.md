@@ -4,7 +4,7 @@
 
 ## 개요
 
-이 시스템은 금화(gold)의 이동과 상거래 규칙을 **순수 함수**로 소유한다 — MongoDB·`Character`·`ObjectInstance`에 의존하지 않고 좁은 숫자·구조 입력만 다룬다. 영속화·바닥 배치·인벤토리 배선·재고 소싱·소유자 배선은 라이브 command 라우팅 계층(#106)의 책임이다.
+이 시스템은 금화(gold)의 이동과 상거래 규칙을 **순수 함수**로 담당한다 — MongoDB·`Character`·`ObjectInstance`에 의존하지 않고 좁은 숫자·구조 입력만 다룬다. 영속화·바닥 배치·인벤토리 연결·재고 소싱·소유자 연결은 라이브 command 라우팅 계층(#106)의 책임이다.
 
 네 축으로 구성된다:
 
@@ -13,7 +13,7 @@
 - **상점 서비스**(`shopService`) — 상점 구매(buy)·몹상점 구매(purchase)·전당포 판매(sell)·수리(repair)의 게이트·거부조건·복제·RNG.
 - **소지 한도**(`carry`) — 무게(재귀 합, `maxWeight` 소비)·개수 두 상한을 순수 predicate 하나로.
 
-가격·판매·수리·소지 한도에는 골든 fixture가 있다(fixture 규약은 [`golden-fixture-harness.md`](golden-fixture-harness.md)). 결정적 RNG는 combat의 `CombatRng` seam([`combat.md`](combat.md))을 재사용한다.
+가격·판매·수리·소지 한도에는 골든 fixture가 있다(fixture 규약은 [`golden-fixture-harness.md`](golden-fixture-harness.md)). 결정적 RNG는 combat의 `CombatRng` 확장 지점(seam)([`combat.md`](combat.md))을 재사용한다.
 
 **스키마 동결(D1)**: 어떤 모듈도 `object.ts`·`character.ts`·`schemaVersion`을 import하지 않는다. 각 서비스는 필요한 필드만 로컬 좁은 타입으로 선언해 cross-package import를 가격 공식 하나로 최소화한다 — 동시 워크트리의 schemaVersion bump와 병합 충돌을 원천 차단한다. gold는 기존 `character.gold` 필드를 소비만 한다.
 
@@ -33,7 +33,7 @@
 
 ### 금화 경제 (moneyService)
 
-MONEY 오브젝트(objnum 0 "동전", type 10)의 이동을 gold↔디스크립터 순수 변환으로 이식한다. 반환 `MoneyDescriptor`는 `{ objnum: 0, type: 10, value }`인 **소유자 없는 bare 디스크립터**이며 영속 `ObjectInstance`가 아니다 — 바닥 배치·소유자 배선은 #106의 몫이다.
+MONEY 오브젝트(objnum 0 "동전", type 10)의 이동을 gold↔디스크립터 순수 변환으로 이식한다. 반환 `MoneyDescriptor`는 `{ objnum: 0, type: 10, value }`인 **소유자 없는 bare 디스크립터**이며 영속 `ObjectInstance`가 아니다 — 바닥 배치·소유자 연결은 #106의 몫이다.
 
 | 함수 | 동작 | 거부 |
 |------|------|------|
@@ -43,7 +43,7 @@ MONEY 오브젝트(objnum 0 "동전", type 10)의 이동을 gold↔디스크립�
 
 거부 시 `InvalidMoneyAmountError`를 던지고 부분 결과를 반환하지 않는다. 금액(`amt`)은 `assertPositiveIntAmount`(≥1), 잔액(`gold`·`fromGold`·`toGold`·`money.value`)은 `assertNonNegativeIntBalance`(≥0 정수)로 진입점에서 검증한다 — 잔액은 0일 수 있어 금액 가드와 분리한다.
 
-**gold 상한**은 서비스 계층에서 min0-only로 강제한다(스키마 `.max()` 미도입). 어떤 연산도 gold를 음수로 만들지 않는다(`amt>gold` 거부로 보장). 상한 VALUE는 유예 — `bankTransactionService.withdraw`가 min0-only인 것과 대칭이다.
+**gold 상한**은 서비스 계층에서 min0-only로 강제한다(스키마 `.max()` 미도입). 어떤 연산도 gold를 음수로 만들지 않는다(`amt>gold` 거부로 보장). 상한 VALUE는 보류 — `bankTransactionService.withdraw`가 min0-only인 것과 대칭이다.
 
 ### 가격 config (priceConfig)
 
@@ -66,14 +66,14 @@ MONEY 오브젝트(objnum 0 "동전", type 10)의 이동을 gold↔디스크립�
 - 개수: 구매 *전* `invCount > 200` → `count-limit`(오라클 pre-purchase strict `>` 경계, 정확히 200 보유자는 성공).
 - 성공: `goldAfter = gold − value`.
 
-재고 소싱 위치는 유예한다 — `shopItem`을 파라미터로 받고 `rom_num+1` 인접방 규칙(D5)을 재현하지 않는다. 오라클이 클론 직후 하는 영구 플래그 해제(OPERM2/OPERMT/OTEMPP)는 `ShopItem`이 플래그를 담지 않으므로 완전 인스턴스 배선 시점에 #106이 수행한다.
+재고 소싱 위치는 보류한다 — `shopItem`을 파라미터로 받고 `rom_num+1` 인접방 규칙(D5)을 재현하지 않는다. 오라클이 클론 직후 하는 영구 플래그 해제(OPERM2/OPERMT/OTEMPP)는 `ShopItem`이 플래그를 담지 않으므로 완전 인스턴스 연결 시점에 #106이 수행한다.
 
 ### 몹상점 구매 (purchase, MPURIT)
 
 `purchase(char, item)` — 몹은 템플릿을 무한 복제하므로 buy와 동일하게 소유자 없는 클론을 반환한다. 어느 템플릿을 클론할지(몹 `carry[]`에서 itemRef→템플릿 해석)는 #106의 책임이며, purchase는 이미 해석된 템플릿 아이템을 받는다.
 
 - 게이트: `gold < mobBuyPrice(value)`(= `max(10, value)`) → `insufficient-gold`.
-- 개수: 취득 *전* `invCount > 150` → `count-limit`(buy와 동일 strict `>` 경계, 정확히 150 보유자는 성공).
+- 개수: 얻기 *전* `invCount > 150` → `count-limit`(buy와 동일 strict `>` 경계, 정확히 150 보유자는 성공).
 - 성공: `goldAfter = gold − price`.
 
 ### 전당포 판매 (sell, RPAWNS)
@@ -103,12 +103,12 @@ RNG 순서: `broke(1,100)`를 먼저 굴리고, **성공일 때만** `durability
 
 ### 소지 한도 (carry)
 
-원본이 각 명령 핸들러에 흩어 검사하는 무게 상한(`object.c weight_obj` 재귀 + `player.c max_weight`)과 개수 상한을 순수 predicate 하나로 모은다. 예외를 던지지 않고 boolean을 반환한다 — 거부 처리는 server 소관.
+원본이 각 명령 핸들러에 흩어 검사하는 무게 상한(`object.c weight_obj` 재귀 + `player.c max_weight`)과 개수 상한을 순수 predicate 하나로 모은다. 예외를 던지지 않고 boolean을 반환한다 — 거부 처리는 server 담당.
 
 - `weightOf(node)` — 재귀 무게 합(`object.c weight_obj` 이식). `n = node.weight`에서 시작해 **자식이** `weightless`(OWTLES, bit 7)가 아닐 때만 그 서브트리 무게를 더한다.
 - `canCarry(char, node, mode)`:
   - 개수: `invCount > limit`이면 `false`(strict `>`). limit는 `buy` 200, `get`/`give`/`purchase` 150.
-  - 무게: `weightCarried + weightOf(node) > maxWeight(context)`이면 `false`. `maxWeight`는 [`stats-core.md`](stats-core.md) `stats/derived`가 정본이다 — `20 + str*10 + barbarian` 공식을 재유도하지 않는다.
+  - 무게: `weightCarried + weightOf(node) > maxWeight(context)`이면 `false`. `maxWeight`는 [`stats-core.md`](stats-core.md) `stats/derived`가 기준이다 — `20 + str*10 + barbarian` 공식을 재유도하지 않는다.
 
 **OWTLES 재귀 규칙(핵심 함정)**: OWTLES 자식은 자기 무게도 내용물도 합산에서 제외된다(서브트리 전체 skip). 반면 무게를 재는 **최상위 노드 자신의 무게는 항상 계산된다** — OWTLES 플래그는 오직 부모의 순회에서만 소비되기 때문이다. `owner`/`template` 해결(플래그를 어디서 읽는지)은 이 모듈 밖(#106)이며, 소비자가 순수 `WeightNode` 트리로 구조를 넘긴다.
 
@@ -117,10 +117,10 @@ RNG 순서: `broke(1,100)`를 먼저 굴리고, **성공일 때만** `durability
 - **스키마 무변경(D1)** — `object.ts`·`character.ts`·`characterSchema`·`schemaVersion` 무변경. gold는 기존 `gold: int().min(0)` 필드를 소비만 한다.
 - **입력 self-defense** — 각 서비스는 진입점에서 gold·value·shotscur 등을 0 이상 정수로 강제한다(`assertNonNegativeInt`/`assertNonNegativeIntBalance`). 음수·소수·NaN은 가격/잔액 산술을 gold 생성·손실 벡터로 만들므로 `invalid-input`으로 거부한다. 유효 입력의 동작은 바꾸지 않는다.
 - **RNG seam(D4)** — 새 seam 파일을 만들지 않는다. sell·repair는 combat의 `CombatRng`(`packages/server/src/combat/dice.ts`)를 직접 주입받고, RNG 분기 결정은 server 서비스에 둔다. 오라클의 `time(0)` 벽시계 의존은 버리고 확률·공식은 콘텐츠로 보존한다.
-- **재고 소싱 위치 유예(D5, Open Q#2)** — buy는 `shopItem`을, purchase는 해석된 템플릿을 파라미터로 받는다. 월드 데이터 확장 vs 상점 config vs 인접방 규칙 이식은 결정하지 않으며, `rom_num+1` 인접 규칙은 재현하지 않는다.
-- **gold 상한 값 유예(Open Q#3)** — service-layer·min0-only. 수치 상한은 발명하지 않으며 `bankTransactionService` Open Q3와 함께 확정한다.
-- **라이브 command 라우팅 유예** — `구매`/`판매`/`수리`/`양도` 명령 파싱·라우팅, 영속화·바닥 배치·인벤토리 이동·소유자 배선은 #106 소관이다. 이 시스템은 순수 서비스·seam만 제공한다.
-- **trade 물물교환 미이식(Open Q#4)** — A8 §8·§10-g의 미완성 로직은 유예한다.
+- **재고 소싱 위치 보류(D5, Open Q#2)** — buy는 `shopItem`을, purchase는 해석된 템플릿을 파라미터로 받는다. 월드 데이터 확장 vs 상점 config vs 인접방 규칙 이식은 결정하지 않으며, `rom_num+1` 인접 규칙은 재현하지 않는다.
+- **gold 상한 값 보류(Open Q#3)** — service-layer·min0-only. 수치 상한은 발명하지 않으며 `bankTransactionService` Open Q3와 함께 확정한다.
+- **라이브 command 라우팅 보류** — `구매`/`판매`/`수리`/`양도` 명령 파싱·라우팅, 영속화·바닥 배치·인벤토리 이동·소유자 연결은 #106이 담당한다. 이 시스템은 순수 서비스·seam만 제공한다.
+- **trade 물물교환 미이식(Open Q#4)** — A8 §8·§10-g의 미완성 로직은 보류한다.
 
 ## 관련 문서
 

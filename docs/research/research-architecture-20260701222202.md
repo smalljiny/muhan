@@ -15,7 +15,7 @@
 
 ## 2. 인메모리 권위 상태 ↔ DB 영속화 경계 (D2 검증)
 
-- **시뮬레이션은 메모리에서, DB는 통제된 지점의 의도적 스냅샷만.** 모든 상태 변경이 즉시 블로킹 I/O를 하면 안 되며, 계층 경계(Network → Session → 권위 월드 틱 → 도메인 변경 → 영속화 경계 → 저장 어댑터)를 둔다 ([AlgoDaily: Game Server Persistence](https://algodaily.com/lessons/lesson-5-game-server-persistence-083ca31a)). D2의 "메모리 그래프 권위, DB 왕복 금지"와 정합.
+- **시뮬레이션은 메모리에서, DB는 통제된 지점의 의도적 스냅샷만.** 모든 상태 변경이 즉시 블로킹 I/O를 하면 안 되며, 계층 경계(Network → Session → 권위 월드 틱 → 도메인 변경 → 영속화 경계 → 저장 어댑터)를 둔다 ([AlgoDaily: Game Server Persistence](https://algodaily.com/lessons/lesson-5-game-server-persistence-083ca31a)). D2의 "메모리 그래프 권위, DB 왕복 금지"와 일치.
 - **"객체 그래프가 아니라 값을 저장하라"** — 포인터 대신 안정 ID, 엔진 객체 대신 평문 값, 마이그레이션용 version 필드 ([AlgoDaily](https://algodaily.com/lessons/lesson-5-game-server-persistence-083ca31a)). 무한이 1993 raw-struct 덤프를 버리고 MongoDB 네이티브 문서로 가는 결정([[muhan-mud-port]])을 직접 검증.
 - **세이브는 틱과 분리: snapshot → queue → async worker.** 틱이 안전 시점에 불변 스냅샷 생성 → 영속화 큐 push → 저장 워커가 로깅·재시도와 함께 기록 ([AlgoDaily](https://algodaily.com/lessons/lesson-5-game-server-persistence-083ca31a)).
 - **autosave 정석 = dirty-flag + 선택적 + 개별 + 비동기.** 변경된 것만(dirty=true), 엔티티 개별로(시간 분산), 비동기로 저장 ([gamedev.stackexchange](https://gamedev.stackexchange.com/questions/31944/best-practices-for-periodically-saving-game-state-to-disk)). D2의 "DB 네이티브 신규 세이브 정책(dirty 주기 flush + 이벤트 즉시 write)"과 정확히 일치. (fork/COW 스냅샷은 C/Unix 기법이라 단일 프로세스 Node 포팅엔 부적용 — 대안으로만 표기.)
@@ -23,7 +23,7 @@
 
 ## 3. WebSocket 구조화 프로토콜·공유 타입 (D4 검증)
 
-- **incoming command 계약과 outgoing event 계약을 명시적으로 분리.** `zod-sockets`는 incoming을 "Action"(input+ack 스키마), outgoing을 "Emission"으로 형식화하고 설정을 프론트로 export해 계약을 강제하며 AsyncAPI 생성 ([RobinTail/zod-sockets](https://github.com/RobinTail/zod-sockets)). 4X 게임은 공유 패키지에 `GameCommand`/`GameEvent` 분리 ([Ernest.dev](https://ernest.dev/2026/05/31/aonw-how-i-built-multiplayer-for-a-turn-based-4x-game-with-flutter-dart-websockets-and-postgresql/)). D4의 5개 인자 패턴·구조화 이벤트와 정합.
+- **incoming command 계약과 outgoing event 계약을 명시적으로 분리.** `zod-sockets`는 incoming을 "Action"(input+ack 스키마), outgoing을 "Emission"으로 형식화하고 설정을 프론트로 export해 계약을 강제하며 AsyncAPI 생성 ([RobinTail/zod-sockets](https://github.com/RobinTail/zod-sockets)). 4X 게임은 공유 패키지에 `GameCommand`/`GameEvent` 분리 ([Ernest.dev](https://ernest.dev/2026/05/31/aonw-how-i-built-multiplayer-for-a-turn-based-4x-game-with-flutter-dart-websockets-and-postgresql/)). D4의 5개 인자 패턴·구조화 이벤트와 일치.
 - **메시지당 Zod 스키마 1개 + `z.infer`로 TS 타입 파생, 병렬 `type` 수동 관리 금지.** 스키마를 client/server 공용 위치(내부 npm 패키지·monorepo 폴더)에 둔다 ([DEV/Nevavuori](https://dev.to/jussinevavuori/end-to-end-typesafe-apis-with-typescript-and-shared-zod-schemas-4jmo)). 프로덕션 RTS OpenFrontIO는 모든 클라 액션을 `Intent` discriminated union(`z.infer` 멤버)으로 모델링 ([OpenFrontIO Schemas.ts](https://github.com/openfrontio/OpenFrontIO/blob/20bc311c/src/core/Schemas.ts)). D4의 "Zod 단일 출처 + monorepo shared" 결정을 직접 검증.
 - **네임스페이스 `action`/`type` discriminator 래퍼**(`domain:action`, `table:join` 등)로 서버가 라우팅, 수신 시 Zod discriminated-union 파싱 ([Shoehive command-system](https://github.com/jtay/shoehive/blob/main/docs/pages/api/6_command-system.md)).
 - 타입 공유 옵션 순위: (1) monorepo 공유 패키지, (2) OpenAPI/GraphQL, (3) tRPC. 라우터를 `/packages/api`에 dev dependency로 두면 타입은 빌드 시 소거돼 서버 코드 미배포로 타입 안전 확보 ([tRPC Discussion #6980](https://github.com/trpc/trpc/discussions/6980); [r/typescript](https://www.reddit.com/r/typescript/comments/1cjvvln/best_practices_for_sharing_types_between_backend/)). D8 pnpm monorepo shared 패키지 결정 뒷받침.
@@ -31,7 +31,7 @@
 
 ## 4. 브로드캐스트 채널·Redis 확장 (D3 검증)
 
-- **EventEmitter=단일 프로세스 내/한 번만 처리, Redis=크로스노드 fan-out.** 클러스터 전역 once-only 작업엔 pub/sub이 아닌 Redis list 큐(RPUSH/LPOP) 사용 ([SO: Redis pub/sub vs EventEmitter](https://stackoverflow.com/questions/65772945/redis-pub-sub-vs-node-js-eventemitter-for-only-once-processed-events)). D3의 "in-process EventEmitter 채널" 결정 정합.
+- **EventEmitter=단일 프로세스 내/한 번만 처리, Redis=크로스노드 fan-out.** 클러스터 전역 once-only 작업엔 pub/sub이 아닌 Redis list 큐(RPUSH/LPOP) 사용 ([SO: Redis pub/sub vs EventEmitter](https://stackoverflow.com/questions/65772945/redis-pub-sub-vs-node-js-eventemitter-for-only-once-processed-events)). D3의 "in-process EventEmitter 채널" 결정과 일치.
 - **단일 프로세스가 WS 3만~10만 동시 연결을 처리**(연결당 ~5~50KiB), 초과 시에만 수평 확장 ([Stack Harbor](https://stackharbor.com/en/knowledge-base/nodejs-websocket-scaling-pattern/)). 핵심 트레이드오프 수치: 무한 목표(수십~수백 CCU)는 **단일 프로세스로 압도적 여유** → D1 단일 프로세스·D3 Redis 후순위 결정을 정량적으로 확증.
 - 수평 확장 시 새 문제 3개: (1) stickiness(LB가 세션 보유 노드로 라우팅), (2) 크로스노드 방송(Redis pub/sub 어댑터 릴레이), (3) presence(TTL 갱신 Redis hash) ([Stack Harbor](https://stackharbor.com/en/knowledge-base/nodejs-websocket-scaling-pattern/)).
 - **fan-out 증폭 함정: 방별 채널 구독, wildcard 금지.** `psubscribe('room:*')`는 모든 노드가 모든 방 메시지를 받아 전달량이 노드 수에 대해 **2차(P×N×N)** 로 폭증. 해결: 방의 첫 로컬 멤버 입장 시에만 구독, 마지막 퇴장 시 해제 ([AhsanLab, 2026, 1~8노드 벤치마크](https://tech.ahsanlab.me/posts/scaling-websockets-horizontally-with-redis-pubsub-with-benchmarks)). D3의 방=채널 설계가 미래 Redis 도입 시 지켜야 할 규칙.
@@ -49,7 +49,7 @@
 
 ## Key Takeaways
 
-- **D1·D3 정량 확증**: 단일 Node 프로세스가 WS 3만~10만 연결을 처리 → 무한 목표(수십~수백)는 단일 프로세스 + in-process EventEmitter로 압도적 여유, Redis 후순위가 맞다. Colyseus 반려 결정과도 정합(스케일링 문제 자체가 없음).
+- **D1·D3 정량 확증**: 단일 Node 프로세스가 WS 3만~10만 연결을 처리 → 무한 목표(수십~수백)는 단일 프로세스 + in-process EventEmitter로 압도적 여유, Redis 후순위가 맞다. Colyseus 기각 결정과도 일치(스케일링 문제 자체가 없음).
 - **D1 heartbeat 패턴은 DikuMUD 계열의 표준**(단일 타이머 + modulo 서브시스템 분배)이라 무한 A1 구조를 그대로 현대 스케줄러로 옮기면 된다. Evennia 구독 모델·LPMud 시간예산 heartbeat가 "활성 크리처 next-action 큐" refine의 선례.
 - **D2 세이브 정책 신규 설계 = 업계 정석과 일치**: 인메모리 권위 + snapshot→queue→async worker + dirty-flag 선택적 개별 비동기 flush. "객체 그래프 말고 값 저장"이 raw-struct→MongoDB 문서 결정을 검증.
 - **D4·D8 프로토콜은 정착 패턴 존재**: command/event 계약 분리 + 메시지당 Zod 스키마 + `z.infer` + monorepo 공유 패키지 + `domain:action` discriminator. 손수 구현이 검증된 길이며 프레임워크 불요.

@@ -1,12 +1,12 @@
 # A9 몬스터 AI·스폰·리스폰
 
-> 무한의 몬스터가 oracle에서 *무엇을 하는지* — 언제 시뮬레이션되고(active 리스트), 어떻게 세계에 등장하며(스폰 3계층), 매 틱 무엇을 판단하고(update_active AI), 누구를 노리며(어그로), 어떻게 대화·도주하는지를 규명한다. 공격성·배회·재생·어그로 타깃 선택·리스폰 주기·대화 규칙은 게임 규칙이므로 충실히 이식하고, `first_active` 단일 연결 리스트·`time(0)` 초 단위 폴링·`perm_mon` lasttime 배열·하드코딩 침공 좌표·데드 스캐폴드(몬스터 도주·주기 발화)는 원작의 구현 방식이므로 자유롭게 재설계한다. 이슈 #9. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)의 `update.c`·`creature.c`·`room.c`·`player.c`·`command8.c`. 코드 이식이 아니라 동작 추출.
+> 무한의 몬스터가 oracle에서 *무엇을 하는지* — 언제 시뮬레이션되고(active 리스트), 어떻게 세계에 등장하며(스폰 3계층), 매 틱 무엇을 판단하고(update_active AI), 누구를 노리며(어그로), 어떻게 대화·도주하는지를 정리한다. 공격성·배회·재생·어그로 타깃 선택·리스폰 주기·대화 규칙은 게임 규칙이므로 충실히 이식하고, `first_active` 단일 연결 리스트·`time(0)` 초 단위 폴링·`perm_mon` lasttime 배열·하드코딩 침공 좌표·데드 스캐폴드(몬스터 도주·주기 발화)는 원작의 구현 방식이므로 자유롭게 재설계한다. 이슈 #9. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)의 `update.c`·`creature.c`·`room.c`·`player.c`·`command8.c`. 코드 이식이 아니라 동작 추출.
 >
 > **oracle 읽기 주의**: 하네스 `grep` 래퍼가 `-I`(binary skip)를 붙여 EUC-KR 파일을 스킵한다. `command grep -a` 또는 `iconv -f EUC-KR -t UTF-8 -c … | grep`로 우회한다([[muhan-oracle-toolchain]]).
 >
-> **전투·경제 공식은 재유도하지 않는다**: 몬스터 명중(`thaco − armor/8`)·데미지(`mdice`)·경험치 분배·gold 드롭은 [[a5-combat]]와 [[a8-items-economy]]에 확정돼 있다. 본 노트는 그 공식을 *언제·어떤 조건에서* 몬스터가 발동하는지(AI 결정 축)만 다루고, 수치 유도는 참조로 넘긴다. 방 입장·이동 규칙은 [[a4-movement-rooms]] 소관이다.
+> **전투·경제 공식은 재유도하지 않는다**: 몬스터 명중(`thaco − armor/8`)·데미지(`mdice`)·경험치 분배·gold 드롭은 [[a5-combat]]와 [[a8-items-economy]]에 확정돼 있다. 본 노트는 그 공식을 *언제·어떤 조건에서* 몬스터가 발동하는지(AI 결정 축)만 다루고, 수치 유도는 참조로 넘긴다. 방 입장·이동 규칙은 [[a4-movement-rooms]] 담당이다.
 >
-> **이동 연동 행동은 a4 소관**: MFOLLO(공격자 추종)·MBLOCK(출구 차단)·MPGUAR(수동 출구 감시)는 몬스터 행동이지만 `update_active` AI 틱이 아니라 플레이어 이동 코드에서 트리거되므로 [[a4-movement-rooms]]에서 다룬다. 본 노트의 "배회"는 스폰 진입(wander-in)과 확률 퇴장(wander-out, §10)을 뜻하며, 몬스터의 자율 방-이동은 데드 `check_for_flee`(§6)를 빼면 없다.
+> **이동 연동 행동은 a4 담당**: MFOLLO(공격자 추종)·MBLOCK(출구 차단)·MPGUAR(수동 출구 감시)는 몬스터 행동이지만 `update_active` AI 틱이 아니라 플레이어 이동 코드에서 트리거되므로 [[a4-movement-rooms]]에서 다룬다. 본 노트의 "배회"는 스폰 진입(wander-in)과 확률 퇴장(wander-out, §10)을 뜻하며, 몬스터의 자율 방-이동은 데드 `check_for_flee`(§6)를 빼면 없다.
 
 ## 개요
 
@@ -25,7 +25,7 @@
 | # | 발견 | 분류 |
 |---|------|------|
 | 1 | **active 리스트 = 플레이어 근접 시뮬레이션.** `first_active` 단일 연결 리스트에 등록된 몬스터만 매 초 `update_active`가 순회. 방에 플레이어 진입 시 방 몬스터 전원 `add_active`, 방이 비면(`!rom_ptr->first_ply`) 즉시 `del_active` | 재설계(스케줄링) |
-| 2 | **스폰 트리거 3모델.** ① perm_mon=**입장 구동**(add_ply_rom→add_permcrt_rom, lazy) ② random=**폴링 20초**(p=traffic) ③ invasion=**폴링 4000·5000초**(하드코딩 좌표) | 이식(규칙)/재설계(트리거) |
+| 2 | **스폰 트리거 3모델.** ① perm_mon=**입장 기반**(add_ply_rom→add_permcrt_rom, lazy) ② random=**폴링 20초**(p=traffic) ③ invasion=**폴링 4000·5000초**(하드코딩 좌표) | 이식(규칙)/재설계(트리거) |
 | 3 | **리스폰 = 사망 게이트 + 입장 재검사.** `perm_mon[i]`={interval,ltime,misc}. 사망 시 `die_perm_crt`가 `ltime=사망시각` 세팅, 다음 입장 때 `ltime+interval ≤ 현재`면 재스폰. 스케줄러가 아니라 lazy 검사 | 이식(주기)/재설계(구현) |
 | 4 | **어그로 타깃 = piety 역가중 랜덤.** `lowest_piety`(MAGGRE)=Σmax(1,25−piety) 가중, `low_piety_alg`(MGAGGR/MEAGGR)=Σmax(1,30−piety) + 성향 필터(±100) + 레벨 필터(첫 루프만, §4.2 비대칭). 신앙심 낮을수록 표적 확률↑ | 콘텐츠(공식) |
 | 5 | **공격성 3종.** MAGGRE(무차별)·MGAGGR(선한 유저 공격, alg=−1)·MEAGGR(악한 유저 공격, alg=1). 성향-공격형은 레벨 티어로 표적을 편향(저렙 가중치 배제)하나 **선택 루프엔 레벨 필터가 없어 저렙 완전 배제는 보장 안 됨(원본 비대칭)**. 민첩 높은 유저는 30% 초기 회피 | 이식(규칙)/재설계(비대칭) |
@@ -38,7 +38,7 @@
 | 12 | **특수 공격.** breath(MBRETH, ~13%: 침/악취·독/냉기/화염 4변종)·경험치 드레인(MENEDR 10%)·독(MPOISS 15%)·질병(MDISEA 10%)·실명(MBLNDR 10%)·아이템 용해(MDISIT 15%) | 콘텐츠(행동) |
 | 13 | **아이템 파괴 (피격 시).** `choose_item`이 착용 아이템(WIELD·HELD 제외) 랜덤 선택 → `shotscur--`, 0 되면 "산산히 부서져" 제거 후 `compute_ac` | 콘텐츠(규칙) |
 | 14 | **몬스터 도주 = 완전 비활성.** `check_for_flee` 첫 줄 `return;`로 no-op(데드). MFLEER는 데드 함수 내부와 DM 표시 문자열에만 등장. 도주는 **플레이어 전용**(PWIMPY hpcur≤WIMPYVALUE / PFEARS 확률) | 이식(as-shipped)/재설계(데드) |
-| 15 | **대화 = interactive live / periodic dead.** `talk` 명령: 정적 `talk[80]` 또는 MTALKS 키워드 파일(first_tlk)→응답+`talk_action`(공격/소셜/시전/퀘스트지급). MTLKAG=대화 후 적대. **MSAYTLK/LT_SAYTLK(주기 발화)는 미배선 데드** | 이식(규칙)/재설계(데드) |
+| 15 | **대화 = interactive live / periodic dead.** `talk` 명령: 정적 `talk[80]` 또는 MTALKS 키워드 파일(first_tlk)→응답+`talk_action`(공격/소셜/시전/퀘스트지급). MTLKAG=대화 후 적대. **MSAYTLK/LT_SAYTLK(주기 발화)는 미연결 데드** | 이식(규칙)/재설계(데드) |
 | 16 | **사망 트리거.** 플레이어 hpcur<1 → `die()`. 몬스터 사망은 `attack_crt` 반환값. `die()`가 경험치 분배·gold 드롭([[a5-combat]]/[[a8-items-economy]])·인벤 드롭·퀘스트·리스폰 타이머 리셋·MSUMMO 소환 처리 | 콘텐츠(→a5/a8) |
 | 17 | **소지 아이템 랜덤화 (스폰 시).** `carry[10]` objnum 템플릿 중 1~3개(90/6/4%) 복제, `value`를 ±10% 흔들고 ORENCH면 랜덤 인챈트. gold=MNRGLD면 고정, 아니면 mrand(gold/10, gold) | 이식(경제)/재설계(랜덤) |
 
@@ -64,15 +64,15 @@
 
 ## 2. 스폰/리스폰: 세 개의 독립 트리거 모델 (규칙은 이식 / 트리거는 재설계)
 
-무한의 몬스터 등장은 성격이 다른 **세 시스템**으로 갈린다. 이 분리가 A9의 핵심 아키텍처 함의다.
+무한의 몬스터 등장은 성격이 다른 **세 시스템**으로 갈린다. 이 분리가 A9의 핵심 아키텍처 시사점이다.
 
 | 모델 | 트리거 | 주기/조건 | 대상 정의 | 그룹 크기 |
 |------|--------|-----------|-----------|-----------|
-| **perm_mon** (고정) | **입장 구동** (add_ply_rom→add_permcrt_rom) | 사망 후 `interval` 경과 + 다음 입장 시 재검사 | 방 `perm_mon[10]`={interval,ltime,misc=몹번호} | 슬롯 중복 몹번호 합산 |
+| **perm_mon** (고정) | **입장 기반** (add_ply_rom→add_permcrt_rom) | 사망 후 `interval` 경과 + 다음 입장 시 재검사 | 방 `perm_mon[10]`={interval,ltime,misc=몹번호} | 슬롯 중복 몹번호 합산 |
 | **random** (배회) | **폴링** update_random | 20초(`Random_update_interval`), `mrand(1,100)≤traffic` | 방 `random[10]` 후보 + `traffic` | RPLWAN=플레이어수, 아니면 `numwander` |
 | **invasion** (침공) | **폴링** update_monster / _two | 4000초 / 5000초 | 하드코딩 방·몹 번호 범위 | 50 / 10 고정 |
 
-### 2.1 perm_mon: 입장 구동 리스폰 (add_permcrt_rom, room.c:308)
+### 2.1 perm_mon: 입장 기반 리스폰 (add_permcrt_rom, room.c:308)
 
 방 구조체(mstruct.h:154)에 `struct lasttime perm_mon[10]`이 있다. `lasttime`={`interval`(long), `ltime`(long), `misc`(short)}(mstruct.h:53). `misc`=고정 몬스터 템플릿 번호, `interval`=리스폰 지연, `ltime`=마지막 사망 시각.
 
@@ -104,12 +104,12 @@
 - **update_monster** (4000초): 50회 반복하며 방 `mrand(8000,8300)`에 몹 `mrand(732,755)`를 스폰. 전역 방송 "드레니아에 카오스의 지휘하에 몹이 침공했습니다."
 - **update_monster_two** (5000초): 10회 반복하며 방 `mrand(3601,3630)`에 몹 `mrand(265,299)` 스폰. "무적존을 강탈하려고 드레니아 몹이 침공했습니다."
 
-방/몹 번호 범위가 소스에 리터럴로 박혀 있다 — 이것은 **원작 구현 방식(하드코딩)**이며, 신규 스택에서는 데이터 정의된 이벤트(방 태그·몹 풀·주기·방송 메시지)로 승격해 재설계한다. 침공이라는 게임 이벤트 자체(주기적 몹 물결 + 전역 알림)는 **콘텐츠**다.
+방/몹 번호 범위가 소스에 리터럴로 박혀 있다 — 이것은 **원작 구현 방식(하드코딩)**이며, 신규 스택에서는 데이터 정의된 이벤트(방 태그·몹 풀·주기·방송 메시지)로 올려 재설계한다. 침공이라는 게임 이벤트 자체(주기적 몹 물결 + 전역 알림)는 **콘텐츠**다.
 
 ### 2.4 부차 스폰: 소환·초인의 돌
 
 - **summon_crt** (creature.c:821): `MSUMMO` 몬스터가 죽을 때(`die_perm_crt`) `special` 필드 번호의 몬스터를 소환, 죽인 플레이어를 즉시 적으로 등록(`add_enm_crt`). "죽으면서 부하를 부르는" 패턴.
-- **update_moonstone** (update.c:728, 20000초): 몬스터가 아니라 아이템 스폰이지만 같은 "랜덤 방 선택" 패턴 — RNOTEL 아닌 랜덤 방에 obj 640(초인의 돌)을 떨궈 전역 방송. [[a8-items-economy]] 소관이나 스폰 메커니즘 대조용으로 기록.
+- **update_moonstone** (update.c:728, 20000초): 몬스터가 아니라 아이템 스폰이지만 같은 "랜덤 방 선택" 패턴 — RNOTEL 아닌 랜덤 방에 obj 640(초인의 돌)을 떨궈 전역 방송. [[a8-items-economy]] 담당이나 스폰 메커니즘 대조용으로 기록.
 
 ## 3. update_active: 몬스터 AI 틱 루프 (이식 + 재설계)
 
@@ -211,7 +211,7 @@ while 루프라 밀린 시간만큼 소급 적용된다(방을 오래 비웠다 
 - **check_for_flee** (creature.c:624): 함수 본체 첫 실행문이 `return;`(creature.c:631). 그 아래 MFLEER 검사·HP 임계·인접 방 탈출 로직은 **전부 도달 불가 데드 코드**. 전 `.c` grep 결과 MFLEER는 이 데드 함수 내부(creature.c:632)와 DM 상태표시 문자열(dm2.c:398 `"Flee, "`)에만 등장 — **어떤 라이브 경로에서도 읽히지 않는다**.
 - 따라서 무한에서 **도주하는 것은 플레이어뿐**이다(§5.7 PWIMPY/PFEARS). 몬스터는 HP가 낮아도 도망가지 않고 끝까지 싸운다.
 
-신규 스택 함의: MFLEER 플래그는 몬스터 데이터에 존재하나 동작이 없다. 이식 시 (a) 원본 동작 재현 = 무시(도주 없음), 또는 (b) **의도된 신규 기능**으로 되살려 데이터의 MFLEER를 실제 도주로 구현할지는 결정 게이트 항목. 데드 코드의 원래 의도(HP<20% & 인접 로드된 방으로 75% 확률 탈출)는 참고용으로 남긴다.
+신규 스택 시사점: MFLEER 플래그는 몬스터 데이터에 존재하나 동작이 없다. 이식 시 (a) 원본 동작 재현 = 무시(도주 없음), 또는 (b) **의도된 신규 기능**으로 되살려 데이터의 MFLEER를 실제 도주로 구현할지는 결정 게이트 항목. 데드 코드의 원래 의도(HP<20% & 인접 로드된 방으로 75% 확률 탈출)는 참고용으로 남긴다.
 
 ## 7. 대화: interactive는 live, periodic는 dead (콘텐츠 규칙)
 
@@ -229,7 +229,7 @@ while 루프라 밀린 시간만큼 소급 적용된다(방을 오래 비웠다 
 - **3 = cast**: `tt->action` 스펠명을 spllist에서 찾아 시전(공격형이면 offensive_spell, 이미 적이면 시전 거부).
 - **4 = give**: `tt->action` objnum 아이템 지급(무게·150개 한도·퀘스트 검사 [[a8-items-economy]]).
 
-즉 대화는 **데이터 구동 상태 기계**(키워드→응답+부수효과)다. 신규 스택에서 대화 파일을 JSON(키워드→{응답, action 타입, 파라미터})으로 승격하면 그대로 이식된다.
+즉 대화는 **데이터 기반 상태 기계**(키워드→응답+부수효과)다. 신규 스택에서 대화 파일을 JSON(키워드→{응답, action 타입, 파라미터})으로 올리면 그대로 이식된다.
 
 ### 7.2 periodic talk (dead) — MSAYTLK / LT_SAYTLK
 
@@ -237,7 +237,7 @@ while 루프라 밀린 시간만큼 소급 적용된다(방을 오래 비웠다 
 
 ## 8. 사망·charm·소환 (콘텐츠 → 수치는 a5/a8)
 
-- **die** (creature.c:262): 몬스터 사망 시 적 리스트의 damage 비례로 경험치 분배([[a5-combat]]), 인벤토리·gold를 바닥에 드롭([[a8-items-economy]]), MPERMT면 `die_perm_crt`로 리스폰 타이머 리셋(§2.1), charm 해제, `del_active`+`del_crt_rom`+`free_crt`. 플레이어 사망 분기는 경험치 감소·레벨 강등·1008호(사망 방) 이동 등 — [[a7-player-progression]]·[[a5-combat]] 소관.
+- **die** (creature.c:262): 몬스터 사망 시 적 리스트의 damage 비례로 경험치 분배([[a5-combat]]), 인벤토리·gold를 바닥에 드롭([[a8-items-economy]]), MPERMT면 `die_perm_crt`로 리스폰 타이머 리셋(§2.1), charm 해제, `del_active`+`del_crt_rom`+`free_crt`. 플레이어 사망 분기는 경험치 감소·레벨 강등·1008호(사망 방) 이동 등 — [[a7-player-progression]]·[[a5-combat]] 담당.
 - **charm** (MCHARM, creature.c:721~812): `is_charm_crt`/`add_charm_crt`/`del_charm_crt`가 플레이어별 매혹 몬스터 리스트(`Ply[fd].extr->first_charm`) 관리. 매혹된 몬스터는 시전자를 공격하지 않음(update.c:345, `p=1`). LT_CHRMD 만료로 해제.
 - **die_perm_crt의 부수효과**: 퀘스트 몬스터(`questnum`)면 퀘스트 완료·경험치 지급, MDEATH면 `ddesc/` 파일의 사후 묘사 방송, MSUMMO면 `summon_crt`로 부하 소환(§2.4).
 
@@ -263,11 +263,11 @@ while 루프라 밀린 시간만큼 소급 적용된다(방을 오래 비웠다 
 | 소지 랜덤화 | carry[] 1~3개(90/6/4%), value ±10%, ORENCH 인챈트, MNRGLD gold | mrand 호출 위치 |
 | 사망 | die() 트리거, 리스폰 리셋, 퀘스트, MSUMMO 소환 | free_crt/링크드 리스트 정리, goto crt_died |
 
-## 아키텍처 함의
+## 아키텍처 시사점
 
-1. **활성 집합 = 방 점유 이벤트 구동 스케줄러.** `first_active`를 매 틱 스캔·방 비움 체크하는 대신, 방→몬스터 인덱스 + 플레이어 입장/퇴장 이벤트로 활성 집합을 증분 갱신하고, active 몬스터만 라운드 스케줄러(EventEmitter/타이머 휠)에 등록한다. "빈 방=시간 정지" 의미론은 유지 — 몬스터 상태(HP·적·타이머)를 방이 비는 동안 진행하지 않는다.
+1. **활성 집합 = 방 점유 이벤트 기반 스케줄러.** `first_active`를 매 틱 스캔·방 비움 체크하는 대신, 방→몬스터 인덱스 + 플레이어 입장/퇴장 이벤트로 활성 집합을 증분 갱신하고, active 몬스터만 라운드 스케줄러(EventEmitter/타이머 휠)에 등록한다. "빈 방=시간 정지" 의미론은 유지 — 몬스터 상태(HP·적·타이머)를 방이 비는 동안 진행하지 않는다.
 
-2. **스폰 3모델을 명시적 트리거 타입으로 통일.** (a) perm=**입장 훅**(방 진입 시 리스폰 레코드 검사), (b) random=**인터벌 틱**(방별 traffic 확률), (c) invasion=**스크립트 이벤트**(데이터 정의된 몹 풀·주기·좌표·방송). 하드코딩 침공 좌표는 이벤트 설정으로 승격한다.
+2. **스폰 3모델을 명시적 트리거 타입으로 통일.** (a) perm=**입장 훅**(방 진입 시 리스폰 레코드 검사), (b) random=**인터벌 틱**(방별 traffic 확률), (c) invasion=**스크립트 이벤트**(데이터 정의된 몹 풀·주기·좌표·방송). 하드코딩 침공 좌표는 이벤트 설정으로 올린다.
 
 3. **리스폰은 death-timestamp + lazy 재계산 또는 스케줄 잡 중 택1.** 원본의 "사망 시각 기록 → 다음 입장 시 경과 계산"은 상태를 최소화하는 좋은 패턴이다. MongoDB에 방 인스턴스별 `perm_mon` 사망 타임스탬프를 저장하고, 입장 시 또는 저빈도 스윕으로 리젠 판정한다. 스케줄러 잡으로 바꿔도 되나, 빈 방까지 잡을 거는 비용을 피하려면 lazy가 유리하다.
 
@@ -275,6 +275,6 @@ while 루프라 밀린 시간만큼 소급 적용된다(방을 오래 비웠다 
 
 5. **어그로 타깃 = piety 역가중 랜덤 공식을 그대로 이식.** `MAX(1, 25−piety)` / `MAX(1, 30−piety)` 가중치, 성향 필터(±100), 레벨 티어 필터, 민첩 30% 회피는 게임 밸런스의 일부이므로 수치까지 보존한다. 단 `low_piety_alg`의 레벨 필터는 두 루프 중 첫 번째(가중치 합산)에만 있고 선택 루프엔 없는 **원본 비대칭**이라, 신규 구현이 "저렙 완전 배제"로 정규화하면 밸런스가 미묘하게 달라진다 — as-shipped 재현이 기본이면 이 비대칭까지 재현하거나, 의도를 살려 정규화할지 명시 결정한다. 적 리스트는 FIFO 큐 + 이탈 시 회전 + 다중 자동반격 의미론을 재현하되, add_enm_crt의 주석은 무시하고 코드 동작(tail append)을 따른다.
 
-6. **대화 = 데이터 구동 상태 기계.** 몬스터 대화 파일을 JSON(키워드→{응답, action: attack/social/cast/give, 파라미터})으로 이식하면 talk_action 분기가 그대로 매핑된다. 정적 talk 문자열과 MTLKAG(대화 후 적대)도 몬스터 데이터 필드로 유지한다.
+6. **대화 = 데이터 기반 상태 기계.** 몬스터 대화 파일을 JSON(키워드→{응답, action: attack/social/cast/give, 파라미터})으로 이식하면 talk_action 분기가 그대로 매핑된다. 정적 talk 문자열과 MTLKAG(대화 후 적대)도 몬스터 데이터 필드로 유지한다.
 
 7. **데드 스캐폴드는 이식하지 않되 결정 게이트에 올린다.** 몬스터 도주(MFLEER/check_for_flee)와 주기 발화(MSAYTLK/LT_SAYTLK/talkbuf)는 데이터엔 플래그가 있으나 동작이 없다. as-shipped 충실 재현은 이 둘을 무시하는 것이고, 원저자 의도를 살려 **신규 기능으로 구현**하는 것은 별도 스코프다 — 포팅 원칙([[muhan-port-principle]])상 "동작은 충실히 재현"이 기준이므로 기본값은 재현(=미구현), 되살림은 명시 결정으로 처리한다.
