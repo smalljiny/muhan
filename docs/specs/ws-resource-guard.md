@@ -64,7 +64,7 @@ E3-2(인증·세션 FSM) adversarial 리뷰가 자원 고갈(DoS) 표면 2건을
 
 `safeSend` 단일 병목에서 이번 payload를 미리 직렬화해 `socket.bufferedAmount + payloadBytes > WS_MAX_BUFFERED_BYTES`면 느린 소비자로 판정해 `socket.close(1013)`(Try Again Later)하고 전송하지 않는다. enqueue 직전에 대기 payload 크기까지 회계에 넣는 hard cap이라, 단일 이벤트가 큐를 상한 너머로 밀어넣고도 살아남는 one-message overshoot가 없다.
 
-권위적 이벤트를 push하는 서버라 프레임을 드롭·유예하면 클라이언트 상태가 어긋나므로 close가 유일하게 안전한 응답이다. close는 close 핸들러를 핸들러 중간에 재진입 발화시키지만, 기존 idempotent teardown(`cleanupConnection` + `binding.connection === ctx` 가드)이 이를 흡수한다.
+서버가 상태를 결정해 이벤트를 push하는 구조라 프레임을 드롭·유예하면 클라이언트 상태가 어긋나므로 close가 유일하게 안전한 응답이다. close는 close 핸들러를 핸들러 중간에 재진입 발화시키지만, 기존 idempotent teardown(`cleanupConnection` + `binding.connection === ctx` 가드)이 이를 흡수한다.
 
 **send 콜백 오류**: `socket.send(payload, cb)`의 콜백 err를 받아 `log.error({ err }, 'ws send failed')`로 로깅하고 코드 없는 `close()`로 잘라낸다 — 정책적 backpressure(1013)와 달리 transport 실패이므로 코드 없이 닫는다(deadline 관례 미러). 콜백형 send에서 not-OPEN 전송은 동기 throw 대신 콜백 err로 오지만, 잔여 동기 throw를 방어하기 위해 try/catch를 defense-in-depth로 유지한다.
 

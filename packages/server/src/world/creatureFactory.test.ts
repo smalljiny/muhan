@@ -27,7 +27,7 @@ const thief: CreatureSource = {
   class: 2,
   intelligence: 18,
   piety: 12,
-  // 사망 분배 읽기 필드(Story 6): experience(킬 경험치)·alignment(정렬, 선/악 축 — 음수 유효).
+  // 사망 분배 읽기 필드(Story 6): experience(킬 경험치)·alignment(성향, 선/악 축 — 음수 유효).
   experience: 300,
   alignment: -50,
 }

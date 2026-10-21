@@ -42,7 +42,7 @@ export type CreatureSource = Pick<
   | 'piety'
   // 사망 분배 읽기 필드(Story 6) — creatures.json / rooms.json monsters[]에 항상 존재한다.
   // CreatureInstance에서 optional이라 Pick 결과도 optional이지만, 소스는 항상 값을 보유하므로
-  // materialize가 실값을 옮긴다. Story 7 사망 처리가 킬 경험치·정렬 변동에 읽는다.
+  // materialize가 실값을 옮긴다. Story 7 사망 처리가 킬 경험치·성향 변동에 읽는다.
   | 'experience'
   | 'alignment'
   // 이름 매칭용 별칭(Story 4) — creatures.json / rooms.json monsters[]에 항상 존재한다(별칭이
@@ -104,7 +104,7 @@ function materialize(
     piety: src.piety,
     realm: [0, 0, 0, 0],
     // 사망 분배 읽기 필드(Story 6) — 소스에서 그대로 옮긴다(콘텐츠 불변). 소스 JSON이 항상
-    // 두 키를 보유하므로 실값을 채운다(Story 7 킬 경험치·정렬 변동 입력).
+    // 두 키를 보유하므로 실값을 채운다(Story 7 킬 경험치·성향 변동 입력).
     experience: src.experience,
     alignment: src.alignment,
     // 이름 매칭용 별칭(Story 4) — 소스에서 옮긴다(콘텐츠 불변). 소스에 없어도 빈 배열로

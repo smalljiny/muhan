@@ -21,7 +21,7 @@ export type PlayerCombatState = {
   /** 현재 MP — 마법 소비가 in-place 차감(가변). */
   mpCurrent: number
   readonly level: number
-  /** 클래스 인덱스(1-12) — 피해 분기(BARBARIAN/MAGE/CLERIC/INVINCIBLE)·PALADIN 정렬 보정에 소비. */
+  /** 클래스 인덱스(1-12) — 피해 분기(BARBARIAN/MAGE/CLERIC/INVINCIBLE)·PALADIN 성향 보정에 소비. */
   readonly class: number
   /** 유효 힘(effectiveContext.effectiveStrength) — 피해 `bonus[str]` 항에 bonusOf로 소비. */
   readonly effectiveStrength: number
@@ -58,7 +58,7 @@ export type PlayerCombatState = {
    * 하면 재조립이 정본 경로다). 상태 플래그가 없는 플레이어는 빈 hex 또는 all-zero hex다.
    */
   readonly flags: string
-  /** 성향(PALADIN 정렬 보정에 Story 5가 소비). */
+  /** 성향(PALADIN 성향 보정에 Story 5가 소비). */
   readonly alignment: number
   /** 무기 데미지 서술자 — 미착용이면 null(맨손 분기). mdice(weapon)은 착용 시에만 소비. */
   readonly weapon: WeaponDamage | null

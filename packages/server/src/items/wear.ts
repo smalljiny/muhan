@@ -81,7 +81,7 @@ export interface WearParams {
  * - equipped: 착용 성공, slot 설정된 새 인스턴스
  * - rejected: 게이트 거부(인벤에 그대로)
  * - burned: 밸런스 소각(파괴 — 배선 유예)
- * - bounced: 정렬 반발로 몸에서 튕겨 바닥 낙하(reject와 별개)
+ * - bounced: 성향 반발로 몸에서 튕겨 바닥 낙하(reject와 별개)
  */
 export type WearOutcome =
   | { readonly kind: 'equipped'; readonly object: ObjectInstance }
@@ -156,7 +156,7 @@ export function wearGate(params: WearParams): WearOutcome {
     return { kind: 'rejected', reason: '부서져서 입을 수 없게 되었습니다.' }
   }
 
-  // ⑧ 정렬 — OGOODO+정렬<-50·OEVILO+정렬>50이면 몸에서 튕겨 바닥 낙하(command3.c:132·142).
+  // ⑧ 성향 — OGOODO+성향<-50·OEVILO+성향>50이면 몸에서 튕겨 바닥 낙하(command3.c:132·142).
   if (!alignmentAllowed(flags, actor.alignment)) {
     return { kind: 'bounced', reason: '당신 몸에서 튕겨져 나가 바닥에 떨어집니다.' }
   }
@@ -198,9 +198,9 @@ const PALADIN_RANGER_DMG_RELIEF = 2
 const HELD_DICE_LIMIT = 100
 /** ready 소각 메시지(command3.c:788·795·801). */
 const READY_BURN_REASON = '당신이 무기를 쥐자 푸른 빛을 내며 사라집니다.'
-/** ready 정렬 반발 메시지(command3.c:762·771). */
+/** ready 성향 반발 메시지(command3.c:762·771). */
 const READY_BOUNCE_REASON = '당신의 몸에서 튕겨져 나가 바닥에 떨어집니다.'
-/** hold 정렬 반발 메시지(command3.c:922·931). */
+/** hold 성향 반발 메시지(command3.c:922·931). */
 const HOLD_BOUNCE_REASON = '당신의 손에서 튕겨져 나가 땅에 떨어집니다.'
 
 /**
@@ -282,7 +282,7 @@ export function readyGate(params: ReadyParams): WearOutcome {
     return { kind: 'rejected', reason: '당신의 직업에 맞지 않습니다.' }
   }
 
-  // ⑥ 정렬 — OGOODO+정렬<-50·OEVILO+정렬>50이면 몸에서 튕겨 바닥 낙하(command3.c:755-773).
+  // ⑥ 성향 — OGOODO+성향<-50·OEVILO+성향>50이면 몸에서 튕겨 바닥 낙하(command3.c:755-773).
   if (!alignmentAllowed(flags, actor.alignment)) {
     return { kind: 'bounced', reason: READY_BOUNCE_REASON }
   }
@@ -372,7 +372,7 @@ export function holdGate(params: HoldParams): WearOutcome {
     return { kind: 'rejected', reason: '당신의 직업에 맞지 않습니다.' }
   }
 
-  // ⑦ 정렬 — OGOODO+정렬<-50·OEVILO+정렬>50이면 손에서 튕겨 바닥 낙하(command3.c:919-937).
+  // ⑦ 성향 — OGOODO+성향<-50·OEVILO+성향>50이면 손에서 튕겨 바닥 낙하(command3.c:919-937).
   // 플랜 T6.2 요약 초과, 오라클 충실.
   if (!alignmentAllowed(flags, actor.alignment)) {
     return { kind: 'bounced', reason: HOLD_BOUNCE_REASON }

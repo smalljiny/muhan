@@ -46,9 +46,9 @@
 
 ### G2 — 학습·전수
 
-`study(char, book)`(`learning.ts`)는 비법서(SCROLL) 연마를 게이트 순서대로 평가한다: PBLIND(실명) → 오브젝트 타입(SCROLL 아님) → 레벨(`book.ndice > level`) → 정렬(`OGOODO`이고 `alignment<-100` 또는 `OEVILO`이고 `alignment>100`) → 클래스(`OCLSEL` 켜져 있고 해당 클래스 비트 없고 `class<CARETAKER`) → `magicpower` 유효성(카탈로그 밖이면 `no-spell`). 통과 시 `setKnown(char.spells, book.magicpower-1)`한 새 store를 반환하고, 실패 시 원본 store를 그대로 반환한다.
+`study(char, book)`(`learning.ts`)는 비법서(SCROLL) 연마를 게이트 순서대로 평가한다: PBLIND(실명) → 오브젝트 타입(SCROLL 아님) → 레벨(`book.ndice > level`) → 성향(`OGOODO`이고 `alignment<-100` 또는 `OEVILO`이고 `alignment>100`) → 클래스(`OCLSEL` 켜져 있고 해당 클래스 비트 없고 `class<CARETAKER`) → `magicpower` 유효성(카탈로그 밖이면 `no-spell`). 통과 시 `setKnown(char.spells, book.magicpower-1)`한 새 store를 반환하고, 실패 시 원본 store를 그대로 반환한다.
 
-study의 **정렬 게이트는 known-divergence로 미발화**다 — `alignment` 실 값역이 `[0,2]`(생성 인터뷰 1|2 + backfill 중립 sentinel 0)라 `<-100`·`>100` 두 분기가 모두 거짓이고, 현재 어떤 캐릭터도 정렬로 연마를 거부당하지 않는다. 오라클 임계값을 **재조정하지 않는다** — 보존해야 E6 성향 시스템([#123](https://github.com/smalljiny/muhan/issues/123))이 `-1000..+1000`을 도입할 때 코드 변경 없이 발화한다. 같은 성격의 미발화 게이트가 `combat/aggro.ts`·`combat/attackStats.ts`·`items/flags.ts`에도 있다([character-flags.md](character-flags.md)).
+study의 **성향 게이트는 known-divergence로 미발화**다 — `alignment` 실 값역이 `[0,2]`(생성 인터뷰 1|2 + backfill 중립 sentinel 0)라 `<-100`·`>100` 두 분기가 모두 거짓이고, 현재 어떤 캐릭터도 성향으로 연마를 거부당하지 않는다. 오라클 임계값을 **재조정하지 않는다** — 보존해야 E6 성향 시스템([#123](https://github.com/smalljiny/muhan/issues/123))이 `-1000..+1000`을 도입할 때 코드 변경 없이 발화한다. 같은 성격의 미발화 게이트가 `combat/aggro.ts`·`combat/attackStats.ts`·`items/flags.ts`에도 있다([character-flags.md](character-flags.md)).
 
 study·teach가 읽는 PBLIND·PSILNC의 **영속 입력원은 `characterSchema.statusEffects`**이며, `composeCharacterFlags`가 세 투영을 OR해 소비측이 `F_ISSET`으로 읽는 16자 hex를 만든다([character-flags.md](character-flags.md)). `study` 배선(#120)이 그 합성값을 게이트에 주입한다(`teach`는 #119 대기).
 
@@ -61,7 +61,7 @@ study·teach가 읽는 PBLIND·PSILNC의 **영속 입력원은 `characterSchema.
 3. 해소된 쌍의 템플릿을 `study()`에 넘겨 게이트를 평가하고, 실패 갈래를 `Record<Failure, string>`으로 한국어 거부 메시지에 사상해 `error{rule_rejected}`로 답한다.
 4. 성공 시 라이브 엔트리를 `{ ...live, character }`로 교체하고, `markCharacterDirty` → `markObjectDeleted` 순서로 두 write를 마킹한 뒤(순서 계약은 [`save-policy.md`](save-policy.md)) `progress:studied`를 본인에게 1회 발화한다.
 
-정렬 게이트가 미발화이므로(위 divergence) 현재 라이브 경로에서 정렬로 연마가 거부되는 일은 없다.
+성향 게이트가 미발화이므로(위 divergence) 현재 라이브 경로에서 성향으로 연마가 거부되는 일은 없다.
 
 `teach(caster, target, spellNo)`는 PBLIND → PSILNC → base-class(`CARETAKER`/`MAGE`/`CLERIC`만 통과, `INVINCIBLE`·`SUB_DM`·`DM`은 불가) → 주문 존재(`spellByNo`) → 시전자 지식(`isKnown`) → `spllv` 전수등급 순서로 평가한다. `canTeachSpllv(casterClass, spllv)`는 등급별 최소 클래스를 판정한다: spllv 1(`CLERIC`↑)·2(`MAGE`↑)·3(`INVINCIBLE`↑)·4(`CARETAKER`↑)·5(`SUB_DM`↑). base-class 게이트가 `INVINCIBLE`·`SUB_DM`을 막으므로 spllv 5 주문은 실질 전수 불가한 quirk가 남는다(원작 충실). 통과 시 `setKnown(target.spells, spellNo)`한 새 store를 반환한다.
 
@@ -73,7 +73,7 @@ study·teach가 읽는 PBLIND·PSILNC의 **영속 입력원은 `characterSchema.
 
 ### G4 — 지속효과 타이머
 
-버프/디버프 만료는 `statusEffects.until`과 동일한 **절대-틱** 관례를 따른다. `isExpired(until, tick) = tick > until`(`spellDuration.ts`)이 `statusEffects.isActive(until>=now)`의 대우다 — 경계 `tick===until`은 아직 활성이다. `grantBuff(character, spellNo, until)`은 `character.buffs`에 `{ [spellNo]: { until } }`을 병합한 새 `Character`를 반환한다(재-grant는 덮어쓰기). `isBuffActive(character, spellNo, tick)`는 `combat/statusEffects.isActive`를 그대로 위임한다.
+버프/디버프 만료는 `statusEffects.until`과 동일한 **절대-틱** 관례를 따른다. `isExpired(until, tick) = tick > until`(`spellDuration.ts`)이 `statusEffects.isActive(until>=now)`의 부정이다 — 경계 `tick===until`은 아직 활성이다. `grantBuff(character, spellNo, until)`은 `character.buffs`에 `{ [spellNo]: { until } }`을 병합한 새 `Character`를 반환한다(재-grant는 덮어쓰기). `isBuffActive(character, spellNo, tick)`는 `combat/statusEffects.isActive`를 그대로 위임한다.
 
 `computeBuffDur(spellNo, input)`은 A6 §6 표준 공식 `MAX(300, 1200 + intBonus*600)`에 클래스 보너스(`classBonusClasses`면 `+60*trunc((level+3)/4)`)·RPMEXT 방 보너스(`+rpmext`, 표준 800/detect·fly 600)를 가산한다. `gated=false`(비-CAST)면 고정 1200(`NON_CAST_BUFF_DUR`)을 반환한다. `BUFF_DUR_META`에 등록된 표준 11주문(`SPROTE`·`SBLESS`·`SRFIRE`·`SRCOLD`·`SRMAGI`·`SBRWAT`·`SSSHLD`·`SKNOWA`·`SDINVI`·`SDMAGI`·`SFLYSP`) 밖의 spellNo는 throw한다. `computeSpecialBuffDur`은 표준 공식을 벗어나는 3주문을 별도 처리한다: `SINVIS`(`MAX(300,1200+B*600)`+MAGE 클래스보너스+rpmext 600, A6 §11-b MAX(300) 하한 복원)·`SLEVIT`(`MAX(300,2400+B*600)`+rpmext 800, 클래스보너스 없음)·`SLIGHT`(`300 + trunc((level+3)/4)*300 + (rpmext?600:0)`, A6 §11-a 연산자 우선순위 버그를 의도된 스케일 공식으로 복원, gated 무시).
 

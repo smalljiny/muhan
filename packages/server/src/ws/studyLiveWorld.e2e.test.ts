@@ -90,7 +90,7 @@ const CHAR_CLASS = 5
  *    거부 조건이므로 같으면 통과). ndice가 0이 아닌 후보를 고른 이유가 이것이다 — 0을 고르면 레벨
  *    게이트가 어떤 값에서도 통과해 관통 경로에서 사실상 사라진다. 정본 SCROLL의 ndice 값역은
  *    {0,16,20,28,32,36,39,40,43,48,52,60,70}이라 20이 저레벨 쪽 최소에 가깝다.
- *  - `flags === '0000000000000000'` — `OGOODO`·`OEVILO`(④ 정렬)·`OCLSEL`(⑤ 클래스) 미세팅이라 두
+ *  - `flags === '0000000000000000'` — `OGOODO`·`OEVILO`(④ 성향)·`OCLSEL`(⑤ 클래스) 미세팅이라 두
  *    게이트가 통과하고, `OINVIS` 미세팅이라 소지품 해소자의 가시성 게이트도 통과한다.
  *  - `magicpower === 13` → 주문번호 12(`혼동`)가 카탈로그 멤버라 ⑥ 주문 존재 게이트를 통과한다.
  *
@@ -107,7 +107,7 @@ const BOOK_INSTANCE_ID = 'study-e2e-book-1'
  * 두 번째 시드 비법서 objnum — 정본 `objects.json`의 `파초식서`(id 342). 재접속 회귀 케이스에서만 쓴다.
  *
  * 선정 기준은 `BOOK_OBJNUM`과 같다(SCROLL·`ndice === 20`으로 레벨 게이트 등호 통과·all-zero flags라
- * 정렬·클래스·가시성 게이트 미발화). **다른 주문번호를 담는 것**만 다르고, 그 차이가 회귀 단언을
+ * 성향·클래스·가시성 게이트 미발화). **다른 주문번호를 담는 것**만 다르고, 그 차이가 회귀 단언을
  * 성립시킨다 — 재접속 후 이 책을 연마하면 `progress:studied.spells`에 첫 세션에서 배운 12번 비트와
  * 방금 배운 30번 비트가 함께 실려야 한다. 같은 책을 다시 연마하면 두 경우가 구별되지 않는다
  * (`setKnown`이 멱등이라 되돌아간 상태에서도 같은 프레임이 나온다).
@@ -396,7 +396,7 @@ describe('학습 end-to-end (실 소켓 · 정본 템플릿 인덱스)', () => {
     // ⑥ 주문 존재 게이트 — magicpower-1이 카탈로그 멤버다.
     expect(BOOK_TEMPLATE?.magicpower).toBe(BOOK_SPELL_NO + 1)
     expect(spellByNo(BOOK_SPELL_NO)).toBeDefined()
-    // ④⑤ 정렬·클래스 게이트와 소지품 가시성 게이트가 모두 미발화하는 flags다.
+    // ④⑤ 성향·클래스 게이트와 소지품 가시성 게이트가 모두 미발화하는 flags다.
     const flags = BOOK_TEMPLATE?.flags ?? ''
     expect(F_ISSET(flags, OGOODO)).toBe(false)
     expect(F_ISSET(flags, OEVILO)).toBe(false)

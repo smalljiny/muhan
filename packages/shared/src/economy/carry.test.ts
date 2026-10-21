@@ -130,7 +130,7 @@ describe('런타임 weightOf SUT 골든 교차검증', () => {
   })
 
   it('버그 주입 변형(OWTLES 무시)에는 approve가 throw한다 (negative control)', () => {
-    // 버그: weightless 자식도 합산 → OWTLES discriminator 케이스에서 발산.
+    // 버그: weightless 자식도 합산 → OWTLES discriminator 케이스에서 결과가 달라진다.
     const buggy = (node: WeightNode): number =>
       node.weight + node.contents.reduce((s, c) => s + buggy(c), 0)
     expect(() => approve(loadCarryFixture(), buggy)).toThrow()

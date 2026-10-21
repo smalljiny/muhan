@@ -15,10 +15,10 @@ import { resolveHpMax, resolveMpMax, clampVital } from './maxResolvers.js'
  * - stats 튜플 인덱스 = **v-1**(enum STR=1..PTY=5 → StatIndex strength=0..piety=4). v=0은 무변화.
  * - index는 항상 짝수(newLevel%4==0 ⇒ newLevel 짝수)라 level_cycle 홀수 슬롯은 판독되지 않는다.
  *
- * ## 최대치·현재치 정책 (D3 재동기화 / D4 발산)
+ * ## 최대치·현재치 정책 (D3 재동기화 / D4 차이)
  * - 최대치는 %4 게이트 없이 **매 레벨 폐형 재동기화**한다(resolveHpMax/resolveMpMax of 새 레벨).
  * - hpCurrent/mpCurrent는 **올리지 않는다** — 새 최대치로 `clampVital` 클램프만 한다. 원본은
- *   %4==0에서 풀회복(hpcur=hpmax)했지만 신규는 재생이 격차를 메우는 발산을 의도한다(D4).
+ *   %4==0에서 풀회복(hpcur=hpmax)했지만 신규는 재생이 격차를 메우도록 의도적으로 다르게 둔다(D4).
  */
 
 /** CARETAKER 등 dice·PUPDMG 분기는 progression 소관이 아니라 무시한다(combat/prestige X2). */

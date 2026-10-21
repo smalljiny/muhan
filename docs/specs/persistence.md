@@ -49,7 +49,7 @@
 
 **V6 시딩은 조건부이며 가드가 `Number.isInteger`다.** v5에서 alignment가 선택이었으므로 v5 문서 일부는 이미 1|2 실값을 갖는다 — V5의 무조건 시딩(v4엔 spells가 존재할 수 없었다)과 달리 값 보유 문서를 `0`으로 클로버하면 안 된다. 가드로 `=== undefined`를 쓰면 **Mongo가 null로 저장한 값이 통과해** 곧바로 `z.int()` parse를 깨뜨리고(V2의 `raw.class`·V3의 `raw.level`이 이미 같은 관용을 쓴다), `typeof === 'number'`를 쓰면 손상 문서의 `NaN`이 보존돼 parse가 hard throw하면서 **그 캐릭터가 영구히 로드 불가**가 된다(자가 치유 없음). `Number.isInteger`는 null·undefined·NaN·소수를 모두 "값이 아님"으로 보고 재시딩한다. 값역 위반(예 `5`)은 시딩 대상이 아니라 parse 에러로 드러나야 하므로 이 가드는 범위를 보지 않는다.
 
-`characterRepository.parseCharacterDoc`이 소유하는 불변식은 하나다 — **backfill은 parse에 선행한다**. 스텝별 시딩 책임은 `characterBackfill.ts` 모듈 헤더가 정본이며 게이트 쪽에 재전사하지 않는다(버전이 오를 때마다 두 서사가 어긋난다).
+`characterRepository.parseCharacterDoc`이 소유하는 불변식은 하나다 — **backfill은 parse에 선행한다**. 스텝별 시딩 책임은 `characterBackfill.ts` 모듈 헤더가 정본이며 게이트 쪽에 재전사하지 않는다(버전이 오를 때마다 두 설명이 어긋난다).
 
 **`object.ts`** — `objectOwnerSchema`(discriminated union) + `objectSchema`:
 

@@ -4,7 +4,7 @@
 
 ## 개요
 
-무한의 모든 아이템은 `object` 구조체 하나(type 0~14)로 표현되며, 착용은 오라클의 `ready[20]` 슬롯 배열에 포인터를 꽂고 다층 게이트(직업·성별·정렬·크기·레벨)를 통과하는 방식이다. 이 계층은 그 규칙(무엇을)을 오라클(`command3.c`·`object.c`·`magic1.c`·`mtype.h`) 충실로 이식하되, 구현 방식(어떻게)은 순수 함수 + seam으로 재설계한다.
+무한의 모든 아이템은 `object` 구조체 하나(type 0~14)로 표현되며, 착용은 오라클의 `ready[20]` 슬롯 배열에 포인터를 꽂고 다층 게이트(직업·성별·성향·크기·레벨)를 통과하는 방식이다. 이 계층은 그 규칙(무엇을)을 오라클(`command3.c`·`object.c`·`magic1.c`·`mtype.h`) 충실로 이식하되, 구현 방식(어떻게)은 순수 함수 + seam으로 재설계한다.
 
 계층 경계는 **순수 로직 + 조회 인덱스 + seam**이다. object 물질화·인벤토리 로딩·룸 배치·WS 명령 파싱·DB write-back·실 인벤 이동/객체 파괴는 배선 유예(§제약사항)로 두고, 이 계층은 입력을 받아 새 값(불변)이나 판별 outcome을 반환하는 순수 함수만 제공한다. characterSchema·objectSchema는 무변경이며 schemaVersion bump가 없다.
 
@@ -15,7 +15,7 @@
 | 모듈 | 책임 |
 |------|------|
 | `taxonomy.ts` | object 타입 상수 0~14·`isWeapon(type)`·wearflag 슬롯 상수(BODY=1…WIELD=20, MAXWEAR=20)·**`WIELD_SLOT`(=WIELD−1, 0-based 19)**·`routeWearCommand`·`resolveSlot` |
-| `flags.ts` | object 플래그 비트 상수·게이트 predicate(성별·정렬·직업·크기·저주·결혼·귀속·enchant) + 종족/성별 상수 |
+| `flags.ts` | object 플래그 비트 상수·게이트 predicate(성별·성향·직업·크기·저주·결혼·귀속·enchant) + 종족/성별 상수 |
 | `objectTemplate.ts` | `buildObjectTemplateIndex(raw)` → `ReadonlyMap<objnum, ObjectTemplate>`·`loadObjectTemplates(worldRoot?)` 부팅 seam |
 | `objectPairing.ts` | `pairObject`·`pairObjects` — 인스턴스↔템플릿 결합(`EquippedPair` 생성의 단일 출처) |
 | `carriedTargetResolver.ts` | `resolveCarriedObject` — 소지품 스코프 이름·서수 대상 해소(오라클 `find_obj` 2단 스캔) |
@@ -44,7 +44,7 @@
 flags(hex string) 위에서 `world/hexFlags.js`의 `F_ISSET`으로 비트를 판정하는 순수 predicate substrate다. 게이트 순서·ARMOR type 검사·INVINCIBLE 전역 우회 조립은 소비자(`wear.ts`) 소관이며, 이 모듈은 predicate만 제공한다.
 
 - `genderAllowed(flags, gender)` — ONOFEM(여성 거부)·ONOMAL(남성 거부). 오라클 명명 역전 반영(gender 1=남/2=여).
-- `alignmentAllowed(flags, alignment)` — OGOODO+정렬<−50 거부, OEVILO+정렬>50 거부. **known-divergence로 미발화** — `alignment` 실 값역이 `[0,2]`(생성 인터뷰 1|2 + backfill 중립 sentinel 0)라 두 조건이 항상 거짓이고 정렬 착용 제한이 걸리지 않는다. 오라클 임계값을 현 값역에 맞춰 "고치면" 오라클 상수가 소실되므로 보존한다 — E6 성향 시스템([#123](https://github.com/smalljiny/muhan/issues/123))이 `-1000..+1000`을 도입하면 코드 변경 없이 발화한다([character-flags.md](character-flags.md)).
+- `alignmentAllowed(flags, alignment)` — OGOODO+성향<−50 거부, OEVILO+성향>50 거부. **known-divergence로 미발화** — `alignment` 실 값역이 `[0,2]`(생성 인터뷰 1|2 + backfill 중립 sentinel 0)라 두 조건이 항상 거짓이고 성향 착용 제한이 걸리지 않는다. 오라클 임계값을 현 값역에 맞춰 "고치면" 오라클 상수가 소실되므로 보존한다 — E6 성향 시스템([#123](https://github.com/smalljiny/muhan/issues/123))이 `-1000..+1000`을 도입하면 코드 변경 없이 발화한다([character-flags.md](character-flags.md)).
 - `sizeAllowed(flags, race)` — `i = OSIZE1?2:0 + OSIZE2?1:0`; 1=소형(GNOME/HOBBIT/DWARF)·2=중형(HUMAN/ELF/HALFELF/ORC)·3=대형(HALFGIANT)·0=무제한. INVINCIBLE 우회는 담지 않는다(호출자가 외부 래핑).
 - `classAllowed(flags, class)` — ONOMAG+(MAGE|CLERIC) 거부 + OCLSEL 게이트 융합. 게이트 순서상 ONOMAG·OCLSEL이 분리 검사되어야 하므로 착용 게이트는 이 융합 predicate를 쓰지 않고 아래 `oclselBlocks`를 쓴다.
 - `oclselBlocks(flags, class)` — OCLSEL 세트 + (OCLSEL+class) 비트 없음 + class<INVINCIBLE이면 거부(true). 세 게이트가 공유해 INVINCIBLE 우회를 단일 출처로 둔다.
@@ -52,11 +52,11 @@ flags(hex string) 위에서 `world/hexFlags.js`의 `F_ISSET`으로 비트를 판
 
 ### 착용 게이트 (`wear.ts`)
 
-세 게이트 모두 오라클 순서대로 첫 실패에서 즉시 판별 outcome을 반환하는 순수 함수다. E6 유예 필드(결혼 상태·수치 정렬·무기 숙련·ONEWEV 소유자 일치)는 명시 입력 인자(`WearActor`·`isBoundOwner`)로 받는다. outcome은 `equipped`(slot·equipped 설정된 새 인스턴스, 불변)·`rejected`·`burned`(밸런스 소각)·`bounced`(정렬 반발) 판별 유니온이다.
+세 게이트 모두 오라클 순서대로 첫 실패에서 즉시 판별 outcome을 반환하는 순수 함수다. E6 유예 필드(결혼 상태·수치 성향·무기 숙련·ONEWEV 소유자 일치)는 명시 입력 인자(`WearActor`·`isBoundOwner`)로 받는다. outcome은 `equipped`(slot·equipped 설정된 새 인스턴스, 불변)·`rejected`·`burned`(밸런스 소각)·`bounced`(성향 반발) 판별 유니온이다.
 
-- **`wearGate`(방어구, `command3.c` wear 52~194)**: 라우팅(WIELD/HELD/미착용 거부) → ①ONOMAG(type===ARMOR) → ②성별(type===ARMOR) → ③shots 소각(`>1001`, questnum==0) → ④레벨/AC(`check_ac`=armor×5·BODY armor×2; `>151 && questnum==0`→burned; `<30`→0; `class<INVINCIBLE && questnum==0 && !ONEWEV && level<check_ac`→rejected) → ⑤결혼(type===ARMOR) → ⑥슬롯 점유 → ⑦파손(shotscur<1) → ⑧정렬→bounced → ⑨OCLSEL → ⑩OSIZE. AC 소각은 `<30→0` 리셋 이전에 검사하며, ONEWEV은 레벨 거부만 면제하고 소각은 면제하지 않는다.
-- **`readyGate`(무기 장착 WIELD, `command3.c` ready 691~)**: ①WIELD 아님 거부 → ②마법사 무거운무기 제한(SHARP/THRUST + dice합>14 + questnum==0 + !ONEWEV + MAGE/CLERIC — 플래그 없는 dice 규칙) → ③성별(SHARP/THRUST 조건부) → ④WIELD 슬롯 점유 → ⑤OCLSEL → ⑥정렬→bounced → ⑦OSIZE → ⑧dice 소각(`>39`, questnum==0 && !ONEWEV) → ⑨shots 소각(`>600`, !ONEWEV만 — questnum 무관, ⑧과 비대칭) → ⑩ONSHAT+OALCRT 소각 → ⑪레벨(check_dmg=dice합; FIGHTER−7·ASSASSIN/THIEF−3·PALADIN/RANGER−2; `check_dmg>15 && !ONEWEV && level<check_dmg×3 && questnum==0`) → ⑫ONEWEV 귀속(isBoundOwner 불일치 거부).
-- **`holdGate`(쥠 HELD, `command3.c` hold 860~)**: ①HELD/WIELD 아님 거부 → ②이벤트템/임무템(OEVENT‖questnum>0) → ③귀속템/임무템(ONEWEV‖questnum>0) → ④HELD 슬롯 점유 → ⑤강력무기(dice합>100) → ⑥OCLSEL → ⑦정렬→bounced. 통과 시 type 무관하게 equipped=true + HELD 슬롯(16)을 무조건 설정한다(오라클 `type<ARMOR` 분기는 drop된 OWHELD 플래그 전용).
+- **`wearGate`(방어구, `command3.c` wear 52~194)**: 라우팅(WIELD/HELD/미착용 거부) → ①ONOMAG(type===ARMOR) → ②성별(type===ARMOR) → ③shots 소각(`>1001`, questnum==0) → ④레벨/AC(`check_ac`=armor×5·BODY armor×2; `>151 && questnum==0`→burned; `<30`→0; `class<INVINCIBLE && questnum==0 && !ONEWEV && level<check_ac`→rejected) → ⑤결혼(type===ARMOR) → ⑥슬롯 점유 → ⑦파손(shotscur<1) → ⑧성향→bounced → ⑨OCLSEL → ⑩OSIZE. AC 소각은 `<30→0` 리셋 이전에 검사하며, ONEWEV은 레벨 거부만 면제하고 소각은 면제하지 않는다.
+- **`readyGate`(무기 장착 WIELD, `command3.c` ready 691~)**: ①WIELD 아님 거부 → ②마법사 무거운무기 제한(SHARP/THRUST + dice합>14 + questnum==0 + !ONEWEV + MAGE/CLERIC — 플래그 없는 dice 규칙) → ③성별(SHARP/THRUST 조건부) → ④WIELD 슬롯 점유 → ⑤OCLSEL → ⑥성향→bounced → ⑦OSIZE → ⑧dice 소각(`>39`, questnum==0 && !ONEWEV) → ⑨shots 소각(`>600`, !ONEWEV만 — questnum 무관, ⑧과 비대칭) → ⑩ONSHAT+OALCRT 소각 → ⑪레벨(check_dmg=dice합; FIGHTER−7·ASSASSIN/THIEF−3·PALADIN/RANGER−2; `check_dmg>15 && !ONEWEV && level<check_dmg×3 && questnum==0`) → ⑫ONEWEV 귀속(isBoundOwner 불일치 거부).
+- **`holdGate`(쥠 HELD, `command3.c` hold 860~)**: ①HELD/WIELD 아님 거부 → ②이벤트템/임무템(OEVENT‖questnum>0) → ③귀속템/임무템(ONEWEV‖questnum>0) → ④HELD 슬롯 점유 → ⑤강력무기(dice합>100) → ⑥OCLSEL → ⑦성향→bounced. 통과 시 type 무관하게 equipped=true + HELD 슬롯(16)을 무조건 설정한다(오라클 `type<ARMOR` 분기는 drop된 OWHELD 플래그 전용).
 
 저주(OCURSE)는 세 착용 게이트가 검사하지 않는다 — 오라클에서 저주는 탈착(remove) 시점에 작용한다. `isCursed` predicate는 탈착 enforcement substrate로만 제공되고 그 배선은 유예된다.
 
@@ -102,7 +102,7 @@ flags(hex string) 위에서 `world/hexFlags.js`의 `F_ISSET`으로 비트를 판
 - **스키마 무변경**: characterSchema·objectSchema 무변경, schemaVersion bump 없음. 슬롯(`slot`)·`equipped`는 objectSchema 기존 필드를 사용하고, 인챈트·소각·착용상태 per-instance 영속 필드는 인스턴스화 토픽 소관이다.
 - **배선 유예(Non-goal)** — #120이 일부를 해소했다. **배선됨**: 인벤토리 로딩(세션 진입 시 적재), 템플릿 인덱스 부팅 조립, 소지품 이름 해소, `progress:study`의 객체 파괴(write-behind 삭제). **여전히 유예**: object 물질화·룸 배치, 착용/소비 WS 명령("입다"/"무장"/"마시다"/"벗다") 파싱·라우팅, 착용 outcome(equipped/burned/bounced)의 실 인벤 이동, 소비 shotscur 감소(effect 성공 결합), 탈착(remove) 시점 저주 enforcement, rand_enchant per-instance 적용·저장. 비-삭제 인벤 변경의 write-back 경로는 아직 없다.
 - **재구현 금지 경계**: stats-core는 소비만(computeAc/computeThaco 재구현 금지), magic은 seam 호출만(spell effect 본체 재구현 금지 — magic #84 소유), enchant는 rng 주입(Math.random 직접 호출 금지).
-- **E6 유예 필드 → 명시 입력**: 결혼 상태·수치 정렬·무기 숙련(proficiency[5])·ONEWEV 소유자 일치는 순수 함수의 명시 입력 인자로 받고, Character→입력 어댑터 배선은 유예한다.
+- **E6 유예 필드 → 명시 입력**: 결혼 상태·수치 성향·무기 숙련(proficiency[5])·ONEWEV 소유자 일치는 순수 함수의 명시 입력 인자로 받고, Character→입력 어댑터 배선은 유예한다.
 - **경제·은행 범위 밖**: 금화·상점·전당포·수리·소지한도는 [economy.md](economy.md), 은행 물품 보관은 [bank-items.md](bank-items.md)에서 이식(#87). 거래(trade 물물교환)는 유예.
 
 ## 관련 문서

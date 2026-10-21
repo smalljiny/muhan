@@ -10,7 +10,7 @@ import { neededExp, resolveHpMax, resolveMpMax, type Character } from 'shared'
  *   2. 부활·회복 — 몬스터 피살은 hp/mp 풀회복, 독/질병 해제, reviveRoom 이동.
  * class·level·race·stats·gold 등 정체성 필드는 불변이다.
  *
- * ## ★ 플랜 D7 의도된 발산 — down_level 미호출, 레벨 유지
+ * ## ★ 플랜 D7 의도된 차이 — down_level 미호출, 레벨 유지
  * 오라클은 사망 시 `down_level`을 호출해 레벨을 강등하지만(creature.c: `while(level>n) down_level`),
  * 본 이식은 A7 §11 근거로 **레벨을 유지**한다. `level` 필드는 절대 변경하지 않고, 깎인 exp가 현재
  * 레벨 임계 아래로 내려가면 하한 `expFloor(level)`로 되끌어올려 레벨 정합을 흉내낸다. 결과적으로

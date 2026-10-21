@@ -50,7 +50,7 @@ export const clientCommandSchema = z.discriminatedUnion('type', [
   }),
   // 자유채팅 — 채널로 발화 대상 범위를 지목한다. text는 발화 내용. id는 상관 키.
   // text는 freeTextPayloadSchema를 spread하지 않고 직접 선언한다 — 채널 전파 대상이라 CHAT_TEXT_MAX
-  // 상한을 둬야 하는데, spread한 building block의 text는 상한이 없다(debug:echo는 fan-out이 아니라 무상한 유지).
+  // 상한을 둬야 하는데, spread한 building block의 text는 상한이 없다(debug:echo는 fan-out이 아니라 상한 없이 유지).
   z.strictObject({
     type: z.literal('chat:message'),
     channel: z.enum(['say', 'yell', 'broadcast']),

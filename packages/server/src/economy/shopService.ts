@@ -293,7 +293,7 @@ export interface RepairItem {
  *   2. gold -= cost(선차감) 후 broke = rng(1,100) + bonusOf(piety).
  *   3. 실패 = (broke ≤ 15 && shotscur < 1) || (broke ≤ 5 && shotscur > 0)
  *        → gold += cost(환불, net 0) + 아이템 파괴(item=null). 성공보다 굴림을 1회만 소비한다.
- *   4. 성공 = shotscur' = trunc(shotsmax * rng(5,9) / 10). 곱 위에서 절삭한다(hpMax류 그룹핑 트랩:
+ *   4. 성공 = shotscur' = trunc(shotsmax * rng(5,9) / 10). 곱한 뒤 버린다(hpMax류 그룹핑 트랩:
  *        `shotsmax * trunc(rng/10)`이 아니다). goldAfter = gold − cost.
  *
  * RNG 순서: broke(1,100)를 먼저 굴리고, 성공일 때만 durability(5,9)를 굴린다 — 실패는 굴림 1회,
@@ -334,7 +334,7 @@ export function repair(
     return { goldAfter: char.gold, broke, broken: true, item: null }
   }
 
-  // 성공: shotsmax * rng(5,9)를 먼저 곱한 뒤 10으로 나눠 절삭한다(곱 위에서 절삭).
+  // 성공: shotsmax * rng(5,9)를 먼저 곱한 뒤 10으로 나눠 버린다(곱한 뒤 버림).
   const durability = Math.trunc((item.shotsmax * ctx.rng(5, 9)) / 10)
   return {
     goldAfter: char.gold - cost,

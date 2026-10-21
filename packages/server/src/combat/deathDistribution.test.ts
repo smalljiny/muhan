@@ -117,7 +117,7 @@ describe('distributeCreatureDeath', () => {
       expect(result.awards).toEqual([{ playerId: 'p1', exp: 1000, alignmentDelta: 0 }])
     })
 
-    it('정수 절삭(Math.trunc)으로 exp를 계산한다', () => {
+    it('정수 버림(Math.trunc)으로 exp를 계산한다', () => {
       const dead = makeDead({ experience: 1000, hpmax: 300, alignment: 0, enemies: ['p1'] })
       // trunc(1000*100/300) = trunc(333.33) = 333.
       const ledger = ledgerOf([['p1', 100]])
@@ -213,11 +213,11 @@ describe('distributeCreatureDeath', () => {
       expect(result.awards.map((a) => a.alignmentDelta)).toEqual([-100, -100])
     })
 
-    it('음수 alignment는 Math.trunc(0 방향 절삭)로 계산한다(Math.floor 아님)', () => {
+    it('음수 alignment는 Math.trunc(0 방향 버림)로 계산한다(Math.floor 아님)', () => {
       const dead = makeDead({ experience: 1000, hpmax: 100, alignment: -13, enemies: ['p1'] })
       const ledger = ledgerOf([['p1', 40]])
       const result = distributeCreatureDeath(dead, makeRoom(), ledger, {})
-      // -trunc(-13/5) = -trunc(-2.6) = -(-2) = 2. (floor면 -(-3)=3으로 발산.) exp = trunc(1000*40/100)=400.
+      // -trunc(-13/5) = -trunc(-2.6) = -(-2) = 2. (floor면 -(-3)=3으로 달라진다.) exp = trunc(1000*40/100)=400.
       expect(result.awards).toEqual([{ playerId: 'p1', exp: 400, alignmentDelta: 2 }])
     })
 

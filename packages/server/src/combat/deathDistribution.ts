@@ -12,8 +12,8 @@ import { F_ISSET, MTRADE } from '../world/hexFlags.js'
  *
  * ── 오라클 분배 루프(B 블록, creature.c:287~311) ─────────────────────────────
  * 기여자(적 리스트 멤버 && 데미지>0)마다:
- *   expdiv   = crt->experience * ep->damage / MAX(hpmax, 1)     (정수 절삭)
- *   expgroup = 그룹킬 ? expdiv + experience/10 : expdiv         (정수 절삭)
+ *   expdiv   = crt->experience * ep->damage / MAX(hpmax, 1)     (정수 버림)
+ *   expgroup = 그룹킬 ? expdiv + experience/10 : expdiv         (정수 버림)
  *   expgroup = MIN(expgroup, experience)                        (몬스터 exp 캡)
  *   ply->experience += expgroup
  *   ply->alignment  -= crt->alignment/5                         (★ 루프 내부 — 기여자마다)
@@ -29,10 +29,10 @@ import { F_ISSET, MTRADE } from '../world/hexFlags.js'
  *     "살해자"는 오라클과 충돌하므로 오라클(behavioral truth, CLAUDE.md 포팅 원칙)로 이식한다.
  *     (b) **기여자 축 divergence(오라클 대비 축소)**: 오라클 루프 게이트는 `find_who(ep->enemy)`
  *     (플레이어 present/해소 여부, 데미지 무관)라, present인 0-데미지 적(빗나간 오프너가 resolveAttack
- *     전 registerEnemy로 등록한 경우 등)도 exp(절삭 0)·alignment 페널티·groupkill 카운트를 받는다.
+ *     전 registerEnemy로 등록한 경우 등)도 exp(버림 후 0)·alignment 페널티·groupkill 카운트를 받는다.
  *     이 포트는 기여자를 `damage > 0`으로 좁혀(#3) 그런 적을 셋 다에서 제외한다 — awards·groupkill·
  *     alignment가 present 축이 아닌 damage 축으로 게이팅된다. 여기서 "exp 0 기여자"는 damage>0이나
- *     절삭 0인 경우만 가리키며, 진짜 0-데미지 present 적은 제외된다. 라이브 조립(#99)이 기여자 축을
+ *     버림 후 0인 경우만 가리키며, 진짜 0-데미지 present 적은 제외된다. 라이브 조립(#99)이 기여자 축을
  *     present 기준으로 재검토할지 결정한다(이 resolver는 반환만). alignment 클램프 ±1000도 #99 소유
  *     (delta만 반환, 무클램프).
  *  5. levels 루프 미이식: 오라클 A 블록(creature.c:278~285, `levels`·첫 `expdiv=exp/levels`)은
@@ -68,7 +68,7 @@ export interface DeathAward {
   readonly playerId: string
   /** 획득 경험치(MIN(expgroup, 몬스터 exp) 캡 적용). */
   readonly exp: number
-  /** 정렬 변동 delta(-trunc(dead.alignment/5)). 누적·클램프는 #99. */
+  /** 성향 변동 delta(-trunc(dead.alignment/5)). 누적·클램프는 #99. */
   readonly alignmentDelta: number
 }
 

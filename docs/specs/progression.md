@@ -85,7 +85,7 @@ WorldClock `register`에 `intervalSec:5` 슬롯 1개(`createRegenSlot`). 정상 
 - `mpCurrent += MAX(4, 5 + (int>17 ? 1 : 0) + (class===도술사(5) ? 2 : 0))`
 - 각각 `resolveHpMax`/`resolveMpMax`로 클램프. con=stats[2], int=stats[3].
 
-`RHEALR`(회복실, 비트 13) 방은 정상 재생 후 hp/mp 각 **+100 진폭** 적용 후 최종 클램프(순서: 정상재생 → RHEALR +100 → 클램프 1회). 슬롯은 활성 플레이어를 순회하며 라이브 char를 carve-out으로 in-place 갱신하고 distinct 스냅샷을 markDirty로 흘린다(dirtyTracker 계약). provider는 주입 seam이며 기본값은 빈 iterable(dormant) — 라이브 플레이어 집합의 실 소스는 #82 combatRegistry + 유예된 lifecycle wiring이다.
+`RHEALR`(회복실, 비트 13) 방은 정상 재생 후 hp/mp 각 **+100 가산** 적용 후 최종 클램프(순서: 정상재생 → RHEALR +100 → 클램프 1회). 슬롯은 활성 플레이어를 순회하며 라이브 char를 carve-out으로 in-place 갱신하고 distinct 스냅샷을 markDirty로 흘린다(dirtyTracker 계약). provider는 주입 seam이며 기본값은 빈 iterable(dormant) — 라이브 플레이어 집합의 실 소스는 #82 combatRegistry + 유예된 lifecycle wiring이다.
 
 ### PvE 사망 페널티
 
@@ -105,11 +105,11 @@ WorldClock `register`에 `intervalSec:5` 슬롯 1개(`createRegenSlot`). 정상 
 ## 제약사항
 
 - **HP/MP 최대치 미저장** — 저장하지 않고 compute-on-read. 최대치 재계산 goal은 on-read 계산으로 재해석한다(D2).
-- **RHEALR `interval/=3` 케이던스 가속 미구현** — 진폭(+100)만 재현. WorldClock 슬롯의 `intervalSec`는 정수·전 플레이어 공유 상수라 방별 서브-5초 케이던스를 표현할 수 없다. per-player/per-room 스케줄러 도입 후속 토픽으로 이월.
+- **RHEALR `interval/=3` 케이던스 가속 미구현** — 가산(+100)만 재현. WorldClock 슬롯의 `intervalSec`는 정수·전 플레이어 공유 상수라 방별 서브-5초 케이던스를 표현할 수 없다. per-player/per-room 스케줄러 도입 후속 토픽으로 이월.
 - **오라클 상태 guard 미구현** — 재생의 `RPHARM`/질병/독(`!ill && !PPOISN`), 연마의 `PBLIND`/`PUPDMG`, 사망의 독/질병 해제(`PPOISN`/`PDISEA`)는 characterSchema에 상태 플래그 필드가 없어 통째 생략한다(DoT는 #83 소관). 상태 플래그가 스키마에 붙는 후속 토픽에서 함께 이식한다.
-- **오라클 대비 의도된 발산**: 정상 레벨업 `hpCurrent` 미상승(원본 `%4` 풀회복 비재현, 재생이 채움); 사망 시 `down_level` 미호출·레벨 유지(오라클은 down_level 호출, A7 §11 재해석); 무적 리셋이 `level=1`에서 종료(원본 fall-through +1 비재현).
+- **오라클 대비 의도된 차이**: 정상 레벨업 `hpCurrent` 미상승(원본 `%4` 풀회복 비재현, 재생이 채움); 사망 시 `down_level` 미호출·레벨 유지(오라클은 down_level 호출, A7 §11 재해석); 무적 리셋이 `level=1`에서 종료(원본 fall-through +1 비재현).
 - **regen·death는 여전히 미배선** — train은 `progress:train`으로 라이브 배선됐으나, regen provider는 dormant고(`createRegenSlot` 부트 미등록) death seam도 미발화다. cross-topic 접합면 X1(death seam 발화·배선)·X2(level 변경 후 라이브 투영 refresh·초인 4d4+4 주사위)·X3(hpCurrent/mpCurrent 이중 홈 sync)은 #82 combat-resolve 표면 확정(rebase) 시점의 조정점으로 남긴다.
-- **write-path 조정 — gold가 write-behind에 진입했다** — train·regen은 full Character 스냅샷을 markDirty한다. dirtyTracker가 키당 full 스냅샷 last-write-wins 교체라, bank 직접 write·#82 이중 홈 같은 out-of-band DB write를 이후 flush가 무성 revert할 수 있다(특히 regen은 반복 writer). train 배선으로 **연마 비용 차감이 write-behind로 흐르기 시작**했으므로 이제 한쪽은 무장된 상태다 — 충돌 상대인 은행 직접 write가 dormant라 아직 도달 불가하며, 은행 명령 배선은 #43 해소까지 blocking이다([`save-policy.md`](save-policy.md) §제약사항).
+- **write-path 조정 — gold가 write-behind에 진입했다** — train·regen은 full Character 스냅샷을 markDirty한다. dirtyTracker가 키당 full 스냅샷 last-write-wins 교체라, bank 직접 write·#82 이중 홈 같은 out-of-band DB write를 이후 flush가 무성 revert할 수 있다(특히 regen은 반복 writer). train 배선으로 **연마 비용 차감이 write-behind로 흐르기 시작**했으므로 이제 한쪽 경로는 활성화된 상태다 — 충돌 상대인 은행 직접 write가 dormant라 아직 도달 불가하며, 은행 명령 배선은 #43 해소까지 blocking이다([`save-policy.md`](save-policy.md) §제약사항).
 - **재접속 re-hydrate revert** — link-dead 후 재접속이 DB를 다시 읽어 아직 flush되지 않은 진행도(레벨·gold)를 무성 revert할 수 있다(pre-existing, [#124](https://github.com/smalljiny/muhan/issues/124)).
 - **범위 밖**: DoT(독/질병)·PvP 사망 특수·사망 exp 분배(→#83), gold 소싱(→#87), 마법 데미지(→#84/#85), 직업전환(`chg_class_main`), 전투 데미지(→#82).
 

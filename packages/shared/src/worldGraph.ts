@@ -125,7 +125,7 @@ export type CreatureInstance = {
   intelligence: number
   piety: number
   /**
-   * 사망 분배 읽기 필드(콘텐츠, 불변) — Story 7 사망 처리가 킬 경험치 분배·정렬(alignment) 변동에
+   * 사망 분배 읽기 필드(콘텐츠, 불변) — Story 7 사망 처리가 킬 경험치 분배·성향(alignment) 변동에
    * 읽는다. armor/thaco/realm 선례처럼 소스 JSON(creatures.json / rooms.json `monsters[]`, port
    * templates.js CRT 오프셋 experience=344·alignment=324)에 이미 존재하며 물질화 시점에 옮긴다 —
    * embedded 몬스터는 `templateId=null`이라 재조회가 불가능하기 때문이다.
@@ -136,7 +136,7 @@ export type CreatureInstance = {
    * 부호 있는 정수 가능 — alignment는 선/악 축이라 음수 유효).
    *
    *   - `experience`: 몬스터 처치 시 분배할 경험치(정본 값, read-only).
-   *   - `alignment`: 정렬 값(선/악 축). 처치 시 플레이어 alignment 변동 판정 입력.
+   *   - `alignment`: 성향 값(선/악 축). 처치 시 플레이어 alignment 변동 판정 입력.
    */
   experience?: number
   alignment?: number

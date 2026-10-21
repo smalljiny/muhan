@@ -29,7 +29,7 @@ export const ATTACK_COOLDOWN_INTERVAL = 1
 export const ATTACK_COOLDOWN_BLIND = 6
 
 // ── 클래스 인덱스 상수(tables.ts:97-98, global.c class_stats 순서) ─────────────
-// 플레이어 피해 분기·PALADIN 정렬 보정(command5.c:244-278)과 spell_fail 클래스별 chance(magic8.c:791-897)가
+// 플레이어 피해 분기·PALADIN 성향 보정(command5.c:244-278)과 spell_fail 클래스별 chance(magic8.c:791-897)가
 // 소비한다. 여기가 클래스 인덱스의 단일 출처다 — spell_fail이 8클래스를 전부 참조하므로 전투에서 아직
 // 안 쓰던 ASSASSIN/FIGHTER/RANGER/THIEF도 여기에 모아 매직 넘버 재출현을 막는다.
 /** 암살자 — spell_fail chance `(L4+B)*5+30`(magic8.c). */
@@ -42,7 +42,7 @@ export const CLERIC = 3
 export const FIGHTER = 4
 /** 마법사 — CLERIC과 함께 피해 override(command5.c:254), spell_fail `(L4+B)*5+75`. */
 export const MAGE = 5
-/** 성기사 — 정렬(alignment) 기반 피해 보정(command5.c:266), spell_fail `(L4+B)*5+50`. */
+/** 성기사 — 성향(alignment) 기반 피해 보정(command5.c:266), spell_fail `(L4+B)*5+50`. */
 export const PALADIN = 6
 /** 레인저 — spell_fail chance `(L4+B)*4+56`(magic8.c, 유일한 *4 배수). */
 export const RANGER = 7

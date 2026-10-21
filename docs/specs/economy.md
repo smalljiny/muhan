@@ -56,7 +56,7 @@ MONEY 오브젝트(objnum 0 "동전", type 10)의 이동을 gold↔디스크립�
 | `sellPrice(value)` | `min(trunc(value/2), 100000)`(50% 환급, 10만 상한) | `command7.c:258` |
 | `repairCost(value)` | `trunc(value/4)`(정가 25%) | `command8.c:249` |
 
-정수 나눗셈은 `Math.trunc`(0 방향 절삭)로 C 정수 나눗셈 의미를 명시한다(`value` 비음수라 `Math.floor`와 결과 동일). 입력 검증은 두지 않는다 — 소비자가 검증된 `object.value`를 넘긴다.
+정수 나눗셈은 `Math.trunc`(0 방향 버림)로 C 정수 나눗셈 의미를 명시한다(`value` 비음수라 `Math.floor`와 결과 동일). 입력 검증은 두지 않는다 — 소비자가 검증된 `object.value`를 넘긴다.
 
 ### 상점 구매 (buy, RSHOPP)
 
@@ -97,7 +97,7 @@ MONEY 오브젝트(objnum 0 "동전", type 10)의 이동을 gold↔디스크립�
 1. `cost = repairCost(value)`(= `trunc(value/4)`). `gold < cost` → `insufficient-gold`.
 2. `gold −= cost`(선차감) 후 `broke = rng(1,100) + bonusOf(piety)`([`stats-core.md`](stats-core.md) `bonusOf` 소비).
 3. **실패** = `(broke ≤ 15 && shotscur < 1) || (broke ≤ 5 && shotscur > 0)` → `gold += cost`(환불) + 아이템 파괴.
-4. **성공** = `shotscur' = trunc(shotsmax * rng(5,9) / 10)`(곱 위에서 절삭). `goldAfter = gold − cost`.
+4. **성공** = `shotscur' = trunc(shotsmax * rng(5,9) / 10)`(곱한 뒤 버림). `goldAfter = gold − cost`.
 
 RNG 순서: `broke(1,100)`를 먼저 굴리고, **성공일 때만** `durability(5,9)`를 굴린다 — 실패는 굴림 1회, 성공은 2회다.
 
@@ -110,7 +110,7 @@ RNG 순서: `broke(1,100)`를 먼저 굴리고, **성공일 때만** `durability
   - 개수: `invCount > limit`이면 `false`(strict `>`). limit는 `buy` 200, `get`/`give`/`purchase` 150.
   - 무게: `weightCarried + weightOf(node) > maxWeight(context)`이면 `false`. `maxWeight`는 [`stats-core.md`](stats-core.md) `stats/derived`가 정본이다 — `20 + str*10 + barbarian` 공식을 재유도하지 않는다.
 
-**OWTLES 재귀 규칙(결정적 함정)**: OWTLES 자식은 자기 무게도 내용물도 합산에서 제외된다(서브트리 전체 skip). 반면 무게를 재는 **최상위 노드 자신의 무게는 항상 계산된다** — OWTLES 플래그는 오직 부모의 순회에서만 소비되기 때문이다. `owner`/`template` 해결(플래그를 어디서 읽는지)은 이 모듈 밖(#106)이며, 소비자가 순수 `WeightNode` 트리로 구조를 넘긴다.
+**OWTLES 재귀 규칙(핵심 함정)**: OWTLES 자식은 자기 무게도 내용물도 합산에서 제외된다(서브트리 전체 skip). 반면 무게를 재는 **최상위 노드 자신의 무게는 항상 계산된다** — OWTLES 플래그는 오직 부모의 순회에서만 소비되기 때문이다. `owner`/`template` 해결(플래그를 어디서 읽는지)은 이 모듈 밖(#106)이며, 소비자가 순수 `WeightNode` 트리로 구조를 넘긴다.
 
 ## 제약사항
 

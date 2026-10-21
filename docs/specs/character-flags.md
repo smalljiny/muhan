@@ -137,12 +137,12 @@ toPlayerCombatState(character, effectiveContext, weaponDamage, flags: string): P
 
 | 위치 | 게이트 | 오라클 임계값 | `[0,2]`에서의 결과 |
 |---|---|---|---|
-| `magic/learning.ts` | study OGOODO/OEVILO | `< -100` / `> 100` | 두 분기 모두 거짓 — 정렬로 연마를 거부당하는 캐릭터 없음 |
+| `magic/learning.ts` | study OGOODO/OEVILO | `< -100` / `> 100` | 두 분기 모두 거짓 — 성향으로 연마를 거부당하는 캐릭터 없음 |
 | `combat/aggro.ts` | MGAGGR/MEAGGR 선공 | `< 100` / `> -100` | 두 조건 모두 참 → early-return — 해당 몹이 아무도 선공하지 않음 |
-| `combat/attackStats.ts` | PALADIN 정렬 보정 | `< 0` / `> 250` | 두 분기 모두 거짓 — 항상 `n` 반환 |
-| `items/flags.ts` | `alignmentAllowed` 착용 | `< -50` / `> 50` | 두 조건 모두 거짓 — 정렬 착용 제한 미발화 |
+| `combat/attackStats.ts` | PALADIN 성향 보정 | `< 0` / `> 250` | 두 분기 모두 거짓 — 항상 `n` 반환 |
+| `items/flags.ts` | `alignmentAllowed` 착용 | `< -50` / `> 50` | 두 조건 모두 거짓 — 성향 착용 제한 미발화 |
 
-**임계값을 현 값역에 맞춰 재조정하지 않는다.** 오라클 상수를 보존하면 E6가 `-1000..+1000`을 도입할 때 **코드 변경 없이** 네 게이트가 동시에 발화한다. "고치면" 오라클 상수가 소실되고 E6에서 값 재해석이 필요해진다. 이를 "정렬 게이트 수정"으로 보고하지 않는다.
+**임계값을 현 값역에 맞춰 재조정하지 않는다.** 오라클 상수를 보존하면 E6가 `-1000..+1000`을 도입할 때 **코드 변경 없이** 네 게이트가 동시에 발화한다. "고치면" 오라클 상수가 소실되고 E6에서 값 재해석이 필요해진다. 이를 "성향 게이트 수정"으로 보고하지 않는다.
 
 ### 미영속 6종이 만드는 구조적 미발화 (#121 관측)
 
@@ -175,7 +175,7 @@ toPlayerCombatState(character, effectiveContext, weaponDamage, flags: string): P
 ## 관련 문서
 
 - [persistence.md](persistence.md) — `characterSchema` 필드 표, v6 backfill 체인
-- [combat.md](combat.md) — `toPlayerCombatState`, 명중 임계 PFEARS/PBLIND, PALADIN 정렬 보정
+- [combat.md](combat.md) — `toPlayerCombatState`, 명중 임계 PFEARS/PBLIND, PALADIN 성향 보정
 - [magic-progression.md](magic-progression.md) — study·teach 게이트, `statusEffects` 헬퍼
 - [items-equipment.md](items-equipment.md) — `alignmentAllowed` 착용 게이트
 - [save-policy.md](save-policy.md) — `STATUS_EFFECT_COPIERS` 스냅샷 복사

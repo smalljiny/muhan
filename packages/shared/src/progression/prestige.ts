@@ -19,7 +19,7 @@ import { resolveHpMax, resolveMpMax } from './maxResolvers.js'
  * - **가족/소셜(edit_member PFAMIL)·broadcast(I/O)**: progression 무관, skip.
  *
  * ## vitals 정책 (D4 예외 — 풀회복)
- * 레벨업(levelUp.resync)은 현재치를 새 최대치로 클램프만 하지만(D4 발산), 승급은 D4의 명시적
+ * 레벨업(levelUp.resync)은 현재치를 새 최대치로 클램프만 하지만(D4 차이), 승급은 D4의 명시적
  * 예외로 **풀회복**한다 — 새 캐릭터 형태(class·level 전이 후)의 `resolveHpMax`/`resolveMpMax`를
  * 현재치에 그대로 대입한다(clamp 아님).
  */

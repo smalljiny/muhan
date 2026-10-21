@@ -662,7 +662,7 @@
         <ul class="s-list">
           <li><strong>#61 E12 패널</strong> — 전투·스탯 이벤트가 계약에 들어와 <strong>게이트 열림</strong></li>
           <li>#122 cast — <strong>선행 해제</strong> (체인 종단) · #119 teach — 선행 0</li>
-          <li>부채 #129(가시성 필터)가 <strong>실제로 열렸습니다</strong> · 신규 #147</li>
+          <li>부채 #129(가시성 필터)의 위험이 <strong>실제로 드러났습니다</strong> · 신규 #147</li>
         </ul>
       </div>
     </div>
@@ -1082,8 +1082,8 @@
       <div class="debt-card">
         <div class="debt-top"><span class="sev high">열림</span><span class="debt-title">world:room 수신자 인지 가시성 필터 부재</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/129">#129</a></div>
-        <div class="debt-body"><code>projectRoomView</code>가 <strong>관찰자를 인자로 받지 않아</strong> 오라클 <code>room.c</code>의 두 게이트(점유자 은신·투명 필터 / 광원·실명 게이트)를 구현하지 않습니다. 위험은 누락이 <strong>테스트 실패가 아니라 과다 노출로 나타나</strong> 회귀 테스트가 잡지 못한다는 점입니다. <strong>08-20 #121 배선으로 예고대로 열렸습니다</strong> — 보안 리뷰가 두 번째 누출 지점을 특정했습니다: <code>combat:attack</code>의 대상 지목 2단계가 크리처 실패 시 플레이어로 폴백해 <code>player-target</code>/<code>not-found</code>로 <strong>다른 오류를 반환</strong>하므로, 이름을 추측하면 방 목록에 안 뜨는 캐릭터의 존재를 검출할 수 있습니다. 아직 <code>PHIDDN</code>·<code>PINVIS</code>의 라이브 쓰기 경로가 없어 실입력은 도달 불가하나, <strong>#129가 <code>roomView</code>만 고치고 <code>resolveRoomPlayer</code>를 함께 고치지 않으면 "표시는 숨겼는데 공격 오류로는 새는" 회귀가 조용히 생깁니다</strong>.</div>
-        <div class="debt-gate">▸ #121이 열었음 · <code>roomView</code>와 <code>resolveRoomPlayer</code>를 <strong>함께</strong> 고칠 것 · CP2</div>
+        <div class="debt-body"><code>projectRoomView</code>가 <strong>관찰자를 인자로 받지 않아</strong> 오라클 <code>room.c</code>의 두 게이트(점유자 은신·투명 필터 / 광원·실명 게이트)를 구현하지 않습니다. 위험은 누락이 <strong>테스트 실패가 아니라 과다 노출로 나타나</strong> 회귀 테스트가 잡지 못한다는 점입니다. <strong>08-20 #121 배선으로 예고했던 위험이 현실이 됐습니다</strong> — 보안 리뷰가 두 번째 누출 지점을 특정했습니다: <code>combat:attack</code>의 대상 지목 2단계가 크리처 실패 시 플레이어로 폴백해 <code>player-target</code>/<code>not-found</code>로 <strong>다른 오류를 반환</strong>하므로, 이름을 추측하면 방 목록에 안 뜨는 캐릭터의 존재를 검출할 수 있습니다. 아직 <code>PHIDDN</code>·<code>PINVIS</code>의 라이브 쓰기 경로가 없어 실입력은 도달 불가하나, <strong>#129가 <code>roomView</code>만 고치고 <code>resolveRoomPlayer</code>를 함께 고치지 않으면 "표시는 숨겼는데 공격 오류로는 새는" 회귀가 조용히 생깁니다</strong>.</div>
+        <div class="debt-gate">▸ #121로 현실화 · <code>roomView</code>와 <code>resolveRoomPlayer</code>를 <strong>함께</strong> 고칠 것 · CP2</div>
       </div>
       <div class="debt-card">
         <div class="debt-top"><span class="sev">신규</span><span class="debt-title">비사망 크리처 소멸 seam 부재 — 원장 미회수</span>
@@ -1094,13 +1094,13 @@
       <div class="debt-card">
         <div class="debt-top"><span class="sev">정리 ×5</span><span class="debt-title">E11 파생 클라이언트·계약 정리</span>
           <span class="debt-num"><a href="https://github.com/smalljiny/muhan/issues/130">#130</a>·<a href="https://github.com/smalljiny/muhan/issues/131">#131</a>·<a href="https://github.com/smalljiny/muhan/issues/132">#132</a>·<a href="https://github.com/smalljiny/muhan/issues/133">#133</a>·<a href="https://github.com/smalljiny/muhan/issues/134">#134</a></span></div>
-        <div class="debt-body">PR #128이 완료 기준으로 <code>tryMove.ts</code>·<code>EventLog.tsx</code> 미변경을 못박아 범위 밖으로 밀린 항목들입니다. <strong>#130</strong> <code>lastError</code> 해제 경로가 없어 이동 거부 배너가 성공 후에도 잔존 · <strong>#131</strong> EventLog 무상한 누적 + 렌더당 전량 <code>JSON.stringify</code>(방 스냅샷이 최대·최빈 페이로드가 됨) · <strong>#132</strong> <code>Omit&lt;Extract&lt;…&gt;&gt;</code> 수기 표현 3곳 → <code>ServerEventPayload&lt;T&gt;</code> 승격 · <strong>#133</strong> <code>plugin.ts</code> seam 비대칭 · <strong>#134</strong> 표시/통행 비대칭 근거 주석 부재(<code>isVisible</code>이 자기 범위를 과대 표현 — <strong>고치면 오라클 동작이 조용히 깨짐</strong>).</div>
+        <div class="debt-body">PR #128이 완료 기준으로 <code>tryMove.ts</code>·<code>EventLog.tsx</code> 미변경을 못박아 범위 밖으로 밀린 항목들입니다. <strong>#130</strong> <code>lastError</code> 해제 경로가 없어 이동 거부 배너가 성공 후에도 잔존 · <strong>#131</strong> EventLog 상한 없는 누적 + 렌더당 전량 <code>JSON.stringify</code>(방 스냅샷이 최대·최빈 페이로드가 됨) · <strong>#132</strong> <code>Omit&lt;Extract&lt;…&gt;&gt;</code> 수기 표현 3곳 → <code>ServerEventPayload&lt;T&gt;</code> 승격 · <strong>#133</strong> <code>plugin.ts</code> seam 비대칭 · <strong>#134</strong> 표시/통행 비대칭 근거 주석 부재(<code>isVisible</code>이 자기 범위를 과대 표현 — <strong>고치면 오라클 동작이 조용히 깨짐</strong>).</div>
         <div class="debt-gate">▸ 게이트 없음 · #130·#131은 CP1 UX에 직접 노출</div>
       </div>
       <div class="debt-card high">
         <div class="debt-top"><span class="sev high">계약</span><span class="debt-title">은행 트랜잭션 ↔ SaveEngine write-behind</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/43">#43</a></div>
-        <div class="debt-body"><code>BankTransactionService</code>는 gold를 Mongo 트랜잭션으로 직접 쓰고 <code>SaveEngine</code>은 같은 컬렉션을 write-behind로 씁니다. 공유 per-key 조정점이 없어 커밋 이후 도착한 stale flush가 <code>$set</code>으로 트랜잭션 결과를 덮습니다. <strong>현재는 도달 불가</strong>(gold를 dirty로 흘리는 은행 caller 0건)이나 <code>train</code> 배선으로 한쪽이 무장됐습니다.</div>
+        <div class="debt-body"><code>BankTransactionService</code>는 gold를 Mongo 트랜잭션으로 직접 쓰고 <code>SaveEngine</code>은 같은 컬렉션을 write-behind로 씁니다. 공유 per-key 조정점이 없어 커밋 이후 도착한 stale flush가 <code>$set</code>으로 트랜잭션 결과를 덮습니다. <strong>현재는 도달 불가</strong>(gold를 dirty로 흘리는 은행 caller 0건)이나 <code>train</code> 배선으로 한쪽 경로가 이미 활성화됐습니다.</div>
         <div class="debt-gate">▸ blocking: 해소 전 은행 명령 배선 금지 · CP2</div>
       </div>
       <div class="debt-card">
@@ -1151,7 +1151,7 @@
       <div class="next-card">
         <div class="next-n">03</div>
         <div class="next-t">#130 · #131을 CP1에 얹기</div>
-        <div class="next-d">E11 파생 6건 중 이 둘만 <strong>사용자에게 직접 보이는 결함</strong>입니다 — 잠긴 문을 한 번 누르면 에러 배너가 이후 이동 성공에도 계속 남고(#130), 이동할수록 방 스냅샷이 무상한 누적돼 매 렌더 전량 재직렬화됩니다(#131). 첫 릴리스에 사람을 초대하는 관문이라면 이 둘은 CP1 UX의 일부로 보는 게 맞습니다. 나머지 셋(#132·#133·#134)과 서수 divergence(#137)는 기록만 정확하면 급하지 않습니다.</div>
+        <div class="next-d">E11 파생 6건 중 이 둘만 <strong>사용자에게 직접 보이는 결함</strong>입니다 — 잠긴 문을 한 번 누르면 에러 배너가 이후 이동 성공에도 계속 남고(#130), 이동할수록 방 스냅샷이 상한 없이 누적돼 매 렌더 전량 재직렬화됩니다(#131). 첫 릴리스에 사람을 초대하는 관문이라면 이 둘은 CP1 UX의 일부로 보는 게 맞습니다. 나머지 셋(#132·#133·#134)과 서수 divergence(#137)는 기록만 정확하면 급하지 않습니다.</div>
       </div>
     </div>
   </section>

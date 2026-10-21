@@ -55,7 +55,7 @@ function makeCase(input: RealmGrowthInput, note?: string): GoldenFixture<RealmGr
 /**
  * 케이스를 조립한다:
  *   - 기본 성장(정수 배당).
- *   - trunc 절삭(분수 배당).
+ *   - trunc 버림(분수 배당).
  *   - exp 캡(m>hpmax 방어 케이스).
  *   - hpmax=0 → MAX(1,hpmax) 0분모 가드.
  *   - exp=0 몬스터 → 성장 0.

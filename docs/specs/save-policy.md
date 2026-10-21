@@ -11,7 +11,7 @@
 | 경로 | 대상 | 메커니즘 | 손실 모델 |
 |------|------|----------|----------|
 | **write-behind(주기)** | 고빈도 연속 상태 — 캐릭터 진행·재생·위치, 방 문·리스폰 타임스탬프 | `markDirty` → 주기 flush → 비동기 upsert | 크래시 시 최대 flush 간격만큼 손실(수용) |
-| **동기 즉시** | 치명 이벤트(레벨업·로그아웃), **돈(은행·금화)** | `saveNow`(await) / `BankTransactionService`(트랜잭션) | 손실 없음 |
+| **동기 즉시** | 중요 이벤트(레벨업·로그아웃), **돈(은행·금화)** | `saveNow`(await) / `BankTransactionService`(트랜잭션) | 손실 없음 |
 
 **메커니즘만** 제공한다 — 게임플레이 호출처(레벨업·거래·로그아웃에서의 `markDirty`/`saveNow` 호출)는 후속 에픽 범위이며, 각 컴포넌트는 테스트로 격리 구동한다(§제약사항).
 
@@ -117,7 +117,7 @@ bounded 큐 + 비동기 워커가 Mongo write를 게임 틱과 분리해 drain�
 
 ### 이벤트 즉시 저장 (SaveEngine.saveNow)
 
-`saveNow(collection, id, snapshot, reason)`는 주기 버퍼를 우회해 즉시 repository write를 수행하고 **await**한다(fire-and-forget 금지 — 반환 시점에 문서가 실제 갱신됨). 레벨업·로그아웃 등 재구성 불가·치명 이벤트용.
+`saveNow(collection, id, snapshot, reason)`는 주기 버퍼를 우회해 즉시 repository write를 수행하고 **await**한다(fire-and-forget 금지 — 반환 시점에 문서가 실제 갱신됨). 레벨업·로그아웃 등 재구성 불가·중요 이벤트용.
 
 - **id 가드** — `id`가 비어 있지 않은 문자열인지 검증한다(`assertSaveId`). id가 Mongo `_id` 필터에 실리므로 객체 유입 시 연산자 주입(`{$ne:...}`)을 진입점에서 차단한다.
 - **evict-before-write(2계층)** — write 직전에 `DirtyTracker.evict`(아직 flush 안 된 stale mark 제거, registry·inProgress 양쪽)와 `AsyncWriteQueue.evict`(이미 flush돼 pending/in-flight인 stale write 취소·완료 대기)를 모두 수행한다. 두 계층 evict로 stale 스냅샷이 즉시 저장을 나중에 덮어쓰는 write-loss를 봉쇄한다.
@@ -165,7 +165,7 @@ bounded 큐 + 비동기 워커가 Mongo write를 게임 틱과 분리해 drain�
 ## 제약사항
 
 - **세이브 호출처는 일부만 배선됨** — 라이브 이동·연마·세션 종료가 `markCharacterDirty`를 경유해 실제로 dirty를 마킹한다. 나머지(거래·전투 등 E6 잔여)의 `markDirty`/`saveNow` 호출은 각 배선 토픽 소관이다.
-- **은행 명령 배선은 #43 해소까지 blocking** — `BankTransactionService`는 gold를 트랜잭션으로 직접 쓰고, `SaveEngine`은 같은 컬렉션을 write-behind로 쓴다. 두 경로 사이에 공유 per-key 조정점이 없어, gold 엔티티를 두 경로로 흘리면 트랜잭션 커밋 후 도착한 stale flush가 결과를 되돌릴 수 있다. **`progress:train` 배선으로 gold가 write-behind 경로에 진입했다**(연마 비용 차감이 전체 문서 스냅샷에 실린다) — 즉 한쪽은 이미 무장됐다. 충돌 상대인 은행 직접 write는 아직 dormant라(`clientCommandSchema`에 은행 명령 없음, `BankTransactionService` non-test caller 0건) 충돌은 현재 도달 불가하다. 따라서 계약을 고정한다: **#43을 해소하기 전에는 은행 명령을 배선하지 않는다.** 해소 방향은 (a) 트랜잭션 전후 두 키를 SaveEngine에서 evict/quiesce 후 재-mark하거나 (b) gold 변이를 write-behind 밖에 두어 단일 authoritative 경로로 유지하는 것이다([smalljiny/muhan#43](https://github.com/smalljiny/muhan/issues/43), 코드 계약은 `bankTransactionService.ts` 도크스트링).
+- **은행 명령 배선은 #43 해소까지 blocking** — `BankTransactionService`는 gold를 트랜잭션으로 직접 쓰고, `SaveEngine`은 같은 컬렉션을 write-behind로 쓴다. 두 경로 사이에 공유 per-key 조정점이 없어, gold 엔티티를 두 경로로 흘리면 트랜잭션 커밋 후 도착한 stale flush가 결과를 되돌릴 수 있다. **`progress:train` 배선으로 gold가 write-behind 경로에 진입했다**(연마 비용 차감이 전체 문서 스냅샷에 실린다) — 즉 한쪽 경로는 이미 활성화됐다. 충돌 상대인 은행 직접 write는 아직 dormant라(`clientCommandSchema`에 은행 명령 없음, `BankTransactionService` non-test caller 0건) 충돌은 현재 도달 불가하다. 따라서 계약을 고정한다: **#43을 해소하기 전에는 은행 명령을 배선하지 않는다.** 해소 방향은 (a) 트랜잭션 전후 두 키를 SaveEngine에서 evict/quiesce 후 재-mark하거나 (b) gold 변이를 write-behind 밖에 두어 단일 authoritative 경로로 유지하는 것이다([smalljiny/muhan#43](https://github.com/smalljiny/muhan/issues/43), 코드 계약은 `bankTransactionService.ts` 도크스트링).
 - **재접속 pending revert는 `characters`에 한해 해소됐다(#124)** — hydrate가 `peekPending('characters', id)`를 DB 문서 위에 overlay한다. 보장 문장은 "pending이 `DirtyTracker`에 살아 있는 동안 hydrate가 그것을 채택한다"이고, 수명 계약이 그 "살아 있는 동안"을 정의한다. **`objectDeletions`는 합성하지 않는다** — 재접속 시 삭제 마킹된 비법서가 인벤에 유령으로 남는다. 현재 무해하지만(재연마 시 `setKnown`·`markObjectDeleted` 모두 멱등해 수렴, 줍기·버리기·건네주기 경로 0건) #119(teach)·#121(attack)이 건네주기·전리품 경로를 열면 재평가가 필요하다.
 - **write 영구 실패 스냅샷은 복구하지 않는다** — permanent 실패·재시도 소진 시 `discard`로 버린다. 그 키의 이후 `peekPending`은 `undefined`가 되어 hydrate가 저장소 값으로 떨어진다(진행도 손실). 복구하려면 WAL급 영속 큐가 필요해 write-behind 손실 모델(아래 Durable WAL 없음)이 이미 수용한 범위다. 실패는 logger로 관측된다.
 - **`character.gold` 상한 미부과** — 은행 gold는 3억 상한(불변식 6)이지만 출금 크레딧은 `character.gold`에 상한을 두지 않는다. 원작 오라클의 소지 gold 상한 여부를 재확인 후 확정되면 이 seam에 대칭 가드를 추가한다(persistence.md §제약사항 미결 연동).
