@@ -6,7 +6,7 @@ import { oracleMprofic } from './mproficFixture.js'
 export { writeFixtureFile }
 
 /**
- * offensive_spell 골든 옮겨 적기-diff fixture 생성기 — manual oracle.
+ * offensive_spell 골든 옮겨 적기-diff fixture 생성기 — manual 오라클.
  *
  * 원본 `magic1.c:820-1170`의 공격 주문 데미지 파이프(bns·방상성·마법저항·오버킬 캡·사망)를 **독립
  * 리터럴**로 옮겨 적어(옮겨 적기 pass 2) 자기완결 시나리오 케이스로 감싼다. SUT `offensiveSpell`(server/magic)은

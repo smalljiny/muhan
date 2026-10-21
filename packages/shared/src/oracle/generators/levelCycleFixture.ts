@@ -6,7 +6,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * level_cycle(레벨업 능력치 성장 분포) 골든 fixture 생성기 — manual oracle의 독립 참조 구현.
+ * level_cycle(레벨업 능력치 성장 분포) 골든 fixture 생성기 — manual 오라클의 독립 참조 구현.
  *
  * 원본 `global.c:78`(level_cycle) + `player.c:770`(up_level 성장 게이트)의 동작을 참조 구현
  * (`referenceLevelCycleGains`)으로 옮기고, 클래스 1-9의 "레벨 1→40 upLevel 반복 누적 성장

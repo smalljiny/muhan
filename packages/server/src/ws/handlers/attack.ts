@@ -38,7 +38,7 @@ import { makeErrorEvent } from '../serverEvent.js'
  * `resolveCharacterName`은 방 뷰 변환과 플레이어 해석이 **같은 인스턴스**를 공유해야 한다
  * (liveWorldWiring 불변식 #3). `now`는 현재 절대 틱 seam으로 `worldClock.currentTick()` 도메인이며,
  * 쿨다운 상수 단위(초)와 1Hz 틱이 일치한다. `rng`는 굴림 seam으로 프로덕션 연결이 `defaultCombatRng`를
- * 꽂는다(전투 모듈은 순수 함수로 남는다). `ledgers`는 크리처별 데미지 원장 라우터로, 사망 seam에 준 것과
+ * 꽂는다(전투 모듈은 순수 함수로 남는다). `ledgers`는 몬스터별 데미지 원장 라우터로, 사망 seam에 준 것과
  * **같은 인스턴스**여야 보상이 0이 되지 않는다. `markCharacterDirty`는 write-behind 영속화 seam이다.
  */
 export interface AttackHandlerDeps extends DeathSeams {
@@ -71,7 +71,7 @@ const REJECT_MESSAGES: Record<'cooldown' | 'player-target' | 'not-found', string
   cooldown: '아직 공격할 준비가 되지 않았습니다',
   // PvP 범위 밖(D5) — 사람이 지목되면 `checkPvpGate`에 닿기 전에 여기서 끊는다.
   'player-target': '아직 사람은 공격할 수 없습니다',
-  // 크리처·플레이어 2단 탐색이 모두 빈손일 때(오라클 command5.c:71,76 순서).
+  // 몬스터·플레이어 2단 탐색이 모두 빈손일 때(오라클 command5.c:71,76 순서).
   'not-found': '그런 것이 여기에 없습니다',
 }
 
@@ -110,7 +110,7 @@ function toWireAttack(descriptor: AttackDescriptor): WireAttack {
  * `initiateAttack`은 대상이 죽으면 그 안에서 사망 seam을 실행하고, 그 seam은 기여자 경험치를 올린
  * **새 `LiveCharacter`를 `liveRegistry.register`한다**(`ws/assembleDeathSeams.ts` 헤더 경고). 따라서
  * 공격 시작 시점에 읽어 둔 `live` 참조로 hp·mp를 되쓰면 방금 오른 경험치가 조용히 사라진다 —
- * 예외도 로그도 없이 "몹을 잡았는데 경험치가 안 오른다"로만 드러난다. 되쓰기 직전에 레지스트리를
+ * 예외도 로그도 없이 "몬스터를 잡았는데 경험치가 안 오른다"로만 드러난다. 되쓰기 직전에 레지스트리를
  * 다시 읽어 그 최신 문서에 hp·mp만 얹고, `character:stats`도 **그 문서에서** 변환한다.
  *
  * ## 사람 대상은 PvP 게이트에 닿기 전에 거부한다 (D5)
@@ -170,7 +170,7 @@ export function createAttackHandler(deps: AttackHandlerDeps): CommandHandler {
       return makeErrorEvent('rule_rejected', REJECT_MESSAGES.cooldown, command.id)
     }
 
-    // (7) 대상 지목 2단 — 크리처 **먼저**, 못 찾으면 플레이어(오라클 command5.c:71,76 순서).
+    // (7) 대상 지목 2단 — 몬스터 **먼저**, 못 찾으면 플레이어(오라클 command5.c:71,76 순서).
     //     `ordinal` 미지정은 리졸버 기본값 1로 떨어진다(와이어 스키마가 하한 1을 강제).
     const creature = deps.resolveRoomCreature(room, command.target, flags, command.ordinal)
     if (creature === undefined) {
@@ -194,7 +194,7 @@ export function createAttackHandler(deps: AttackHandlerDeps): CommandHandler {
     const base = F_ISSET(flags, PBLIND) ? ATTACK_COOLDOWN_BLIND : ATTACK_COOLDOWN_INTERVAL
     state.nextAttackAt = now + base
 
-    // (10) 공격 판정 일체를 오프너에 위임한다. 원장은 이 크리처 전용이어야 한다 — 단일 원장을 쓰면
+    // (10) 공격 판정 일체를 오프너에 위임한다. 원장은 이 몬스터 전용이어야 한다 — 단일 원장을 쓰면
     //     다른 몬스터에 준 데미지가 합산돼 사망 보상이 부풀려진다(creatureLedgers.ts 헤더).
     const result = initiateAttack(toCombatant(state), toCombatant(creature), {
       rng: deps.rng,
@@ -250,7 +250,7 @@ export function createAttackHandler(deps: AttackHandlerDeps): CommandHandler {
       // 사망 seam이 이미 방 creatures[]에서 제거한 뒤라, 이 변환에는 죽은 개체가 없다(D14).
       //
       // ⚠ 이 방 뷰는 **공격자 소켓에만** 간다(핸들러 반환은 요청 소켓으로 나간다). 같은 방의 다른
-      // 점유자는 통지를 받지 못해 죽은 크리처를 계속 목록에 두고 지목할 수 있다. 방 스코프 전파는
+      // 점유자는 통지를 받지 못해 죽은 몬스터를 계속 목록에 두고 지목할 수 있다. 방 스코프 전파는
       // 스펙 §5가 **#116**(방송 seam 연결)으로 보류한 범위다 — 이 핸들러의 누락이 아니라 아직
       // 연결되지 않은 방송 경로다. #116이 붙는 시점에 이 이벤트 발생도 방 전파로 함께 올린다.
       events.push({ type: 'world:room', ...projectRoomView(room, deps.resolveCharacterName) })

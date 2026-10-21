@@ -119,7 +119,7 @@ export class CharacterRepository implements IRepository<Character> {
   }
 
   /**
-   * 캐릭터 인벤토리 뷰 — object.owner={type:'character', id}를 역참조해 소유 오브젝트를 파생한다.
+   * 캐릭터 인벤토리 뷰 — object.owner={type:'character', id}를 역참조해 소유 아이템을 파생한다.
    * 캐릭터 문서에 권한 배열을 두지 않는 단일 소유권 모델의 조회 경로다.
    */
   async hydrateInventory(characterId: string): Promise<ObjectInstance[]> {

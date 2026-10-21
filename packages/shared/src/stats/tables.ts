@@ -1,11 +1,11 @@
 /**
  * stats/tables — 무한 전투·경제·레벨링의 정적 룩업 테이블 단일 물리 출처.
  *
- * 원본 C 전역 상수(`global.c`·`player.c`)를 32비트 oracle에서 옮겨 적은 4종 테이블과,
+ * 원본 C 전역 상수(`global.c`·`player.c`)를 32비트 오라클에서 옮겨 적은 4종 테이블과,
  * clamp 내장 접근자를 제공한다. 순수 데이터 모듈이며 런타임 I/O import(`node:fs` 등)를
  * 절대 포함하지 않는다 — 서버·클라이언트 어느 쪽에서도 안전하게 import된다.
  *
- * ## oracle 출처
+ * ## 오라클 출처
  * - `bonus[64]`   — `player.c` 전역 (능력치→보너스). compute_ac 등이 재사용.
  * - `class_stats` — `global.c:37` (클래스별 HP/MP 성장·타격 주사위).
  * - `thaco_list`  — `global.c:105` (클래스×레벨 THAC0).

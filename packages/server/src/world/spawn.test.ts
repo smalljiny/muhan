@@ -271,7 +271,7 @@ describe('createInstanceIdAllocator — D7 방별 monotonic idx', () => {
 })
 
 describe('loadSpawnTemplates — data/world/creatures.json', () => {
-  it('creatures.json을 몹번호 인덱스로 로드하고 numwander를 담는다', () => {
+  it('creatures.json을 몬스터 번호 인덱스로 로드하고 numwander를 담는다', () => {
     const templates = loadSpawnTemplates()
     const c25 = templates.get(25)
     expect(c25).toBeDefined()

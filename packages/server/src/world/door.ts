@@ -3,7 +3,7 @@ import type { ExitEdge } from 'shared'
 /**
  * 문·열쇠 상태머신 — 출구 플래그 조합으로 open/close/lock/unlock 전이를 구현하는 순수 로직.
  *
- * oracle `docs/notes/game-analysis-20260625/a4-movement-rooms.md` §2·§3 이식:
+ * 오라클 `docs/notes/game-analysis-20260625/a4-movement-rooms.md` §2·§3 이식:
  *   문은 별도 엔티티가 아니라 출구의 플래그 조합이다. 상태 2비트(XCLOSD·XLOCKD)와
  *   능력 3비트(XCLOSS·XLOCKS·XUNPCK)로 상태머신을 이룬다(command6.c:365–722).
  *
@@ -16,11 +16,11 @@ import type { ExitEdge } from 'shared'
  *   전이 함수는 문 상태(flags+ltime)만 변경하고, `now`(현재 실초)는 인자 주입 seam이다.
  *
  * 이 파일은 문 상태머신과 함께 **출구 플래그 어휘 전체 + `number[]` 비트 헬퍼**를 담당한다
- * (크리처·오브젝트·플레이어 비트 어휘가 hexFlags.ts에 모인 것과 대칭). 따라서 전이 함수가 읽지
+ * (몬스터·아이템·플레이어 비트 어휘가 hexFlags.ts에 모인 것과 대칭). 따라서 전이 함수가 읽지
  * 않는 표시 전용 비트(XSECRT·XINVIS)도 여기 산다 — 소비자는 roomView·tryMove 등 다른 모듈이다.
  */
 
-// ── 출구 플래그 비트 상수 (oracle a4 §2, 오라클 검증 완료) ────────────────────
+// ── 출구 플래그 비트 상수 (오라클 a4 §2, 오라클 검증 완료) ────────────────────
 // 상태 2비트 + 능력 3비트 + 표시·통행 가시성 비트. XSECRT·XINVIS는 표시 전용(roomView가 소비),
 // XNOSEE는 표시+통행 양쪽 게이트(§2, tryMove도 읽는다).
 /** 비밀 출구(표시 전용) — F_ISSET bit 0. 방 표시 목록에서 제외되나 통행은 가능하다. */
@@ -40,20 +40,20 @@ export const XUNPCK = 6
 /** 못 봄/못 씀(가시성+통행) — F_ISSET bit 19. */
 export const XNOSEE = 19
 
-/** KEY 오브젝트 타입 값(oracle a8 §items). 열쇠는 obj.type===KEY로 식별. */
+/** KEY 아이템 타입 값(오라클 a8 §items). 열쇠는 obj.type===KEY로 식별. */
 export const KEY = 11
 
 /**
- * 열쇠 오브젝트의 door 로컬 최소 shape.
+ * 열쇠 아이템의 door 로컬 최소 shape.
  *
- * 실 인벤토리/오브젝트 연결은 후속 토픽 담당이므로 shared ObjectInstance를 import하지 않고
+ * 실 인벤토리/아이템 연결은 후속 토픽 담당이므로 shared ObjectInstance를 import하지 않고
  * (shotscur는 인스턴스·ndice는 템플릿이라 실 조회 seam이 아직 없음) 매칭·소모에 필요한
  * 최소 필드만 로컬 타입으로 둔다. 여기선 문 상태머신의 매칭 규칙만 다룬다.
  */
 export type KeyLike = {
-  /** 오브젝트 타입. KEY(11)여야 열쇠로 인정된다. */
+  /** 아이템 타입. KEY(11)여야 열쇠로 인정된다. */
   type: number
-  /** 주사위 수 필드를 열쇠 ID로 전용(oracle §3). exit.key와 숫자로 대조한다. */
+  /** 주사위 수 필드를 열쇠 ID로 전용(오라클 §3). exit.key와 숫자로 대조한다. */
   ndice: number
   /** 잔여 사용 횟수. unlock 성공 시 1 감소한다(0이면 부서짐 — 그 처리는 호출자 seam). */
   shotscur: number
@@ -97,7 +97,7 @@ export function clearFlag(flags: number[], bit: number): void {
 /**
  * 열쇠가 출구에 맞는지 판정한다 — 이름이 아니라 숫자 매칭.
  *
- * oracle §3: `obj->type == KEY && obj->ndice == exit->key`(command6.c:512,598).
+ * 오라클 §3: `obj->type == KEY && obj->ndice == exit->key`(command6.c:512,598).
  * shotscur 소모는 여기서 하지 않고 unlock 전이가 담당한다(순수 predicate 유지).
  */
 export function keyMatch(obj: KeyLike, exit: ExitEdge): boolean {
@@ -109,7 +109,7 @@ export function keyMatch(obj: KeyLike, exit: ExitEdge): boolean {
 /**
  * 문 열기. `XLOCKD`(잠김)면 거부, 아니면 `XCLOSD` 해제 + `ltime` 리셋 후 true.
  *
- * oracle §3: openexit는 XLOCKD면 거부, XCLOSD 해제, ltime.ltime=now(타이머 리셋).
+ * 오라클 §3: openexit는 XLOCKD면 거부, XCLOSD 해제, ltime.ltime=now(타이머 리셋).
  * 거부 경로는 부수효과 없이 false만 반환한다.
  */
 export function openexit(exit: ExitEdge, now: number): boolean {
@@ -122,7 +122,7 @@ export function openexit(exit: ExitEdge, now: number): boolean {
 /**
  * 문 닫기. `XCLOSS`(닫을 수 있음) 능력이 없으면 거부, 있으면 `XCLOSD` 설정 후 true.
  *
- * oracle §3: closeexit는 XCLOSS 능력 필요, XCLOSD 설정. 타이머는 리셋하지 않는다.
+ * 오라클 §3: closeexit는 XCLOSS 능력 필요, XCLOSD 설정. 타이머는 리셋하지 않는다.
  */
 export function closeexit(exit: ExitEdge): boolean {
   if (!hasFlag(exit.flags, XCLOSS)) return false
@@ -134,7 +134,7 @@ export function closeexit(exit: ExitEdge): boolean {
  * 문 잠그기. `XLOCKS`(잠글 수 있음) + `XCLOSD`(먼저 닫힘) + 열쇠 일치 전부 충족 시
  * `XLOCKD` 설정 후 true, 아니면 false.
  *
- * oracle §3: lock은 XLOCKS + XCLOSD + 열쇠 → XLOCKD 설정. 타이머 리셋 없음
+ * 오라클 §3: lock은 XLOCKS + XCLOSD + 열쇠 → XLOCKD 설정. 타이머 리셋 없음
  * (openexit/unlock만 리셋). 거부 경로는 부수효과 없이 false만 반환한다.
  */
 export function lock(exit: ExitEdge, key: KeyLike): boolean {
@@ -149,7 +149,7 @@ export function lock(exit: ExitEdge, key: KeyLike): boolean {
  * 문 열쇠로 잠금 해제. `XLOCKD`(잠김) + 열쇠 일치 시 `XLOCKD` 해제 + `key.shotscur` 감소
  * + `ltime` 리셋 후 true, 아니면 false.
  *
- * oracle §3: unlock은 XLOCKD + 열쇠 → XLOCKD 해제, 열쇠 shotscur--, 타이머 리셋.
+ * 오라클 §3: unlock은 XLOCKD + 열쇠 → XLOCKD 해제, 열쇠 shotscur--, 타이머 리셋.
  * 거부 경로는 부수효과 없이 false만 반환한다. 열쇠 0 소진 시 파괴 처리는 호출자 seam.
  */
 export function unlock(exit: ExitEdge, key: KeyLike, now: number): boolean {

@@ -24,7 +24,7 @@ export type HandshakeResult =
  * - pre-ready + system:ready + 버전 정확 일치 → accept: `ctx.ready`를 true로 전이시켜야 한다는 신호.
  * - pre-ready + system:ready + 버전 불일치 → reload: system:reload push 후 소켓 close 신호.
  *
- * 버전 대조는 서버 권위 정확 비교(`client === ctx.protocolVersion`)다. 누락·문자열·소수 등 어떤
+ * 버전 대조는 서버 기준 정확 비교(`client === ctx.protocolVersion`)다. 누락·문자열·소수 등 어떤
  * 불일치도 reload 경로로 보낸다(clientCommandSchema 전체 파싱은 Story 6 라우터의 몫).
  */
 export function handleHandshakeFrame(ctx: ConnectionContext, parsed: unknown): HandshakeResult {
@@ -55,7 +55,7 @@ export function handleHandshakeFrame(ctx: ConnectionContext, parsed: unknown): H
     }
   }
 
-  // 서버 권위 정확 비교(강제 변환 없음). 누락·문자열·소수 등 어떤 불일치도 reload로 보낸다.
+  // 서버 기준 정확 비교(강제 변환 없음). 누락·문자열·소수 등 어떤 불일치도 reload로 보낸다.
   // 의도적 설계: 핸드셰이크는 type+버전만 게이트하고 `clientCommandSchema` strict 파싱을 돌리지 않는다.
   // 계약 밖 여분 필드가 실려도 ready로 전이하나, ready 이후 모든 프레임은 셸이 세션 상태로 라우팅해
   // clientCommandSchema로 strict 검증하므로(command 상태면 라우터 dispatch, 그 이전 상태면 세션 FSM decider)

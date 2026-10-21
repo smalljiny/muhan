@@ -16,7 +16,7 @@ import {
 /**
  * createCombatTick — deps를 클로저 바인딩해 몬스터 근접 + 적 플레이어 반격을 실행하는 OnCombatTick
  * 핸들러를 만드는 팩토리(오라클 update.c §1·§3, 반격 command5.c). creatureTick 슬롯이 §3.5 게이트를
- * 통과시킨 크리처마다 이 핸들러를 호출한다.
+ * 통과시킨 몬스터마다 이 핸들러를 호출한다.
  *
  * 라운드 모델: 몬스터가 첫 present 적을 근접(또는 MMAGIC 주문으로 대체)하고, 그 몬스터의 적 리스트에
  * 오른 present 플레이어들이 각자 LT_ATTCK 쿨다운(nextAttackAt) 게이트를 통과할 때만 자동 반격한다.
@@ -63,7 +63,7 @@ export interface CombatTickDeps {
   readonly registry: Pick<CombatRegistry, 'get'>
   /** 데미지 원장 — resolveAttack ctx가 누적(deps 주입 단일 인스턴스). */
   readonly ledger: DamageLedger
-  /** 크리처 사망 seam — resolveAttack이 (dead, room, now)로 실행. */
+  /** 몬스터 사망 seam — resolveAttack이 (dead, room, now)로 실행. */
   readonly fireCreatureDeath: (dead: CreatureInstance, room: RoomNode, now: number) => void
   /** 플레이어 사망 seam — resolveAttack이 (dead, room, now)로 실행. */
   readonly firePlayerDeath: (dead: PlayerCombatState, room: RoomNode, now: number) => void
@@ -92,7 +92,7 @@ export function createCombatTick(deps: CombatTickDeps): OnCombatTick {
     // 계층으로 보류돼(D2/#99, deathDistribution) creatureTick이 HP 가드 없이 재디스패치할 수 있으므로,
     // 근접·counter 진입 전 차단한다(resolveAttack DEAD_DEFENDER_NOOP 선례). 없으면 counter의 NOOP 뒤
     // `creature.hpcur<1` 관찰이 fireCreatureDeath를 재실행해 exactly-once를 깨고 정당한 target death까지
-    // 취소한다. 오라클도 die()가 크리처를 즉시 제거해 재행동이 구조적으로 불가능하다.
+    // 취소한다. 오라클도 die()가 몬스터를 즉시 제거해 재행동이 구조적으로 불가능하다.
     if (creature.hpcur < 1) return
 
     const now = deps.now()

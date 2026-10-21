@@ -3,7 +3,7 @@ import type { PlayerCombatState } from '../combat/playerState.js'
 import { F_ISSET } from '../world/hexFlags.js'
 
 /**
- * Caster — 몹(CreatureInstance)·플레이어(PlayerCombatState) 공유 시전 추상.
+ * Caster — 몬스터(CreatureInstance)·플레이어(PlayerCombatState) 공유 시전 추상.
  *
  * ## 계약 경계 (#84·#85·#86 공유 — 정확히 6필드, 그 이상 노출 금지)
  * 이 6필드로 시전 게이트·spell_fail·데미지 bns가 완결된다. 계약은 다음을 **포함하지 않는다**:
@@ -18,7 +18,7 @@ export interface Caster {
   mpCurrent: number
   /** 레벨 — spell_fail L4·mprofic 입력(읽기). */
   readonly level: number
-  /** realm별 숙련(길이 4, 읽기) — 플레이어는 캐릭터 영속 realm, 몹은 creature.realm. */
+  /** realm별 숙련(길이 4, 읽기) — 플레이어는 캐릭터 영속 realm, 몬스터는 creature.realm. */
   readonly realm: readonly number[]
   /** 직업 인덱스(읽기). */
   readonly class: number

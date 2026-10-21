@@ -86,13 +86,13 @@ const ROOM_ARENA = 1
 // 공식이 바뀔 때 이 전제가 조용히 무너진다. 확률에 기대는 단언은 이 파일에 하나도 없다.
 //
 //   ① 명중 — `hitThreshold = thaco - trunc(defender.armor/8)`이고 `rng(1,30) < threshold`가 빗나감이다
-//      (`combat/attackStats.ts`·`resolveAttack.performStrike`). 크리처 armor를 크게 잡아 threshold를
+//      (`combat/attackStats.ts`·`resolveAttack.performStrike`). 몬스터 armor를 크게 잡아 threshold를
 //      1 이하로 눌러 두면 굴림 최솟값 1에서도 명중한다.
 //   ② 피해 — 맨손(`weapon === null`)이면 숙련 p=0이라 크리 굴림 `rng(1,100) <= 0`이 항상 거짓이고,
 //      불발 굴림은 무기 착용 시에만 소비된다. 다중공격은 `multiAttackCount`가 초인(class 9)·초과
 //      클래스에서만 2 이상이라 class 5는 **PUPDMG를 갖고 있어도** 항상 1타다. 남는 것은
 //      `mdice(class_stats[class]) + bonus[strength]`뿐이라 값 범위가 닫힌 구간이 된다.
-//   ③ 그 닫힌 구간을 크리처 hp 양쪽에 둔다 — 생존 시나리오는 hp를 최대 피해보다 크게, 처치 시나리오는
+//   ③ 그 닫힌 구간을 몬스터 hp 양쪽에 둔다 — 생존 시나리오는 hp를 최대 피해보다 크게, 처치 시나리오는
 //      hp를 최소 피해보다 작게 잡는다.
 
 /** 캐릭터 class — MAGE(5). 맨손 피해 값 범위가 `class_stats[5]`(1d3)로 좁아 ③의 여유가 가장 크다. */
@@ -107,22 +107,22 @@ const CHAR_EXPERIENCE = 0
 /** 캐릭터 문서의 현재 HP — 반격 없음(T9.4) 단언의 기준값이다. */
 const CHAR_HP = 42
 
-/** 크리처 armor — ①을 성립시킨다(trunc(160/8)=20 ≥ 어떤 클래스의 THAC0 상한 20). */
+/** 몬스터 armor — ①을 성립시킨다(trunc(160/8)=20 ≥ 어떤 클래스의 THAC0 상한 20). */
 const CREATURE_ARMOR = 160
-/** 생존 시나리오 크리처 HP — ③의 위쪽(최대 피해보다 크다). */
+/** 생존 시나리오 몬스터 HP — ③의 위쪽(최대 피해보다 크다). */
 const SURVIVOR_HP = 100
-/** 처치 시나리오 크리처 HP — ③의 아래쪽(최소 피해보다 작다). */
+/** 처치 시나리오 몬스터 HP — ③의 아래쪽(최소 피해보다 작다). */
 const KILL_HP = 1
 /**
- * 처치 시나리오 크리처의 보유 경험치. `hpmax === KILL_HP === 1`이라 분배식
+ * 처치 시나리오 몬스터의 보유 경험치. `hpmax === KILL_HP === 1`이라 분배식
  * `trunc(experience * damage / max(hpmax,1))`의 damage가 오버킬 캡으로 1이 되고, 기여자가 혼자라
  * 그룹킬 보너스도 없어 **정확히 이 값**이 적립된다(`combat/deathDistribution.ts`).
  */
 const KILL_EXP = 500
 
-/** 크리처 표시 이름 = 지목 질의. 방 목록·`combat:attacked.targetName`·질의가 모두 이 값을 쓴다. */
+/** 몬스터 표시 이름 = 지목 질의. 방 목록·`combat:attacked.targetName`·질의가 모두 이 값을 쓴다. */
 const CREATURE_NAME = '고블린'
-/** 크리처 instanceId — `combat:attacked.targetInstanceId`·방 뷰 재생성 없음 단언의 기준값이다. */
+/** 몬스터 instanceId — `combat:attacked.targetInstanceId`·방 뷰 재생성 없음 단언의 기준값이다. */
 const CREATURE_ID = `${ROOM_ARENA}:c0`
 
 /** 시드 캐릭터 문서 — 공유 픽스처에 이 시나리오가 근거로 삼는 필드만 명시 override한다. */
@@ -154,7 +154,7 @@ function seedCombatState(): PlayerCombatState {
 const MIN_DAMAGE = playerBaseDamage(toCombatant(seedCombatState()), minRollRng)
 const MAX_DAMAGE = playerBaseDamage(toCombatant(seedCombatState()), maxRollRng)
 
-/** 생존 크리처 — 한 타격을 견딘다(T9.2·T9.4). */
+/** 생존 몬스터 — 한 타격을 견딘다(T9.2·T9.4). */
 function survivorCreature(): CreatureInstance {
   return makeCreature(CREATURE_ID, CREATURE_NAME, {
     armor: CREATURE_ARMOR,
@@ -164,7 +164,7 @@ function survivorCreature(): CreatureInstance {
   })
 }
 
-/** 처치 크리처 — 어떤 굴림에서도 한 타격에 죽는다(T9.3). */
+/** 처치 몬스터 — 어떤 굴림에서도 한 타격에 죽는다(T9.3). */
 function killableCreature(): CreatureInstance {
   return makeCreature(CREATURE_ID, CREATURE_NAME, {
     armor: CREATURE_ARMOR,
@@ -393,7 +393,7 @@ describe('공격 end-to-end (실 소켓 · 실 월드 틱)', () => {
     expect(MIN_DAMAGE).toBe(playerBaseDamage(attacker, minRollRng))
     expect(MAX_DAMAGE).toBe(playerBaseDamage(attacker, maxRollRng))
 
-    // ④ 크리처 HP를 값 범위 양쪽에 둔다 — 생존 크리처는 최대 피해로도 죽지 않고, 처치 크리처는 최소
+    // ④ 몬스터 HP를 값 범위 양쪽에 둔다 — 생존 몬스터는 최대 피해로도 죽지 않고, 처치 몬스터는 최소
     //    피해로도 죽는다. 등호가 아니라 진부등호라 경계에서 뒤집히지 않는다.
     expect(MAX_DAMAGE).toBeLessThan(SURVIVOR_HP)
     expect(MIN_DAMAGE).toBeGreaterThan(KILL_HP)
@@ -402,7 +402,7 @@ describe('공격 end-to-end (실 소켓 · 실 월드 틱)', () => {
   it('진입→지목→타격이 combat:attacked·character:stats를 순서대로 내고, 쿨다운 미도래 2타를 거부한다', async () => {
     const { h, url } = await startTracked(survivorCreature())
 
-    // ── 1) 진입 — 캐릭터가 방에 배치되고 방 목록에 크리처가 보인다. ────────────────
+    // ── 1) 진입 — 캐릭터가 방에 배치되고 방 목록에 몬스터가 보인다. ────────────────
     const client = trackedClient(url)
     const s = await enterWorld(client, CHAR)
     expect(s.entered).toMatchObject({ type: 'session:entered', characterId: CHAR })
@@ -450,7 +450,7 @@ describe('공격 end-to-end (실 소켓 · 실 월드 틱)', () => {
       hpCurrent: CHAR_HP, // 몬스터가 반격하지 않으므로 공격자 HP는 불변이다.
     })
 
-    // 크리처는 살아남았고 실제로 피해를 입었다(라이브 방 노드 관측 — 프레임의 died:false와 일치).
+    // 몬스터는 살아남았고 실제로 피해를 입었다(라이브 방 노드 관측 — 프레임의 died:false와 일치).
     expect(h.room.creatures).toHaveLength(1)
     expect(h.room.creatures[0]?.hpcur).toBeLessThan(SURVIVOR_HP)
     expect(h.room.creatures[0]?.hpcur).toBeGreaterThan(0)
@@ -465,7 +465,7 @@ describe('공격 end-to-end (실 소켓 · 실 월드 틱)', () => {
     })
   })
 
-  it('처치하면 combat:attacked·character:stats에 이어 죽은 크리처가 빠진 world:room이 온다', async () => {
+  it('처치하면 combat:attacked·character:stats에 이어 죽은 몬스터가 빠진 world:room이 온다', async () => {
     const { h, url } = await startTracked(killableCreature())
 
     const client = trackedClient(url)
@@ -514,7 +514,7 @@ describe('공격 end-to-end (실 소켓 · 실 월드 틱)', () => {
     expect(s.entered).toMatchObject({ type: 'session:entered', characterId: CHAR })
     await waitFor(() => h.room.occupants.has(CHAR))
 
-    // ── 1) 1타 — 이 타격이 크리처의 적 리스트에 공격자를 등록한다(registerEnemy). ──
+    // ── 1) 1타 — 이 타격이 몬스터의 적 리스트에 공격자를 등록한다(registerEnemy). ──
     client.send(JSON.stringify({ type: 'combat:attack', target: CREATURE_NAME }))
     expect(await s.reader.next()).toMatchObject({ type: 'combat:attacked', hit: true, died: false })
     const before = await s.reader.next()
@@ -526,7 +526,7 @@ describe('공격 end-to-end (실 소켓 · 실 월드 틱)', () => {
     expect(h.worldClock.currentTick()).toBe(ticks)
 
     // ── 3) 틱이 **공허하지 않았다**는 증거 두 가지. ─────────────────────────────────
-    //  (a) creatureTick이 이 크리처를 실제로 처리했다 — next-action이 스케줄됐다.
+    //  (a) creatureTick이 이 몬스터를 실제로 처리했다 — next-action이 스케줄됐다.
     //  (b) 적 리스트가 비어 있지 않아 §3.5 조기종료 게이트를 통과했다 = 전투 디스패치 지점까지
     //      도달했다. 그 지점의 seam(`onCombatTick`)이 프로덕션 기본값 no-op이라는 것이 #99가 아직
     //      연결되지 않았다는 사실 그 자체다.

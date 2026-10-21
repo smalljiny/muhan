@@ -6,7 +6,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * max_weight(최대 소지량) 골든 fixture 생성기 — manual oracle의 독립 참조 구현.
+ * max_weight(최대 소지량) 골든 fixture 생성기 — manual 오라클의 독립 참조 구현.
  *
  * 원본 `player.c:1099`의 최대 소지량 공식을 참조 구현(`referenceMaxWeight`)으로 옮기고,
  * 손 계산으로 확정한 6개 케이스를 fixture로 감싸 `fixtures/max_weight.json`에 기록한다.

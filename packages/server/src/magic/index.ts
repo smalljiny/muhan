@@ -1,5 +1,5 @@
 /**
- * magic 배럴 — 몹·플레이어 공유 Caster 추상과 주문 디스패치의 공개 인터페이스(#84).
+ * magic 배럴 — 몬스터·플레이어 공유 Caster 추상과 주문 디스패치의 공개 인터페이스(#84).
  *
  * 카탈로그(SPELL_CATALOG·spellByNo·OSPELL_GRID)는 shared/magic이 담당하므로 여기서 재노출하지
  * 않는다 — server 모듈은 시전 어댑터(Caster)·연결(SpellDispatch)·게이트(gate)·spell_fail과

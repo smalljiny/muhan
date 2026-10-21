@@ -5,17 +5,17 @@ import { evaluateMoveGates } from './moveGates.js'
 /**
  * 통합 이동 경로 — 원본 A4 §8의 4중 복제 이동 코드를 단일 `tryMove`로 통합한다.
  *
- * oracle `docs/notes/game-analysis-20260625/a4-movement-rooms.md` §1(게이트)·§8(4중 복제) +
+ * 오라클 `docs/notes/game-analysis-20260625/a4-movement-rooms.md` §1(게이트)·§8(4중 복제) +
  * spec §3.3·§3.4 이식:
- *   원본은 방향 이동·명명 이동·flee·sneak가 각기 거의 동일한 게이트 건틀릿을 복제해 갖고 있었다.
- *   본 이식은 **출구 선택 방식만 mode로 분기**하고, 선택된 출구에 대한 게이트 건틀릿 본체
+ *   원본은 방향 이동·명명 이동·flee·sneak가 각기 거의 동일한 게이트 검사를 복제해 갖고 있었다.
+ *   본 이식은 **출구 선택 방식만 mode로 분기**하고, 선택된 출구에 대한 게이트 검사 본체
  *   (`evaluateMoveGates`, Story 6)와 통과 후 leave/join 방송·점유자 재배치를 전 mode가 공유한다.
  *
  * 게이트 순서(콘텐츠)는 `moveGates.ts`가 보존한다. 여기서는 그 앞단인
  *   - gate 1(출구 존재) + XNOSEE 이름/방향 탐색 제외(6번째 강제 게이트)
  *   - 통과 후 부수효과(방송·재배치)
- * 만 담당한다. dangling(대상 방 없음)은 건틀릿 내부(danglingGate)가 처리하므로 미해석 target을
- * 그대로 건틀릿에 넘긴다.
+ * 만 담당한다. dangling(대상 방 없음)은 게이트 검사 내부(danglingGate)가 처리하므로 미해석 target을
+ * 그대로 게이트 검사에 넘긴다.
  *
  * 순수성/가변성 경계:
  *   출구 해석·게이트 평가는 부수효과가 없다. 통과 시에만 라이브 가변 carve-out으로
@@ -39,7 +39,7 @@ export type MoveActor = {
 }
 
 /**
- * 이동 mode — 출구 **선택 방식**만 결정한다(게이트 건틀릿 본체는 공유). spec §3.4:
+ * 이동 mode — 출구 **선택 방식**만 결정한다(게이트 검사 본체는 공유). spec §3.4:
  *   - directional/named/sneak: 이름/방향 문자열(selector)로 출구를 선형 탐색.
  *   - flee: selector 무시, chooseFleeExit로 가시 출구를 선택.
  */
@@ -154,7 +154,7 @@ const NO_EXIT: TryMoveResult = { ok: false, reason: '길이 막혀 있습니다'
  * 통합 이동. 4개 mode가 이 단일 경로를 공유하고 출구 선택 방식만 분기한다.
  *
  * 순서: (1) source 방 해석 → (2) mode별 출구 해석(gate 1 + XNOSEE 제외) → (3) target 해석 →
- * (4) 공유 게이트 건틀릿 실행 → 통과 시 (5a) leave 방송 (5b) 점유자 재배치 (5c) join 방송.
+ * (4) 공유 게이트 검사 실행 → 통과 시 (5a) leave 방송 (5b) 점유자 재배치 (5c) join 방송.
  * 어느 단계든 거부되면 이동을 취소하고(재배치·방송 없음) 거부 결과를 반환한다.
  */
 export function tryMove(
@@ -171,11 +171,11 @@ export function tryMove(
   const exit = resolveExit(sourceRoom, selector, mode, deps.rng)
   if (exit === undefined) return NO_EXIT
 
-  // (3) 도착 방 = resolveRoom(exit.targetRoomId). 미해석(dangling)이면 건틀릿이 거부하므로
-  //     undefined를 그대로 건틀릿에 넘긴다.
+  // (3) 도착 방 = resolveRoom(exit.targetRoomId). 미해석(dangling)이면 게이트 검사가 거부하므로
+  //     undefined를 그대로 게이트 검사에 넘긴다.
   const targetRoom = deps.resolveRoom(exit.targetRoomId)
 
-  // (4) 공유 게이트 건틀릿(Story 6) — dangling·XLOCKD·XCLOSD·시간·정원 등 순서 보존.
+  // (4) 공유 게이트 검사(Story 6) — dangling·XLOCKD·XCLOSD·시간·정원 등 순서 보존.
   //     flee 도착 후 정원(17) 재검사도 이 1회 실행이 표현한다(별도 2차 실행 불필요).
   const gate = evaluateMoveGates({
     exit,
@@ -185,7 +185,7 @@ export function tryMove(
   })
   if (!gate.ok) return { ok: false, reason: gate.reason }
 
-  // 건틀릿 통과 시 targetRoom은 반드시 정의됨(dangling 게이트가 undefined를 선행 거부).
+  // 게이트 검사 통과 시 targetRoom은 반드시 정의됨(dangling 게이트가 undefined를 선행 거부).
   // 타입 좁힘을 위한 방어 — 도달 불가 경로.
   if (targetRoom === undefined) return NO_EXIT
 

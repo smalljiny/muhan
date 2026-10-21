@@ -68,7 +68,7 @@ const TRAIN_LEVEL = 7
 const TRAIN_EXP = neededExp(TRAIN_LEVEL)
 const TRAIN_GOLD = goldToTrain(TRAIN_LEVEL)
 
-/** 시작 방에서 유효 출구 '동'으로 도착 방을 잇는 pass-move 픽스처(all-zero flags — 게이트 건틀릿 통과). */
+/** 시작 방에서 유효 출구 '동'으로 도착 방을 잇는 pass-move 픽스처(all-zero flags — 게이트 검사 통과). */
 const EXIT_EAST = '동'
 
 /**
@@ -97,7 +97,7 @@ function makeCharacter(id: string, accountId: string, currentRoom: number): Char
   }
 }
 
-/** all-zero flags 방(tryMove.test.ts pass-move 픽스처 미러 — 게이트 건틀릿 통과). */
+/** all-zero flags 방(tryMove.test.ts pass-move 픽스처 미러 — 게이트 검사 통과). */
 function makeRoom(roomId: number, exits: RoomNode['exits']): RoomNode {
   return {
     roomId,
@@ -184,7 +184,7 @@ function buildHarness(): LiveWorldHarness {
   const roomStart = makeRoom(ROOM_START, [makeExit(EXIT_EAST, ROOM_DEST)])
   // 도착 방은 back-exit이 없다 — 이 스위트는 start→dest 단방향 이동만 exercise한다.
   const roomDest = makeRoom(ROOM_DEST, [])
-  // 훈련방은 시작 방과 분리한다 — 시작 방 flags는 기존 이동 시나리오의 tryMove 게이트 건틀릿 입력이라
+  // 훈련방은 시작 방과 분리한다 — 시작 방 flags는 기존 이동 시나리오의 tryMove 게이트 검사 입력이라
   // RTRAIN 비트를 얹으면 무관한 케이스를 흔든다.
   const roomTrain = makeTrainingRoom(ROOM_TRAIN, CHAR_CLASS)
   const worldGraph = new Map<number, RoomNode>([

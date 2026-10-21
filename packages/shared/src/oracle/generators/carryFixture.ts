@@ -6,7 +6,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * carry(재귀 무게 합 weightOf) 골든 fixture 생성기 — manual oracle의 독립 참조 구현(A8 §8/§13).
+ * carry(재귀 무게 합 weightOf) 골든 fixture 생성기 — manual 오라클의 독립 참조 구현(A8 §8/§13).
  *
  * 원본 `object.c` `weight_obj`의 재귀 무게 합을 참조 구현(`referenceWeightOf`)으로 옮기고,
  * 손 계산으로 확정한 5개 케이스를 fixture로 감싸 `fixtures/carry.json`에 기록한다. 산술 기준은

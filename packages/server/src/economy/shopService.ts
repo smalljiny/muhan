@@ -85,7 +85,7 @@ function assertNonNegativeInt(value: number, label: string): void {
 const BUY_COUNT_LIMIT = 200
 
 /**
- * get/give/purchase 개수 상한 — A8 §8/§13. 몹 상점 얻기(purchase)는 buy(200)와 다른 150 상한을
+ * get/give/purchase 개수 상한 — A8 §8/§13. 몬스터 상점 얻기(purchase)는 buy(200)와 다른 150 상한을
  * 쓴다. buy와 동일하게 얻기 *전* invCount를 strict `>`로 검사한다 — 정확히 150 보유자는 얻기에
  * 성공하고 151에서 종료한다. plan G7 canCarry의 `get/give/purchase > 150` 기준과 동일 경계다.
  */
@@ -142,10 +142,10 @@ export function buy(
 }
 
 /**
- * 몹 상점에서 아이템을 얻는다(purchase, A8 §8 MPURIT). 몹은 템플릿을 무한 복제하므로 재고 원본을
+ * 몬스터 상점에서 아이템을 얻는다(purchase, A8 §8 MPURIT). 몬스터는 템플릿을 무한 복제하므로 재고 원본을
  * 변이하지 않고 소유자 없는 클론 디스크립터를 반환한다(_id·owner 연결은 #106의 몫). 어느 템플릿을
- * 클론할지 — 몹의 carry[]에서 itemRef→템플릿 해석 — 는 호출자(#106)의 책임이다. purchase는 이미
- * 해석된 템플릿 아이템을 파라미터로 받는다(몹 AI·carry[] 인덱싱 없음).
+ * 클론할지 — 몬스터의 carry[]에서 itemRef→템플릿 해석 — 는 호출자(#106)의 책임이다. purchase는 이미
+ * 해석된 템플릿 아이템을 파라미터로 받는다(몬스터 AI·carry[] 인덱싱 없음).
  *
  * 게이트: gold < mobBuyPrice(value)(= max(10, value))면 insufficient-gold로 거부한다 — 저가
  * 아이템도 최소 10냥을 요구한다(A8 §8: MAX(10, value*1)). 개수는 얻기 *전* invCount가 150을
@@ -179,7 +179,7 @@ export function purchase(
 }
 
 /**
- * object 타입 코드(A8 §1 taxonomy) — 판매 게이트가 읽는 상수. 원본 mstruct.h의 오브젝트
+ * object 타입 코드(A8 §1 taxonomy) — 판매 게이트가 읽는 상수. 원본 mstruct.h의 `object`
  * 종류 열거. sell의 poorquality·unsellable 판정에만 필요한 항목을 명명 상수로 노출한다.
  */
 const MISSILE = 4

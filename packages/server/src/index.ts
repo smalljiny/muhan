@@ -107,7 +107,7 @@ async function boot(): Promise<void> {
     characterRepo: characters,
     objectTemplates,
     // 사망 seam(소환·perm 리스폰)이 쓰는 두 원재료는 **worldRuntime의 인스턴스를 그대로** 싣는다.
-    // 별도 발급기·인덱스를 만들면 소환 크리처 instanceId가 스폰 크리처와 충돌한다(D7 4경로 공유 계약 —
+    // 별도 발급기·인덱스를 만들면 소환 몬스터 instanceId가 스폰 몬스터와 충돌한다(D7 4경로 공유 계약 —
     // worldRuntime.alloc JSDoc이 이 조립 지점을 지목한다).
     spawnTemplates: worldRuntime.templates,
     alloc: worldRuntime.alloc,

@@ -5,7 +5,7 @@ import { F_SET } from '../world/hexFlags.js'
 import { toCaster } from './caster.js'
 
 /**
- * Caster 계약 경계 테스트 — 몹·플레이어 공유 추상의 6필드와 write-through를 못박는다.
+ * Caster 계약 경계 테스트 — 몬스터·플레이어 공유 추상의 6필드와 write-through를 못박는다.
  *
  * 이 계약은 #85(realm 성장·학습 write)·#86(scroll/potion/wand 본체)이 공유하므로,
  * "정확히 6필드"·"mpCurrent 라이브 write-through"를 런타임으로 잠근다(개별 필드 검증만으로는

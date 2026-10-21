@@ -49,7 +49,7 @@ export function canTeachSpllv(casterClass: number, spllv: number): boolean {
 
 // ── T3.2: study(비법서 연마) ─────────────────────────────────────────────────
 
-/** 비법서(SCROLL) 오브젝트 템플릿의 study 관련 필드 — magicpower=주문번호+1, ndice=레벨제한. */
+/** 비법서(SCROLL) 아이템 템플릿의 study 관련 필드 — magicpower=주문번호+1, ndice=레벨제한. */
 export interface SpellBook {
   /** object 타입 — SCROLL(7)만 연마 가능(magic1.c:294). */
   readonly type: number

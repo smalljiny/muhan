@@ -308,7 +308,7 @@ describe('createCombatTick — 근접 + 반격', () => {
   })
 
   it('stale-dead 몬스터(hpcur<1로 진입)는 counter 준비돼도 fireCreatureDeath 재실행 안 함 (exactly-once, #91)', () => {
-    // 사망 제거가 #99로 보류돼(deathDistribution) creatureTick이 HP 가드 없이 due 크리처를 재디스패치할 수
+    // 사망 제거가 #99로 보류돼(deathDistribution) creatureTick이 HP 가드 없이 due 몬스터를 재디스패치할 수
     // 있다. 가드 없으면 counter가 DEAD_DEFENDER_NOOP(실행 안 함)을 반환해도 이후 `creature.hpcur<1` 관찰이
     // 여전히 true라 fireCreatureDeath가 재실행된다 — stale-dead 진입 가드가 이 exactly-once 위반의 lock이다.
     const player = makePlayer({ characterId: 'p1', hpCurrent: 50, nextAttackAt: 0 })

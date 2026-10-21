@@ -18,11 +18,11 @@ import type { PlayerCombatState } from '../combat/playerState.js'
  * 원장을 읽은 뒤에 버리는가, 기여자 경험치가 레지스트리에 실제로 남는가, 성향·전리품처럼 적용하지
  * 않기로 한 것이 새어 들어오지 않는가.
  *
- * 원장·레지스트리·크리처 사망 deps는 mock이 아니라 실제 구현을 쓴다(관측만 spy로 얹는다) — mock으로
+ * 원장·레지스트리·몬스터 사망 deps는 mock이 아니라 실제 구현을 쓴다(관측만 spy로 얹는다) — mock으로
  * 갈아끼우면 "원장을 먼저 버려도 통과하는" 테스트가 되어 순서 회귀를 못 잡는다.
  */
 
-/** 사망 크리처 픽스처 — exp 100, hpmax 10이라 데미지 10이면 보상이 정확히 100이다. */
+/** 사망 몬스터 픽스처 — exp 100, hpmax 10이라 데미지 10이면 보상이 정확히 100이다. */
 function makeDead(overrides: Partial<CreatureInstance> = {}): CreatureInstance {
   return makeCreature('50:c0', '고정몹', {
     hpmax: 10,
@@ -142,7 +142,7 @@ describe('assembleDeathSeams — fireCreatureDeath 경험치 적립', () => {
 })
 
 describe('assembleDeathSeams — fireCreatureDeath 방·원장 처리', () => {
-  it('죽은 크리처를 room.creatures에서 제거한다', () => {
+  it('죽은 몬스터를 room.creatures에서 제거한다', () => {
     const ctx = setup()
     const dead = makeDead({ enemies: [] })
     const survivor = makeCreature('50:c1', '살아있는몹')

@@ -97,7 +97,7 @@ export function wearGate(params: WearParams): WearOutcome {
   const { flags, type, wearflag, armor, shotsmax, shotscur, questnum, instance, occupiedSlots, actor } =
     params
 
-  // 0. 라우팅 — wear는 방어구/장신구 전용. 무기(WIELD)·든 물건(HELD)·미착용(0)은 거부.
+  // 0. 라우팅 — wear는 방어구/장신구 전용. 무기(WIELD)·든 아이템(HELD)·미착용(0)은 거부.
   if (wearflag === 0 || wearflag === WIELD || wearflag === HELD) {
     return { kind: 'rejected', reason: '입는 물건이 아닙니다.' }
   }

@@ -42,7 +42,7 @@ function makeRoom(
 const noNames = (): undefined => undefined
 
 describe('buildRoomSummary', () => {
-  it('해석된 방을 world:room 전 필드(이름·설명·출구·점유자·아이템·크리처)로 변환한다', () => {
+  it('해석된 방을 world:room 전 필드(이름·설명·출구·점유자·아이템·몬스터)로 변환한다', () => {
     const rooms = new Map<number, RoomNode>([
       [
         50,
@@ -88,7 +88,7 @@ describe('buildRoomSummary', () => {
     expect(summary(9999)).toBeUndefined()
   })
 
-  it('숨김 아이템·숨김 크리처·비밀 출구를 걸러 낸다 (projectRoomView 위임 확인)', () => {
+  it('숨김 아이템·숨김 몬스터·비밀 출구를 걸러 낸다 (projectRoomView 위임 확인)', () => {
     const rooms = new Map<number, RoomNode>([
       [
         3,

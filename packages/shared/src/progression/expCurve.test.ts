@@ -8,7 +8,7 @@ describe('needed_exp 테이블 무결성', () => {
     expect(needed_exp).toHaveLength(128)
   })
 
-  it('경계 인덱스가 oracle 기준과 일치한다 (0=128, 126=100000000, 127=190000000)', () => {
+  it('경계 인덱스가 오라클 기준과 일치한다 (0=128, 126=100000000, 127=190000000)', () => {
     expect(needed_exp[0]).toBe(128)
     expect(needed_exp[126]).toBe(100000000)
     expect(needed_exp[127]).toBe(190000000)

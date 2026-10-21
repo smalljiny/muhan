@@ -12,7 +12,7 @@ import type { GoldenFixture } from '../types.js'
  */
 
 /**
- * manual oracle fixture envelope을 조립한다. `method:'manual'`·`seed:null` 규약과
+ * manual 오라클 fixture envelope을 조립한다. `method:'manual'`·`seed:null` 규약과
  * `generatedAt` clock 스탬프의 단일 출처다. `cases`는 각 생성기의 `buildCases()` 결과다.
  */
 export function makeManualFixture<I, O>(

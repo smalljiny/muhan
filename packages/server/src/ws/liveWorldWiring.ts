@@ -88,11 +88,11 @@ export interface LiveWorldWiringBundle {
    */
   readonly objectTemplates: ObjectTemplateIndex
   /**
-   * 크리처 스폰 템플릿 인덱스(몹번호 → 템플릿). 사망 seam의 MSUMMO 소환·MPERMT 리스폰 타이머 리셋이
+   * 몬스터 스폰 템플릿 인덱스(몬스터 번호 → 템플릿). 사망 seam의 MSUMMO 소환·MPERMT 리스폰 타이머 리셋이
    * 소비한다(`CreatureDeathDeps.templates`).
    *
    * boot는 `worldRuntime.templates`를 **그대로** 싣는다. 사망 seam이 자기 인덱스를 따로 로드하면
-   * 같은 몹번호가 두 객체로 갈라져 perm 슬롯 이름 매칭(slot.misc → template.name)이 스폰 경로와
+   * 같은 몬스터 번호가 두 객체로 갈라져 perm 슬롯 이름 매칭(slot.misc → template.name)이 스폰 경로와
    * 다른 사본을 보게 된다 — creatures.json은 부팅 고정 콘텐츠라 사본을 둘 이유가 없다.
    */
   readonly spawnTemplates: SpawnTemplateIndex
@@ -100,9 +100,9 @@ export interface LiveWorldWiringBundle {
    * 방별 monotonic instanceId 발급기(D7). 사망 seam의 MSUMMO 소환이 소비한다(`CreatureDeathDeps.alloc`).
    *
    * boot는 `worldRuntime.alloc`을 **그대로** 싣는다 — perm 리스폰·random 스폰·invasion 3경로가 이미
-   * 공유하는 그 인스턴스여야 소환 크리처 instanceId가 충돌하지 않는다. 별도 발급기를 만들면 방별
+   * 공유하는 그 인스턴스여야 소환 몬스터 instanceId가 충돌하지 않는다. 별도 발급기를 만들면 방별
    * 카운터가 `room.creatures.length`에서 다시 시작해(`createInstanceIdAllocator`의 lazy fallback)
-   * 살아 있는 크리처와 같은 `${roomId}:c${idx}`를 발급하고, 그때부터 지목·원장·제거가 엉뚱한 개체를
+   * 살아 있는 몬스터와 같은 `${roomId}:c${idx}`를 발급하고, 그때부터 지목·원장·제거가 엉뚱한 개체를
    * 가리킨다. 예외도 로그도 남지 않는 종류의 사고다.
    */
   readonly alloc: InstanceIdAllocator
@@ -247,9 +247,9 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     ...entryCore,
     place: (live: LiveCharacter) => {
       entryCore.place(live)
-      // 조립 출처는 **라이브 레지스트리의 권위 엔트리**다. `entryCore.place`는 멱등이라 이미 점유자면
+      // 조립 출처는 **라이브 레지스트리의 기준 엔트리**다. `entryCore.place`는 멱등이라 이미 점유자면
       // 조기 반환하며 `register(live)`를 하지 않는데(`liveCharacterEntry.ts:218`), 그때 인자로 받은
-      // `live`는 하이드레이트했다가 버려진 문서다. 그 버려진 문서로 조립하면 재접속~첫 공격 구간이
+      // `live`는 hydrate했다가 버려진 문서다. 그 버려진 문서로 조립하면 재접속~첫 공격 구간이
       // 스테일 파생값(armor·thaco·level)으로 계산된다 — carry가 지켜 주는 hp·mp·쿨다운 밖의 필드다.
       // 지금은 다음 공격의 재조립이 덮어 주지만 몬스터 반격 tick(#99)이 붙으면 그 구간이 관측된다.
       // `?? live`는 도달 불가 방어선이다 — `place`는 등록하거나(신규) 이미 점유자라 조기 반환하는데,
@@ -339,7 +339,7 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     markObjectDeleted,
   }
 
-  // 크리처별 데미지 원장 라우터 — **1회** 생성해 공격 누적(attackDeps.ledgers)과 사망 분배
+  // 몬스터별 데미지 원장 라우터 — **1회** 생성해 공격 누적(attackDeps.ledgers)과 사망 분배
   // (fireCreatureDeath 내부)가 같은 참조를 쓴다. 두 인스턴스로 갈리면 사망 시점에 읽는 원장이 비어
   // 기여자 게이트(`ledger.get(id) > 0`)가 전부 탈락하고 보상이 조용히 0이 된다(assembleDeathSeams 헤더).
   const ledgers = createCreatureLedgers()

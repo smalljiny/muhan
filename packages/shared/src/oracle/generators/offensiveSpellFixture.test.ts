@@ -67,7 +67,7 @@ describe('offensiveSpellFixture — writeFixtureFile', () => {
 })
 
 describe('체크인된 offensive_spell.json fixture', () => {
-  it('goldenFixtureSchema를 통과하고 manual oracle이다', () => {
+  it('goldenFixtureSchema를 통과하고 manual 오라클이다', () => {
     const url = new URL('../fixtures/offensive_spell.json', import.meta.url)
     const parsed: unknown = JSON.parse(readFileSync(url, 'utf8'))
     const result = goldenFixtureSchema.safeParse(parsed)

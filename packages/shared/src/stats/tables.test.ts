@@ -194,7 +194,7 @@ describe('class_stats 교차검증 — A7 §2 닫힌 식 HP/MP', () => {
 
 // ---------------------------------------------------------------------------
 // T1.4 — 골든 옮겨 적기-diff fixture 대조 (approve)
-// SUT(접근자)는 tables.ts를 읽고, fixture expected는 C oracle 리터럴이다.
+// SUT(접근자)는 tables.ts를 읽고, fixture expected는 C 오라클 리터럴이다.
 // ---------------------------------------------------------------------------
 function loadFixture<I, O>(name: string): GoldenFixture<I, O> {
   const url = new URL(`../oracle/fixtures/${name}.json`, import.meta.url)

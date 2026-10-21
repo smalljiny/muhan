@@ -79,7 +79,7 @@ export const FINGER6 = 14
 export const FINGER7 = 15
 /** 반지 8(finger8) — FINGER 그룹의 마지막 슬롯 이름표. */
 export const FINGER8 = 16
-/** 든 물건(held). */
+/** 든 아이템(held). */
 export const HELD = 17
 /** 방패(shield). */
 export const SHIELD = 18

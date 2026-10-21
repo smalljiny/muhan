@@ -100,11 +100,11 @@ function parseRoom(buf) {
   };
 
   // 스폰 데이터 (room 구조체 480B 내부 고정 필드; 커서 미이동)
-  // random: short[10] 랜덤 스폰 몹번호. traffic: 스폰 확률(char).
+  // random: short[10] 랜덤 스폰 몬스터 번호. traffic: 스폰 확률(char).
   room.random = [];
   for (let i = 0; i < 10; i++) room.random.push(b.readInt16LE(OFF.room.random + i * 2));
   room.traffic = b.readInt8(OFF.room.traffic);
-  // perm_mon: lasttime[10] (각 12B: interval long, ltime long, misc short) 고정 스폰 몹.
+  // perm_mon: lasttime[10] (각 12B: interval long, ltime long, misc short) 고정 스폰 몬스터.
   room.perm_mon = [];
   for (let i = 0; i < 10; i++) {
     const o = OFF.room.perm_mon + i * 12;

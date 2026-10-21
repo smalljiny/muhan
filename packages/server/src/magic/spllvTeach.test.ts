@@ -21,7 +21,7 @@ describe('체크인된 spllv_teach.json 골든 fixture', () => {
     return result.data as Parameters<typeof approve>[0]
   }
 
-  it('goldenFixtureSchema를 통과하고 manual oracle이다', () => {
+  it('goldenFixtureSchema를 통과하고 manual 오라클이다', () => {
     const fixture = loadFixture()
     expect(fixture.oracle.method).toBe('manual')
     expect(fixture.cases.length).toBeGreaterThan(0)

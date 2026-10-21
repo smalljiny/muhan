@@ -36,7 +36,7 @@ import { F_ISSET, PUPDMG, OALCRT, OCURSE, MBEFUD } from '../world/hexFlags.js'
  *     크리 미발동 & 무기 착용 시에만 소비한다.
  *   - 의도적 미이식: 크리 시 무기 파괴 굴림 `mrand(1,100)<3`(command5.c:290)·불발 시 compute_thaco
  *     재계산·`if(crt->class>=DM)n=0`(command5.c:263, 무적 게이트는 Story 6)·숙련 XP 적립은 범위 밖.
- *     무기 오브젝트 이동(낙하·마모 shotscur)은 플래그로만 드러낸다.
+ *     무기 아이템 이동(낙하·마모 shotscur)은 플래그로만 드러낸다.
  */
 
 /** 사망 seam은 (dead, room, now)를 인자로 받는다(사전 바인딩 금지). Story 9가 deps만 바인딩한다. */
@@ -50,7 +50,7 @@ export interface ResolveContext {
 }
 
 /**
- * 단일 타격 결과(메시지 렌더링 입력). 무기 마모·낙하는 실제 오브젝트 이동 없이 플래그만 드러낸다.
+ * 단일 타격 결과(메시지 렌더링 입력). 무기 마모·낙하는 실제 아이템 이동 없이 플래그만 드러낸다.
  * specialAttack은 몬스터 명중 타격일 때만 non-null이다(플레이어·미명중은 null).
  */
 export interface AttackDescriptor {
@@ -140,7 +140,7 @@ function resolveCritFumble(state: PlayerCombatState, n: number, rng: CombatRng):
 
   if (critRoll <= p || autoCrit) {
     const mult = rng(CRIT_MULTIPLIER_MIN, CRIT_MULTIPLIER_MAX)
-    // 크리 시 무기 파괴 굴림 mrand(1,100)<3(command5.c:290)은 이식 생략 — 무기 오브젝트 모델 범위 밖.
+    // 크리 시 무기 파괴 굴림 mrand(1,100)<3(command5.c:290)은 이식 생략 — 무기 아이템 모델 범위 밖.
     return { damage: n * mult, critical: true, fumble: false, weaponDropped: false }
   }
 

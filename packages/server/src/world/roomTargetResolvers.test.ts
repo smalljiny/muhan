@@ -62,19 +62,19 @@ describe('resolveRoomCreature — DM 투명 게이트(class >= CARETAKER && PDMI
 })
 
 describe('resolveRoomCreature — MINVIS 게이트와 관찰자 PDINVI 예외', () => {
-  it('MINVIS 크리처는 PDINVI 미보유 관찰자에게 해석되지 않는다', () => {
+  it('MINVIS 몬스터는 PDINVI 미보유 관찰자에게 해석되지 않는다', () => {
     const room = roomWithCreatures(makeCreature('c-invis', '유령', { flags: flagsHex(MINVIS) }))
 
     expect(resolveRoomCreature(room, '유령', NO_FLAGS)).toBeUndefined()
   })
 
-  it('MINVIS 크리처도 PDINVI 보유 관찰자에게는 해석된다', () => {
+  it('MINVIS 몬스터도 PDINVI 보유 관찰자에게는 해석된다', () => {
     const room = roomWithCreatures(makeCreature('c-invis', '유령', { flags: flagsHex(MINVIS) }))
 
     expect(resolveRoomCreature(room, '유령', flagsHex(PDINVI))?.instanceId).toBe('c-invis')
   })
 
-  it('MINVIS 없는 크리처는 관찰자 flags와 무관하게 해석된다', () => {
+  it('MINVIS 없는 몬스터는 관찰자 flags와 무관하게 해석된다', () => {
     const room = roomWithCreatures(makeCreature('c-plain', '유령'))
 
     expect(resolveRoomCreature(room, '유령', NO_FLAGS)?.instanceId).toBe('c-plain')
@@ -120,7 +120,7 @@ describe('resolveRoomCreature — 매칭 규칙은 순수 매처에 위임한다
     expect(resolveRoomCreature(room, '고블린', NO_FLAGS)?.instanceId).toBe('c-1')
   })
 
-  it('입력 방·크리처 배열을 변형하지 않는다(순수)', () => {
+  it('입력 방·몬스터 배열을 변형하지 않는다(순수)', () => {
     const room = roomWithCreatures(
       makeCreature('c-dm', '고블린', { class: CARETAKER_CLASS, flags: flagsHex(PDMINV) }),
       makeCreature('c-1', '고블린'),

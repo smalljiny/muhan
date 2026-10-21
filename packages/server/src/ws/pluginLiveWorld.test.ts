@@ -164,7 +164,7 @@ const EVICT_ROOM_DEST = 12
 const EVICT_LEVEL = 7
 const EVICT_EXP = neededExp(EVICT_LEVEL)
 const EVICT_GOLD = goldToTrain(EVICT_LEVEL)
-/** all-zero flags 출구 — 이동 게이트 건틀릿을 통과한다(liveWorld.e2e 픽스처 미러). */
+/** all-zero flags 출구 — 이동 게이트 검사를 통과한다(liveWorld.e2e 픽스처 미러). */
 const EVICT_EXIT = '동'
 
 interface EvictHarness {

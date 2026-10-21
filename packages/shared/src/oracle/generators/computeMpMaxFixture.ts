@@ -7,7 +7,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * compute_mpmax(최대 MP) 골든 fixture 생성기 — manual oracle의 독립 참조 구현.
+ * compute_mpmax(최대 MP) 골든 fixture 생성기 — manual 오라클의 독립 참조 구현.
  *
  * 원본 `player.c:806`(up_level)의 MP 성장 닫힌 식을 참조 구현(`referenceComputeMpMax`)으로
  * 옮기고, A7 §2 손 계산으로 확정한 6개 케이스를 fixture로 감싸 `fixtures/compute_mpmax.json`에

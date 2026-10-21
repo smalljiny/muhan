@@ -7,7 +7,7 @@ import type { Character } from '../schema/character.js'
 /**
  * invinciblePrestige/caretakerPrestige/classifyPrestige(승급 전이) 테스트.
  *
- * oracle command7.c:607-635. 무적(class<9→9, level=1, exp=0)과 초인(class===9→10,
+ * 오라클 command7.c:607-635. 무적(class<9→9, level=1, exp=0)과 초인(class===9→10,
  * level=127)의 순수 class/level/experience/vitals 전이만 검증한다. gold·dice는 담당 밖(train·
  * combat 담당). vitals는 D4 예외로 **풀회복**(clamp 아님) — 입력 현재치를 max 미만으로 두어
  * 풀회복과 클램프/보존을 판별한다.

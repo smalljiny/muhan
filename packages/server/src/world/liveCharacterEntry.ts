@@ -18,7 +18,7 @@ import type { MoveActor } from './tryMove.js'
  * 모든 의존성은 파라미터로 주입한다(T3.5 — 전역 조회 없음).
  *
  * ## 인벤토리 로드 — 세션 진입에서 1회
- * hydrate가 `characterRepo.hydrateInventory`를 함께 호출해 소유 오브젝트 인스턴스를 라이브 엔트리에
+ * hydrate가 `characterRepo.hydrateInventory`를 함께 호출해 소유 아이템 인스턴스를 라이브 엔트리에
  * 싣는다. 진입에서 한 번 다 읽어 두는 이유는 **명령 핸들러의 동기 계약을 지키기 위해서**다
  * (`ws/router.ts`의 `CommandHandler`는 `ServerEvent | undefined`를 동기 반환한다). 핸들러가 인벤을
  * 그때그때 DB에서 읽으면 async가 되고, 상태 변형과 dirty 표시 사이에 정지점이 생겨 중간 상태가
@@ -36,7 +36,7 @@ import type { MoveActor } from './tryMove.js'
  * 이 공백은 **삭제에 한해서만** 닫힌다 — 후속 Story가 `objectDeletions` 삭제 어댑터를 추가하지만
  * objects의 update·insert 어댑터는 없다. 따라서 삭제 이외의 인벤 변경(equip 토글·`shotscur` 감소·
  * 줍기)은 영속 경로가 아예 없고, 캐릭터 필드와 달리 종료 스냅샷이라는 구제자도 없다.
- * 라이브 인벤을 메모리 권위로 쓰되 **영속화까지 닫힌 것으로 읽지 말 것.**
+ * 라이브 인벤을 메모리 기준 데이터로 쓰되 **영속화까지 닫힌 것으로 읽지 말 것.**
  *
  * ### 진입 비용 추적 임계(OQ3)
  * 지금은 측정하지 않는다 — `objects`에 캐릭터 소유 문서를 만드는 경로(줍기·시드)가 아직 없어 측정

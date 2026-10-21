@@ -129,7 +129,7 @@ describe('후보 선택', () => {
     expect(room.creatures).toHaveLength(0)
   })
 
-  it('알 수 없는 템플릿 몹번호는 스킵한다', () => {
+  it('알 수 없는 템플릿 몬스터 번호는 스킵한다', () => {
     const room = makeRoom({ random: [999, 0, 0, 0, 0, 0, 0, 0, 0, 0] })
     const slot = createRandomSpawn({
       rooms: () => [room],
@@ -181,7 +181,7 @@ describe('그룹 크기', () => {
   })
 })
 
-describe('스폰 크리처 타이머 초기화', () => {
+describe('스폰 몬스터 타이머 초기화', () => {
   it('nextActionAt=now+cadence·lastScavengeAt·lastWanderAt=now', () => {
     const room = makeRoom()
     const slot = createRandomSpawn({

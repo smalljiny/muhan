@@ -7,7 +7,7 @@ import { F_ISSET, F_SET, MPERMT } from './hexFlags.js'
  * 스폰 공통 인프라 + perm 입장 lazy 리스폰(플랜 T4.1, A9 §2.1 add_permcrt_rom room.c:308).
  *
  * 세 스폰 트리거(perm·random·invasion)가 공유하는 두 seam을 여기서 정의한다:
- *   1. `SpawnTemplateIndex` — 몹번호로 크리처 템플릿을 조회하는 인덱스(팩토리 (b)의 입력).
+ *   1. `SpawnTemplateIndex` — 몬스터 번호로 몬스터 템플릿을 조회하는 인덱스(팩토리 (b)의 입력).
  *      random 그룹 크기 산정에 `numwander`(D9)가 필요하므로 `CreatureSource`에 numwander를 더한
  *      `SpawnTemplate`을 값으로 담는다. `numwander`는 스폰 그룹 크기 입력이라 `CreatureInstance`에는
  *      싣지 않고 여기 raw 템플릿 인덱스에만 둔다.
@@ -23,13 +23,13 @@ import { F_ISSET, F_SET, MPERMT } from './hexFlags.js'
 /** 스폰 템플릿 = 크리처 소스 + numwander(random 그룹 크기 입력, D9). */
 export type SpawnTemplate = CreatureSource & { readonly numwander: number }
 
-/** 몹번호 → 스폰 템플릿 인덱스. fromTemplate에도 그대로 넘길 수 있다(SpawnTemplate <: CreatureSource). */
+/** 몬스터 번호 → 스폰 템플릿 인덱스. fromTemplate에도 그대로 넘길 수 있다(SpawnTemplate <: CreatureSource). */
 export type SpawnTemplateIndex = ReadonlyMap<number, SpawnTemplate>
 
 /** creatures.json raw 엔트리(스폰에 필요한 필드만). */
 type RawCreatureTemplate = SpawnTemplate & { readonly id: number }
 
-/** raw creatures 배열을 몹번호 인덱스로 만든다. 필요한 필드만 복사해 raw 번들과 분리한다. */
+/** raw creatures 배열을 몬스터 번호 인덱스로 만든다. 필요한 필드만 복사해 raw 번들과 분리한다. */
 export function buildSpawnTemplateIndex(raw: readonly RawCreatureTemplate[]): SpawnTemplateIndex {
   const map = new Map<number, SpawnTemplate>()
   for (const c of raw) {
@@ -103,7 +103,7 @@ export function createInstanceIdAllocator(rooms?: Iterable<RoomNode>): InstanceI
 
 /** perm 리스폰 의존성(전역 금지 — 인자 주입). */
 export interface PermRespawnDeps {
-  /** 몹번호 → 템플릿 인덱스(팩토리 (b) 조회). */
+  /** 몬스터 번호 → 템플릿 인덱스(팩토리 (b) 조회). */
   readonly templates: SpawnTemplateIndex
   /** 방별 monotonic idx 발급기(D7). */
   readonly alloc: InstanceIdAllocator
@@ -123,7 +123,7 @@ export interface PermRespawnDeps {
  *   - 각 스폰: 팩토리 (b) 인스턴스 생성 → MPERMT 세팅 → room.creatures push. idx는 monotonic 발급기(D7).
  *
  * ltime은 여기서 쓰지 않는다(읽기만) — 사망 시 `ltime = now` 리셋은 Story 5(onCreatureDeath) 담당.
- * 스폰된 크리처 배열을 반환한다(테스트·조립 지점 관찰용).
+ * 스폰된 몬스터 배열을 반환한다(테스트·조립 지점 관찰용).
  */
 export function respawnPermCreatures(room: RoomNode, now: number, deps: PermRespawnDeps): CreatureInstance[] {
   const rng = deps.rng ?? defaultCreatureRng

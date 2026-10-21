@@ -6,7 +6,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * needed_exp(exp 곡선 룩업·역함수) 골든 fixture 생성기 — manual oracle의 독립 참조 구현.
+ * needed_exp(exp 곡선 룩업·역함수) 골든 fixture 생성기 — manual 오라클의 독립 참조 구현.
  *
  * 원본 `global.c:129`(needed_exp 테이블) + `command7.c:590`(neededExp) + `misc.c:472`
  * (exp_to_lev)의 동작을 참조 구현(`referenceNeededExp`/`referenceExpToLevel`)으로 옮기고,

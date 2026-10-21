@@ -262,8 +262,8 @@ describe('tryMove 게이트 거부 시 무변경', () => {
     expect(deps.broadcastLeave).not.toHaveBeenCalled()
   })
 
-  it('flee도 공유 게이트 건틀릿을 거친다 — 정원 초과 시 이동 취소', () => {
-    // flee가 가시 출구를 해석하지만 도착 방 정원 초과 → 공유 건틀릿이 거부.
+  it('flee도 공유 게이트 검사를 거친다 — 정원 초과 시 이동 취소', () => {
+    // flee가 가시 출구를 해석하지만 도착 방 정원 초과 → 공유 게이트 검사가 거부.
     // (원본 flee는 패닉 이동이나 게이트를 건너뛰지 않음 — 4개 mode가 단일 본체 공유 검증)
     const target = makeRoom(200, [], ['resident'], [RONEPL])
     const source = makeRoom(100, [makeExit('동', 200)], ['me'])

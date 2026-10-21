@@ -100,7 +100,7 @@ export type TrainDeps = {
 /**
  * location gate — 초인 금지 → base RTRAIN → class-bit 역순 매칭(class>8 서브매칭 면제).
  *
- * oracle command7.c:530-585. base RTRAIN은 무적(class>8)도 필수다 — class>8의 fail=0은
+ * 오라클 command7.c:530-585. base RTRAIN은 무적(class>8)도 필수다 — class>8의 fail=0은
  * class-bit 서브매칭만 면제하고 base 검사는 통과해야 한다. class 비트는 (class-1)의 하위 3비트,
  * 방 비트는 RTRAIN+3-i(역순). 각 i에서 불일치면 mismatch.
  */
@@ -143,7 +143,7 @@ export function train(char: Character, room: { flags: number[] }, deps: TrainDep
   if (char.experience < expNeeded) return { ok: false, reason: 'insufficient-exp' }
   if (char.gold < goldNeeded) return { ok: false, reason: 'insufficient-gold' }
 
-  // ── prestige 우선 분기 (train 진입 시 1회 평가, oracle prestige if는 do-while 앞) ────
+  // ── prestige 우선 분기 (train 진입 시 1회 평가, 오라클 prestige if는 do-while 앞) ────
   const prestige = classifyPrestige(char)
   if (prestige !== 'none') {
     const paid = { ...char, gold: char.gold - goldNeeded }

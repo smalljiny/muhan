@@ -107,14 +107,14 @@ describe('createActiveSet — 점유 기반 활성/비활성', () => {
     expect(set.activatedAt(1)).toBe(500)
   })
 
-  it('비활성 방의 크리처 상태를 건드리지 않는다(동결 — activeSet은 creatures를 변경하지 않음)', () => {
+  it('비활성 방의 몬스터 상태를 건드리지 않는다(동결 — activeSet은 creatures를 변경하지 않음)', () => {
     const set = createActiveSet()
     const creature = makeCreature('1:c0', 5)
     const room = makeRoom(1, ['p1'], [creature])
     set.activate(room, 100)
     room.occupants.delete('p1')
     set.deactivate(room)
-    // activeSet은 크리처 상태(hpcur·타이머)를 읽기만 하며 변경하지 않는다.
+    // activeSet은 몬스터 상태(hpcur·타이머)를 읽기만 하며 변경하지 않는다.
     expect(creature.hpcur).toBe(5)
     expect(creature.nextActionAt).toBeUndefined()
   })

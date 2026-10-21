@@ -33,7 +33,7 @@ import { initiateAttack } from '../../combat/initiateAttack.js'
 import { createAttackHandler, type AttackHandlerDeps } from './attack.js'
 
 /**
- * combat:attack 핸들러 스펙 — 대상 지목 2단(크리처 우선)·쿨다운 게이트·전투상태 재조립·공격 판정·
+ * combat:attack 핸들러 스펙 — 대상 지목 2단(몬스터 우선)·쿨다운 게이트·전투상태 재조립·공격 판정·
  * 되쓰기·이벤트 변환을 하나의 명령 경로로 연결한다.
  *
  * ## 킬 경로는 mock이 아니라 실 구현을 태운다
@@ -75,14 +75,14 @@ function attackCommand(
 }
 
 /**
- * 죽일 수 있는 크리처 — hpmax·hpcur 1, exp 100이라 한 대 맞으면 죽고 보상이 정확히 100이다
+ * 죽일 수 있는 몬스터 — hpmax·hpcur 1, exp 100이라 한 대 맞으면 죽고 보상이 정확히 100이다
  * (expdiv = trunc(exp * dmg / hpmax) = 100).
  */
 function makeFragileCreature(overrides: Partial<CreatureInstance> = {}): CreatureInstance {
   return makeCreature('1:c0', '고블린', { hpmax: 1, hpcur: 1, experience: 100, ...overrides })
 }
 
-/** 잘 버티는 크리처 — 한 대로는 죽지 않는다(비-킬 경로 기본). */
+/** 잘 버티는 몬스터 — 한 대로는 죽지 않는다(비-킬 경로 기본). */
 function makeToughCreature(overrides: Partial<CreatureInstance> = {}): CreatureInstance {
   return makeCreature('1:c0', '고블린', { hpmax: 500, hpcur: 500, experience: 100, ...overrides })
 }
@@ -269,7 +269,7 @@ describe('createAttackHandler — 쿨다운 게이트', () => {
 // ── 대상 해석 ────────────────────────────────────────────────────────────────
 
 describe('createAttackHandler — 대상 해석', () => {
-  it('크리처가 없고 사람이 잡히면 사람 공격 거부 메시지를 낸다', () => {
+  it('몬스터가 없고 사람이 잡히면 사람 공격 거부 메시지를 낸다', () => {
     const { handler } = setup({ others: [makeCharacter({ _id: 'char-2', name: '타이' })] })
 
     const events = run(handler, attackCommand('타이'))
@@ -301,7 +301,7 @@ describe('createAttackHandler — 대상 해석', () => {
     expect(events[0]).toMatchObject({ message: '아직 사람은 공격할 수 없습니다' })
   })
 
-  it('크리처·사람 모두 못 찾으면 미해석 거부 메시지를 낸다', () => {
+  it('몬스터·사람 모두 못 찾으면 미해석 거부 메시지를 낸다', () => {
     const { handler } = setup({ creatures: [makeToughCreature()] })
 
     const events = run(handler, attackCommand('용'))
@@ -314,7 +314,7 @@ describe('createAttackHandler — 대상 해석', () => {
     })
   })
 
-  it('같은 이름의 크리처와 사람이 함께 있으면 크리처를 먼저 고른다', () => {
+  it('같은 이름의 몬스터와 사람이 함께 있으면 몬스터를 먼저 고른다', () => {
     const { handler } = setup({
       others: [makeCharacter({ _id: 'char-2', name: '타이' })],
       creatures: [makeToughCreature({ name: '타이' })],
@@ -342,7 +342,7 @@ describe('createAttackHandler — 대상 해석', () => {
 // ── 게이트 실패 ──────────────────────────────────────────────────────────────
 
 describe('createAttackHandler — 무적 게이트', () => {
-  it('MUNKIL 크리처는 initiateAttack이 돌려준 사유로 거부한다', () => {
+  it('MUNKIL 몬스터는 initiateAttack이 돌려준 사유로 거부한다', () => {
     const { handler } = setup({ creatures: [makeToughCreature({ flags: flagsHex(MUNKIL) })] })
 
     const events = run(handler, attackCommand('고블린'))
@@ -550,7 +550,7 @@ describe('createAttackHandler — 킬 경로', () => {
     expect(liveRegistry.get('char-1')?.character.experience).toBe(130)
   })
 
-  it('사망 시 world:room을 세 번째 이벤트로 덧붙이고 죽은 크리처를 뺀다', () => {
+  it('사망 시 world:room을 세 번째 이벤트로 덧붙이고 죽은 몬스터를 뺀다', () => {
     const { handler } = setup({ creatures: [makeFragileCreature()] })
 
     const events = run(handler, attackCommand('고블린'))

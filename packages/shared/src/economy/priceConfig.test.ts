@@ -6,7 +6,7 @@ import { goldenFixtureSchema, type GoldenFixture } from '../oracle/types.js'
 import type { PriceInput } from '../oracle/generators/priceFixture.js'
 
 describe('PRICE_CONFIG — 선언적 배수 상수 테이블', () => {
-  it('몹 하한·판매 상한·판매/수리 제수를 A8 §8 기준값으로 노출한다', () => {
+  it('몬스터 하한·판매 상한·판매/수리 제수를 A8 §8 기준값으로 노출한다', () => {
     expect(PRICE_CONFIG.mobFloor).toBe(10)
     expect(PRICE_CONFIG.sellCap).toBe(100000)
     expect(PRICE_CONFIG.sellDivisor).toBe(2)

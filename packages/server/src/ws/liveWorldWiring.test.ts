@@ -299,7 +299,7 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
  * 동일성은 위 '#3' 케이스가 고정하며, (3) 여기서는 플레이어 리졸버가 **같은 레지스트리 인스턴스**를
  * 배후에 둔다는 것(백킹 스토어 미분기)을 spy로 고정한다.
  */
-describe('방 스코프 대상 리졸버 노출 (크리처·플레이어)', () => {
+describe('방 스코프 대상 리졸버 노출 (몬스터·플레이어)', () => {
   it('resolveRoomCreature은 모듈 순수 함수를 그대로 노출한다(재생성 없음)', () => {
     const h = makeBundle(new Map<number, RoomNode>([[3, makeRoom(3)]]))
 
@@ -308,7 +308,7 @@ describe('방 스코프 대상 리졸버 노출 (크리처·플레이어)', () =
     expect(wiring.resolveRoomCreature).toBe(resolveRoomCreature)
   })
 
-  it('노출된 크리처 리졸버가 방 크리처를 가시성 게이트와 함께 해석한다', () => {
+  it('노출된 크리처 리졸버가 방 몬스터를 가시성 게이트와 함께 해석한다', () => {
     const room = makeRoom(3, [], [], {
       creatures: [
         makeCreature('c-invis', '유령', { flags: flagsHex(MINVIS) }),
@@ -366,7 +366,7 @@ describe('world:room 두 생산자 페이로드 동일성 (진입 vs 이동)', (
   it('같은 방에 대해 enterCommand 경로(roomSummary)와 이동 경로(move 핸들러)가 같은 페이로드를 낸다', () => {
     // A=100 →'동'→ B=200. char-1이 A에 있다가 B로 이동한 뒤, 같은 B에 대한 두 경로의 페이로드를 비교한다.
     const roomA = makeRoom(100, ['char-1'], [{ name: '동', targetRoomId: 200 }])
-    // 아이템·크리처까지 non-vacuous하게 비교하려면 도착 방에 실물이 있어야 한다(빈 배열끼리 비교는
+    // 아이템·몬스터까지 non-vacuous하게 비교하려면 도착 방에 실물이 있어야 한다(빈 배열끼리 비교는
     // 두 생산자의 변환이 갈려도 통과한다).
     const roomB = makeRoom(200, [], [{ name: '서', targetRoomId: 100 }], {
       items: [makeItem('obj-1', '녹슨 검')],
@@ -388,7 +388,7 @@ describe('world:room 두 생산자 페이로드 동일성 (진입 vs 이동)', (
     const entrySummary = buildSessionLiveWorld(wiring.liveWorldBinding).roomSummary(200)
 
     expect(entrySummary).toBeDefined()
-    // non-vacuous: 두 페이로드 모두 실제 점유자·아이템·크리처·출구를 담는다(빈 값 비교가 아니다).
+    // non-vacuous: 두 페이로드 모두 실제 점유자·아이템·몬스터·출구를 담는다(빈 값 비교가 아니다).
     expect(entrySummary?.occupants).toEqual([{ characterId: 'char-1', name: '테스토스' }])
     expect(entrySummary?.items).toEqual([{ instanceId: 'obj-1', name: '녹슨 검' }])
     expect(entrySummary?.creatures).toEqual([{ instanceId: 'crt-1', name: '박쥐', level: 2 }])

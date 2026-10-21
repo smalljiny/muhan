@@ -33,7 +33,7 @@ describe('게이트 입력 재사용 계약(타입 레벨)', () => {
 const FIGHTER = 4 // class < CARETAKER — MENONL 대상
 
 describe('checkTargetImmunityPre (player→creature MUNKIL, registerEnemy 前, Story 10 T10.3)', () => {
-  it('MUNKIL 크리처는 마법무기여도 무조건 거부한다', () => {
+  it('MUNKIL 몬스터는 마법무기여도 무조건 거부한다', () => {
     const r = checkTargetImmunityPre({
       defender: { flags: F_SET('', MUNKIL) },
     })
@@ -45,7 +45,7 @@ describe('checkTargetImmunityPre (player→creature MUNKIL, registerEnemy 前, S
     expect(checkTargetImmunityPre({ defender: { flags: F_SET('', MENONL) } }).ok).toBe(true)
   })
 
-  it('플래그 없는 크리처는 허용하고 쿨다운 증분은 0이다', () => {
+  it('플래그 없는 몬스터는 허용하고 쿨다운 증분은 0이다', () => {
     const r = checkTargetImmunityPre({ defender: { flags: '' } })
     expect(r).toEqual({ ok: true, cooldownIncrement: 0 })
   })
@@ -58,7 +58,7 @@ describe('checkTargetImmunityPre (player→creature MUNKIL, registerEnemy 前, S
 })
 
 describe('checkTargetImmunityPost (player→creature MMGONL/MENONL, registerEnemy 後, Story 10 T10.3)', () => {
-  it('MMGONL 크리처는 마법무기여도 거부한다(마법만)', () => {
+  it('MMGONL 몬스터는 마법무기여도 거부한다(마법만)', () => {
     const r = checkTargetImmunityPost({
       attacker: { class: FIGHTER, weapon: { adjustment: 3 } },
       defender: { flags: F_SET('', MMGONL) },
@@ -106,7 +106,7 @@ describe('checkTargetImmunityPost (player→creature MMGONL/MENONL, registerEnem
     expect(r.ok).toBe(true)
   })
 
-  it('플래그 없는 크리처는 허용하고 쿨다운 증분은 0이다', () => {
+  it('플래그 없는 몬스터는 허용하고 쿨다운 증분은 0이다', () => {
     const r = checkTargetImmunityPost({
       attacker: { class: FIGHTER, weapon: null },
       defender: { flags: '' },

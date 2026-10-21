@@ -1,9 +1,9 @@
 /**
  * stats/derived — `EffectiveStatContext`를 입력으로 받는 파생 스탯 resolver 런타임 계층.
  *
- * 산술 기준은 `oracle/*`에 단일 출처로 두고, 이 계층은 공통 컨텍스트를 각 oracle 함수의
+ * 산술 기준은 `oracle/*`에 단일 출처로 두고, 이 계층은 공통 컨텍스트를 각 오라클 함수의
  * 좁은 입력으로 어댑트해 호출하는 얇은 wrapper만 제공한다(Open Q #5: wrap). 방어도·명중률
- * 등 산술식을 여기서 재정의하지 않는다 — 드리프트 0을 위해 산술은 oracle 한 곳에만 존재한다.
+ * 등 산술식을 여기서 재정의하지 않는다 — 드리프트 0을 위해 산술은 오라클 한 곳에만 존재한다.
  */
 
 import { computeAc as computeAcOracle } from '../oracle/computeAc.js'
@@ -12,7 +12,7 @@ import { thacoOf, bonusOf, proficDivisorOf, classStatOf } from './tables.js'
 import type { EffectiveStatContext } from './context.js'
 
 /**
- * 방어도 resolver — `EffectiveStatContext`를 `ComputeAcInput`으로 어댑트해 oracle
+ * 방어도 resolver — `EffectiveStatContext`를 `ComputeAcInput`으로 어댑트해 오라클
  * `computeAc`를 호출하는 얇은 wrapper. 산술식은 `oracle/computeAc.ts`가 기준이다.
  */
 export function computeAc(context: EffectiveStatContext): number {
@@ -27,7 +27,7 @@ export function computeAc(context: EffectiveStatContext): number {
 /**
  * 명중(THAC0) resolver — `player.c:1001`의 compute_thaco를 직접 산술로 구현한 SUT.
  *
- * computeAc와 달리 oracle 산술 모듈이 없다 — 산술 기준이 이 함수 자체다. 독립 참조는
+ * computeAc와 달리 오라클 산술 모듈이 없다 — 산술 기준이 이 함수 자체다. 독립 참조는
  * `oracle/generators/computeThacoFixture.ts`의 `referenceComputeThaco`가 골든 fixture용으로
  * 별도 표현으로 보유한다.
  *
@@ -49,7 +49,7 @@ export function computeThaco(context: EffectiveStatContext): number {
   let thaco = thacoOf({ classIndex: characterClass, levelIndex })
   thaco -= weaponAdjustment
   thaco -= Math.trunc(weaponProficiency / proficDivisorOf(characterClass))
-  // oracle과의 차이(의도): C `compute_thaco`(player.c:1011)는 `bonus[strength]`를 무클램프로
+  // 오라클과의 차이(의도): C `compute_thaco`(player.c:1011)는 `bonus[strength]`를 무클램프로
   // 첨자하나, `bonusOf`는 [0,63]으로 clamp한다. 정상 능력치 범위에서는 동일하고, clamp가
   // C의 잠재적 OOB 읽기보다 안전하다 — effectiveStrength>63(버프 스택) 극단에서만 갈린다.
   thaco -= bonusOf(effectiveStrength)
@@ -88,7 +88,7 @@ export function maxWeight(context: EffectiveStatContext): number {
  * truncation이 **곱 결과에 적용**된다. `Math.trunc(hp * (level - 1) / 2)`로 그룹핑한다 —
  * `hp * Math.trunc((level-1)/2)`로 잘못 묶으면 오답이다(fighter L10이 83 아닌 80).
  *
- * ## oracle과의 차이 수용: 닫힌 식만 구현
+ * ## 오라클과의 차이 수용: 닫힌 식만 구현
  * 원본 `up_level`은 닫힌 식(805–808) 이전에 홀짝 증분(779–780)을 수행하고, 닫힌 식 재계산은
  * `level==1`·`level%4==0`에서만 도달한다(791행 조기 return). `level%4≠0` 레벨은 증분
  * 누적값이 잔존해 닫힌 식과 **어긋나며** 그 값이 디스크에 저장·관측된다(fighter hpMax:
@@ -108,7 +108,7 @@ export function computeHpMax(context: EffectiveStatContext): number {
  *
  * `mpMax = mpstart + trunc(mp * (level-1) / 2)`. computeHpMax와 동일한 그룹핑 규칙을 따른다 —
  * truncation은 곱 결과에 적용한다. `mpstart`·`mp`는 `classStatOf`로 읽는다.
- * oracle과의 차이 수용(닫힌 식만 구현)도 computeHpMax와 동일하다 — MP는 짝수 레벨 증분이라
+ * 오라클과의 차이 수용(닫힌 식만 구현)도 computeHpMax와 동일하다 — MP는 짝수 레벨 증분이라
  * `level%4≠0` 짝수 레벨에서 닫힌 식과 어긋난다(같은 A7 §2 근거).
  */
 export function computeMpMax(context: EffectiveStatContext): number {

@@ -14,7 +14,7 @@
 
 /**
  * MONEY 디스크립터 — 좁은 객체이며 완전한 ObjectInstance가 아니다. objnum 0="동전" 템플릿,
- * type 10=MONEY(A8 §1 taxonomy). A8 §7 die()는 몹 gold를 obj->value=gold인 MONEY 객체로
+ * type 10=MONEY(A8 §1 taxonomy). A8 §7 die()는 몬스터 gold를 obj->value=gold인 MONEY 객체로
  * 변환한다. 소유자·영속 필드가 없는 bare 디스크립터다(바닥 배치·소유자 연결은 #106의 몫).
  */
 export interface MoneyDescriptor {

@@ -5,7 +5,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * realmGrowthAmount 골든 옮겨 적기-diff fixture 생성기 — manual oracle.
+ * realmGrowthAmount 골든 옮겨 적기-diff fixture 생성기 — manual 오라클.
  *
  * 원본 `magic1.c:1122-1130`의 realm 숙련 성장량 공식을 **독립 리터럴**로 옮겨 적어(옮겨 적기 pass 2) {m, exp,
  * hpmax} 조회 케이스로 감싼다. SUT `realmGrowthAmount`(server/magic)은 realmGrowth.ts 구현(옮겨 적기 pass 1)을

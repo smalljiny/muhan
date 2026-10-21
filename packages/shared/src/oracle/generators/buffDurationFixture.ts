@@ -6,7 +6,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * 버프/디버프 dur 골든 옮겨 적기-diff fixture 생성기 — manual oracle(A6 §6·§7, magic2-8.c).
+ * 버프/디버프 dur 골든 옮겨 적기-diff fixture 생성기 — manual 오라클(A6 §6·§7, magic2-8.c).
  *
  * 원본 magic2.c:374(버프)·magic8.c(디버프)의 dur 공식을 **독립 리터럴**로 옮겨 적어(옮겨 적기 pass 2)
  * 케이스로 감싼다. SUT computeBuffDur/computeDebuffDur(server)는 buffCatalog 메타 테이블을 소비하는
