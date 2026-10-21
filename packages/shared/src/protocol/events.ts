@@ -7,7 +7,7 @@ import { characterSummarySchema, promptKindSchema, promptOptionSchema } from './
  *
  * 값 자체는 `magic/spellStore.ts`의 `SPELL_STORE_BYTES`·`schema/character.ts`의 `spells`와 같지만
  * **import하지 않고 여기 따로 선언한다** — 프로토콜은 도메인·영속 모듈과 별개이고, 와이어 계약은
- * 도메인 상수가 움직였다고 따라 움직이면 안 된다(움직이면 version bump 대상이다). 대신 형상이
+ * 도메인 상수가 움직였다고 따라 움직이면 안 된다(움직이면 version bump 대상이다). 대신 형태가
  * 어긋나면 교차 테스트(events.test.ts)가 잡는다.
  */
 const SPELL_MASK_BYTES = 16
@@ -150,8 +150,8 @@ export const serverEventSchema = z.discriminatedUnion('type', [
   // 학습 성공 통지 — study()가 확정한 주문 습득 결과를 본인에게 1회 발화한다. progress:trained 선례대로
   // correlationId를 싣지 않는다(상태 이벤트 — 거부만 error로 상관 키를 반향한다).
   //
-  // spells는 characterSchema.spells와 **같은 형상을 따로 선언한 것**이다 — 프로토콜은 schema/(영속·도메인)와
-  // 별개 모듈이라 파생하지 않는다(transport-protocol.md). 그래서 형상 일치는 이 파일이 아니라 두 스키마를
+  // spells는 characterSchema.spells와 **같은 형태를 따로 선언한 것**이다 — 프로토콜은 schema/(영속·도메인)와
+  // 별개 모듈이라 파생하지 않는다(transport-protocol.md). 그래서 형태 일치는 이 파일이 아니라 두 스키마를
   // 함께 import하는 교차 테스트(events.test.ts)가 보장한다. 이 주석만으로는 아무것도 강제되지 않는다.
   //
   // consumedObjectId는 study가 바꾸는 **두 번째 상태**다. progress:trained가 세운 원칙("그 연산이 실제로
@@ -193,7 +193,7 @@ export const serverEventSchema = z.discriminatedUnion('type', [
   // specialAttack을 뺀 것이다(D11). 몬스터 특수공격 마커는 이슈 #99 소관이라 이 토픽의 와이어 계약에
   // 넣지 않는다 — 그때 필드를 추가하면 version bump 대상이다. strict라서 지금 실어 보내면 거부된다.
   //
-  // progress:studied의 spells와 같은 상황이다 — 저쪽 형상을 **따로 선언한 것**이지 파생한 것이 아니다.
+  // progress:studied의 spells와 같은 상황이다 — 저쪽 형태를 **따로 선언한 것**이지 파생한 것이 아니다.
   // shared는 server를 import할 수 없어(의존 방향이 server → shared) 그 대응을 여기서 강제할 수 없다.
   // 강제는 반대편이 한다 — server/src/combat/attackDescriptorWire.test.ts가 두 타입을 함께 놓고
   // 컴파일 타임에 대조한다. 이 주석만으로는 아무것도 강제되지 않는다.

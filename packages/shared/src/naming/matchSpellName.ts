@@ -33,7 +33,7 @@
  * 순수 함수다. 입력 배열·객체를 변형하지 않고 전역 상태를 읽지 않는다.
  */
 
-/** 매처가 보는 카탈로그 엔트리의 최소 형상 — `SpellEntry` 전체를 요구하지 않는다. */
+/** 매처가 보는 카탈로그 엔트리의 최소 형태 — `SpellEntry` 전체를 요구하지 않는다. */
 export interface SpellNameEntry {
   readonly spellNo: number
   readonly koreanName: string

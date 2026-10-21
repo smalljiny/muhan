@@ -7,7 +7,7 @@ import { createGameTime } from './gameTime.js'
 import { createCheckExitsSlot } from './checkExits.js'
 
 // index.ts boot 배선의 통합 정합성(플랜 line 233 "선택"). index.ts는 커버리지 제외 배선 코드라
-// 이 테스트가 실 배선 형상 — 하나의 WorldClock에 gameTime·checkExits 슬롯을 동시 등록하고
+// 이 테스트가 실 배선 구성을 재현한다 — 하나의 WorldClock에 gameTime·checkExits 슬롯을 동시 등록하고
 // FakeClock으로 구동해 두 슬롯이 각자 케이던스로 함께 발화함을 결정적으로 검증한다.
 
 function makeExit(bits: number[], ltime: number, interval: number): ExitEdge {

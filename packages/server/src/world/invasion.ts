@@ -9,7 +9,7 @@ import type { SpawnTemplateIndex, InstanceIdAllocator } from './spawn.js'
  * (플랜 T4.3·T4.4, A9 §2.3 update_monster/_two update.c:755·784, 결정 D2).
  *
  * 원본은 방/몹 번호 범위를 소스에 하드코딩(방 8000~8300·3601~3630, 몹 732~755·265~299, 4000·5000초)
- * 했다 — 이것은 형상이므로 신규 스택에서 `data/world/events.json`(hand-authored, converter 산출물
+ * 했다 — 이것은 원작의 구현 방식이므로 신규 스택에서 `data/world/events.json`(hand-authored, converter 산출물
  * 아님) 데이터 정의로 승격한다. 침공이라는 게임 이벤트 자체(주기적 몹 물결 + 전역 알림)는 콘텐츠다.
  *
  * 이벤트마다 `intervalSec=periodSec`인 `WorldTickSlot` 하나를 만들어 반환한다 — 서로 다른 주기의

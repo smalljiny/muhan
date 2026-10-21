@@ -108,7 +108,7 @@ function materialize(
     experience: src.experience,
     alignment: src.alignment,
     // 이름 매칭용 별칭(Story 4) — 소스에서 옮긴다(콘텐츠 불변). 소스에 없어도 빈 배열로
-    // 정규화한다(undefined 금지 — 대상 매처가 두 형상을 분기하지 않도록). 배열은 인스턴스마다
+    // 정규화한다(undefined 금지 — 대상 매처가 두 경우를 따로 처리하지 않도록). 배열은 인스턴스마다
     // 복사한다 — 같은 템플릿에서 스폰된 전 인스턴스가 한 배열을 공유하지 않게(realm 선례).
     keys: [...(src.keys ?? [])],
     flags: src.flags,

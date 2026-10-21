@@ -11,7 +11,7 @@ import { serverEventSchema } from './events.js'
  */
 describe('serverEventSchema (전투 이벤트)', () => {
   describe('combat:attacked', () => {
-    /** 단일 타격 서술자의 유효 형상. 케이스마다 다른 필드만 덮어써 차이를 드러낸다. */
+    /** 단일 타격 서술자의 유효 형태. 케이스마다 다른 필드만 덮어써 차이를 드러낸다. */
     const validAttack = {
       hit: true,
       damage: 7,

@@ -155,7 +155,7 @@ function makeCharacter(): Character {
 /**
  * 시드 비법서 인스턴스 — `objectSchema.parse`를 통과시켜 만든다.
  *
- * 리터럴을 그대로 쓰지 않는 이유는 형상 계약을 **런타임에** 강제하기 위해서다. 이 스위트의 fake repo는
+ * 리터럴을 그대로 쓰지 않는 이유는 형태 계약을 **런타임에** 강제하기 위해서다. 이 스위트의 fake repo는
  * 인스턴스를 검증 없이 돌려주므로(실 `ObjectRepository.findByOwner`는 `objectSchema.parse`한다), 파싱을
  * 끼우지 않으면 스키마가 거부할 시드로도 시나리오가 통과해 배선 검출력이 떨어진다.
  */

@@ -570,7 +570,7 @@ describe('serverEventSchema (server→client 봉투)', () => {
       type: 'progress:studied',
       spellNo: 7,
       spellName: '화염구',
-      // characterSchema.spells와 동일한 형상 — uint8[16] = 128비트 주문 지식 비트마스크.
+      // characterSchema.spells와 동일한 형태 — uint8[16] = 128비트 주문 지식 비트마스크.
       spells: [128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       consumedObjectId: 'obj-1',
     }
@@ -628,13 +628,13 @@ describe('serverEventSchema (server→client 봉투)', () => {
     })
 
     /**
-     * 영속 스키마와의 형상 드리프트 차단 — 와이어 `spells`는 `characterSchema.spells`를 파생하지 않고
+     * 영속 스키마와의 형태 드리프트 차단 — 와이어 `spells`는 `characterSchema.spells`를 파생하지 않고
      * 따로 선언하므로(프로토콜은 schema/와 별개 모듈), **두 스키마를 함께 검사하는 이 테스트만이**
-     * 형상 일치를 실제로 강제한다. 리터럴 16을 리터럴 16과 대조하는 테스트는 이 보장을 주지 못한다.
+     * 형태 일치를 실제로 강제한다. 리터럴 16을 리터럴 16과 대조하는 테스트는 이 보장을 주지 못한다.
      *
      * 같은 입력 집합을 양쪽에 통과시켜 accept/reject가 일치하는지 본다 — 한쪽 폭이 바뀌면 갈라진다.
      */
-    it('spells 형상이 characterSchema.spells와 일치한다 (드리프트 차단)', () => {
+    it('spells 형태가 characterSchema.spells와 일치한다 (드리프트 차단)', () => {
       const spellsField = characterSchema.shape.spells
       const cases: readonly number[][] = [
         new Array<number>(15).fill(0),

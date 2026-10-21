@@ -55,7 +55,7 @@ export type ItemInstance = {
    * JSON(objects.json / rooms.json `items[]`·중첩 `contains[]`, port `templates.js` OBJ 오프셋
    * 160)에 존재하며 물질화 시점에 옮긴다(배선은 Story 4 — 이 선언 시점엔 값이 흐르지 않는다).
    * 빈 슬롯·공백 전용 슬롯은 리더가 드롭하므로 별칭이
-   * 없는 아이템은 `[]`다(`undefined` 아님 — 매처가 두 형상을 분기하지 않도록).
+   * 없는 아이템은 `[]`다(`undefined` 아님 — 매처가 두 경우를 따로 처리하지 않도록).
    *
    * **선택 필드**로 둔다(required 금지) — `ItemInstance` 인라인 리터럴을 다수 테스트 픽스처가
    * 흩어서 구성하므로 required면 전 리터럴 컴파일이 깨진다(`CreatureInstance.experience` 선례).
@@ -146,7 +146,7 @@ export type CreatureInstance = {
    * CRT 오프셋 255)에 이미 존재하며 물질화 시점에 옮긴다(배선은 Story 4 — 이 선언 시점엔 값이
    * 흐르지 않는다) — embedded 몬스터는 `templateId=null`이라 재조회가 불가능하기 때문이다.
    * 빈 슬롯·공백 전용 슬롯은 리더가 드롭하므로 별칭이 없는
-   * 크리처는 `[]`다(`undefined` 아님 — 매처가 두 형상을 분기하지 않도록).
+   * 크리처는 `[]`다(`undefined` 아님 — 매처가 두 경우를 따로 처리하지 않도록).
    *
    * **선택 필드**로 둔다(required 금지) — `CreatureInstance` 인라인 리터럴을 다수 테스트 픽스처가
    * 흩어서 구성하므로 required면 전 리터럴 컴파일이 깨진다(experience/alignment 선례).

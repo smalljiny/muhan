@@ -89,7 +89,7 @@ export interface RawObjectTemplate {
  *
  * trim은 보관값에도 필요하다 — 소비자 `matchTarget`이 `key.startsWith(query)`라 선행 공백이
  * 남으면 매칭이 조용히 깨진다. 반면 빈 슬롯 드롭은 매칭 폭과 무관하다(빈 `key`는 빈 `query`에만
- * 매치하고, 빈 query는 이미 `name`으로 전 후보에 매치한다) — 형상 정규화 목적이다.
+ * 매치하고, 빈 query는 이미 `name`으로 전 후보에 매치한다) — 형태 정규화 목적이다.
  */
 function sanitizeKeys(keys: readonly string[] | undefined): readonly string[] {
   if (keys === undefined) return []

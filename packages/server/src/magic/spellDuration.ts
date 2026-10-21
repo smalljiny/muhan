@@ -101,7 +101,7 @@ const LIGHT_PER_L4 = 300
  *
  * ## OpenQ #3-b — invisibility·levitate MAX(300) 하한 복원 (A6 §11-b)
  * 오라클(magic3.c:456 invis `1200+B*600`, magic5.c:515 levit `2400+B*600`)은 표준 버프와 달리 MAX(300)
- * 하한이 빠져 저지능(B 음수)이면 dur이 0/음수가 된다(형상 결함). A6 §11-b 결정("표준 버프처럼 하한 적용")에
+ * 하한이 빠져 저지능(B 음수)이면 dur이 0/음수가 된다(구현 결함). A6 §11-b 결정("표준 버프처럼 하한 적용")에
  * 따라 **표준 버프와 동일하게 MAX(300) 하한을 복원**한다 — 하한은 base 항(1200/2400 + B*600)에 걸고,
  * 클래스/RPMEXT 보너스는 하한 뒤 가산한다(computeBuffDur 순서 동형). 비-CAST는 표준처럼 고정 1200.
  *   - invisibility: MAX(300, 1200+B*600) + (MAGE ? 60*L4 : 0) + (rpmext ? 600 : 0). ⇒ SDINVI와 동형.
