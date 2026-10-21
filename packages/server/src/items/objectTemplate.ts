@@ -28,7 +28,7 @@ export interface ObjectTemplate {
    * 흩어진 리터럴이 없어 필수화 비용이 픽스처 1곳뿐이다. (매처 `NameMatchable.keys`는 여전히 선택이라
    * 하류 분기가 사라지지는 않는다 — 필수화의 이득은 이 모듈 안에서 끝난다.)
    *
-   * 소비자는 인벤 스코프 이름 해소자(#120 study 대상 해소)다.
+   * 소비자는 인벤 스코프 이름 리졸버(#120 study 대상 해석)다.
    */
   readonly keys: readonly string[]
   readonly type: number
@@ -80,8 +80,8 @@ export interface RawObjectTemplate {
  * 별칭 슬롯을 위생 처리한다 — 각 원소를 trim하고 빈 것을 드롭해 새 배열로 복사한다.
  * 미보유(`undefined`)는 `[]`로 정규화한다.
  *
- * ⚠ 이 위생의 1차 소유자는 상류 리더 `packages/port/templates.js`의 `readKeys`다 — 거기서 이미
- * trim + 빈 슬롯 드롭을 하므로 정본 데이터(`objects.json` 709엔트리)에서 이 함수는 무발화다.
+ * ⚠ 이 위생의 1차 담당은 상류 리더 `packages/port/templates.js`의 `readKeys`다 — 거기서 이미
+ * trim + 빈 슬롯 드롭을 하므로 기준 데이터(`objects.json` 709엔트리)에서 이 함수는 동작하지 않는다.
  * 여기서 한 번 더 하는 것은 수기 픽스처·후속 데이터 경로에 대한 이중 방어일 뿐이고,
  * 형제 경로(`world/worldGraph.ts`·`creatureFactory.ts`·`spawn.ts`)는 `[...(raw.keys ?? [])]`로
  * 리더 위생을 그대로 신뢰한다. 즉 같은 소스 필드에 위생 강도가 두 갈래로 갈려 있다.

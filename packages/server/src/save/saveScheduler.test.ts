@@ -276,7 +276,7 @@ describe('SaveScheduler', () => {
   /**
    * 완료 프로토콜 왕복 — checkout → enqueue → write → ack/discard.
    *
-   * SaveEngine이 하는 배선(onSettled → tracker.ack/discard)을 그대로 조립해, 스냅샷이 mark부터
+   * SaveEngine이 하는 연결(onSettled → tracker.ack/discard)을 그대로 조립해, 스냅샷이 mark부터
    * write 종결까지 tracker 안에 **연속 존재**함을 구간별로 고정한다. flush가 checkout이 아니라
    * 파괴적 drain을 쓰면 큐에 넘어간 순간 스냅샷이 사라져 재접속 hydrate가 과거 문서를 읽는다(#124).
    */

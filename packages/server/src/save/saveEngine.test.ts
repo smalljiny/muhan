@@ -69,7 +69,7 @@ describe('SaveEngine', () => {
     vi.useRealTimers()
   })
 
-  describe('T5.1 — 조립·dispatch 배선', () => {
+  describe('T5.1 — 조립·dispatch 연결', () => {
     it('start()는 scheduler를 기본 120초 간격으로 arm한다', () => {
       const engine = makeEngine(spies, clock)
       engine.start()
@@ -221,7 +221,7 @@ describe('SaveEngine', () => {
     it('회귀(write-loss): flush로 큐에 in-flight인 stale write가 saveNow의 최신 write를 덮어쓰지 않는다', async () => {
       // 레이스: markDirty(snap_old) → 주기 flush가 snap_old를 큐로 옮겨 워커가 in-flight로 가져간다
       // → saveNow(snap_new). tracker.evict는 이미 checkout된 키라 no-op이므로, in-flight snap_old write가
-      // saveNow의 snap_new write보다 나중에 완료되면 최신값을 덮어쓴다(무성 데이터 손실). saveNow가
+      // saveNow의 snap_new write보다 나중에 완료되면 최신값을 덮어쓴다(조용한 데이터 손실). saveNow가
       // 큐의 pending 취소 + in-flight write await까지 수행해야 이 창이 봉쇄된다.
       const writeLog: unknown[] = []
       let releaseStale!: () => void
@@ -302,16 +302,16 @@ describe('SaveEngine', () => {
   })
 
   /**
-   * 완료 프로토콜 배선 — 큐의 종결 통지가 tracker 반납으로 이어진다.
+   * 완료 프로토콜 연결 — 큐의 종결 통지가 tracker 반납으로 이어진다.
    *
-   * 이 배선이 빠지면 스냅샷이 inProgress에 영구 잔류해 tracker가 무한 성장하고, 반대로 호출자
-   * 옵션이 엔진 배선을 덮으면 반납 자체가 발화하지 않는다. 두 방향 모두 예외도 로그도 남기지
-   * 않는 무성 결함이라 배선 형태를 직접 고정한다.
+   * 이 연결이 빠지면 스냅샷이 inProgress에 영구 잔류해 tracker가 무한 성장하고, 반대로 호출자
+   * 옵션이 엔진 연결을 덮으면 반납 자체가 실행되지 않는다. 두 방향 모두 예외도 로그도 남기지
+   * 않는 조용한 결함이라 연결 형태를 직접 고정한다.
    */
-  describe('T2.3 — 완료 프로토콜 배선(onSettled → tracker.ack/discard)', () => {
+  describe('T2.3 — 완료 프로토콜 연결(onSettled → tracker.ack/discard)', () => {
     it('write 성공 시 tracker.ack을 checkout 엔트리로 정확히 1회 호출한다', async () => {
       const ackSpy = vi.spyOn(DirtyTracker.prototype, 'ack')
-      // checkout이 내준 엔트리를 포착해 참조 동일성까지 단언한다 — 값 동등성만 보면 배선이
+      // checkout이 내준 엔트리를 포착해 참조 동일성까지 단언한다 — 값 동등성만 보면 연결이
       // 엔트리를 재구성해 넘겨도 통과하는데, 그러면 tracker의 반납 가드가 영영 성립하지 않는다.
       const checkoutSpy = vi.spyOn(DirtyTracker.prototype, 'checkout')
       const engine = makeEngine(spies, clock)
@@ -355,12 +355,12 @@ describe('SaveEngine', () => {
     })
 
     /**
-     * 호출자가 `onSettled`를 넘기면 엔진 배선이 덮여 반납이 발화하지 않고, 스냅샷이 inProgress에
+     * 호출자가 `onSettled`를 넘기면 엔진 연결이 덮여 반납이 실행되지 않고, 스냅샷이 inProgress에
      * 영구 잔류한다. 그 고장은 예외도 로그도 남기지 않으므로 런타임 무시가 아니라 타입으로 막는다
      * — `queueOptions`가 `Omit<AsyncWriteQueueOptions, 'onSettled'>`라 넘기는 것 자체가 컴파일
      * 에러다. 아래 단언이 그 형태를 고정한다(생성자 스프레드 순서는 같은 방어의 이중화다).
      */
-    it('queueOptions는 onSettled를 받지 않는다(엔진 배선 보호)', () => {
+    it('queueOptions는 onSettled를 받지 않는다(엔진 연결 보호)', () => {
       expectTypeOf<NonNullable<SaveEngineOptions['queueOptions']>>().not.toHaveProperty('onSettled')
       expectTypeOf<NonNullable<SaveEngineOptions['queueOptions']>>().toHaveProperty('sleep')
       expectTypeOf<NonNullable<SaveEngineOptions['queueOptions']>>().toHaveProperty('capacity')
@@ -371,7 +371,7 @@ describe('SaveEngine', () => {
    * pending 스냅샷 조회 seam — 재접속 hydrate가 아직 영속되지 않은 진행도를 보는 단일 입구다.
    *
    * 두 축을 고정한다 — (1) 조회처는 tracker 한 곳이고, (2) 반환값은 영속 경로와 같은 _id 정규화를
-   * 거친다. 계약 근거는 `SaveEngine.peekPending` JSDoc이 정본이다.
+   * 거친다. 계약 근거는 `SaveEngine.peekPending` JSDoc이 기준이다.
    */
   describe('T3.2 — peekPending 조회 seam', () => {
     it('registry·inProgress 양쪽에 없는 키는 undefined를 반환한다(수명 계약상 DB가 최신)', () => {
@@ -481,7 +481,7 @@ describe('SaveEngine', () => {
      *
      * collection별 타입 파라미터를 두지 않는다. 소비자(hydrate)가 characterPatchSchema로 런타임
      * 검증하므로, 검증되지 않은 컴파일 타임 단언을 이중으로 두면 둘이 어긋나도 타입 검사가 잡지
-     * 못한다. save 계층이 collection 무지(agnostic)라는 기존 설계와도 정합이다.
+     * 못한다. save 계층이 collection 무지(agnostic)라는 기존 설계와도 일치한다.
      */
     it('공개 시그니처가 (collection: string, id: string) => unknown이다(OQ2 결정 고정)', () => {
       // 인스턴스 프로퍼티가 아니라 클래스 타입에서 메서드 타입을 꺼낸다 — 형제 타입 테스트
@@ -543,7 +543,7 @@ describe('SaveEngine', () => {
     })
 
     it('markObjectDeleted seam→주기 flush 경로로 deleteById가 정확히 1회 호출된다', async () => {
-      // 실 seam을 통과시켜 프로덕션이 실제로 흘리는 형태(컬렉션 리터럴·툼스톤)로 배선을 관통 검증한다
+      // 실 seam을 통과시켜 프로덕션이 실제로 흘리는 형태(컬렉션 리터럴·툼스톤)로 연결을 관통 검증한다
       // — 직접 markDirty에 넣으면 seam과 dispatch 키가 어긋나도 검출되지 않는다.
       const engine = makeEngine(spies, clock)
       const markObjectDeleted = createMarkObjectDeleted((collection, id, snapshot) =>

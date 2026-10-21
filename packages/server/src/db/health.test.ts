@@ -3,7 +3,7 @@ import { type Db } from 'mongodb'
 import { pingDb } from './health.js'
 
 // pingDb는 순수 유닛으로 검증한다 — command 성공/실패만 분기하므로 스텁이면 충분하다.
-// 실제 mongod 대상 ping 성공 경로는 connection.test.ts(연결 통합 테스트)가 소유한다.
+// 실제 mongod 대상 ping 성공 경로는 connection.test.ts(연결 통합 테스트)가 담당한다.
 describe('pingDb', () => {
   it('command가 성공하면 true를 반환한다', async () => {
     const okDb = { command: () => Promise.resolve({ ok: 1 }) } as unknown as Db

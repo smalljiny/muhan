@@ -1,6 +1,6 @@
 /**
  * object 타입 taxonomy·착용 슬롯 매핑 — 오라클(mtype.h)의 byte-fidelity 값을 이름 있는 상수로 분리한다.
- * 아이템 타입 0~14, 착용 wearflag 1~20이 여기 정본으로 모여 후속 Story(착용·인벤토리·전투 무기 판정)가
+ * 아이템 타입 0~14, 착용 wearflag 1~20이 여기 기준으로 모여 후속 Story(착용·인벤토리·전투 무기 판정)가
  * 매직 넘버 없이 소비한다.
  */
 
@@ -114,7 +114,7 @@ export function routeWearCommand(wearflag: number): WearCommand {
 }
 
 /**
- * 다중슬롯 first-free 슬롯 해소 — wearflag가 가리키는 후보 슬롯(0-based) 중 비어 있는 첫 인덱스를 반환한다.
+ * 다중슬롯 first-free 슬롯 해석 — wearflag가 가리키는 후보 슬롯(0-based) 중 비어 있는 첫 인덱스를 반환한다.
  * NECK1(4)은 슬롯 3·4, FINGER1(9)은 슬롯 8~15의 그룹을 훑고, 단일 부위는 슬롯 wearflag−1 하나만 본다.
  * 모든 후보가 점유(occupied)면 null.
  *

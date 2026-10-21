@@ -5,9 +5,9 @@ import { applyPlayerDeath } from './death.js'
 /**
  * PvE 사망 페널티 seam(applyPlayerDeath) 단위 테스트.
  *
- * 발화자 없는 순수 소비자(creatureDeath.ts 선례) — exp 손실·레벨 유지(D7 차이)·부활·상태 회복을
+ * 호출자 없는 순수 소비자(creatureDeath.ts 선례) — exp 손실·레벨 유지(D7 차이)·부활·상태 회복을
  * 검증한다. 손실 테스트(1·2)와 하한 테스트(3)는 입력 exp를 격리해 expFloor 클램프가 손실 단언을
- * 무성으로 덮어쓰지 않게 한다(loss 테스트는 floor보다 충분히 큰 exp, floor 테스트는 floor 근처 exp).
+ * 조용히 덮어쓰지 않게 한다(loss 테스트는 floor보다 충분히 큰 exp, floor 테스트는 floor 근처 exp).
  */
 
 /** 유효 Character 픽스처. class·level·exp·room·vitals를 오버라이드로 조정한다. */

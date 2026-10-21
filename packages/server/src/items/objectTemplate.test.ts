@@ -164,13 +164,13 @@ describe('loadObjectTemplates — data/world/objects.json', () => {
     expect([...index.values()].every((t) => t.type >= 0 && t.type <= 14)).toBe(true)
   })
 
-  it('단도(id 1) 별칭을 정본 데이터에서 그대로 로드한다', () => {
+  it('단도(id 1) 별칭을 기준 데이터에서 그대로 로드한다', () => {
     const dagger = index.get(1)
     expect(dagger?.name).toBe('단도')
     expect(dagger?.keys).toEqual(['단도', '도', '단'])
   })
 
-  it('별칭이 없는 정본 엔트리는 빈 배열을 갖는다(undefined 없음)', () => {
+  it('별칭이 없는 기준 엔트리는 빈 배열을 갖는다(undefined 없음)', () => {
     const templates = [...index.values()]
     expect(templates.every((t) => Array.isArray(t.keys))).toBe(true)
     expect(templates.some((t) => t.keys.length === 0)).toBe(true)

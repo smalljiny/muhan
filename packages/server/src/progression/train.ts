@@ -13,26 +13,26 @@ import type { MarkCharacterDirty } from '../world/markCharacterDirty.js'
  * progression/train — `연마` 명령 핸들러. 3게이트 판정(location→exp→gold) → prestige 우선
  * 분기 → gold 차감 배치 upLevel(D6)을 결정적 순수 로직으로 옮긴다.
  *
- * 원본 `command7.c:530-650`(train 명령)의 progression 소관을 이식한다. shared 순수 함수
+ * 원본 `command7.c:530-650`(train 명령)의 progression 담당 부분을 이식한다. shared 순수 함수
  * (neededExp·upLevel·classifyPrestige·invinciblePrestige·caretakerPrestige)를 소비하고, room
  * flag는 `hasFlag`(F_ISSET 이식), 영속화는 `markCharacterDirty` seam을 주입 소비한다. class·level·
- * experience·vitals 전이는 shared가 소유하고, train은 3게이트·gold 차감·배치 시퀀싱만 소유한다.
+ * experience·vitals 전이는 shared가 담당하고, train은 3게이트·gold 차감·배치 시퀀싱만 담당한다.
  *
  * ## immutability
  * 입력 char/room을 변형하지 않는다. 성공 시 새 Character를 반환하고, 같은 값을
- * `markCharacterDirty`에 넘긴다 — 스냅샷 distinct화는 그 헬퍼가 단독으로 소유한다.
+ * `markCharacterDirty`에 넘긴다 — 스냅샷 distinct화는 그 헬퍼가 단독으로 담당한다.
  *
  * ## gold 쓰기경로 조정 — named deferred dependency (미해결)
  * train은 성공 시 최종 Character 스냅샷(gold 포함)을 markDirty로 write-behind에 흘린다. 같은
  * characters 문서가 bank 트랜잭션 경로(bankTransactionService)로도 gold를 직접 쓰면, 커밋 이후
- * 도착한 train 스냅샷 flush가 gold를 되돌릴 수 있다(무성 revert). 이는 bankTransactionService
+ * 도착한 train 스냅샷 flush가 gold를 되돌릴 수 있다(조용한 revert). 이는 bankTransactionService
  * 상단 "쓰기 경로 조정 계약"과 동형 문제(X1/X2/X3 조정 패턴)이며, 여전히 해결되지 않았다.
  *
- * 현 상태: train은 이제 라이브 command dispatcher에 배선돼 있다(`progress:train` →
+ * 현 상태: train은 이제 라이브 command dispatcher에 연결돼 있다(`progress:train` →
  * `ws/handlers/train.ts`) — 즉 이 경로의 gold 쓰기는 실제로 일어난다. 충돌 자체가 아직 도달
  * 불가한 이유는 **반대편이 dormant**하기 때문이다: 은행 명령은 `clientCommandSchema`에 variant가
  * 없고 `bankTransactionService`의 non-test caller가 0건이라, 두 경로가 동시에 같은 문서의 gold를
- * 쓰는 상황이 아직 성립하지 않는다. 은행 명령을 배선하는 토픽에서 두 경로를 조정한다.
+ * 쓰는 상황이 아직 성립하지 않는다. 은행 명령을 연결하는 토픽에서 두 경로를 조정한다.
  */
 
 /**
@@ -41,7 +41,7 @@ import type { MarkCharacterDirty } from '../world/markCharacterDirty.js'
  */
 export const RTRAIN = 3
 
-/** INVINCIBLE(무적) class 인덱스(mtype.h 정본). class>8 판정 경계. */
+/** INVINCIBLE(무적) class 인덱스(mtype.h 원본). class>8 판정 경계. */
 const INVINCIBLE = 9
 
 /** CARETAKER(초인) class 인덱스. 초인은 수련 금지(command7.c:530). */
@@ -125,10 +125,10 @@ function checkLocation(
  *
  * 성공 시 새 Character를 반환하고 markDirty로 스냅샷을 1회 기록한다. 입력 char/room은 무변이.
  *
- * ## 오라클 상태 guard 미구현 (전체 생략, regen/death 유예 클래스 동형)
+ * ## 오라클 상태 guard 미구현 (전체 생략, regen/death 보류 클래스 동형)
  * 오라클 train(command7.c:551-565)은 PBLIND(장님 → 수련 불가)·PUPDMG(버프 해제·hp/mp/주사위 조정)
  * guard를 가진다. 본 이식은 두 guard를 통째로 생략한다 — characterSchema에 상태 플래그 필드가 없어
- * 구현할 입력이 없다(regen의 RPHARM/ill/PPOISN·death의 DoT와 동일 유예). 상태 플래그가 스키마에
+ * 구현할 입력이 없다(regen의 RPHARM/ill/PPOISN·death의 DoT와 동일 보류). 상태 플래그가 스키마에
  * 붙는 후속 토픽에서 함께 이식한다.
  */
 export function train(char: Character, room: { flags: number[] }, deps: TrainDeps): TrainResult {
@@ -175,7 +175,7 @@ export function train(char: Character, room: { flags: number[] }, deps: TrainDep
 
 /**
  * 성공 결과를 조립한다 — markCharacterDirty로 전체 Character를 1회 기록하고 Result를 반환한다.
- * 반환 character와 스냅샷의 분리(distinct 참조)는 markCharacterDirty가 소유하므로 여기서 복사하지 않는다.
+ * 반환 character와 스냅샷의 분리(distinct 참조)는 markCharacterDirty가 담당하므로 여기서 복사하지 않는다.
  */
 function finalize(
   character: Character,

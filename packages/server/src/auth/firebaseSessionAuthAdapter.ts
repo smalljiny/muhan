@@ -17,8 +17,8 @@ import { applyRaceModifiers } from './raceModifiers.js'
 import type { SessionCookieVerifier } from './sessionCookieVerifier.js'
 
 /**
- * 신규 캐릭터의 기본 시작 방. dev 기본값이다 — 정본 스폰 방은 world-entry #74 / Story 6-7에서
- * 확정된다. 생성 경로를 실행 가능하게 하려는 placeholder이므로 정본값 탐색은 유예한다.
+ * 신규 캐릭터의 기본 시작 방. dev 기본값이다 — 기준 스폰 방은 world-entry #74 / Story 6-7에서
+ * 확정된다. 생성 경로를 실행 가능하게 하려는 placeholder이므로 기준값 탐색은 보류한다.
  */
 const START_ROOM = 1
 
@@ -41,7 +41,7 @@ const STARTING_LEVEL = 1
  * accounts·characters를 주입받으며 전역 싱글턴을 조회하지 않는다.
  *
  * 매핑 규약: CharacterSummary.characterId = Character._id. level은 v2에서 영속 필드가 됐으므로
- * 요약의 level은 문서 값을 그대로 투영한다(생성 시 seedVitals와 함께 1레벨로 시딩).
+ * 요약의 level은 문서 값을 그대로 변환한다(생성 시 seedVitals와 함께 1레벨로 시딩).
  */
 export class FirebaseSessionAuthAdapter implements SessionAuthPort {
   // 최초 validate에서 upsert를 이미 수행한 accountId 집합(중복 write 방지용 dedup 캐시).
@@ -66,7 +66,7 @@ export class FirebaseSessionAuthAdapter implements SessionAuthPort {
 
     const accountId = verified.uid
     await this.ensureAccountUpserted(accountId)
-    // account.status='banned' 강제는 여기 없다 — ban을 세팅하는 admin 명령이 A13으로 유예됐고,
+    // account.status='banned' 강제는 여기 없다 — ban을 세팅하는 admin 명령이 A13으로 보류됐고,
     // 즉시 세션 차단은 쿠키 revocation(checkRevoked) 결정과 얽힌다. A13에서 ban 명령을 붙일 때
     // 이 지점에 접속 시 banned 거부를 추가한다(accountRepository.setStatus 주석 참조).
     return { accountId }
@@ -90,7 +90,7 @@ export class FirebaseSessionAuthAdapter implements SessionAuthPort {
   }
 
   async createCharacter(accountId: string, dto: CreateCharacterInput): Promise<CharacterSummary> {
-    // 종족 보정을 포인트바이 raw 스탯에 적용한 값을 저장한다(종족 수학은 server E5 코드 소유, 재클램프 없음).
+    // 종족 보정을 포인트바이 raw 스탯에 적용한 값을 저장한다(종족 수학은 server E5 코드 담당, 재클램프 없음).
     const doc: Character = {
       _id: randomUUID(),
       name: dto.name,
@@ -105,13 +105,13 @@ export class FirebaseSessionAuthAdapter implements SessionAuthPort {
       // 누적 경험치는 1레벨 신규라 0으로 시딩한다(backfillCharacterV3의 level<=1 시딩과 일치).
       experience: 0,
       // 빈 spell store(빈 지식 비트마스크·realm [0,0,0,0])를 시딩한다. backfillCharacterV5와 동일
-      // 시드 출처(seedSpellStore)를 공유해 신규·승격 문서의 버전 드리프트를 차단한다.
+      // 시드 출처(seedSpellStore)를 공유해 신규 문서와 버전을 올린 문서의 버전 드리프트를 차단한다.
       ...seedSpellStore(),
       schemaVersion: CHARACTER_SCHEMA_VERSION,
       accountId,
       status: 'active',
-      // gender·weapon은 생성 인터뷰가 고른 선택 스칼라. alignment는 v6에서 required로 승격됐다
-      // (부재 문서의 sentinel 0 시딩은 backfillCharacterV6 소관) — 여기서 `?? undefined` 같은
+      // gender·weapon은 생성 인터뷰가 고른 선택 스칼라. alignment는 v6에서 required로 올라갔다
+      // (alignment가 없는 문서의 sentinel 0 시딩은 backfillCharacterV6 담당) — 여기서 `?? undefined` 같은
       // 선택 필드 관용을 도입하면 insert 경로의 characterSchema.parse가 throw한다.
       gender: dto.gender,
       weapon: dto.weapon,
@@ -148,7 +148,7 @@ export class FirebaseSessionAuthAdapter implements SessionAuthPort {
       name: doc.name,
       class: doc.class,
       race: doc.race,
-      // level은 이제 영속 필드다(v2) — dev 기본값 대신 문서 값을 그대로 투영한다.
+      // level은 이제 영속 필드다(v2) — dev 기본값 대신 문서 값을 그대로 변환한다.
       level: doc.level,
     }
   }

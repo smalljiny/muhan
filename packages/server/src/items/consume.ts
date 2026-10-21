@@ -12,18 +12,18 @@ import type { Caster } from '../magic/caster.js'
  *
  * ## gated=false — 시전 자격 게이트 우회
  * evaluateGate를 gated=false로 호출한다. magic1.c의 마나(mpcur<mp)·knowledge(!S_ISSET) 게이트는
- * how==CAST일 때만 발화하므로, 소비 경로(how≠CAST)는 이를 우회한다 — 콘텐츠(아이템 효과)를
+ * how==CAST일 때만 동작하므로, 소비 경로(how≠CAST)는 이를 우회한다 — 콘텐츠(아이템 효과)를
  * 규칙(시전 자격)으로 막지 않는다. applyCastGate가 아니라 evaluateGate를 쓴다(마나 write-through 없음).
  *
  * ## effect 본체 재구현 없음 — 분류만
  * dispatch.resolve로 주문을 분류만 하고 실행하지 않는다. 핸들러 형태(H)는 dispatch.ts에서
  * 제네릭 미확정이라 호출할 수 없다(S5 offensiveSpell 등록 후 command router가 호출).
  *
- * ## shotscur 감소는 seam이 하지 않는다 — 오라클 성공 결합(§5 배선 유예)
+ * ## shotscur 감소는 seam이 하지 않는다 — 오라클 성공 결합(§5 연결 보류)
  * 오라클 drink/readscroll/zap은 spell fn 반환값 n을 관찰해 **`if(n)`(효과 성공)일 때만** shotscur를
  * 감소한다(magic1.c drink:647-655·readscroll:476-481·zap:802-806). 이 순수 seam은 핸들러를
  * 실행하지 못해 성공 n을 관찰할 수 없으므로 감소를 결정할 수 없다 — charge 감소·객체 파괴는
- * effect 실행 후 성공을 관찰하는 배선 계층 소관이다(§5 Non-goal). delivered는 "배달 가능"만 알리고
+ * effect 실행 후 성공을 관찰하는 연결 계층 담당이다(§5 Non-goal). delivered는 "배달 가능"만 알리고
  * 입력 인스턴스를 변형하지 않는다.
  */
 
@@ -33,7 +33,7 @@ export type ConsumeContext = 'potion' | 'scroll' | 'wand'
 /**
  * 소비 배달 결과(exhaustive union). 각 케이스는 정확히 한 경로에 안착한다.
  * 어떤 케이스도 shotscur를 감소하지 않는다 — 감소는 effect 성공(오라클 `if(n)`)에 결합돼
- * 배선 계층 소관이다(모듈 docstring 참조). 이 seam은 입력 인스턴스를 변형하지 않는다.
+ * 연결 계층 담당이다(모듈 docstring 참조). 이 seam은 입력 인스턴스를 변형하지 않는다.
  */
 export type ConsumeOutcome =
   // 소비 대상 타입이 아님(type ∉ {POTION,SCROLL,WAND}).
@@ -45,7 +45,7 @@ export type ConsumeOutcome =
   // 미등록 주문 → undefined. dispatch가 family-agnostic이 된 뒤로 offensive·비-offensive를 가리지
   // 않고 "핸들러 미등록"을 하나로 접는다(effect 핸들러는 magic S5·S7~S10에서 등록).
   | { kind: 'unresolved'; spellNo: number; context: ConsumeContext }
-  // 핸들러 resolve 성공 → 배달 가능. 배선 계층이 핸들러를 실행하고 성공(`if(n)`) 시 shotscur를 감소한다.
+  // 핸들러 resolve 성공 → 배달 가능. 연결 계층이 핸들러를 실행하고 성공(`if(n)`) 시 shotscur를 감소한다.
   // (gate는 gated=false로 무조건 우회하므로 delivered 도달은 resolve 결과만으로 결정된다.)
   | { kind: 'delivered'; spellNo: number; context: ConsumeContext }
 
@@ -89,7 +89,7 @@ export function deliverConsumable(params: DeliverConsumableParams): ConsumeOutco
 
   // ⑤ gate(순수, 마나 미소비) — gated=false라 마나·클래스·knowledge를 전부 우회(항상 PASS).
   //    소비 경로(how≠CAST)는 시전 자격을 묻지 않는다. 반환값을 의도적으로 버린다 —
-  //    이 호출은 "consult-but-bypass" seam 마커이며, 향후 소비 게이팅이 필요해질 때의 배선 지점이다.
+  //    이 호출은 "consult-but-bypass" seam 마커이며, 향후 소비 게이팅이 필요해질 때의 연결 지점이다.
   //    applyCastGate가 아닌 evaluateGate를 써 마나 write-through를 피한다.
   evaluateGate(caster, { manaCost: 0, spellNo }, false)
 
@@ -97,7 +97,7 @@ export function deliverConsumable(params: DeliverConsumableParams): ConsumeOutco
   const resolved = dispatch.resolve(spellNo)
   if (resolved === undefined) return { kind: 'unresolved', spellNo, context }
 
-  // 핸들러 resolve 성공 → 배달 가능. shotscur 감소는 배선 계층이 effect 성공(`if(n)`) 시 수행한다.
+  // 핸들러 resolve 성공 → 배달 가능. shotscur 감소는 연결 계층이 effect 성공(`if(n)`) 시 수행한다.
   // 이 seam은 입력 인스턴스를 변형하지 않는다(오라클 성공 결합 — 모듈 docstring 참조).
   return { kind: 'delivered', spellNo, context }
 }

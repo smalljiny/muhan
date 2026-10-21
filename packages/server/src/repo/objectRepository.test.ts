@@ -75,7 +75,7 @@ describe('ObjectRepository (integration)', () => {
   /**
    * OQ2 결정성 — 서수는 플레이어가 관측하는 동작이므로 조회 순서가 계약이어야 한다.
    * Mongo 자연 순서는 계약이 아니라(문서 이동·재사용 공간에 따라 바뀔 수 있다) `_id` 오름차순으로
-   * 고정한다. 오라클 이름 사전순과의 divergence는 `world/liveCharacterEntry.ts` 헤더가 소유한다.
+   * 고정한다. 오라클 이름 사전순과의 divergence는 `world/liveCharacterEntry.ts` 헤더가 담당한다.
    */
   it('findByOwner는 _id 오름차순으로 정렬된 결정적 순서를 반환한다', async () => {
     // 삽입 순서를 역순으로 둬 자연 순서와 정렬 결과가 갈리게 만든다(비-vacuous).
