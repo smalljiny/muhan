@@ -96,7 +96,7 @@ const actor: ActorContext = { accountId: 'acc-1', characterId: 'char-1' }
 const SUCCESS_LEVEL = 2
 /** 무적 승급 경계 레벨(shared prestige의 INVINCIBLE_LEVEL). class<9면 이 레벨에서 승급한다. */
 const PRESTIGE_LEVEL = 100
-/** 무적 class 인덱스 — 승급 후 형상의 최대치 파생 입력이다. */
+/** 무적 class 인덱스 — 승급 후 상태의 최대치 파생 입력이다. */
 const INVINCIBLE_CLASS = 9
 const SUCCESS_EXP = neededExp(SUCCESS_LEVEL)
 const SUCCESS_GOLD = goldToTrain(SUCCESS_LEVEL)
@@ -270,7 +270,7 @@ describe('createTrainHandler', () => {
         levelsGained: 0,
         prestige: 'invincible',
       })
-      // 전이 후 형상: class 9·level 1·experience 0. 시작 시점 문서로 투영하면 셋 다 틀린다.
+      // 전이 후 상태: class 9·level 1·experience 0. 시작 시점 문서로 투영하면 셋 다 틀린다.
       const promoted = { class: INVINCIBLE_CLASS, level: 1 }
       expect(events[1]).toMatchObject({
         type: 'character:stats',

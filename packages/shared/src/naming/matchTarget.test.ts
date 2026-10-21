@@ -128,7 +128,7 @@ describe('matchTarget — 경계 케이스', () => {
 
 describe('matchTarget — 소비자 타입 계약', () => {
   it('CreatureInstance(keys?: string[] — 가변)를 그대로 후보로 받는다', () => {
-    // 스펙 §3.1 "타입 무관 — { name, keys? } 형상만 본다". readonly 제약이 Story 6 해소자의
+    // 스펙 §3.1 "타입 무관 — { name, keys? } 형태만 본다". readonly 제약이 Story 6 해소자의
     // 실소비 타입을 거르면 여기서 컴파일이 깨진다.
     const creature = { name: '작은 거미', keys: ['거미'] } as unknown as CreatureInstance
     const candidates: CreatureInstance[] = [creature]

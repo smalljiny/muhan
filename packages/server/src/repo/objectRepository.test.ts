@@ -113,7 +113,7 @@ describe('ObjectRepository (integration)', () => {
   })
 
   it('init()은 구 owner 인덱스를 드롭하지 않는다 — 부팅 경로에 DDL을 두지 않는다', async () => {
-    // 구 형상이 남아 있는 DB(이미 이전 버전으로 init()을 돌린 상황)에서 init()을 돌려도
+    // 구 인덱스 구조가 남아 있는 DB(이미 이전 버전으로 init()을 돌린 상황)에서 init()을 돌려도
     // 기존 인덱스를 건드리지 않아야 한다. 롤링 배포 thrash·부팅 경로 컬렉션 락 차단이 근거다.
     await db.collection('objects').createIndex({ 'owner.type': 1, 'owner.id': 1 })
 

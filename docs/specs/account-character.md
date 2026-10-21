@@ -6,7 +6,7 @@
 
 무한 포팅의 계정·캐릭터 도메인 계층이다. [`auth-session.md`](auth-session.md)(E3-2)가 인증 게이트·3층 세션 FSM(`characterSelect → create → command`)·`SessionAuthPort` seam·in-memory 어댑터를, [`persistence.md`](persistence.md)(E2-1)가 repository 계층·문서 스키마를 확립했다. E3-2는 실 firebase-admin 어댑터·`accountId` Mongo 영구화를 E5로 명시 위임했고, 이 계층이 그 실 구현이다. 클라 진입 UI([`session-entry.md`](session-entry.md), E10)가 소비하는 characterList·selectCharacter·createField·resumed 동작에 실 백엔드를 배선한다.
 
-원작 무한은 account 1급 객체 없이 "이름=크리덴셜=파일키" flat namespace였고(게임 분석 A12 §5), 재설계는 account(1)→character(N)로 승급한다(A12 §9). 원작 캐릭터 생성은 create_ply 8단계 대화형 상태머신(A12 §3·A7 §8)이며 이름은 그 앞 login 상태머신에서 받았다(이름=인증 크리덴셜). 재설계는 Firebase가 인증을 소유하므로 **비밀번호(형상)를 제거**하고 이름(더 이상 크리덴셜 아님)을 인터뷰로 이동시킨다. 자살(suicide)의 `system("mv")` 무덤 이동 셸(형상)도 제거하고 status 플래그 soft-delete로 대체한다.
+원작 무한은 account 1급 객체 없이 "이름=크리덴셜=파일키" flat namespace였고(게임 분석 A12 §5), 재설계는 account(1)→character(N)로 승급한다(A12 §9). 원작 캐릭터 생성은 create_ply 8단계 대화형 상태머신(A12 §3·A7 §8)이며 이름은 그 앞 login 상태머신에서 받았다(이름=인증 크리덴셜). 재설계는 Firebase가 인증을 소유하므로 **비밀번호(원작 구현 방식)를 제거**하고 이름(더 이상 크리덴셜 아님)을 인터뷰로 이동시킨다. 자살(suicide)의 `system("mv")` 무덤 이동 셸(원작 구현 방식)도 제거하고 status 플래그 soft-delete로 대체한다.
 
 계층 경계는 세 가지다.
 
@@ -88,7 +88,7 @@ E3-2의 `ConnectionState` 핸들러 맵에 `delete` 상태를 더하고, create 
 `characterSelect`에서 `CREATE_SENTINEL`로 답하면 `create`로 전이해 8단계 createField 대화를 돈다: 이름→성별(1남/2여)→직업→능력치→주력무기(1~5 도/검/봉/창/궁)→성향(1선/2악)→종족→확정. 각 단계는 `session:reply`의 `promptId`가 현재 step promptId와 일치해야 하고(stale reply 거부) 값을 서버에서 Zod 검증한다.
 
 - **54pt 포인트바이** — 단일 구조화 문자열(공백 구분 5정수, 순서 str·dex·con·int·piety = characterSchema.stats 튜플 순서)을 한 프롬프트로 받는다(5개 서브 프롬프트 아님). 검증: 5값·각 3~18·합 ≤54. 위반 시 현재 단계 유지(재응답). decimal-only 토큰만 허용(`1e1`·`0x10`·`+5` 스머글링 차단).
-- **종족 보정·확정** — confirm에서 point-buy 검증 **후** 종족 보정을 더한다(`applyRaceModifiers`). **no-clamp** — 보정 후 3~18 재검사 없이 저장한다(as-shipped 형상 후보, #80의 read-time bonus가 clamp). 세이브: 종족 보정 stats·gold=500·초기 방·accountId·gender·weapon·alignment. 파생 HP/MP·up_level은 #80로 defer.
+- **종족 보정·확정** — confirm에서 point-buy 검증 **후** 종족 보정을 더한다(`applyRaceModifiers`). **no-clamp** — 보정 후 3~18 재검사 없이 저장한다(as-shipped 동작이며 원작 구현 결함일 수 있다. clamp는 #80의 read-time bonus가 맡는다). 세이브: 종족 보정 stats·gold=500·초기 방·accountId·gender·weapon·alignment. 파생 HP/MP·up_level은 #80로 defer.
 
 ### 선택·진입·재개
 
@@ -98,7 +98,7 @@ E3-2의 `ConnectionState` 핸들러 맵에 `delete` 상태를 더하고, create 
 
 `characterSelect` 선택 prompt에 `DELETE_SENTINEL` 옵션이 실린다. 답하면 `delete`로 전이: (1) 삭제 대상 select prompt → 대상 선택 시 조기 `assertOwnership`(clean early rejection), (2) 「찐짜로」 확인 prompt. 확인 reply.value가 **정확히 「찐짜로」**(trim·정규화 없는 raw 일치 — 「찐짜로 」는 취소)일 때만 `deleteCharacter`를 호출한다. 불일치(「뻥으로」 포함 그 외 전부)는 reject-retry가 아니라 **취소**로 `characterSelect` 복귀(원작 의미). 성공 시 `delete→characterSelect` 전이가 `listCharacters`를 재실행해 삭제 캐릭터를 자연 배제한다.
 
-`deleteCharacter(accountId, characterId)` 포트 메서드는 **내부에서 `assertOwnership`을 재확인**한 뒤 `softDelete`한다(TOCTOU 방어 — 대상 선택과 확인 사이 sibling 세션이 소유를 바꾸는 레이스 차단). FSM 조기 assert와 어댑터 내부 assert는 이중 방어(중복 아님). 원작 비밀번호 확인(형상)·`system("mv")` 셸 이동은 재현하지 않는다(셸 인젝션 표면 제거).
+`deleteCharacter(accountId, characterId)` 포트 메서드는 **내부에서 `assertOwnership`을 재확인**한 뒤 `softDelete`한다(TOCTOU 방어 — 대상 선택과 확인 사이 sibling 세션이 소유를 바꾸는 레이스 차단). FSM 조기 assert와 어댑터 내부 assert는 이중 방어(중복 아님). 원작 비밀번호 확인(구현 방식)·`system("mv")` 셸 이동은 재현하지 않는다(셸 인젝션 표면 제거).
 
 ### async 마이그레이션·프레임 직렬화
 

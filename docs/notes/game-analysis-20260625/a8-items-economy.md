@@ -1,6 +1,6 @@
 # A8 아이템·장비·경제·은행
 
-> 무한의 아이템 체계(타입 taxonomy·착용/장비 규칙·object 필드), 경제(금화·가치·상점·전당포·수리·거래), 은행이 oracle에서 *무엇을 하는지*를 규명한다. 아이템 속성·가격 배수·착용 게이트·거래 규칙은 게임 규칙이므로 충실히 이식하고, 은행=별도 object 파일 컨테이너·`ready[]` 포인터 배열 비직렬화·상점 재고=인접방 규약·gold signed long 무가드는 형상이므로 자유롭게 재설계한다. 이슈 #8. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)와 변환 산출물 `data/world/objects.json`. 코드 이식이 아니라 동작 추출.
+> 무한의 아이템 체계(타입 taxonomy·착용/장비 규칙·object 필드), 경제(금화·가치·상점·전당포·수리·거래), 은행이 oracle에서 *무엇을 하는지*를 규명한다. 아이템 속성·가격 배수·착용 게이트·거래 규칙은 게임 규칙이므로 충실히 이식하고, 은행=별도 object 파일 컨테이너·`ready[]` 포인터 배열 비직렬화·상점 재고=인접방 규약·gold signed long 무가드는 원작의 구현 방식이므로 자유롭게 재설계한다. 이슈 #8. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)와 변환 산출물 `data/world/objects.json`. 코드 이식이 아니라 동작 추출.
 >
 > **oracle 읽기 주의**: 하네스 `grep` 래퍼가 `-I`(binary skip)를 붙여 EUC-KR 파일을 스킵한다. `command grep -a` 또는 `iconv -f EUC-KR -t UTF-8 -c … | grep`로 우회한다([[muhan-oracle-toolchain]]).
 >
@@ -14,9 +14,9 @@
 
 착용은 **다층 게이트**를 통과해야 한다: 클래스·성별·결혼·정렬·종족 크기 제한, 그리고 **아이템 강도에 비례한 레벨 요구**(방어구 `armor*5`, 무기 `(ndice·sdice+pdice)*3`). 게이트를 넘는 초강력 아이템(방어구 AC환산 >151, 무기 dice합 >39)은 착용 시도 시 **"푸른 연기와 함께 사라진다"** — 밸런스를 벗어난 아이템을 자동 소각하는 방어 장치다.
 
-은행은 구조적으로 특이하다. 잔고는 `creature` 필드가 **아니라** 플레이어별 **별도 object 파일**(`PLAYERPATH/bank/<이름>`)이며, 그 object가 컨테이너로 동작해 현금은 `value`에, 보관 물품은 중첩 인벤토리에 담긴다. 이자는 없다(단순 금고). 이 "은행=object 파일" 형상이 신규 스택의 계좌 모델(MongoDB 문서)을 가른다.
+은행은 구조적으로 특이하다. 잔고는 `creature` 필드가 **아니라** 플레이어별 **별도 object 파일**(`PLAYERPATH/bank/<이름>`)이며, 그 object가 컨테이너로 동작해 현금은 `value`에, 보관 물품은 중첩 인벤토리에 담긴다. 이자는 없다(단순 금고). 이 "은행=object 파일" 구조가 신규 스택의 계좌 모델(MongoDB 문서)을 가른다.
 
-핵심 분리: **타입 taxonomy·착용 슬롯·레벨/직업/성별/크기 게이트·가격 배수(100/50/25%)·소지 한도(150/200)·몹 소지금 랜덤화·거래 거부 조건은 콘텐츠**(충실히 이식), **은행=별도 object 파일 컨테이너·`ready[]` 포인터 배열·상점 재고=`rom_num+1` 인접방·gold signed long 무가드·time(0) 기반 확률·데드 statement는 형상**(재설계).
+핵심 분리: **타입 taxonomy·착용 슬롯·레벨/직업/성별/크기 게이트·가격 배수(100/50/25%)·소지 한도(150/200)·몹 소지금 랜덤화·거래 거부 조건은 콘텐츠**(충실히 이식), **은행=별도 object 파일 컨테이너·`ready[]` 포인터 배열·상점 재고=`rom_num+1` 인접방·gold signed long 무가드·time(0) 기반 확률·데드 statement는 구현 방식**(재설계).
 
 ## 핵심 발견 요약
 
@@ -24,15 +24,15 @@
 |---|------|------|
 | 1 | **아이템 = `object` 352B 단일 구조체.** type 0~14로 성격 결정. 무기 0~4(Sharp/Thrust/Blunt/Pole/Missile), 5~13(Armor·Potion·Scroll·Wand·Container·Money·Key·LightSource·Misc), 14(Container2, help 미기재) | 콘텐츠(taxonomy) |
 | 2 | **착용 = `ready[20]` 슬롯 배열.** wearflag(1~20)이 슬롯 인덱스(`ready[wearflag-1]`). BODY·팔·다리·목×2·손·머리·발·손가락×8·쥠·방패·얼굴·무기. 방어구=`wear`, 무기=`ready`, 쥠=`hold` | 콘텐츠(장비) |
-| 3 | **착용 효과는 필드 직접변형 아님 — `ready[]` 재계산.** `compute_ac`=`… − Σ ready[i]->armor …`, `compute_thaco`=`… − ready[WIELD]->adjustment …`. wear/ready/remove가 재계산 트리거. [[a7-player-progression]] §12 원칙과 일치 | 콘텐츠(공식)/형상(트리거) |
+| 3 | **착용 효과는 필드 직접변형 아님 — `ready[]` 재계산.** `compute_ac`=`… − Σ ready[i]->armor …`, `compute_thaco`=`… − ready[WIELD]->adjustment …`. wear/ready/remove가 재계산 트리거. [[a7-player-progression]] §12 원칙과 일치 | 이식(공식)/재설계(트리거) |
 | 4 | **착용 다층 게이트.** 클래스(ONOMAG·OCLSEL)·성별(ONOFEM=남/ONOMAL=여, 명명 역전)·결혼(OMARRI)·정렬(OGOODO/OEVILO ±50)·종족크기(OSIZE 3계급)·**레벨(방어구 armor*5, BODY armor*2 / 무기 dice합*3)** | 콘텐츠(규칙) |
 | 5 | **밸런스 초과 아이템 자동 소각.** 착용 시 방어구 AC환산 >151, 무기 `ndice·sdice+pdice` >39, shots >600 → questnum·ONEWEV 아니면 free("푸른 연기와 함께 사라집니다") | 콘텐츠(가드) |
 | 6 | **소비 아이템 = `magicpower-1` 스펠 시전.** Potion=`drink`, Scroll=`readscroll`, Wand=`zap` → `shotscur--` → [[a6-magic]] spllist[magicpower-1]를 각 컨텍스트로 시전. 무기 데미지는 [[a5-combat]] | 콘텐츠(→a6/a5) |
 | 7 | **가격 = `object.value` 단일 필드 × 상수 배수.** 상점구매=value(1:1), 전당포판매=min(value/2, 10만), 수리=value/4, 몹구매=max(10, value) | 콘텐츠(경제) |
-| 8 | **상점 재고 = 인접방 `rom_num+1` object를 복제, 무소진.** buy는 창고방에서 로드→복제 지급. 몹 상점(MPURIT)은 `carry[]` objnum 템플릿 복제(무한 재고) | 콘텐츠(규칙)/형상(방 규약) |
-| 9 | **금화 = `creature.gold`(long, offset 348) 무가드.** 몹 처치 시 `die()`가 gold를 바닥의 MONEY object로 변환. 몹 소지금은 스폰 시 `mrand(gold/10, gold)` 랜덤(MNRGLD면 고정) | 콘텐츠(드롭)/형상(무가드) |
-| 10 | **상점/서비스 방 = room flag.** RSHOPP=0(상점)·RPAWNS=2(전당포)·RREPAI=7(수리)·RDUMPR=1(덤프)·RBANK=39(은행)·RMARRI=41(결혼) | 콘텐츠(게이트)/형상(비트) |
-| 11 | **은행 = 별도 object 파일 컨테이너.** `bank/<이름>` 파일, 현금=`object.value`, 물품=중첩 인벤토리(슬롯 200). 입금/출금/잔액/보관물/받아. **이자 없음, 3억 상한, 수수료·이체 없음** | 형상(영속화) |
+| 8 | **상점 재고 = 인접방 `rom_num+1` object를 복제, 무소진.** buy는 창고방에서 로드→복제 지급. 몹 상점(MPURIT)은 `carry[]` objnum 템플릿 복제(무한 재고) | 이식(규칙)/재설계(방 규약) |
+| 9 | **금화 = `creature.gold`(long, offset 348) 무가드.** 몹 처치 시 `die()`가 gold를 바닥의 MONEY object로 변환. 몹 소지금은 스폰 시 `mrand(gold/10, gold)` 랜덤(MNRGLD면 고정) | 이식(드롭)/재설계(무가드) |
+| 10 | **상점/서비스 방 = room flag.** RSHOPP=0(상점)·RPAWNS=2(전당포)·RREPAI=7(수리)·RDUMPR=1(덤프)·RBANK=39(은행)·RMARRI=41(결혼) | 이식(게이트)/재설계(비트) |
+| 11 | **은행 = 별도 object 파일 컨테이너.** `bank/<이름>` 파일, 현금=`object.value`, 물품=중첩 인벤토리(슬롯 200). 입금/출금/잔액/보관물/받아. **이자 없음, 3억 상한, 수수료·이체 없음** | 재설계(영속화) |
 | 12 | **거래 다중 거부.** 판매: gold<20·저품질(shots≤max/8)·ONEWEV·컨테이너내용·두루마기/물약. 양도: questnum·ONEWEV·이벤트. 습득: ONOTAK·OSCENE·MGUARD 감시 | 콘텐츠(규칙) |
 | 13 | **소지 한도 = 무게 + 개수(150/200).** get/give/purchase=150, buy=200(장착 포함 count_inv). 무게는 `max_weight(ply)`([[a7-player-progression]]) 초과 시 거부 | 콘텐츠(한도) |
 
@@ -188,7 +188,7 @@ compute_ac(ply_ptr);
 
 ---
 
-## 4. 착용 스탯 효과: `ready[]` 재계산 (콘텐츠 공식 / 형상 트리거)
+## 4. 착용 스탯 효과: `ready[]` 재계산 (공식은 이식 / 트리거는 재설계)
 
 **착용은 능력치 필드를 직접 가감하지 않는다.** wear/ready/remove는 슬롯 포인터를 꽂거나 비운 뒤 파생 스탯을 **`ready[]` 전체에서 다시 계산**한다. [[a7-player-progression]] §11·§12에서 확정한 폐형 공식에 아이템이 기여하는 항만 여기 적는다:
 
@@ -197,7 +197,7 @@ compute_ac(ply_ptr);
 
 즉 무기의 `adjustment`는 **명중에만**, `armor`는 **AC에만** 들어간다. 데미지의 무기 기여(`ndice/sdice/pdice`)는 [[a5-combat]]에서 다룬다.
 
-> **형상 함의**: 착용 효과가 `ready[]` 재계산으로 구현된 건 [[a7-player-progression]] §12의 "유효 스탯 = 순수 함수" 방향과 이미 부합한다. 다만 트리거가 **수동**(wear/ready/remove가 `compute_ac`/`compute_thaco`를 직접 호출)이라 호출 누락 시 stale해진다. 신규 스택은 AC/thaco를 `ready[]`에 대한 파생값으로 두고 슬롯 변경 시 무효화(또는 조회 시 계산)해 수동 호출을 제거한다.
+> **구현 시사점**: 착용 효과가 `ready[]` 재계산으로 구현된 건 [[a7-player-progression]] §12의 "유효 스탯 = 순수 함수" 방향과 이미 부합한다. 다만 트리거가 **수동**(wear/ready/remove가 `compute_ac`/`compute_thaco`를 직접 호출)이라 호출 누락 시 stale해진다. 신규 스택은 AC/thaco를 `ready[]`에 대한 파생값으로 두고 슬롯 변경 시 무효화(또는 조회 시 계산)해 수동 호출을 제거한다.
 
 착용 상태 플래그: **`OWEARS`(23)** = 착용 중(프롬프트에 흔한 `OWORN`은 **존재하지 않음**), **`OWHELD`(49)** = 쥠. 이 플래그는 인벤토리 목록·저장/로드 시 착용 여부 복원에 쓰인다.
 
@@ -286,7 +286,7 @@ obj_ptr->pdice = MAX(obj_ptr->pdice, obj_ptr->adjustment);
 
 ---
 
-## 7. 금화 경제 (콘텐츠 규칙 / 형상 필드)
+## 7. 금화 경제 (규칙은 이식 / 필드는 재설계)
 
 금화는 **`creature.gold`**(long, offset 348, `mstruct.h:189`)다. **상한·음수 가드가 없다** — 어디서도 clamp하지 않고, 가문 가입 시 `+= family_gold*10000`, 불태우기 대박 시 `+= 100000`까지 더한다.
 
@@ -363,7 +363,7 @@ else { print(… gold); }
 ply_ptr->gold += gold;                     // if/else 밖: 또 +gold
 ```
 
-lucky 분기는 if 내부에서 한 번, if/else 밖에서 또 한 번 더해 **실제 2배**를 지급한다(표시 `gold*2`와 일치). normal 분기는 밖에서만 더해 1배. **버그 아님.** (단 `time(0)` 기반 확률은 형상 — 결정적 스케줄러로 대체.)
+lucky 분기는 if 내부에서 한 번, if/else 밖에서 또 한 번 더해 **실제 2배**를 지급한다(표시 `gold*2`와 일치). normal 분기는 밖에서만 더해 1배. **버그 아님.** (단 `time(0)` 기반 확률은 구현 방식 — 결정적 스케줄러로 대체.)
 
 ### 수리 — `repair` (`command8.c:196`), 25%
 
@@ -392,11 +392,11 @@ else shotscur = shotsmax * mrand(5,9)/10;              // 성공: 내구 50~90% 
 
 ---
 
-## 9. 은행 (형상 중심)
+## 9. 은행 (구현 방식 중심)
 
 은행은 **구조적으로 특이**하다. 잔고가 `creature` 필드가 아니라 **플레이어별 별도 object 파일**이다.
 
-### 저장 구조 (형상 — MongoDB 설계 직결)
+### 저장 구조 (원작 구현 방식 — MongoDB 설계 직결)
 
 - 파일 경로: `PLAYERPATH/bank/<플레이어이름>`(`bank.c:12`).
 - 이 파일은 **단일 `object`**이며 컨테이너로 동작: 현금은 `object.value`(long, offset 300), 보관 물품은 그 object의 중첩 인벤토리(`first_obj`).
@@ -444,20 +444,20 @@ bnk_ptr->value -= amt;  ply_ptr->gold += amt;
 
 ---
 
-## 10. 형상·버그·데드코드 목록 (재설계 / 비재현 후보)
+## 10. 구현 방식·버그·데드코드 목록 (재설계 / 비재현 후보)
 
 | # | 항목 | 성격 | 처리 |
 |---|---|---|---|
-| a | **은행 = 별도 object 파일 컨테이너**(`bank/<이름>`, 현금=value) | 형상 | MongoDB 문서 `{owner, gold, items[]}`. player 인라인 또는 별도 컬렉션 모두 원본 의미와 정합 |
-| b | **`ready[20]` 포인터 배열** — 디스크상 4B 포인터×20, 로드 시 무의미 | 형상 | 착용 슬롯을 objectId 참조로. 저장은 착용 여부(OWEARS)로 복원 |
-| c | **상점 재고 = `rom_num+1` 인접방 규약** — 방 번호 인접에 의존 | 형상 | 명시적 재고 목록(shop inventory) 모델. 복제·무소진은 규칙으로 이식 |
-| d | **`gold` signed long 무가드** — 상한·음수 검증 없음, `+=100000` 등 | 형상/결함 | 상한·검증 추가(또는 BigInt/unsigned) |
-| e | **`time(0)` 기반 확률**(전당포 2배 `command7.c:272`) — 벽시계 의존 | 형상 | 결정적 RNG/스케줄러로 대체(확률 1/250은 유지) |
+| a | **은행 = 별도 object 파일 컨테이너**(`bank/<이름>`, 현금=value) | 구현 방식 | MongoDB 문서 `{owner, gold, items[]}`. player 인라인 또는 별도 컬렉션 모두 원본 의미와 정합 |
+| b | **`ready[20]` 포인터 배열** — 디스크상 4B 포인터×20, 로드 시 무의미 | 구현 방식 | 착용 슬롯을 objectId 참조로. 저장은 착용 여부(OWEARS)로 복원 |
+| c | **상점 재고 = `rom_num+1` 인접방 규약** — 방 번호 인접에 의존 | 구현 방식 | 명시적 재고 목록(shop inventory) 모델. 복제·무소진은 규칙으로 이식 |
+| d | **`gold` signed long 무가드** — 상한·음수 검증 없음, `+=100000` 등 | 구현 방식/결함 | 상한·검증 추가(또는 BigInt/unsigned) |
+| e | **`time(0)` 기반 확률**(전당포 2배 `command7.c:272`) — 벽시계 의존 | 구현 방식 | 결정적 RNG/스케줄러로 대체(확률 1/250은 유지) |
 | f | **은행 초기화 `F_ISSET(bnk_ptr, OCONTN)`**(`bank.c:311`) — 테스트 매크로를 설정처럼 호출, **플래그가 실제로 안 켜짐** | 버그(데드) | 신규 계좌 문서는 컨테이너 성격을 명시. 원본 OCONTN 의존 코드 영향 재확인 |
 | g | **trade 몹이 받은 물건 미보관**(`command10.c` 주석 처리) — 대가만 지급 | 미완성 | 물물교환을 완결형으로 재설계할지 결정 |
 | h | **CONTAINER2(14)** — 헤더 정의되나 help 미기재, 실사용 미확인 | 불명 | `data/world/objects.json` 카운트로 확정, 0이면 제외 |
-| i | **파생 스탯 수동 재계산 트리거** — wear/ready/remove가 `compute_ac`/`compute_thaco` 직접 호출(누락 시 stale) | 형상 | [[a7-player-progression]] §12대로 유효 스탯 함수화 |
-| j | **밸런스 소각 임계 하드코딩**(AC>151, dice합>39, shots>600) — 매직넘버 | 형상 | 아이템 검증 규칙을 데이터/config로 |
+| i | **파생 스탯 수동 재계산 트리거** — wear/ready/remove가 `compute_ac`/`compute_thaco` 직접 호출(누락 시 stale) | 구현 방식 | [[a7-player-progression]] §12대로 유효 스탯 함수화 |
+| j | **밸런스 소각 임계 하드코딩**(AC>151, dice합>39, shots>600) — 매직넘버 | 구현 방식 | 아이템 검증 규칙을 데이터/config로 |
 
 ---
 
@@ -469,13 +469,13 @@ bnk_ptr->value -= amt;  ply_ptr->gold += amt;
 
 3. **경제는 `value` 하나 위의 상수 배수.** 구매 100%·판매 50%(cap 10만)·수리 25%·몹구매 max(10,value). 이 배수는 코드가 아니라 **경제 config**(JSON)로 두어 튜닝을 코드에서 분리한다. `value`는 아이템 템플릿의 정본 필드로 이식.
 
-4. **상점 재고를 선언적으로.** 원본은 재고를 "인접 방 번호 규약"으로 표현하지만(§8), 이는 방 번호 인접성에 묶인 형상이다. 신규 스택은 상점에 명시적 재고 목록(무한/유한, 복제 여부)을 부여하고, 몹 상점의 `carry[]`도 상인 인벤토리로 모델링한다.
+4. **상점 재고를 선언적으로.** 원본은 재고를 "인접 방 번호 규약"으로 표현하지만(§8), 이는 방 번호 인접성에 묶인 구현 방식이다. 신규 스택은 상점에 명시적 재고 목록(무한/유한, 복제 여부)을 부여하고, 몹 상점의 `carry[]`도 상인 인벤토리로 모델링한다.
 
-5. **은행은 계좌 도메인으로 분리**(§9). 원본의 "은행=object 파일 컨테이너"는 영리한 재사용이지만 형상이다. 계좌를 `{owner, gold, items[], slotLimit:200, cap:3억}` 문서로 두면 현금·보관을 명확히 분리하면서 원본 의미(이자 없음·3억 상한·이체 없음)를 그대로 이식한다. **이자 부재는 설계 선택 지점** — 무한 원작 충실성 vs 경제 확장 사이에서 결정 게이트로 표시.
+5. **은행은 계좌 도메인으로 분리**(§9). 원본의 "은행=object 파일 컨테이너"는 영리한 재사용이지만 원작의 구현 방식이다. 계좌를 `{owner, gold, items[], slotLimit:200, cap:3억}` 문서로 두면 현금·보관을 명확히 분리하면서 원본 의미(이자 없음·3억 상한·이체 없음)를 그대로 이식한다. **이자 부재는 설계 선택 지점** — 무한 원작 충실성 vs 경제 확장 사이에서 결정 게이트로 표시.
 
 6. **금화 무결성 가드 추가.** gold·value·잔고 전부 signed long 무가드다. 신규 스택은 상한·음수 검증·트랜잭션(입금/출금/판매의 원자성)을 넣는다 — 특히 은행은 두 파일(계좌+세이브) 동시 저장이라 부분 실패 시 유실/복제 위험이 있다.
 
-7. **콘텐츠/형상 경계 확정.** 이식: §1 타입 taxonomy·§2 착용 슬롯·게이트·§3 무기 레벨게이트·§5 소비 아이템 배달·§6 플래그 의미·rand_enchant·종족 크기·§7 금화 드롭·§8 가격 배수·거래 거부·소지 한도·§9 은행 규칙(3억·200슬롯·이자 없음). 재설계/비재현: §10 전 항목(은행 파일 구조·`ready[]` 포인터·재고 방규약·무가드·time(0)·OCONTN 데드 statement·미완성 trade).
+7. **콘텐츠/구현 방식 경계 확정.** 이식: §1 타입 taxonomy·§2 착용 슬롯·게이트·§3 무기 레벨게이트·§5 소비 아이템 배달·§6 플래그 의미·rand_enchant·종족 크기·§7 금화 드롭·§8 가격 배수·거래 거부·소지 한도·§9 은행 규칙(3억·200슬롯·이자 없음). 재설계/비재현: §10 전 항목(은행 파일 구조·`ready[]` 포인터·재고 방규약·무가드·time(0)·OCONTN 데드 statement·미완성 trade).
 
 ---
 

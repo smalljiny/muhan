@@ -56,7 +56,7 @@ const REJECT_MESSAGES: Record<Extract<TrainResult, { ok: false }>['reason'], str
  *
  * ## 스탯 통지는 `character:stats`로 통일한다 (D10)
  * 연마는 레벨·경험치·hp·mp를 한꺼번에 바꾸므로 `progress:trained`에 스탯 필드를 더 얹고 싶어지지만,
- * 그러면 같은 값이 명령마다 다른 이벤트 형상으로 나가 클라이언트가 명령별 파서를 갖게 된다. 대신
+ * 그러면 같은 값이 명령마다 다른 이벤트 형태로 나가 클라이언트가 명령별 파서를 갖게 된다. 대신
  * 공격·연마가 공유하는 스냅샷 이벤트를 **덧붙인다** — `progress:trained`의 기존 필드는 한 글자도
  * 바꾸지 않는다(D15). 투영 규칙의 단일 출처는 `ws/characterStatsEvent.ts`이고 여기서 재구현하지 않는다.
  *

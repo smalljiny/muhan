@@ -1,6 +1,6 @@
 # A6 마법 시스템
 
-> 무한의 마법(주문 카탈로그·시전 규칙·데미지 공식·지속효과 타이머·마법 자원)이 oracle에서 *무엇을 하는지*를 규명한다. 주문 효과·수치는 밸런스 정의이므로 충실히 이식하고, 디스패치(함수 포인터 테이블·`how==CAST` 4중 분기·lasttime 슬롯 재사용)는 형상이므로 자유롭게 재설계한다. 이슈 #6. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)와 변환 산출물 `data/world/creatures.json`(몬스터 템플릿 674). 코드 이식이 아니라 동작 추출.
+> 무한의 마법(주문 카탈로그·시전 규칙·데미지 공식·지속효과 타이머·마법 자원)이 oracle에서 *무엇을 하는지*를 규명한다. 주문 효과·수치는 밸런스 정의이므로 충실히 이식하고, 디스패치(함수 포인터 테이블·`how==CAST` 4중 분기·lasttime 슬롯 재사용)는 원작의 구현 방식이므로 자유롭게 재설계한다. 이슈 #6. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)와 변환 산출물 `data/world/creatures.json`(몬스터 템플릿 674). 코드 이식이 아니라 동작 추출.
 >
 > **oracle 읽기 주의**: 하네스 `grep` 래퍼가 `-I`(binary skip)를 붙여 EUC-KR 파일을 스킵한다. `command grep -a` 또는 `iconv -f EUC-KR -t UTF-8 -c … | grep`로 우회한다([[muhan-oracle-toolchain]] 갱신 대상).
 
@@ -10,32 +10,32 @@
 
 주문은 `global.c`의 두 정적 테이블이 정본이다: **`spllist[]`**(55개 활성 주문 = 한글명·주문번호·함수포인터·전수등급)와 **`ospell[]`**(공격 주문 20개 = realm·마나·주사위). 명령 파서는 사용자가 친 한글 주문명을 `spllist`에서 선형 탐색(`strncmp` 접두 매칭)해 함수 포인터를 얻는다.
 
-결정적 비대칭 하나: **마나·클래스·주문지식 게이트는 전부 `how == CAST` 조건에 감싸여 있다.** 즉 두루마리·물약·지팡이로 시전하면 이 게이트를 전부 우회한다 — 도력이 부족해도, 그 직업이 아니어도, 그 주문을 안 배웠어도 아이템만 있으면 발동한다. 대신 아이템 경로는 소모(두루마리 소멸·`shotscur--`)와 `spell_fail` 굴림으로 게이트된다. 이것이 "효과·수치는 콘텐츠(이식) / 디스패치는 형상(재설계)"의 핵심 접합점이다.
+결정적 비대칭 하나: **마나·클래스·주문지식 게이트는 전부 `how == CAST` 조건에 감싸여 있다.** 즉 두루마리·물약·지팡이로 시전하면 이 게이트를 전부 우회한다 — 도력이 부족해도, 그 직업이 아니어도, 그 주문을 안 배웠어도 아이템만 있으면 발동한다. 대신 아이템 경로는 소모(두루마리 소멸·`shotscur--`)와 `spell_fail` 굴림으로 게이트된다. 이것이 "효과·수치는 콘텐츠(이식) / 디스패치는 구현 방식(재설계)"의 핵심 접합점이다.
 
-핵심 분리: **주문 효과·데미지 공식·게이트 의미·지속시간 공식·숙련 성장은 콘텐츠**(충실히 이식), **함수 포인터 선형 탐색·`how==CAST` 4중 반복·lasttime 슬롯 재사용·연산자 우선순위 버그·미완성 주문·dead 필드는 형상**(재설계).
+핵심 분리: **주문 효과·데미지 공식·게이트 의미·지속시간 공식·숙련 성장은 콘텐츠**(충실히 이식), **함수 포인터 선형 탐색·`how==CAST` 4중 반복·lasttime 슬롯 재사용·연산자 우선순위 버그·미완성 주문·dead 필드는 구현 방식**(재설계).
 
 ## 핵심 발견 요약
 
 | # | 발견 | 분류 |
 |---|------|------|
-| 1 | **주문 = `fn(ply, cmnd, how)` 단일 함수를 4경로가 공유.** cast(CAST)·read(SCROLL)·drink(POTION)·zap(WAND)가 같은 fn을 `how`만 바꿔 호출 | 콘텐츠(효과) / 형상(디스패치) |
-| 2 | **마나·클래스·knowledge 게이트가 전부 `how==CAST` 조건부.** scroll/potion/wand는 게이트 우회, 대신 아이템 소모+spell_fail로 게이트 | 콘텐츠(규칙) |
-| 3 | **주문 카탈로그 = `spllist[]` 55개 + `ospell[]` 20개.** 주문번호 0~56, 함수 포인터 테이블. 공격 20 = 4 realm × 5 tier | 콘텐츠(테이블) |
-| 4 | **공격 데미지 `dice(ndice,sdice,pdice+bns)`.** bns = `bonus[int] + mprofic(realm)/{10,6,4}`(bonus_type별). tier1 1d8 ~ tier5 4d5+30 | 콘텐츠(공식) |
-| 5 | **realm 상성 ×2/약화.** 방 플래그 RWATER/RFIRER/RWINDR/REARTH가 동속성 bns×2, 반대속성 bns를 음수(-5 cap). 물↔불, 바람↔땅 | 콘텐츠(공식) |
-| 6 | **마법 저항 = `dmg -= dmg*2*MIN(50,piety+int)/100`.** PRMAGI/MRMAGI 보유 시. piety+int≥50이면 데미지 0(완전 무효) | 콘텐츠(공식) |
-| 7 | **realm 숙련은 몬스터 대상 마법 데미지 비례 성장.** `realm[realm-1] += m*exp/hpmax`(A5 exp분배와 동형). mprofic이 읽어 데미지↑ 성장 루프. **PvP 마법은 성장 없음** | 콘텐츠(성장식) |
-| 8 | **버프 지속 = `MAX(300, 1200+bonus[int]*600)`초**(CAST), 비-CAST 고정 1200. 클래스/RPMEXT 보너스. 예외: invis·levit은 MAX(300) 없음 | 콘텐츠(타이머) |
-| 9 | **디버프 dur 개별 공식 + PRMAGI면 dur/2.** fear/silence/charm은 `LT_FEARS/SILNC/CHRMD`로 만료. **blind는 타이머 없음 = 개안 전까지 영구** | 콘텐츠(타이머) / 형상(blind dur 미사용) |
-| 10 | **spell_fail = 클래스별 `chance=(L4+B)*배수+보정`, `mrand(1,100)>chance`면 실패.** MAGE+75 최고, BARBARIAN+0 최저. cap 없어 고레벨 사실상 무실패 | 콘텐츠(공식) |
-| 11 | **주문 학습 = 비법서(SCROLL obj) 연마 `study` → `S_SET(magicpower-1)`.** 레벨 제한 obj->ndice. `teach`는 CARETAKER/MAGE/CLERIC이 전수(spllv 등급별 권한) | 콘텐츠(획득 규칙) |
-| 12 | **마나 회복 = LT_HEALS 5초 틱 공용**(hp와 동일 슬롯). `mpcur += MAX(4, 5+(int>17)+메이지2)`. RPHARM·중독·질병 방해, RHEALR 방 +100·틱÷3 | 콘텐츠(자원) |
-| 13 | **몬스터 마법 = 동일 주문 함수 재사용.** `crt_spell`이 spells[16] 비트에서 랜덤 선택, 치유는 자기·나머지는 공격자 대상. MMAGIC 플래그 + 확률(기본20%/MMAGIO면 prof[0]%). 674중 294가 주문 보유 | 콘텐츠(AI) / 형상(공유 함수) |
-| 14 | **형상 버그 다수.** light 연산자우선순위로 600초 고정·magicrealm dead 필드·rm_blindness가 SRMDIS 슬롯 재사용·curse/rm_blindness 미완성·summon 51% 선굴림 클래스무관 mp차감 | 형상(비재현 후보) |
+| 1 | **주문 = `fn(ply, cmnd, how)` 단일 함수를 4경로가 공유.** cast(CAST)·read(SCROLL)·drink(POTION)·zap(WAND)가 같은 fn을 `how`만 바꿔 호출 | 이식(효과) / 재설계(디스패치) |
+| 2 | **마나·클래스·knowledge 게이트가 전부 `how==CAST` 조건부.** scroll/potion/wand는 게이트 우회, 대신 아이템 소모+spell_fail로 게이트 | 이식(규칙) |
+| 3 | **주문 카탈로그 = `spllist[]` 55개 + `ospell[]` 20개.** 주문번호 0~56, 함수 포인터 테이블. 공격 20 = 4 realm × 5 tier | 이식(테이블) |
+| 4 | **공격 데미지 `dice(ndice,sdice,pdice+bns)`.** bns = `bonus[int] + mprofic(realm)/{10,6,4}`(bonus_type별). tier1 1d8 ~ tier5 4d5+30 | 이식(공식) |
+| 5 | **realm 상성 ×2/약화.** 방 플래그 RWATER/RFIRER/RWINDR/REARTH가 동속성 bns×2, 반대속성 bns를 음수(-5 cap). 물↔불, 바람↔땅 | 이식(공식) |
+| 6 | **마법 저항 = `dmg -= dmg*2*MIN(50,piety+int)/100`.** PRMAGI/MRMAGI 보유 시. piety+int≥50이면 데미지 0(완전 무효) | 이식(공식) |
+| 7 | **realm 숙련은 몬스터 대상 마법 데미지 비례 성장.** `realm[realm-1] += m*exp/hpmax`(A5 exp분배와 동형). mprofic이 읽어 데미지↑ 성장 루프. **PvP 마법은 성장 없음** | 이식(성장식) |
+| 8 | **버프 지속 = `MAX(300, 1200+bonus[int]*600)`초**(CAST), 비-CAST 고정 1200. 클래스/RPMEXT 보너스. 예외: invis·levit은 MAX(300) 없음 | 이식(타이머) |
+| 9 | **디버프 dur 개별 공식 + PRMAGI면 dur/2.** fear/silence/charm은 `LT_FEARS/SILNC/CHRMD`로 만료. **blind는 타이머 없음 = 개안 전까지 영구** | 이식(타이머) / 재설계(blind dur 미사용) |
+| 10 | **spell_fail = 클래스별 `chance=(L4+B)*배수+보정`, `mrand(1,100)>chance`면 실패.** MAGE+75 최고, BARBARIAN+0 최저. cap 없어 고레벨 사실상 무실패 | 이식(공식) |
+| 11 | **주문 학습 = 비법서(SCROLL obj) 연마 `study` → `S_SET(magicpower-1)`.** 레벨 제한 obj->ndice. `teach`는 CARETAKER/MAGE/CLERIC이 전수(spllv 등급별 권한) | 이식(획득 규칙) |
+| 12 | **마나 회복 = LT_HEALS 5초 틱 공용**(hp와 동일 슬롯). `mpcur += MAX(4, 5+(int>17)+메이지2)`. RPHARM·중독·질병 방해, RHEALR 방 +100·틱÷3 | 이식(자원) |
+| 13 | **몬스터 마법 = 동일 주문 함수 재사용.** `crt_spell`이 spells[16] 비트에서 랜덤 선택, 치유는 자기·나머지는 공격자 대상. MMAGIC 플래그 + 확률(기본20%/MMAGIO면 prof[0]%). 674중 294가 주문 보유 | 이식(AI) / 재설계(공유 함수) |
+| 14 | **구현 버그 다수.** light 연산자우선순위로 600초 고정·magicrealm dead 필드·rm_blindness가 SRMDIS 슬롯 재사용·curse/rm_blindness 미완성·summon 51% 선굴림 클래스무관 mp차감 | 재설계(비재현 후보) |
 
 ---
 
-## 1. 디스패치 = 단일 함수 4경로 공유 (형상)
+## 1. 디스패치 = 단일 함수 4경로 공유 (구현 방식)
 
 주문 함수의 시그니처는 `int fn(creature *ply_ptr, cmd *cmnd, int how[, ...])`. `how`는 진입 경로를 나타내는 상수다(`mtype.h`): `CAST=0`, `POTION=6`, `SCROLL=7`, `WAND=8`. 네 명령이 같은 함수 포인터 테이블을 탄다:
 
@@ -200,7 +200,7 @@ if(crt->type != PLAYER) ply->realm[osp->realm-1] += addrealm;   // PvP는 성장
 | levitate | LT_LEVIT (21) | `2400 + B*600` **(MAX 없음)** | — | +800 | 1200 |
 | light | LT_LIGHT (13) | **버그로 600 고정**(§11) | — | (+600) | — |
 
-B=`bonus[int]`, L4=`(level+3)/4`. `MAX(300,…)` 하한은 지능 페널티(bonus 음수)로 지속이 음수가 되는 것을 막는데, **invisibility·levitate만 이 하한이 빠져 있다** — 저지능이면 지속이 극단적으로 짧아질 수 있다(형상 결함 후보).
+B=`bonus[int]`, L4=`(level+3)/4`. `MAX(300,…)` 하한은 지능 페널티(bonus 음수)로 지속이 음수가 되는 것을 막는데, **invisibility·levitate만 이 하한이 빠져 있다** — 저지능이면 지속이 극단적으로 짧아질 수 있다(구현 결함 후보).
 
 **즉발(타이머 없음)**: curepoison·mend·heal·restore·room_vigor·rm_disease·rm_blind·rm_blindness·remove_curse·curse·teleport·recall·summon·magictrack·object_send·enchant·drain_exp·know_alignment(감지는 KNOWA 타이머). curse는 아이템 `OCURSE` 영구 플래그를 설정(대상이 장비를 못 벗음)하므로 타이머가 아닌 **상태 영속**이다.
 
@@ -220,7 +220,7 @@ B=`bonus[int]`, L4=`(level+3)/4`. `MAX(300,…)` 하한은 지능 페널티(bonu
 | blind (PBLIND/MBLIND) | **없음** | — | — | — | MUNKIL 몬스터 시전 불가 |
 
 - **효과 의미**: fear=도주율↑+공격−2, silence=주문·발화·yell 불가, charm=시전자 공격 불가+아군화(`add_charm_crt`), befuddle=행동 불가(추가로 `LT_SPELL`·PLAYER면 `LT_ATTCK`도 `MIN(9,dur)`로 봉쇄).
-- **blind의 결함**: `dur` 변수가 선언되나 미사용 — 타이머를 안 걸어 **개안술(rm_blind)로 명시 해제하기 전까지 영구 실명**. 콘텐츠(영구 지속)로 볼지 형상 버그로 볼지 결정 필요.
+- **blind의 결함**: `dur` 변수가 선언되나 미사용 — 타이머를 안 걸어 **개안술(rm_blind)로 명시 해제하기 전까지 영구 실명**. 콘텐츠(영구 지속)로 볼지 구현 버그로 볼지 결정 필요.
 - **대(對)언데드**(turn/absorb): `how` 없는 순수 CAST 명령. turn(CLERIC/PALADIN)=명중 `chance=(L4−대상L4)*20 + piety*5 + {PALADIN15/기타25}`, `MIN(80)`; 성공 시 `90−piety` 초과 굴림이면 즉사, 아니면 hp 절반. absorb(MAGE)=hp 흡수(`dmg=(level+73)/4*10`), 언데드면 흡수 실패+시전자 mp 전소. 둘 다 `LT_TURNS` 30초 쿨다운.
 
 ---
@@ -250,7 +250,7 @@ lasttime[LT_HEALS].interval = 5;                       // 5초 주기
 
 ---
 
-## 10. 몬스터 마법 = 공유 함수 재사용 (콘텐츠+형상)
+## 10. 몬스터 마법 = 공유 함수 재사용 (콘텐츠+구현 방식)
 
 몬스터도 주문을 쓴다. `data/world/creatures.json` 674 템플릿 중 **294가 주문 비트(spells) 보유, 286이 mpmax>0**(예: 사당귀신 mp50·lvl60, 야바단의 유령 mp15·lvl60, 그림자 mp12·lvl36).
 
@@ -263,11 +263,11 @@ lasttime[LT_HEALS].interval = 5;                       // 5초 주기
 
 **시전 조건**(update.c:352, 몬스터 공격 틱 내부): `MMAGIC` 플래그 보유 + `mrand(1,100) <= n`(n=기본 20, MMAGIO 플래그면 `proficiency[0]`%) + 매혹 주인 공격이 아닐 것(`!p`). 즉 마법 몬스터는 매 공격 기회마다 확률적으로 근접 대신 주문을 쏜다.
 
-→ **형상 함의**: 몬스터·플레이어가 같은 effect 함수를 공유하는 것은 재사용 관점에서 좋으나, 함수가 `creature*`를 "시전자"로 받아 클래스·mprofic·realm 등 플레이어 필드를 몬스터에도 적용한다. 신규 스택에서 caster 추상(플레이어/몬스터 공통 인터페이스)을 세우면 자연스럽게 재현된다.
+→ **구현 시사점**: 몬스터·플레이어가 같은 effect 함수를 공유하는 것은 재사용 관점에서 좋으나, 함수가 `creature*`를 "시전자"로 받아 클래스·mprofic·realm 등 플레이어 필드를 몬스터에도 적용한다. 신규 스택에서 caster 추상(플레이어/몬스터 공통 인터페이스)을 세우면 자연스럽게 재현된다.
 
 ---
 
-## 11. 형상·버그 목록 (재설계 / 비재현 후보)
+## 11. 구현 방식·버그 목록 (재설계 / 비재현 후보)
 
 | # | 항목 | 성격 | 처리 |
 |---|---|---|---|
@@ -296,7 +296,7 @@ lasttime[LT_HEALS].interval = 5;                       // 5초 주기
 
 5. **realm 숙련 성장은 전투 성장과 통합.** §5 addrealm 공식이 [[a5-combat]] exp 분배와 동형이므로, "데미지 기여 → 성장" 로직을 realm·무기 숙련·exp에 공통 적용하는 단일 성장 파이프로 묶는다.
 
-6. **콘텐츠/형상 경계 확정.** 이식: §2 카탈로그·§3 게이트·§4 데미지·§5 성장·§6·§7 타이머·§8 학습·§9 마나·§10 몬스터 AI 확률. 재설계/비재현: §11 전 항목(버그·미완성·dead·구조).
+6. **콘텐츠/구현 방식 경계 확정.** 이식: §2 카탈로그·§3 게이트·§4 데미지·§5 성장·§6·§7 타이머·§8 학습·§9 마나·§10 몬스터 AI 확률. 재설계/비재현: §11 전 항목(버그·미완성·dead·구조).
 
 ---
 

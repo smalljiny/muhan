@@ -75,7 +75,7 @@ const REJECT_MESSAGES: Record<'cooldown' | 'player-target' | 'not-found', string
   'not-found': '그런 것이 여기에 없습니다',
 }
 
-/** 와이어 `combat:attacked.attacks` 원소 — 스키마에서 파생한다(형상을 손으로 다시 적지 않는다). */
+/** 와이어 `combat:attacked.attacks` 원소 — 스키마에서 파생한다(형태를 손으로 다시 적지 않는다). */
 type WireAttack = Extract<ServerEvent, { type: 'combat:attacked' }>['attacks'][number]
 
 /**

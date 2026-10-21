@@ -25,7 +25,7 @@ export { writeFixtureFile }
  *
  * ## 재생성 (수동 트리거)
  * `expected`·`generatedAt`은 체크인 후 frozen이며, 회귀 테스트 중 자동 재생성은 없다.
- * bare `node`는 상대 import의 `.js`→`.ts`를 해석하지 못하므로(형상 경계 = vite 번들러
+ * bare `node`는 상대 import의 `.js`→`.ts`를 해석하지 못하므로(import 해석 기준 = vite 번들러
  * moduleResolution), TS-aware 러너로 재생성한다. 임시 테스트를 vitest로 1회 실행하고 제거한다:
  *
  * ```

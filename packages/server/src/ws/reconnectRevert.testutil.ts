@@ -166,7 +166,7 @@ export function makeCharacter(overrides: Partial<Character> = {}): Character {
   })
 }
 
-/** 시드 비법서 인스턴스 — `objectSchema.parse`로 형상 계약을 런타임에 강제한다(형제 스위트 관례). */
+/** 시드 비법서 인스턴스 — `objectSchema.parse`로 형태 계약을 런타임에 강제한다(형제 스위트 관례). */
 export function makeBookInstance(): ObjectInstance {
   return objectSchema.parse({
     _id: BOOK_INSTANCE_ID,

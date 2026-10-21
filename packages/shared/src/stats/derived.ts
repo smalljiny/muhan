@@ -92,7 +92,7 @@ export function maxWeight(context: EffectiveStatContext): number {
  * 원본 `up_level`은 폐형(805–808) 이전에 홀짝 증분(779–780)을 수행하고, 폐형 재계산은
  * `level==1`·`level%4==0`에서만 도달한다(791행 조기 return). `level%4≠0` 레벨은 증분
  * 누적값이 잔존해 폐형과 **발산**하며 그 값이 디스크에 저장·관측된다(fighter hpMax:
- * L2 게임56/폐형59, L5 71/68, L7 77/74). 이 발산은 `level%4` 조기 return이 만든 형상
+ * L2 게임56/폐형59, L5 71/68, L7 77/74). 이 발산은 `level%4` 조기 return이 만든 구현
  * 버그로 판단해 신규 스택은 **폐형 하나만** 구현한다 — 발산 레벨에서 원본과 다를 수 있으며
  * 수용된 결정이다(근거: `docs/notes/game-analysis-20260625/a7-player-progression.md` §2 정정).
  */

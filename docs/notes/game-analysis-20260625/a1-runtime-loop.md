@@ -81,18 +81,18 @@ typedef struct lasttime {
 
 즉 타이밍은 두 층이다 — **중앙 1Hz 틱**(언제 평가하는가) + **엔티티별 `lasttime` 쿨다운**(각 행동의 다음 가용 시각). 전투 라운드 길이·주문 재시전·은신 등은 전부 슬롯별 `interval` 값으로 인코딩된다.
 
-## 콘텐츠/형상 분류
+## 콘텐츠/구현 방식 분류
 
 | 구분 | 항목 |
 |---|---|
 | **콘텐츠 (충실히 이식)** | 1초 틱 의미, 각 `update_*` 주기 값(20·150·4000·5000·20000초 등), 슬롯별 `lasttime.interval` 쿨다운 값, `update_active`가 매초 전투를 진행한다는 규칙, 유휴 300초 disconnect 정책, 방 재출현 타이머 의미 |
-| **형상 (재설계)** | `sock_loop`+`select(75ms)` → Node 이벤트 루프(입력은 WebSocket push라 폴링 타임아웃 불요), `iobuf`/`output_buf` → WebSocket 송신, `lasttime[45]` 배열+`LT` 매크로 → JS 타이머/스케줄러 표현, `time(0)` 초 비교 → 단조 시계 기반 스케줄러, `main.c` 데몬화·`startm.c` 워치독 → 프로세스 매니저(systemd/pm2 등) |
+| **구현 방식 (재설계)** | `sock_loop`+`select(75ms)` → Node 이벤트 루프(입력은 WebSocket push라 폴링 타임아웃 불요), `iobuf`/`output_buf` → WebSocket 송신, `lasttime[45]` 배열+`LT` 매크로 → JS 타이머/스케줄러 표현, `time(0)` 초 비교 → 단조 시계 기반 스케줄러, `main.c` 데몬화·`startm.c` 워치독 → 프로세스 매니저(systemd/pm2 등) |
 
 ## 아키텍처 함의 (이슈 #14 입력)
 
 **런타임 루프는 손으로 만든 비동기 기반이다.** 1990년대 C 환경엔 스레드·async I/O·이벤트 루프 라이브러리가 없었으므로, 무한은 단일 스레드에서 다수 동시 행위자를 돌리기 위해 이벤트 루프(`sock_loop`)·I/O 멀티플렉싱(`select`)·타이머 서브시스템(`lasttime`+`LT`)·협력적 스케줄링(회전당 명령 1개)을 직접 구현했다. Node(libuv 이벤트 루프 + 타이머)가 정확히 이 기반의 네이티브 대응물이므로 — 같은 문제의 같은 해법이라 우연이 아니다 — **이 루프는 포팅하지 않고 삭제하며 플랫폼의 것을 채택한다.**
 
-분리 원칙: **메커니즘은 형상, 그 위에 실린 타이밍 값·순서는 콘텐츠.** `select`·`iobuf`·`output_buf`·`lasttime` 배열·`LT` 매크로·`time(0)` 초 단위 폴링은 형상으로 버리고 플랫폼으로 대체한다. 1Hz 케이던스·각 `update_*` 간격 값·슬롯별 쿨다운 duration·`update_active`가 매초 돈다는 순서는 콘텐츠로 재현한다. `lasttime[45]` 배열을 버린다고 쿨다운 *값*까지 버리지 않는다.
+분리 원칙: **메커니즘은 구현 방식, 그 위에 실린 타이밍 값·순서는 콘텐츠.** `select`·`iobuf`·`output_buf`·`lasttime` 배열·`LT` 매크로·`time(0)` 초 단위 폴링은 원작의 구현 방식이므로 버리고 플랫폼으로 대체한다. 1Hz 케이던스·각 `update_*` 간격 값·슬롯별 쿨다운 duration·`update_active`가 매초 돈다는 순서는 콘텐츠로 재현한다. `lasttime[45]` 배열을 버린다고 쿨다운 *값*까지 버리지 않는다.
 
 - **단일 이벤트 루프로 충분하다.** 원본도 단일 프로세스다. 멀티프로세스·Redis는 수평 확장 시점에만 도입한다.
 - **중앙 heartbeat = 1Hz `setInterval`**이 원본 `update_game`과 직결된다. 75ms select 타임아웃은 입력 반응 상한일 뿐이며 WebSocket(push)에는 대응물이 없다.

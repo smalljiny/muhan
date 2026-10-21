@@ -88,7 +88,7 @@ export const clientCommandSchema = z.discriminatedUnion('type', [
   // 대상 지목만 보낸다. id는 상관 키(선택) — progress:studied는 상태 이벤트라 상관 키를 싣지 않고,
   // 거부 시 error 이벤트가 이 id를 correlationId로 반향한다.
   //
-  // target·ordinal 형상과 그 상한 근거는 payloads.ts의 targetOrdinalPayloadSchema가 소유한다.
+  // target·ordinal 형태와 그 상한 근거는 payloads.ts의 targetOrdinalPayloadSchema가 소유한다.
   // 그 블록을 spread해 리터럴 상한이 명령마다 흩어지는 것을 막는다(debug:echo가 freeTextPayloadSchema를
   // spread하는 관용구와 같다 — 리터럴 discriminator와 strict는 새 strictObject가 그대로 보존한다).
   z.strictObject({

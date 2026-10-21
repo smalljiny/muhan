@@ -373,7 +373,7 @@ describe('createLiveWorldWiring — attackDeps 파생', () => {
     const worldGraph = new Map<number, RoomNode>([[4, room]])
     const character = makeCharacter('char-1', 4)
 
-    // index.ts boot와 같은 형상 — worldRuntime이 만든 발급기·템플릿을 묶음에 그대로 싣는다.
+    // index.ts boot와 같은 구성 — worldRuntime이 만든 발급기·템플릿을 묶음에 그대로 싣는다.
     const templates: SpawnTemplateIndex = new Map<number, SpawnTemplate>([
       [summonTemplateId, makeSpawnTemplate('부하')],
     ])

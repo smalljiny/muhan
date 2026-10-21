@@ -3,7 +3,7 @@
 
 ## Executive Summary
 
-인메모리 권위 상태 + DB write-behind는 MMO 아키텍처의 표준 선택이며, "DB는 진실의 원천이 아니다"는 명제가 명시적으로 문서화돼 있다 ([PRDeving](https://prdeving.wordpress.com/2023/09/29/mmo-architecture-source-of-truth-dataflows-i-o-bottlenecks-and-how-to-solve-them/)). 템플릿/인스턴스 분리 역시 가상 세계의 보편 구조로, 사실상 모든 가상 세계가 **읽기 전용 템플릿 저장소 + 읽기·쓰기 인스턴스 저장소** 최소 2개를 유지한다 ([Raph Koster](https://www.raphkoster.com/2021/10/07/digital-objects-how-virtual-worlds-work-part-3/)). 즉 본 토픽이 세우려는 형상(템플릿 인덱스 인메모리 상주 + 인스턴스 문서 컬렉션)은 관행에 부합한다.
+인메모리 권위 상태 + DB write-behind는 MMO 아키텍처의 표준 선택이며, "DB는 진실의 원천이 아니다"는 명제가 명시적으로 문서화돼 있다 ([PRDeving](https://prdeving.wordpress.com/2023/09/29/mmo-architecture-source-of-truth-dataflows-i-o-bottlenecks-and-how-to-solve-them/)). 템플릿/인스턴스 분리 역시 가상 세계의 보편 구조로, 사실상 모든 가상 세계가 **읽기 전용 템플릿 저장소 + 읽기·쓰기 인스턴스 저장소** 최소 2개를 유지한다 ([Raph Koster](https://www.raphkoster.com/2021/10/07/digital-objects-how-virtual-worlds-work-part-3/)). 즉 본 토픽이 세우려는 구조(템플릿 인덱스 인메모리 상주 + 인스턴스 문서 컬렉션)는 관행에 부합한다.
 
 가장 값진 발견은 **동기 핸들러를 async로 바꿀 때의 구체적 실패 모드**다. `ox_inventory` PR #1950은 아이템 이동 경로에서 "카운트 변형 → **yield** → dirty 플래그 세팅" 순서 때문에 접속 종료가 그 사이에 끼어들어 **아이템이 복제되는** 버그를 문서화했고, 수정은 yield를 임계 구간 밖으로 밀어내는 것이었다 ([ox_inventory#1950](https://github.com/overextended/ox_inventory/pull/1950)). 이는 dirty-flag 기반 write-behind를 쓰는 모든 시스템의 공통 함정이다 ([Redis Patterns](https://redis.antirez.com/fundamental/write-behind.html)).
 

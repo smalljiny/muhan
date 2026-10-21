@@ -124,7 +124,7 @@ RNG 순서: `broke(1,100)`를 먼저 굴리고, **성공일 때만** `durability
 
 ## 관련 문서
 
-- **oracle**: `docs/notes/game-analysis-20260625/a8-items-economy.md`(§7 금화 경제·§8 상점/전당포/수리·§10 형상버그) · `legacy/muhan/src/`(`command7.c` buy/sell·`command8.c` repair·`command10.c` purchase·`command2.c` money·`creature.c` drop)
+- **oracle**: `docs/notes/game-analysis-20260625/a8-items-economy.md`(§7 금화 경제·§8 상점/전당포/수리·§10 구현 버그) · `legacy/muhan/src/`(`command7.c` buy/sell·`command8.c` repair·`command10.c` purchase·`command2.c` money·`creature.c` drop)
 - **의존 스펙**: [items-equipment.md](items-equipment.md)(object·value·weight·owner 소비) · [stats-core.md](stats-core.md)(`maxWeight`·`bonusOf` 소비) · [combat.md](combat.md)(`CombatRng` seam 재사용) · [golden-fixture-harness.md](golden-fixture-harness.md)(fixture 규약)
 - **형제 시스템**: [bank-items.md](bank-items.md)(은행 물품 보관 G8) · [save-policy.md](save-policy.md)(은행 현금 트랜잭션 `bankTransactionService`)
 - **후속**: #106(라이브 command 라우팅) · #43(write-behind 라이브 강제)

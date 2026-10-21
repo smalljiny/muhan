@@ -12,7 +12,7 @@ E4 월드 상태 엔진의 세 번째 토픽이다. E4-1a(`runtime-foundation.md
 4. **스폰 3트리거**(perm 입장 lazy 리스폰·random 인터벌 배회·invasion 데이터 정의 이벤트)를 이식한다.
 5. **크리처 사망 라이프사이클**(perm 리스폰 타이머 리셋·MSUMMO 소환·활성집합 제거)을 소유한다.
 
-전투·어그로 타깃 판정·특수공격·주문 시전(전술 판정), 플레이어 WS 명령 배선, object/room `special` 디스패치는 범위 밖이며 seam으로 남는다. 콘텐츠 출처는 `docs/notes/game-analysis-20260625`의 A9(몬스터 AI·스폰)·A11(특수 오브젝트)·A1/A4(런타임·이동) 노트다. 원본 형상(`first_active` 연결 리스트·`time(0)` 폴링·하드코딩 침공 좌표)은 신규 스택으로 재설계하되, 동작 의미(활성 집합·스폰 규칙·autonomic 율·리스폰 규칙)는 충실히 이식한다.
+전투·어그로 타깃 판정·특수공격·주문 시전(전술 판정), 플레이어 WS 명령 배선, object/room `special` 디스패치는 범위 밖이며 seam으로 남는다. 콘텐츠 출처는 `docs/notes/game-analysis-20260625`의 A9(몬스터 AI·스폰)·A11(특수 오브젝트)·A1/A4(런타임·이동) 노트다. 원본 구현 방식(`first_active` 연결 리스트·`time(0)` 폴링·하드코딩 침공 좌표)은 신규 스택으로 재설계하되, 동작 의미(활성 집합·스폰 규칙·autonomic 율·리스폰 규칙)는 충실히 이식한다.
 
 ## 구조 / 스키마
 
@@ -37,7 +37,7 @@ E4 월드 상태 엔진의 세 번째 토픽이다. E4-1a(`runtime-foundation.md
 
 전투 콘텐츠 필드(불변, 물질화 시점 소스 JSON에서 전이)로 `armor`·`thaco`·`ndice`·`sdice`·`pdice`([combat.md](combat.md) operand)와 마법 read 필드(`realm`·`spells`·`class`·`intelligence`·`piety`)가 있고, [combat.md](combat.md) 사망 분배(`distributeCreatureDeath`)가 읽는 `experience`·`alignment`를 **선택 필드**로 담는다(`befuddledUntil`/`charmedUntil` 선택 관례 — 인라인 리터럴 blast-radius 회피, 소스 JSON은 항상 실값 보유). 물질화(`creatureFactory.ts`)는 두 필드를 소스에서 복사하고, template 스폰 경로는 `buildSpawnTemplateIndex`(`spawn.ts`) 명시 매핑이 두 필드를 전파한다(embedded·template 양 경로 충실).
 
-이름 매칭용 별칭 `keys?: string[]`도 같은 선택 필드 관례를 따른다(원본 `char key[3][20]`, CRT 오프셋 255). 소비자는 방 스코프 크리처 해소자이며 규칙 정본은 [`name-matching.md`](name-matching.md)다. **물질화 경로가 전부 필드 선택 복사라 타입만 추가하면 값이 아무 데서도 채워지지 않고, `keys?`가 optional인 탓에 컴파일도 통과하는 조용한 결손이 된다** — `creatureFactory.ts`(embedded)·`buildSpawnTemplateIndex`(template)·`server/src/world/worldGraph.ts`(방 로드) 세 지점 모두에 명시 전파가 필요하다. 프로덕션 리더·물질화는 별칭이 없어도 `[]`를 채운다(`undefined` 금지 — 매처가 두 형상을 분기하지 않도록).
+이름 매칭용 별칭 `keys?: string[]`도 같은 선택 필드 관례를 따른다(원본 `char key[3][20]`, CRT 오프셋 255). 소비자는 방 스코프 크리처 해소자이며 규칙 정본은 [`name-matching.md`](name-matching.md)다. **물질화 경로가 전부 필드 선택 복사라 타입만 추가하면 값이 아무 데서도 채워지지 않고, `keys?`가 optional인 탓에 컴파일도 통과하는 조용한 결손이 된다** — `creatureFactory.ts`(embedded)·`buildSpawnTemplateIndex`(template)·`server/src/world/worldGraph.ts`(방 로드) 세 지점 모두에 명시 전파가 필요하다. 프로덕션 리더·물질화는 별칭이 없어도 `[]`를 채운다(`undefined` 금지 — 매처가 두 경우를 따로 처리하지 않도록).
 
 ### `RoomNode` 스폰 필드 (G3)
 
