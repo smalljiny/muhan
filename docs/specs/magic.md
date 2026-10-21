@@ -63,7 +63,7 @@ OspellEntry { spellNo, realm, mp, ndice, sdice, pdice, bonusType }
 
 `spellByNo(n)`·`ospellOf(n)`은 모듈 로드 시 1회 빌드하는 `ReadonlyMap` 기반 O(1) 조회다(cast는 per-round hot path라 선형 탐색 금지). 카탈로그 밖 번호는 `undefined`를 반환한다. 카탈로그의 offensive 집합 === `OSPELL_GRID` 집합이 테스트로 고정돼(`catalog.test.ts`), `ospellOf(n)===undefined`는 `!offensive`와 동치다.
 
-`spellByName(query)`는 한글 주문명 조회이며 `{kind:'found'|'ambiguous'|'notFound'}`를 돌려준다. 매칭 규칙 본체(완전일치 리셋·즉시 종료·접두 누적·모호 거부)는 `naming/matchSpellName`이 단독 소유하고 여기서는 `SPELL_CATALOG`를 바인딩해 **호출만** 한다 — 정본은 [`name-matching.md`](name-matching.md). `SPELL_BY_NO`처럼 완전일치 이름 인덱스를 두고 앞질러 반환하면 오라클 규칙의 절반을 이 모듈에 복제하는 셈이라 두지 않는다. 번호 조회와 달리 이름 조회는 hot path가 아니다(명령 입력 경로, 라운드당 최대 1회)이고 카탈로그는 56행 정적 테이블이다. 순회 순서는 `SPELL_CATALOG` 선언 순서 = 오라클 `spllist` 배열 순서지만, 결과는 순서에 독립이다(모호는 거부, 유일 접두는 순서 무관).
+`spellByName(query)`는 한글 주문명 조회이며 `{kind:'found'|'ambiguous'|'notFound'}`를 돌려준다. 매칭 규칙 본체(완전일치 리셋·즉시 종료·접두 누적·모호 거부)는 `naming/matchSpellName`이 단독 소유하고 여기서는 `SPELL_CATALOG`를 바인딩해 **호출만** 한다 — 정본은 [`name-matching.md`](name-matching.md). `SPELL_BY_NO`처럼 완전일치 이름 인덱스를 두고 앞질러 반환하면 오라클 규칙의 절반을 이 모듈에 복제하는 셈이라 두지 않는다. 번호 조회와 달리 이름 조회는 hot path가 아니고(명령 입력 경로, 라운드당 최대 1회) 카탈로그는 56행 정적 테이블이다. 순회 순서는 `SPELL_CATALOG` 선언 순서 = 오라클 `spllist` 배열 순서지만, 결과는 순서에 독립이다(모호는 거부, 유일 접두는 순서 무관).
 
 ## 동작
 
