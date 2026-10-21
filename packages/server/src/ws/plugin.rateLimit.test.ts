@@ -12,14 +12,14 @@ import {
 } from './wsTestClient.testutil.js'
 import type { ConnectionRateLimiter, RateVerdict } from './messageRateLimiter.js'
 
-// Story 5 — 인바운드 유량 제한 배선 종단 테스트. Stories 1-2가 만든 순수 유량 제한 코어를 실 소켓
-// message 핸들러에 배선한 결과(파싱 전 gate·1회 경고·지속 종료·socket-open arm·idle 미재-arm·계정 반납·
-// 이중 close 멱등)를 injectWS로 관측한다. verdict 계산 자체는 messageRateLimiter.test.ts가 소유한다 —
-// 여기선 gate가 어디에·어떻게 배선됐는지(순서·부수효과)만 본다.
+// Story 5 — 인바운드 유량 제한 연결 종단 테스트. Stories 1-2가 만든 순수 유량 제한 코어를 실 소켓
+// message 핸들러에 연결한 결과(파싱 전 gate·1회 경고·지속 종료·socket-open arm·idle 미재-arm·계정 반납·
+// 이중 close 멱등)를 injectWS로 관측한다. verdict 계산 자체는 messageRateLimiter.test.ts가 담당한다 —
+// 여기선 gate가 어디에·어떻게 연결됐는지(순서·부수효과)만 본다.
 //
 // 각 테스트가 상한(capacity·maxViolations·refill)을 다르게 요구하므로 이 블록은 자체 env snapshot-restore를
 // 두고 process.env를 테스트별로 오버라이드한 뒤 resetConfigForTests()로 싱글턴을 초기화한다(e2e 격리 패턴 미러).
-describe('WS 인바운드 유량 제한 배선', () => {
+describe('WS 인바운드 유량 제한 연결', () => {
   let savedEnv: NodeJS.ProcessEnv
   // 유량 상한 env 키 목록 — afterEach가 테스트별 오버라이드만 걷어내 base env(MONGODB_URI·ORIGINS)를 보존한다.
   const RATE_ENV_KEYS = [
@@ -30,7 +30,7 @@ describe('WS 인바운드 유량 제한 배선', () => {
     'WS_MSG_RATE_MAX_VIOLATIONS',
   ]
 
-  // base env(MONGODB_URI·WS_ALLOWED_ORIGINS)를 suite 전체 동안 유효하게 유지한다 — 연결 close 뒤 지연 발화하는
+  // base env(MONGODB_URI·WS_ALLOWED_ORIGINS)를 suite 전체 동안 유효하게 유지한다 — 연결 close 뒤 지연 실행되는
   // setImmediate(system:hello) 경로의 getConfig()가 fail-fast(process.exit)하지 않게 한다(e2e beforeAll 패턴 미러).
   beforeAll(() => {
     savedEnv = { ...process.env }
@@ -185,7 +185,7 @@ describe('WS 인바운드 유량 제한 배선', () => {
     const ws = await injectAuthedWS(app)
     const reader = await enterCommandState(ws)
 
-    // 실 idle 타이머를 스파이로 교체해 arm 호출을 관측한다(실 타이머는 먼저 clear해 누수 방지 — idle 배선 테스트 미러).
+    // 실 idle 타이머를 스파이로 교체해 arm 호출을 관측한다(실 타이머는 먼저 clear해 누수 방지 — idle 연결 테스트 미러).
     const ctx = [...app.wsConnections.values()][0]
     ctx?.idle?.clear()
     const armSpy = vi.fn()
@@ -219,7 +219,7 @@ describe('WS 인바운드 유량 제한 배선', () => {
   })
 
   // ── (6) 마지막 연결 close 시 계정 버킷 반납 (keep-until-refilled) ─────────────────
-  it('마지막 연결 close 시 releaseAccount가 발화해도 계정 엔트리는 zero-refcount로 생존한다', async () => {
+  it('마지막 연결 close 시 releaseAccount가 실행돼도 계정 엔트리는 zero-refcount로 생존한다', async () => {
     setLimits({ capacity: '100', refill: '100', accountCapacity: '1000', accountRefill: '1000' })
     const app = buildSeededApp()
     await app.ready()
@@ -231,15 +231,15 @@ describe('WS 인바운드 유량 제한 배선', () => {
 
     ws.terminate()
     await waitFor(() => app.wsConnections.size === 0)
-    // close 리스너가 releaseAccount를 발화해 refCount 0에 도달하지만, keep-until-refilled면 엔트리를
+    // close 리스너가 releaseAccount를 실행해 refCount 0에 도달하지만, keep-until-refilled면 엔트리를
     // 삭제하지 않고 생존시킨다(즉시 재연결이 고갈 버킷을 재사용하도록, issue #77). activeAccountCount는 1 유지.
     expect(app.wsMessageRateLimiter.activeAccountCount()).toBe(1)
 
     await app.close()
   })
 
-  // ── (7) 이중 발화 close 멱등 ⚠️ BLOCKING 회귀 방어 ──────────────────────────────
-  it('같은 계정을 공유하는 두 연결 중 하나에 close가 2회 발화해도 계정 엔트리는 한 번만 감소한다', async () => {
+  // ── (7) 이중 발생 close 멱등 ⚠️ BLOCKING 회귀 방어 ──────────────────────────────
+  it('같은 계정을 공유하는 두 연결 중 하나에 close가 2회 발생해도 계정 엔트리는 한 번만 감소한다', async () => {
     setLimits({ capacity: '100', refill: '100', accountCapacity: '1000', accountRefill: '1000' })
     const app = buildSeededApp()
     await app.ready()
@@ -255,7 +255,7 @@ describe('WS 인바운드 유량 제한 배선', () => {
     const serverSockets = [...app.wsConnections.keys()]
     const sock1 = serverSockets[0]
 
-    // ⚠️ ws 'close'는 이 코드베이스에서 2회 이상 발화할 수 있다(releaseQuota가 releaseOnce인 이유와 동일).
+    // ⚠️ ws 'close'는 이 코드베이스에서 2회 이상 발생할 수 있다(releaseQuota가 releaseOnce인 이유와 동일).
     // once-guard가 없으면 releaseAccount가 이중 감소해 refCount 2→0으로 떨어진다. Story 2의 keep-until-
     // refilled에서는 refCount 0이어도 엔트리를 삭제하지 않으므로 activeAccountCount로는 이 이중 감소가
     // 관측되지 않는다(항상 1) — once-guard는 refCount 정확성만 지킨다. once-guard 관측성은 Story 3의 lazy
@@ -333,7 +333,7 @@ describe('WS 인바운드 유량 제한 배선', () => {
     await app.close()
   })
 
-  // ── (9) refill-horizon 경과 재연결 — 계정 버킷 완전 회복 (배선 회귀) ───────────────
+  // ── (9) refill-horizon 경과 재연결 — 계정 버킷 완전 회복 (연결 회귀) ───────────────
   it('refill-horizon 경과 후 재연결하면 재사용 계정 버킷이 full로 회복돼 다시 accept된다', async () => {
     // accountCapacity 1 → conn1의 첫 프레임 하나로 계정 버킷을 결정론적으로 고갈시킨다. 첫 check가
     //   lastRefill===null 센티넬로 capacity(1) 시드 후 1토큰 소비 → 정확히 0이 되며, 이 seed-then-consume은
@@ -342,7 +342,7 @@ describe('WS 인바운드 유량 제한 배선', () => {
     //   waitFor 10ms 폴링 지배)이 이 horizon을 항상 초과하므로 재사용 버킷은 결정론적으로 full 회복한다
     //   (재연결 지연 »» 10µs; 경과가 길수록 clamp라 over-recover가 불가능해 단방향으로만 안전 — 비-flaky).
     // 이 테스트는 churn FIX가 아니라 WIRING을 고정한다 — 재사용 버킷이 실 performance.now() 경과를 추적해
-    //   horizon 경과 시 회복함을 종단으로 관측한다(old/new 모두 재연결 후 accept라 fix 구분은 (8)이 소유).
+    //   horizon 경과 시 회복함을 종단으로 관측한다(old/new 모두 재연결 후 accept라 fix 구분은 (8)이 담당).
     setLimits({
       capacity: '100',
       refill: '100',
@@ -389,7 +389,7 @@ describe('WS 인바운드 유량 제한 배선', () => {
   // ── (10) churn 시나리오 warn-edge 회귀 — 첫 drop당 rate_limited 정확히 1회 ──────────
   it('churn 재연결로 고갈 계정을 재사용해도 연속 drop은 rate_limited를 정확히 1회만 보낸다', async () => {
     // (8)과 같은 stay-depleted 구성(accountRefill 1). 재연결 연결은 fresh violations 카운터를 갖지만, 경고
-    //   엣지(warn-edge)는 코어가 소유해 위반 구간의 첫 drop만 drop-warn(rate_limited 1회)이 된다. churn이
+    //   엣지(warn-edge)는 코어가 담당해 위반 구간의 첫 drop만 drop-warn(rate_limited 1회)이 된다. churn이
     //   경고를 증폭시키지 않음을 종단으로 고정한다(anti-amplification 회귀). maxViolations 100 → 4연속 drop이
     //   shouldTerminate를 넘기지 않아 assert 도중 close되지 않는다.
     setLimits({
@@ -437,7 +437,7 @@ describe('WS 인바운드 유량 제한 배선', () => {
   })
 
   // ── (11) 형제 refCount 안전 — 한 연결 close가 생존 형제 계정 엔트리를 조기 삭제하지 않음 ──
-  it('한 연결에 close가 이중 발화해도 생존 형제 연결의 계정 엔트리는 live로 남는다', async () => {
+  it('한 연결에 close가 이중 발생해도 생존 형제 연결의 계정 엔트리는 live로 남는다', async () => {
     setLimits({ capacity: '100', refill: '100', accountCapacity: '1000', accountRefill: '1000' })
     const app = buildSeededApp()
     await app.ready()
@@ -453,7 +453,7 @@ describe('WS 인바운드 유량 제한 배선', () => {
     const serverSockets = [...app.wsConnections.keys()]
     const sock1 = serverSockets[0]
 
-    // sock1에 close 이중 발화. once-guard(rateReleased)가 없으면 releaseAccount가 이중 감소해 refCount
+    // sock1에 close 이중 발생. once-guard(rateReleased)가 없으면 releaseAccount가 이중 감소해 refCount
     //   2→0이 되어, 살아 있는 형제(ws2)의 계정 엔트리가 dead로 보인다(liveAccountCount 0 → sweep 대상).
     //   once-guard면 정확히 1회만 반납해 refCount 2→1, 형제 엔트리는 live로 남는다.
     sock1?.emit('close')
@@ -472,7 +472,7 @@ describe('WS 인바운드 유량 제한 배선', () => {
   })
 })
 
-/** 스텁 ConnectionRateLimiter — 고정 verdict를 돌려준다. gate 배선(early-return·부수효과)만 관측할 때 쓴다. */
+/** 스텁 ConnectionRateLimiter — 고정 verdict를 돌려준다. gate 연결(early-return·부수효과)만 관측할 때 쓴다. */
 function stubLimiter(verdict: RateVerdict, terminate = false): ConnectionRateLimiter {
   return {
     check: () => verdict,

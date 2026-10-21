@@ -17,8 +17,8 @@ import type { LiveCharacter } from '../../world/liveCharacterRegistry.js'
  *  2층 StateHandler(`stateHandlers`의 onEnter/handleInput): 포트를 호출하고 이벤트를 주입 `emit`으로만
  *      내보낸다(소켓 직접 접근 금지). 시드 어댑터 + 배열 수집 emit으로 소켓 없이 검증한다. create 핸들러는
  *      대화 상태(`ctx.createProgress`)를 읽고 써야 하므로 `FsmContext`도 인자로 받는다.
- *  3층 배선(`applyTransition`·`enterInitialState`·`handleSessionFrame`): ctx.state를 단일 지점에서
- *      변이하고 enter/exit 콜백을 구동한다. plugin의 message 핸들러(셸)가 emit=safeSend를 주입해 호출한다.
+ *  3층 연결(`applyTransition`·`enterInitialState`·`handleSessionFrame`): ctx.state를 단일 지점에서
+ *      변이하고 enter/exit 콜백을 실행한다. plugin의 message 핸들러(셸)가 emit=safeSend를 주입해 호출한다.
  */
 
 /**
@@ -76,7 +76,7 @@ export const CREATE_CONFIRM_VALUE = 'yes'
  * (이름→성별→직업→능력치→주력무기→성향→종족→확인)이라 counter 없이 step→promptId 고정 맵으로 충분하다.
  * `ctx.createProgress.step`을 저장하고 여기서 기대 promptId를 파생한다(step만 저장, promptId는 파생 —
  * derivable-state 중복 저장 금지). reply.promptId가 현재 step의 promptId와 불일치하면(미일치·지나간 step의
- * stale reply) 거부한다. 원작 create_ply의 암호 단계는 Firebase가 소유하므로 제외하고, 이름은 원작 로그인
+ * stale reply) 거부한다. 원작 create_ply의 암호 단계는 Firebase가 담당하므로 제외하고, 이름은 원작 로그인
  * 단계에서 인터뷰 앞으로 옮겼다(재설계).
  */
 export const CREATE_PROMPT_IDS = {
@@ -112,12 +112,12 @@ export interface CreateProgress {
 }
 
 /**
- * StateHandler가 포트 호출·이벤트 발화에 쓰는 세션 컨텍스트.
+ * StateHandler가 포트 호출·이벤트 발생에 쓰는 세션 컨텍스트.
  *
  * `account`는 게이트가 확정한 계정 신원(핸들러 최상단에서 셸이 1회 narrow해 non-null 보장).
  * `sessionAuth`는 캐릭터 목록·생성·소유권 포트. `emit`은 주입된 이벤트 수집 콜백 — 핸들러는 소켓을 직접
  * 만지지 않고 이 콜백으로만 이벤트를 내보낸다. 셸은 `emit = (e) => safeSend(socket, e)`로, 테스트는
- * 배열 push로 배선한다. 대화 상태(createProgress)는 여기 두지 않는다 — 셸이 매 프레임 재조립하므로
+ * 배열 push로 연결한다. 대화 상태(createProgress)는 여기 두지 않는다 — 셸이 매 프레임 재조립하므로
  * 소켓 수명 동안 유지되는 `FsmContext`에 둔다.
  */
 export interface SessionContext {
@@ -126,19 +126,19 @@ export interface SessionContext {
   readonly emit: (event: ServerEvent) => void
   // 진행 데드라인 seam(Story 6) — emit을 미러한 주입 부수효과 콜백. required(optional 금지)라 주입 누락 시
   // 컴파일에서 걸린다(silent DoS 방지: 주입을 빠뜨리면 데드라인이 설정되지 않아 미진행 연결이 영구 잔존).
-  // 셸은 createDeadline 핸들의 rearm/clear로, 테스트는 vi.fn() 스파이로 배선한다. 상태 전이·create 서브상태
+  // 셸은 createDeadline 핸들의 rearm/clear로, 테스트는 vi.fn() 스파이로 연결한다. 상태 전이·create 서브상태
   // 전진마다 rearmDeadline이, command(in-world) 도달 시 clearDeadline이 호출된다.
   readonly rearmDeadline: () => void
   readonly clearDeadline: () => void
   // 월드 진입 등록 seam(Story 5, emit·rearmDeadline 미러). enterCommand가 이 콜백으로 세션 레지스트리에
-  // 등록/재연결하고 그 outcome으로 발화할 이벤트를 고른다. 셸은 createSessionLifecycle.enterWorld를 이 ctx에
-  // 바인딩해 주입하고, 테스트는 vi.fn()으로 배선한다. required(optional 금지)라 주입 누락 시 컴파일에서 걸린다
-  // (배선을 빠뜨리면 월드 진입이 레지스트리에 등록되지 않아 재연결·evict가 무력화된다).
+  // 등록/재연결하고 그 outcome으로 발생시킬 이벤트를 고른다. 셸은 createSessionLifecycle.enterWorld를 이 ctx에
+  // 바인딩해 주입하고, 테스트는 vi.fn()으로 연결한다. required(optional 금지)라 주입 누락 시 컴파일에서 걸린다
+  // (연결을 빠뜨리면 월드 진입이 레지스트리에 등록되지 않아 재연결·evict가 무력화된다).
   readonly enterWorld: (characterId: string) => 'entered' | 'resumed'
   // 연결 close 여부 조회 seam(Story 4 async 마이그레이션). 포트 호출이 async가 되며 handleInput이 포트 await로
   // 멈춘 사이 소켓이 닫힐 수 있다 — 재개 후 command 진입(enterWorld 등록 + command 상태 대입) 전에 이 콜백으로
   // 죽은 연결을 감지해 부수효과 없이 bail한다(좀비 registry 바인딩·형제 세션 evict·유령 idle 타이머 방지). 셸은
-  // `() => ctx.closed`로, 테스트는 제어 가능한 함수로 배선한다. required(optional 금지)라 주입 누락 시 컴파일에서 걸린다.
+  // `() => ctx.closed`로, 테스트는 제어 가능한 함수로 연결한다. required(optional 금지)라 주입 누락 시 컴파일에서 걸린다.
   readonly isClosed: () => boolean
   /**
    * 라이브 월드 진입 seam(Story 4) — 캐릭터를 로드해 저장된 방에 배치하고 방 요약을 파생한다.
@@ -147,18 +147,18 @@ export interface SessionContext {
    * 일부만 주입된 half-wired 상태(예: place는 있고 roomSummary는 없음)가 표현 가능해지지만, 이 코드베이스는
    * seam을 required-with-noop이나 번들로 묶어 miswiring을 구조적으로 잡는다 — 하나의 옵셔널 객체는
    * 전부-or-전무라 그 어긋남이 불가능하다. 미주입(undefined)은 T4.5의 정상 상태다: 라이브 월드 의존이
-   * 배선되지 않은 환경(핸드셰이크 전 어댑터·기존 테스트)에서는 hydrate/place/world:room을 통째로 건너뛰어
-   * 기존 동작을 그대로 보존한다. 셸(buildSession)이 주입된 liveCharacterEntry+월드 그래프로 배선하고,
-   * 테스트는 스파이 객체로 배선한다.
+   * 연결되지 않은 환경(핸드셰이크 전 어댑터·기존 테스트)에서는 hydrate/place/world:room을 통째로 건너뛰어
+   * 기존 동작을 그대로 보존한다. 셸(buildSession)이 주입된 liveCharacterEntry+월드 그래프로 연결하고,
+   * 테스트는 스파이 객체로 연결한다.
    *
    * 책임 분리(D-G):
    *  - `hydrate`는 **부수효과 없는 비동기 로드**(D-G 2)다. 레지스트리 등록·occupants 변경을 하지 않고
    *    `LiveCharacter`만 조립해 돌려준다 — 그래서 hydrate 뒤 isClosed 가드에서 bail해도 롤백할 상태가 없다.
    *  - `place`는 동기·멱등(D-G 1)이다. 재연결(resumed)·재-배치는 이미 점유 중이면 no-op이라, 옛 세션 종결이
-   *    새 배치를 지우는 레이스에서 register→place 순서로 place가 이긴다(enterCommand가 순서를 소유).
+   *    새 배치를 지우는 레이스에서 register→place 순서로 place가 이긴다(enterCommand가 순서를 담당).
    *  - `roomSummary`는 world:room emit용 방 요약을 `live.character.currentRoom`과 **독립적으로**(place 실행
    *    여부와 무관하게) 월드 그래프에서 파생한다 — resumed에서 place가 no-op이어도 위치 통지가 나가야 한다(D-C).
-   *    미해소 방이면 undefined를 돌려 world:room을 생략한다.
+   *    미해석 방이면 undefined를 돌려 world:room을 생략한다.
    */
   readonly liveWorld?: SessionLiveWorld
 }
@@ -166,7 +166,7 @@ export interface SessionContext {
 /**
  * `SessionContext.liveWorld`의 구조적 형태 — 라이브 월드 진입 seam의 3콜백 계약.
  *
- * 소비자(FSM)가 이 계약을 소유한다(DIP — 인터페이스는 사용처가 정의). 셸측 배선(liveWorldBinding.ts의
+ * 소비자(FSM)가 이 계약을 담당한다(DIP — 인터페이스는 사용처가 정의). 셸측 연결(liveWorldBinding.ts의
  * `buildSessionLiveWorld`)이 이 타입을 `import type`으로 참조해 구현한다. 타입 전용 import는 런타임에
  * 완전히 소거되므로 3층 경계(FSM이 셸 모듈을 런타임 의존하지 않음)를 깨지 않는다. 각 콜백 의미(D-G/D-C)는
  * `SessionContext.liveWorld` 필드 주석 참조.
@@ -202,9 +202,9 @@ export interface DeleteProgress {
 /**
  * 상태별 처리기 — 전이 부수효과를 enter/exit 콜백에 담는다(디스패치 루프 인라인 금지).
  *
- * `onEnter`는 상태 진입 시(applyTransition·enterInitialState) 1회 구동돼 초기 이벤트를 발화한다.
+ * `onEnter`는 상태 진입 시(applyTransition·enterInitialState) 1회 실행돼 초기 이벤트를 발생시킨다.
  * `handleInput`은 그 상태에서 받은 프레임을 처리하고 다음 상태를 반환한다(같은 상태 반환=유지).
- * `onExit`은 상태 이탈 시 구동된다(create가 createProgress를 정리한다). 모든 콜백은 `FsmContext`를 받아
+ * `onExit`은 상태 이탈 시 실행된다(create가 createProgress를 정리한다). 모든 콜백은 `FsmContext`를 받아
  * 대화 상태에 접근한다 — 무상태 핸들러(characterSelect·command)는 ctx를 읽지 않는다.
  */
 export interface StateHandler {
@@ -312,9 +312,9 @@ export function decideDeleteConfirmInput(frame: unknown): DeleteConfirmDecision 
  * create 프레임 해석 결정 — 1층 순수 create reducer의 출력.
  *
  * `advance`는 현재 단계 값을 검증·누적하고 `nextStep`으로 전진하라는 결정(다음 prompt는 핸들러가
- * `nextStep`에서 파생 발화 — promptId를 step에서 파생하는 규약과 동일, 결정에 중복 저장하지 않는다).
+ * `nextStep`에서 파생해 발생시킨다 — promptId를 step에서 파생하는 규약과 동일, 결정에 중복 저장하지 않는다).
  * `complete`는 확인 통과 후 검증된 dto로 캐릭터를 생성하라는 결정. `reject`는 상관 실패(promptId 미일치·
- * 미해결)·값 검증 실패로, 핸들러가 현재 단계를 유지한 채 session_state error만 발화한다.
+ * 미해결)·값 검증 실패로, 핸들러가 현재 단계를 유지한 채 session_state error만 발생시킨다.
  */
 export type CreateDecision =
   | { readonly kind: 'reject'; readonly code: 'session_state' }
@@ -329,7 +329,7 @@ export type CreateDecision =
  * 이름 검증 — 앞뒤 공백을 제거한 뒤 비어있지 않아야 하고(공백만 있는 이름 거부), 상한을 둔다.
  * 상한 40은 원작 creature name 필드(80바이트 EUC-KR, 한글 2바이트 ≈ 40자)를 기준으로 한 방어적
  * 캡이다 — 무한 길이 이름이 E5 영속 계층까지 미절단으로 도달하는 것을 막는다(프레임 64KB 캡의
- * 세분화). 확정 영속 스키마가 서면 그 값과 정합시킨다.
+ * 세분화). 확정 영속 스키마가 서면 그 값과 일치시킨다.
  */
 const createNameSchema = z.string().trim().min(1).max(40)
 
@@ -342,7 +342,7 @@ const createGenderSchema = createIntSchema.refine((n) => n === 1 || n === 2)
 /** 주력 무기 검증 — 1~5(도/검/봉/창/궁)만 허용. */
 const createWeaponSchema = createIntSchema.refine((n) => n >= 1 && n <= 5)
 
-/** 성향 검증 — 1=선/2=악만 허용(단일 스칼라, -1000..+1000 성향 시스템은 E6 유예). */
+/** 성향 검증 — 1=선/2=악만 허용(단일 스칼라, -1000..+1000 성향 시스템은 E6로 보류). */
 const createAlignmentSchema = createIntSchema.refine((n) => n === 1 || n === 2)
 
 /** 종족 검증 — 1~8(오라클 RACE 상수 8종)만 허용. */
@@ -469,23 +469,23 @@ function sessionStateError(message: string): ServerEvent {
 }
 
 /**
- * 월드 진입 — session:entered를 발화하고 command 상태를 반환한다.
+ * 월드 진입 — session:entered를 발생시키고 command 상태를 반환한다.
  *
  * characterSelect의 기존 캐릭터 선택과 create 완주가 공유하는 단일 진입 지점이다(진입 이벤트·목적
  * 상태의 단일 출처). 향후 command 진입 부수효과(존재 등록 등)가 늘면 여기 한 곳만 고친다. 단, 진행
  * 데드라인 clear는 상태 대입과 순서가 맞아야 하므로 여기가 아니라 enterState의 command 분기에 있다
  * (enterCommand는 상태 대입 전에 실행되고, clear는 대입 시점에 일어난다).
  *
- * `enterWorld`를 **emit보다 먼저** 호출해 세션 레지스트리 등록/재연결을 확정한 뒤 이벤트를 발화한다
+ * `enterWorld`를 **emit보다 먼저** 호출해 세션 레지스트리 등록/재연결을 확정한 뒤 이벤트를 발생시킨다
  * (등록 상태 확정 후 이벤트). outcome이 'resumed'(link-dead 재연결 rebind)면 session:resumed를,
- * 'entered'(신규 등록)면 session:entered를 발화한다. create 완주 경로도 이 함수를 공유하며 신규
+ * 'entered'(신규 등록)면 session:entered를 발생시킨다. create 완주 경로도 이 함수를 공유하며 신규
  * 캐릭터는 link-dead일 수 없어 항상 'entered'다.
  *
  * 라이브 배치(Story 4): `live`가 주어지면(호출부에서 hydrate로 로드) `enterWorld` **직후** place한다 —
- * register→place 순서를 이 함수가 소유해, caller가 순서를 어겨 옛 세션 종결(register가 트리거)이 새 배치를
+ * register→place 순서를 이 함수가 담당해, caller가 순서를 어겨 옛 세션 종결(register가 트리거)이 새 배치를
  * 지우는 레이스를 만들 수 없게 한다(D-G 3). place는 멱등이라 resumed·재-배치에서 no-op이다(D-G 1). world:room은
- * place 실행 여부와 독립적으로 `live.character.currentRoom`으로 roomSummary를 조회해 발화하므로, place가 no-op된
- * resumed에서도 위치 통지가 나간다. entered·resumed **양쪽 모두** world:room을 발화한다 — 재연결 클라도 command
+ * place 실행 여부와 독립적으로 `live.character.currentRoom`으로 roomSummary를 조회해 발생시키므로, place가 no-op된
+ * resumed에서도 위치 통지가 나간다. entered·resumed **양쪽 모두** world:room을 발생시킨다 — 재연결 클라도 command
  * 상태에 진입해 자기 위치가 필요하기 때문이다(D-C, 완료 기준은 진입 시점만 요구하나 resumed도 의도적으로 포함).
  */
 function enterCommand(
@@ -538,9 +538,9 @@ export function advanceCreate(
 /**
  * 2층 characterSelect StateHandler.
  *
- * onEnter: 계정 캐릭터 목록을 조회해 characterList + 선택 prompt를 발화한다.
- * handleInput: decider로 프레임을 해석하고, select면 소유권을 포트로 검증해 통과 시 entered 발화 +
- * command 전이, create면 create로 전이(전이가 create.onEnter를 구동해 첫 prompt 발화), OwnershipError면
+ * onEnter: 계정 캐릭터 목록을 조회해 characterList + 선택 prompt를 발생시킨다.
+ * handleInput: decider로 프레임을 해석하고, select면 소유권을 포트로 검증해 통과 시 entered 발생 +
+ * command 전이, create면 create로 전이(전이가 create.onEnter를 실행해 첫 prompt 발생), OwnershipError면
  * unauthorized error + 상태 유지, reject면 session_state error + 유지. 무상태 핸들러라 ctx를 읽지 않는다.
  */
 const characterSelectHandler: StateHandler = {
@@ -565,7 +565,7 @@ const characterSelectHandler: StateHandler = {
       return ConnectionState.characterSelect
     }
     if (decision.kind === 'create' || decision.kind === 'delete') {
-      // 전이가 목적 상태의 onEnter를 구동해 서브상태 초기화 + 첫 prompt를 발화한다(create·delete 공통).
+      // 전이가 목적 상태의 onEnter를 실행해 서브상태 초기화 + 첫 prompt를 발생시킨다(create·delete 공통).
       return decision.nextState
     }
 
@@ -598,10 +598,10 @@ const characterSelectHandler: StateHandler = {
 /**
  * 2층 create StateHandler — 캐릭터 생성 다단 대화.
  *
- * onEnter: createProgress를 name 단계로 초기화(advanceCreate 경유)하고 첫 prompt(create:name)를 발화한다.
+ * onEnter: createProgress를 name 단계로 초기화(advanceCreate 경유)하고 첫 prompt(create:name)를 발생시킨다.
  * handleInput: reducer로 프레임을 해석해 — advance면 advanceCreate로 서브스텝을 전진(BLOCKER 1)하고 다음
- * prompt를 발화한 뒤 create를 유지, complete면 검증된 dto로 캐릭터를 생성(BLOCKER 2)·entered 발화 후
- * command로 전이, reject면 session_state error를 발화하고 현재 단계를 유지한다.
+ * prompt를 발생시킨 뒤 create를 유지, complete면 검증된 dto로 캐릭터를 생성(BLOCKER 2)·entered 발생 후
+ * command로 전이, reject면 session_state error를 발생시키고 현재 단계를 유지한다.
  * onExit: create를 이탈할 때 createProgress를 정리한다(create 밖에선 null 불변식).
  */
 const createHandler: StateHandler = {
@@ -612,7 +612,7 @@ const createHandler: StateHandler = {
   async handleInput(ctx, session, frame) {
     const progress = ctx.createProgress
     if (progress === null) {
-      // create 상태인데 progress가 없으면 배선 불변식 위반. 조용한 no-op 대신 session_state로 응답한다.
+      // create 상태인데 progress가 없으면 연결 불변식 위반. 조용한 no-op 대신 session_state로 응답한다.
       session.emit(sessionStateError('생성 대화 상태가 초기화되지 않았다'))
       return ConnectionState.create
     }
@@ -649,13 +649,13 @@ const createHandler: StateHandler = {
  * 2층 delete StateHandler — 자살(suicide) 서브플로우. 원작 command5.c suicide의 재설계 이식이다.
  *
  * 원작은 경고→암호 확인→"찐짜로? (찐짜로/뻥으로)" 재확인→무덤 이동(system("mv"))이었다. 재설계:
- * 암호는 Firebase가 소유하므로 제거하고, system() 셸은 주입 표면이라 삭제하며, 삭제는 소프트 삭제
+ * 암호는 Firebase가 담당하므로 제거하고, system() 셸은 주입 표면이라 삭제하며, 삭제는 소프트 삭제
  * (status='deleted')로만 한다(findByAccount가 제외해 재로그인이 막힌다 — SUICD 플래그 대체).
  *
  * 와이어는 프레임당 값 하나만 실으므로 대상 선택과 확인을 별도 프레임(별도 서브상태)으로 나눈다:
- *  onEnter: characterList + 삭제 대상 선택 prompt(selectCharacter)를 발화한다.
+ *  onEnter: characterList + 삭제 대상 선택 prompt(selectCharacter)를 발생시킨다.
  *  handleInput 1단계(deleteProgress===null): session:selectCharacter로 대상을 받아 조기 assertOwnership
- *    (확인 화면 전 깔끔한 거부)한 뒤 deleteProgress에 저장하고 confirm prompt(createField)를 발화한다.
+ *    (확인 화면 전 깔끔한 거부)한 뒤 deleteProgress에 저장하고 confirm prompt(createField)를 발생시킨다.
  *  handleInput 2단계(deleteProgress!==null): 「찐짜로」 정확 일치면 deleteCharacter(내부 이중 assert 포함)
  *    후 characterSelect 복귀(목록 재조회에서 삭제분 자연 제외), 그 외 값은 취소(재시도 아님)로 characterSelect
  *    복귀, 미일치 promptId(stale)는 reject로 delete 유지.
@@ -666,7 +666,7 @@ const createHandler: StateHandler = {
  */
 const deleteHandler: StateHandler = {
   async onEnter(_ctx, session) {
-    // 클라가 선택지를 표시할 수 있게 현재 목록을 재발화하고, 삭제 대상 선택 prompt를 낸다.
+    // 클라가 선택지를 표시할 수 있게 현재 목록을 다시 발생시키고, 삭제 대상 선택 prompt를 낸다.
     const characters = await session.sessionAuth.listCharacters(session.account.accountId)
     session.emit({ type: 'session:characterList', characters })
     session.emit({ type: 'session:prompt', promptId: DELETE_SELECT_PROMPT_ID, kind: 'selectCharacter' })
@@ -713,7 +713,7 @@ const deleteHandler: StateHandler = {
     // close-race 가드: deleteCharacter await 도중 닫혔으면 상태 전이·부수효과 없이 현재 상태(delete)로 bail한다
     // (삭제는 이미 영속됐을 수 있으나 죽은 연결에서 characterSelect로 전이하지 않는다 — cleanup이 ctx째 폐기).
     if (session.isClosed()) return ConnectionState.delete
-    // 삭제 성공 → characterSelect 복귀. onEnter가 목록을 재조회하면 삭제 캐릭터는 자연히 빠진다(직접 재발화 금지).
+    // 삭제 성공 → characterSelect 복귀. onEnter가 목록을 재조회하면 삭제 캐릭터는 자연히 빠진다(직접 재발생 금지).
     return ConnectionState.characterSelect
   },
   onExit(ctx) {
@@ -740,7 +740,7 @@ function stubHandler(state: ConnectionState): StateHandler {
   }
 }
 
-/** 상태 → 처리기 배선표. 전이 부수효과는 각 처리기의 enter/exit·handleInput에 담긴다. */
+/** 상태 → 처리기 연결표. 전이 부수효과는 각 처리기의 enter/exit·handleInput에 담긴다. */
 export const stateHandlers: Record<ConnectionState, StateHandler> = {
   [ConnectionState.characterSelect]: characterSelectHandler,
   [ConnectionState.create]: createHandler,
@@ -749,7 +749,7 @@ export const stateHandlers: Record<ConnectionState, StateHandler> = {
 }
 
 /**
- * ctx.state를 대입하고 목적 상태의 onEnter를 구동하는 단일 지점.
+ * ctx.state를 대입하고 목적 상태의 onEnter를 실행하는 단일 지점.
  *
  * ctx.state 대입은 이 함수에서만 일어난다(Lock D — Story 6 데드라인 reaper가 매 진입마다 여기 훅한다).
  * applyTransition·enterInitialState가 모두 이 함수를 거쳐 진입 부수효과를 일원화한다.
@@ -776,8 +776,8 @@ async function enterState(
 /**
  * 3층 전이 적용 — handleInput이 반환한 다음 상태로 전이한다.
  *
- * 같은 상태면 no-op이라 onEnter를 재구동하지 않는다(reject·유지·create 서브스텝 전진 시 초기 이벤트
- * 재발화 방지). 다르면 현 상태 onExit → enterState(대입 + 다음 onEnter) 순으로 구동한다.
+ * 같은 상태면 no-op이라 onEnter를 다시 실행하지 않는다(reject·유지·create 서브스텝 전진 시 초기 이벤트
+ * 재발생 방지). 다르면 현 상태 onExit → enterState(대입 + 다음 onEnter) 순으로 실행한다.
  */
 export async function applyTransition(
   ctx: FsmContext,
@@ -792,9 +792,9 @@ export async function applyTransition(
 /**
  * accept(핸드셰이크 완료) 시 characterSelect로 진입시킨다.
  *
- * 셸이 같은 message-handler 프레임 처리 안에서 await 호출해 characterList + prompt를 발화하게 한다(setImmediate
+ * 셸이 같은 message-handler 프레임 처리 안에서 await 호출해 characterList + prompt를 발생시키게 한다(setImmediate
  * 금지). 이제 async이나 셸의 per-connection 프레임 큐가 이 프레임 완결 뒤에만 다음 프레임을 태우므로 emit 순서·
- * 즉시성은 보존된다. ctx.state 초기값이 이미 characterSelect라도 enterState로 대입·onEnter를 명시 구동해 진입
+ * 즉시성은 보존된다. ctx.state 초기값이 이미 characterSelect라도 enterState로 대입·onEnter를 명시 실행해 진입
  * 부수효과를 낸다.
  */
 export async function enterInitialState(ctx: FsmContext, session: SessionContext): Promise<void> {

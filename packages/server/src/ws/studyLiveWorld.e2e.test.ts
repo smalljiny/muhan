@@ -41,31 +41,31 @@ import {
 } from './wsTestClient.testutil.js'
 
 // Story 8 — 학습(비법서 연마) end-to-end 통합. 형제 스위트 `liveWorld.e2e.test.ts`가 이동·채팅·연마를
-// 관통시키는 것과 같은 하네스 골격을 쓰되, **진입 → 인벤 적재 → 연마 → 통지 → 영속화** 한 흐름만 남긴다.
-// 계층별 단위 테스트(Story 1~7)는 각 seam을 고정했지만 그 사이의 결선이 실제로 이어졌는지는 증명하지
-// 못한다 — 이 파일이 실 TCP 소켓 1개로 그 결선을 관통시킨다.
+// 관통시키는 것과 같은 하네스 골격을 쓰되, **진입 → 인벤 로드 → 연마 → 통지 → 영속화** 한 흐름만 남긴다.
+// 계층별 단위 테스트(Story 1~7)는 각 seam을 고정했지만 그 사이의 연결이 실제로 이어졌는지는 증명하지
+// 못한다 — 이 파일이 실 TCP 소켓 1개로 그 연결을 관통시킨다.
 //
-// ## 형제 스위트와의 결정적 차이 — 정본 템플릿 인덱스를 싣는다
-// `liveWorld.e2e.test.ts`는 `objectTemplates: new Map()`(합성 빈 인덱스)을 싣기 때문에 정본 데이터가
+// ## 형제 스위트와의 결정적 차이 — 기준 템플릿 인덱스를 싣는다
+// `liveWorld.e2e.test.ts`는 `objectTemplates: new Map()`(합성 빈 인덱스)을 싣기 때문에 기준 데이터가
 // 실제로 연마 가능한지를 검출하지 못한다. 이 스위트는 `loadObjectTemplates()`로 `data/world/objects.json`
-// 정본 709엔트리를 그대로 실어, 시드한 비법서가 **실 콘텐츠**로 해소되고 게이트를 통과하는 것까지
+// 기준 709엔트리를 그대로 실어, 시드한 비법서가 **실 콘텐츠**로 해석되고 게이트를 통과하는 것까지
 // 관통시킨다.
 //
 // ⚠ 닫히는 것은 그 하나뿐이다. **boot(`index.ts`)의 묶음 조립은 여전히 미검증**이다 — 이 파일도
 // `LiveWorldWiringBundle` 리터럴을 자체 구성하므로, boot가 `objectTemplates`에 무엇을 싣는지는 여기서
-// 검출되지 않는다(`index.ts`는 커버리지 제외 배선 코드라 설계상 그렇다).
+// 검출되지 않는다(`index.ts`는 커버리지 제외 연결 코드라 설계상 그렇다).
 //
 // ## 두 번째 책임 — release 후 재접속의 소켓판(#124)
 // 마지막 케이스는 학습 흐름이 아니라 **재접속 overlay 경로**를 관통시킨다. 그 경로의 규칙 층은
 // `reconnectRevert.regression.test.ts`가 소켓 없이 덮고, 형제 `liveWorld.e2e.test.ts`의 재접속 케이스는
 // 엔트리가 살아 있는 rebind만 덮어 `hydrate`의 pending 조회에 도달하지 않는다. 여기에 두는 이유는
-// 하네스가 이미 실 `SaveEngine`·`peekPending` seam·정본 템플릿을 싣고 있어, 학습으로 만든 미영속
+// 하네스가 이미 실 `SaveEngine`·`peekPending` seam·기준 템플릿을 싣고 있어, 학습으로 만든 미영속
 // 진행도를 소켓 프레임(`progress:studied.spells`)으로 되읽을 수 있는 유일한 스위트이기 때문이다.
 //
 // ## 하네스 최소화 — 방 1개·계정 1개
 // 연마는 방을 읽지 않고(대상이 소지품 스코프다) 다른 세션과 상호작용하지도 않는다. 형제 스위트의
-// 3방·3계정을 복사하지 않고 방 1개·계정 1개로 줄인다 — 배치가 성립하려면 해소되는 방 하나가 필요할
-// 뿐이다(`entry.place`가 미해소 방에 던진다).
+// 3방·3계정을 복사하지 않고 방 1개·계정 1개로 줄인다 — 배치가 성립하려면 해석되는 방 하나가 필요할
+// 뿐이다(`entry.place`가 미해석 방에 던진다).
 //
 // 이 파일은 테스트 전용이다 — 프로덕션 코드를 바꾸지 않는다.
 
@@ -77,24 +77,24 @@ const CHAR = 'study-e2e-char'
 /** 유일한 방. 연마는 방을 읽지 않으므로 출구도 훈련 플래그도 필요 없다(배치용 최소 노드). */
 const ROOM_STUDY = 1
 
-/** 캐릭터 class — MAGE(5). 시드 비법서에 `OCLSEL`이 없어 클래스 게이트는 미발화하지만, 마법 계열
+/** 캐릭터 class — MAGE(5). 시드 비법서에 `OCLSEL`이 없어 클래스 게이트는 동작하지 않지만, 마법 계열
  *  클래스를 골라 시나리오 의미를 맞춘다. */
 const CHAR_CLASS = 5
 
 /**
- * 시드 비법서 objnum — 정본 `objects.json`의 `혼동비서`(id 142).
+ * 시드 비법서 objnum — 기준 `objects.json`의 `혼동비서`(id 142).
  *
  * 선정 기준(전부 `magic/learning.ts:study`의 게이트 입력이다):
  *  - `type === 7`(SCROLL) — ② SCROLL 게이트 통과.
  *  - `ndice === 20` ≤ 캐릭터 레벨 20 — ③ 레벨 게이트를 **경계값 등호**로 통과한다(`ndice > level`이
  *    거부 조건이므로 같으면 통과). ndice가 0이 아닌 후보를 고른 이유가 이것이다 — 0을 고르면 레벨
- *    게이트가 어떤 값에서도 통과해 관통 경로에서 사실상 사라진다. 정본 SCROLL의 ndice 값역은
+ *    게이트가 어떤 값에서도 통과해 관통 경로에서 사실상 사라진다. 기준 SCROLL의 ndice 값 범위는
  *    {0,16,20,28,32,36,39,40,43,48,52,60,70}이라 20이 저레벨 쪽 최소에 가깝다.
  *  - `flags === '0000000000000000'` — `OGOODO`·`OEVILO`(④ 성향)·`OCLSEL`(⑤ 클래스) 미세팅이라 두
- *    게이트가 통과하고, `OINVIS` 미세팅이라 소지품 해소자의 가시성 게이트도 통과한다.
+ *    게이트가 통과하고, `OINVIS` 미세팅이라 소지품 리졸버의 가시성 게이트도 통과한다.
  *  - `magicpower === 13` → 주문번호 12(`혼동`)가 카탈로그 멤버라 ⑥ 주문 존재 게이트를 통과한다.
  *
- * 아래 첫 it()이 이 조건들을 정본 인덱스에 대해 직접 단언한다 — 정본 데이터가 바뀌면 시나리오가
+ * 아래 첫 it()이 이 조건들을 기준 인덱스에 대해 직접 단언한다 — 기준 데이터가 바뀌면 시나리오가
  * 알 수 없는 이유로 깨지는 대신 그 단언이 먼저 터진다.
  */
 const BOOK_OBJNUM = 142
@@ -104,10 +104,10 @@ const BOOK_SPELL_NO = 12
 const BOOK_INSTANCE_ID = 'study-e2e-book-1'
 
 /**
- * 두 번째 시드 비법서 objnum — 정본 `objects.json`의 `파초식서`(id 342). 재접속 회귀 케이스에서만 쓴다.
+ * 두 번째 시드 비법서 objnum — 기준 `objects.json`의 `파초식서`(id 342). 재접속 회귀 케이스에서만 쓴다.
  *
  * 선정 기준은 `BOOK_OBJNUM`과 같다(SCROLL·`ndice === 20`으로 레벨 게이트 등호 통과·all-zero flags라
- * 성향·클래스·가시성 게이트 미발화). **다른 주문번호를 담는 것**만 다르고, 그 차이가 회귀 단언을
+ * 성향·클래스·가시성 게이트 동작 안 함). **다른 주문번호를 담는 것**만 다르고, 그 차이가 회귀 단언을
  * 성립시킨다 — 재접속 후 이 책을 연마하면 `progress:studied.spells`에 첫 세션에서 배운 12번 비트와
  * 방금 배운 30번 비트가 함께 실려야 한다. 같은 책을 다시 연마하면 두 경우가 구별되지 않는다
  * (`setKnown`이 멱등이라 되돌아간 상태에서도 같은 프레임이 나온다).
@@ -120,12 +120,12 @@ const BOOK2_INSTANCE_ID = 'study-e2e-book-2'
 /** 캐릭터 레벨 — 시드 비법서 `ndice`(20)와 같게 잡아 레벨 게이트 경계를 통과시킨다. */
 const CHAR_LEVEL = 20
 
-/** 정본 템플릿 인덱스 — 파일당 1회 로드해 하네스마다 재파싱하지 않는다(206KB JSON, 읽기 전용). */
+/** 기준 템플릿 인덱스 — 파일당 1회 로드해 하네스마다 재파싱하지 않는다(206KB JSON, 읽기 전용). */
 const OBJECT_TEMPLATES = loadObjectTemplates()
 
-/** 시드 비법서 템플릿(정본). 위 상수들의 실제 출처이며 아래 단언·시드가 함께 참조한다. */
+/** 시드 비법서 템플릿(기준). 위 상수들의 실제 출처이며 아래 단언·시드가 함께 참조한다. */
 const BOOK_TEMPLATE: ObjectTemplate | undefined = OBJECT_TEMPLATES.get(BOOK_OBJNUM)
-/** 두 번째 시드 비법서 템플릿(정본) — 재접속 회귀 케이스의 이름·값 출처다. */
+/** 두 번째 시드 비법서 템플릿(기준) — 재접속 회귀 케이스의 이름·값 출처다. */
 const BOOK2_TEMPLATE: ObjectTemplate | undefined = OBJECT_TEMPLATES.get(BOOK2_OBJNUM)
 
 /** 최소 유효 Character 문서(형제 스위트 `makeCharacter` 미러 — 학습에 필요한 필드만 조정한다). */
@@ -157,7 +157,7 @@ function makeCharacter(): Character {
  *
  * 리터럴을 그대로 쓰지 않는 이유는 형태 계약을 **런타임에** 강제하기 위해서다. 이 스위트의 fake repo는
  * 인스턴스를 검증 없이 돌려주므로(실 `ObjectRepository.findByOwner`는 `objectSchema.parse`한다), 파싱을
- * 끼우지 않으면 스키마가 거부할 시드로도 시나리오가 통과해 배선 검출력이 떨어진다.
+ * 끼우지 않으면 스키마가 거부할 시드로도 시나리오가 통과해 연결 검출력이 떨어진다.
  */
 function makeBookInstance(
   objnum: number,
@@ -168,7 +168,7 @@ function makeBookInstance(
     _id: instanceId,
     objnum,
     // ⚠ 인스턴스의 type은 스키마 필수 필드를 채울 뿐이다 — study()의 ② SCROLL 게이트가 읽는 것은
-    //   `found.template.type`(정본 인덱스)이지 이 값이 아니다. 여기를 바꿔도 게이트는 흔들리지 않는다.
+    //   `found.template.type`(기준 인덱스)이지 이 값이 아니다. 여기를 바꿔도 게이트는 흔들리지 않는다.
     type: SCROLL,
     owner: { type: 'character', id: CHAR },
     slot: null,
@@ -251,10 +251,10 @@ interface StudyHarness {
 }
 
 /**
- * 라이브 월드 묶음을 실 SaveEngine에 결선한 app을 만든다.
+ * 라이브 월드 묶음을 실 SaveEngine에 연결한 app을 만든다.
  *
  * 형제 스위트와 두 곳이 다르다:
- *  1. `objectTemplates`가 정본 인덱스다(합성 빈 Map이 아니다) — 이 파일의 존재 이유(위 헤더 참조).
+ *  1. `objectTemplates`가 기준 인덱스다(합성 빈 Map이 아니다) — 이 파일의 존재 이유(위 헤더 참조).
  *  2. objects repo가 빈 stub이 아니라 `deleteById`를 관측하는 fake다 — 학습이 유발하는 두 번째 write가
  *     실제로 repo까지 도달하는지, 그리고 어느 순서로 도달하는지를 여기서만 볼 수 있다.
  *
@@ -273,7 +273,7 @@ function buildHarness(inventory: readonly ObjectInstance[] = defaultInventory())
   const characterRepo = makeCharacterRepo(makeCharacter(), inventory, writeOrder)
   const objectRepo = makeObjectRepo(writeOrder)
 
-  // SaveEngine — FakeClock + 즉시 backoff. 주기 tick이 발화하지 않으므로 flush 시점은 오직
+  // SaveEngine — FakeClock + 즉시 backoff. 주기 tick이 실행되지 않으므로 flush 시점은 오직
   // `shutdown()`의 강제 flush뿐이고, 그 덕에 "study 마킹 → 종료 마킹"이 **한 flush 안에서** 드레인돼
   // 순서 계약(markDirty 호출 순서 = write 시도 순서)이 그대로 관측된다.
   const bankStub = {} as unknown as BankRepository
@@ -296,7 +296,7 @@ function buildHarness(inventory: readonly ObjectInstance[] = defaultInventory())
       findById: (id) => characterRepo.findById(id),
       hydrateInventory: (id) => characterRepo.hydrateInventory(id),
     },
-    // 정본 인덱스 — boot(`index.ts`)가 싣는 것과 같은 `loadObjectTemplates()` 산출물이다.
+    // 기준 인덱스 — boot(`index.ts`)가 싣는 것과 같은 `loadObjectTemplates()` 산출물이다.
     objectTemplates: OBJECT_TEMPLATES,
     // 사망 seam 원재료 — 이 하네스는 소환·리스폰 경로를 검증하지 않아 빈 인덱스와 신규 발급기를 싣는다.
     spawnTemplates: new Map(),
@@ -329,7 +329,7 @@ function buildHarness(inventory: readonly ObjectInstance[] = defaultInventory())
 
 /**
  * 소켓을 connect→hello→ready→characterList→prompt→selectCharacter→entered→world:room까지 왕복시킨다
- * (형제 스위트 `enterWorld` 미러 — 배치가 발화하는 여분 `world:room` 프레임을 명시 소비한다).
+ * (형제 스위트 `enterWorld` 미러 — 배치가 발생시키는 여분 `world:room` 프레임을 명시 소비한다).
  */
 async function enterWorld(
   client: WebSocket,
@@ -347,7 +347,7 @@ async function enterWorld(
   return { reader, entered, room }
 }
 
-describe('학습 end-to-end (실 소켓 · 정본 템플릿 인덱스)', () => {
+describe('학습 end-to-end (실 소켓 · 기준 템플릿 인덱스)', () => {
   let savedEnv: NodeJS.ProcessEnv
   let apps: FastifyInstance[]
   let clients: WebSocket[]
@@ -386,8 +386,8 @@ describe('학습 end-to-end (실 소켓 · 정본 템플릿 인덱스)', () => {
     return client
   }
 
-  it('정본 objects.json이 시드 비법서를 연마 가능한 SCROLL로 싣는다', () => {
-    // 시나리오의 전제를 정본 데이터에 대해 직접 고정한다 — 데이터가 바뀌면 아래 시나리오가 알 수 없는
+  it('기준 objects.json이 시드 비법서를 연마 가능한 SCROLL로 싣는다', () => {
+    // 시나리오의 전제를 기준 데이터에 대해 직접 고정한다 — 데이터가 바뀌면 아래 시나리오가 알 수 없는
     // 이유로 깨지는 대신 여기가 먼저 터져 원인을 가리킨다.
     expect(BOOK_TEMPLATE).toBeDefined()
     expect(BOOK_TEMPLATE?.type).toBe(SCROLL)
@@ -396,7 +396,7 @@ describe('학습 end-to-end (실 소켓 · 정본 템플릿 인덱스)', () => {
     // ⑥ 주문 존재 게이트 — magicpower-1이 카탈로그 멤버다.
     expect(BOOK_TEMPLATE?.magicpower).toBe(BOOK_SPELL_NO + 1)
     expect(spellByNo(BOOK_SPELL_NO)).toBeDefined()
-    // ④⑤ 성향·클래스 게이트와 소지품 가시성 게이트가 모두 미발화하는 flags다.
+    // ④⑤ 성향·클래스 게이트와 소지품 가시성 게이트가 모두 동작하지 않는 flags다.
     const flags = BOOK_TEMPLATE?.flags ?? ''
     expect(F_ISSET(flags, OGOODO)).toBe(false)
     expect(F_ISSET(flags, OEVILO)).toBe(false)
@@ -404,7 +404,7 @@ describe('학습 end-to-end (실 소켓 · 정본 템플릿 인덱스)', () => {
     expect(F_ISSET(flags, OINVIS)).toBe(false)
   })
 
-  it('진입→인벤 적재→연마→통지→영속화를 관통하고, 종료 재마킹을 지나서도 characters가 먼저 write된다', async () => {
+  it('진입→인벤 로드→연마→통지→영속화를 관통하고, 종료 재마킹을 지나서도 characters가 먼저 write된다', async () => {
     const h = buildHarness()
     const url = await startTracked(h.app)
 
@@ -415,12 +415,12 @@ describe('학습 end-to-end (실 소켓 · 정본 템플릿 인덱스)', () => {
     expect(s.room).toMatchObject({ type: 'world:room', roomId: ROOM_STUDY })
     await waitFor(() => h.room.occupants.has(CHAR))
 
-    // ── 2) 인벤 적재 — 진입이 소지품을 라이브 엔트리에 실었다(진입당 1회). ────────────
+    // ── 2) 인벤 로드 — 진입이 소지품을 라이브 엔트리에 실었다(진입당 1회). ────────────
     expect(h.characterRepo.hydrateInventory).toHaveBeenCalledTimes(1)
     expect(h.liveRegistry.get(CHAR)?.inventory).toHaveLength(1)
     expect(h.liveRegistry.get(CHAR)?.inventory[0]?._id).toBe(BOOK_INSTANCE_ID)
 
-    // ── 3) 연마 — 정본 이름으로 지목한다. 이 이름은 합성 픽스처가 아니라 objects.json의 값이다. ──
+    // ── 3) 연마 — 기준 이름으로 지목한다. 이 이름은 합성 픽스처가 아니라 objects.json의 값이다. ──
     const bookName = BOOK_TEMPLATE?.name ?? ''
     client.send(JSON.stringify({ type: 'progress:study', target: bookName, id: 'st1' }))
 
@@ -440,7 +440,7 @@ describe('학습 end-to-end (실 소켓 · 정본 템플릿 인덱스)', () => {
     expect(isKnown(live?.character.spells ?? [], BOOK_SPELL_NO)).toBe(true)
     expect(live?.inventory).toHaveLength(0)
 
-    // ── 5) 영속화 — 서버 주도 수렴으로 onSessionEnd(markDirty→release)를 구동한 뒤 강제 flush. ──
+    // ── 5) 영속화 — 서버 주도 일괄 종료로 onSessionEnd(markDirty→release)를 실행한 뒤 강제 flush. ──
     // 이 시나리오가 하위 층 테스트와 **다르게** 증명하는 것이 여기 있다. 종료 lifecycle이 characters를
     // **한 번 더** markDirty하므로, `save/saveEngine.ts` 헤더가 순서 계약의 전제로 명시한
     // "두 키가 모두 해당 flush에서 **처음** 마킹될 때"를 벗어난다. 그래도 순서가 살아남는 근거는
@@ -472,7 +472,7 @@ describe('학습 end-to-end (실 소켓 · 정본 템플릿 인덱스)', () => {
     expect(s.entered).toMatchObject({ type: 'session:entered', characterId: CHAR })
     await waitFor(() => h.room.occupants.has(CHAR))
 
-    // 정본 인덱스에 없는 이름이 아니라 **소지하지 않은** 이름을 지목한다 — 해소자 스코프가 소지품임을
+    // 기준 인덱스에 없는 이름이 아니라 **소지하지 않은** 이름을 지목한다 — 리졸버 스코프가 소지품임을
     // 검출하려면 질의가 인덱스 밖이면 안 된다(인덱스 밖 이름은 스코프와 무관하게 실패한다).
     client.send(JSON.stringify({ type: 'progress:study', target: '단도', id: 'st-fail' }))
 
@@ -483,7 +483,7 @@ describe('학습 end-to-end (실 소켓 · 정본 템플릿 인덱스)', () => {
       correlationId: 'st-fail',
     })
 
-    // 강제 flush로 tracker 잔여를 큐까지 밀어낸다. 여기서 세션 종료 수렴을 **일부러 돌리지 않는다** —
+    // 강제 flush로 tracker 잔여를 큐까지 밀어낸다. 여기서 세션 종료 정리를 **일부러 돌리지 않는다** —
     // 종료 lifecycle은 성공/실패와 무관하게 characters를 markDirty하므로, 그것까지 포함하면 이 단언이
     // "거부는 write를 유발하지 않는다"가 아니라 "종료가 write를 유발한다"를 보게 된다.
     await h.saveEngine.shutdown()
@@ -537,7 +537,7 @@ describe('학습 end-to-end (실 소켓 · 정본 템플릿 인덱스)', () => {
     })
 
     // ── 2) 성립 조건 (1) — grace 만료가 라이브 엔트리를 release했다. ─────────────────
-    // 소켓을 닫으면 link-dead가 되고 1ms 뒤 graceExpired 수렴이 markDirty → release로 이어진다.
+    // 소켓을 닫으면 link-dead가 되고 1ms 뒤 graceExpired 정리가 markDirty → release로 이어진다.
     // 아래 세 단언이 "레지스트리에서 실제로 빠졌다"를 고정한다 — 하나라도 빠지면 이 케이스는 D-G 1
     // 조기 반환을 돌면서도 통과하는 무의미한 테스트가 된다.
     first.close()

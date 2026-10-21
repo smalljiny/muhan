@@ -30,7 +30,7 @@ import {
 } from './liveWorldWiring.js'
 
 /**
- * liveWorldWiring — 라이브 월드 의존 묶음을 진입 코어·이동·수명 어댑터·방 해소자로 파생하는 순수 팩토리
+ * liveWorldWiring — 라이브 월드 의존 묶음을 진입 코어·이동·수명 어댑터·방 리졸버로 파생하는 순수 팩토리
  * (Story 7). 팩토리는 transport 없이 단위 테스트 가능해야 하며(#5), transport 결합은 assembleRoomChannelPort
  * 하나에 격리한다. 채팅 전파는 wiring 레벨(2세션 하네스 아님)로 검증한다(#6).
  */
@@ -137,7 +137,7 @@ function makeBundle(worldGraph: Map<number, RoomNode>, character?: Character): B
 }
 
 describe('createLiveWorldWiring (순수 팩토리)', () => {
-  it('liveWorldBinding.resolveRoom은 roomId로 월드 그래프 방을 해소한다', () => {
+  it('liveWorldBinding.resolveRoom은 roomId로 월드 그래프 방을 해석한다', () => {
     const worldGraph = new Map<number, RoomNode>([[5, makeRoom(5)]])
     const { bundle } = makeBundle(worldGraph)
 
@@ -176,7 +176,7 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
     )
   })
 
-  it("hydrate는 묶음 peekPending을 'characters'로 1회 좁혀 호출한다(#124 배선)", async () => {
+  it("hydrate는 묶음 peekPending을 'characters'로 1회 좁혀 호출한다(#124 연결)", async () => {
     const character = makeCharacter('char-1', 3)
     const worldGraph = new Map<number, RoomNode>([[3, makeRoom(3)]])
     const h = makeBundle(worldGraph, character)
@@ -222,9 +222,9 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
     const wiring = createLiveWorldWiring(h.bundle)
 
     // 묶음에 신규 원재료를 추가하지 않았음을 필드 동일성으로 고정한다 — 세 필드 모두 이미 존재하던
-    // seam(레지스트리·발화자 방 해소자·characters 스냅샷 헬퍼)의 재사용이다. resolveRoom은 by-roomId가
-    // 아니라 by-character 해소자와 **같은 인스턴스**여야 하며, 그 해소 동작 자체는 바로 아래
-    // 'resolveRoom(by-character)…' 케이스가 소유한다(여기서 재단언하지 않는다).
+    // seam(레지스트리·발화자 방 리졸버·characters 스냅샷 헬퍼)의 재사용이다. resolveRoom은 by-roomId가
+    // 아니라 by-character 리졸버와 **같은 인스턴스**여야 하며, 그 해석 동작 자체는 바로 아래
+    // 'resolveRoom(by-character)…' 케이스가 담당한다(여기서 재단언하지 않는다).
     expect(wiring.trainDeps.liveRegistry).toBe(h.liveRegistry)
     expect(wiring.trainDeps.markCharacterDirty).toBe(wiring.markCharacterDirty)
     expect(wiring.trainDeps.resolveRoom).toBe(wiring.resolveRoom)
@@ -236,7 +236,7 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
     const wiring = createLiveWorldWiring(h.bundle)
 
     expect(wiring.studyDeps.liveRegistry).toBe(h.liveRegistry)
-    // 템플릿 인덱스는 부팅 시 1회 로드된 정본을 그대로 실어야 한다(재구축 금지 — #3의 확장).
+    // 템플릿 인덱스는 부팅 시 1회 로드된 기준을 그대로 실어야 한다(재구축 금지 — #3의 확장).
     expect(wiring.studyDeps.objectTemplates).toBe(h.objectTemplates)
     // characters 스냅샷 헬퍼는 moveDeps·trainDeps와 **같은 인스턴스**다(계약 단일화).
     expect(wiring.studyDeps.markCharacterDirty).toBe(wiring.markCharacterDirty)
@@ -262,7 +262,7 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
 
     const wiring = createLiveWorldWiring(h.bundle)
 
-    // 참조 동일성 — 클로저를 두 번 만들면 진입·이동 두 world:room 생산자가 서로 다른 해소자를 쓰게 된다.
+    // 참조 동일성 — 클로저를 두 번 만들면 진입·이동 두 world:room 생산자가 서로 다른 리졸버를 쓰게 된다.
     expect(wiring.liveWorldBinding.resolveCharacterName).toBe(wiring.moveDeps.resolveCharacterName)
   })
 
@@ -276,7 +276,7 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
     expect(wiring.liveWorldBinding.resolveCharacterName('unknown')).toBeUndefined()
   })
 
-  it('resolveRoom(by-character)은 registry→currentRoom→worldGraph로 발화자 방을 해소한다', () => {
+  it('resolveRoom(by-character)은 registry→currentRoom→worldGraph로 발화자 방을 해석한다', () => {
     const room = makeRoom(7, ['char-1'])
     const worldGraph = new Map<number, RoomNode>([[7, room]])
     const h = makeBundle(worldGraph)
@@ -290,16 +290,16 @@ describe('createLiveWorldWiring (순수 팩토리)', () => {
 })
 
 /**
- * 방 스코프 대상 해소자 2종 노출 — 규칙 본체(가시성 게이트·매칭)는 `world/roomTargetResolvers.ts`가
- * 소유하고 여기서는 **노출·공유**만 검증한다.
+ * 방 스코프 대상 리졸버 2종 노출 — 규칙 본체(가시성 게이트·매칭)는 `world/roomTargetResolvers.ts`가
+ * 담당하고 여기서는 **노출·공유**만 검증한다.
  *
- * 클로저가 포획한 바인딩의 참조 동일성은 밖에서 관측할 수 없다(플레이어 해소자가 어떤 이름 해소자를
+ * 클로저가 포획한 바인딩의 참조 동일성은 밖에서 관측할 수 없다(플레이어 리졸버가 어떤 이름 리졸버를
  * 품었는지 `toBe`로 볼 방법이 없다). 그래서 세 갈래로 나눠 증명한다 — (1) 팩토리 단위 테스트가 주입
- * 해소자에만 위임함을 spy로 고정하고(roomTargetResolvers.test.ts), (2) 두 world:room 생산자의 참조
- * 동일성은 위 '#3' 케이스가 고정하며, (3) 여기서는 플레이어 해소자가 **같은 레지스트리 인스턴스**를
+ * 리졸버에만 위임함을 spy로 고정하고(roomTargetResolvers.test.ts), (2) 두 world:room 생산자의 참조
+ * 동일성은 위 '#3' 케이스가 고정하며, (3) 여기서는 플레이어 리졸버가 **같은 레지스트리 인스턴스**를
  * 배후에 둔다는 것(백킹 스토어 미분기)을 spy로 고정한다.
  */
-describe('방 스코프 대상 해소자 노출 (크리처·플레이어)', () => {
+describe('방 스코프 대상 리졸버 노출 (크리처·플레이어)', () => {
   it('resolveRoomCreature은 모듈 순수 함수를 그대로 노출한다(재생성 없음)', () => {
     const h = makeBundle(new Map<number, RoomNode>([[3, makeRoom(3)]]))
 
@@ -308,7 +308,7 @@ describe('방 스코프 대상 해소자 노출 (크리처·플레이어)', () =
     expect(wiring.resolveRoomCreature).toBe(resolveRoomCreature)
   })
 
-  it('노출된 크리처 해소자가 방 크리처를 가시성 게이트와 함께 해소한다', () => {
+  it('노출된 크리처 리졸버가 방 크리처를 가시성 게이트와 함께 해석한다', () => {
     const room = makeRoom(3, [], [], {
       creatures: [
         makeCreature('c-invis', '유령', { flags: flagsHex(MINVIS) }),
@@ -323,7 +323,7 @@ describe('방 스코프 대상 해소자 노출 (크리처·플레이어)', () =
     expect(wiring.resolveRoomCreature(room, '유령', flagsHex(PDINVI))?.instanceId).toBe('c-invis')
   })
 
-  it('노출된 플레이어 해소자가 점유자 이름 접두·서수로 characterId를 해소한다', () => {
+  it('노출된 플레이어 리졸버가 점유자 이름 접두·서수로 characterId를 해석한다', () => {
     const room = makeRoom(3, ['char-1', 'char-2'])
     const h = makeBundle(new Map<number, RoomNode>([[3, room]]))
     h.liveRegistry.register({ character: makeCharacter('char-1', 3), inventory: [] })
@@ -339,7 +339,7 @@ describe('방 스코프 대상 해소자 노출 (크리처·플레이어)', () =
     expect(wiring.resolveRoomPlayer(room, '없는이름')).toBeUndefined()
   })
 
-  it('플레이어 해소자는 world:room 생산자와 같은 레지스트리 인스턴스를 배후에 둔다(#3)', () => {
+  it('플레이어 리졸버는 world:room 생산자와 같은 레지스트리 인스턴스를 배후에 둔다(#3)', () => {
     const room = makeRoom(3, ['char-1'])
     const h = makeBundle(new Map<number, RoomNode>([[3, room]]))
     h.liveRegistry.register({ character: makeCharacter('char-1', 3), inventory: [] })
@@ -347,7 +347,7 @@ describe('방 스코프 대상 해소자 노출 (크리처·플레이어)', () =
 
     const wiring = createLiveWorldWiring(h.bundle)
 
-    // 두 경로 각각이 같은 spy에 도달한다 — 해소자가 자체 레지스트리/캐시를 갖지 않는다. 전역 호출
+    // 두 경로 각각이 같은 spy에 도달한다 — 리졸버가 자체 레지스트리/캐시를 갖지 않는다. 전역 호출
     // 시퀀스를 통째로 단정하지 않는다(다른 소비자가 조회를 추가하면 무관한 이유로 깨진다) — 각 호출
     // 전후의 증분만 본다.
     const beforeName = getSpy.mock.calls.length
@@ -367,7 +367,7 @@ describe('world:room 두 생산자 페이로드 동일성 (진입 vs 이동)', (
     // A=100 →'동'→ B=200. char-1이 A에 있다가 B로 이동한 뒤, 같은 B에 대한 두 경로의 페이로드를 비교한다.
     const roomA = makeRoom(100, ['char-1'], [{ name: '동', targetRoomId: 200 }])
     // 아이템·크리처까지 non-vacuous하게 비교하려면 도착 방에 실물이 있어야 한다(빈 배열끼리 비교는
-    // 두 생산자의 투영이 갈려도 통과한다).
+    // 두 생산자의 변환이 갈려도 통과한다).
     const roomB = makeRoom(200, [], [{ name: '서', targetRoomId: 100 }], {
       items: [makeItem('obj-1', '녹슨 검')],
       creatures: [makeCreature('crt-1', '박쥐', { level: 2 })],
@@ -547,8 +547,8 @@ describe('assembleRoomChannelPort (#6 채팅 전파 — wiring 레벨)', () => {
     })
   })
 
-  // 방어 no-op 경로(#4) — 방 occupants에는 있으나 소켓 대상을 해소할 수 없는 멤버는 조용히 스킵한다.
-  // 세션 색인·소켓은 별도 조립 지점(assembleRoomChannelPort)에서만 캡처되므로, 두 단계 각각의 미해소를 고정한다.
+  // 방어 no-op 경로(#4) — 방 occupants에는 있으나 소켓 대상을 해석할 수 없는 멤버는 조용히 스킵한다.
+  // 세션 색인·소켓은 별도 조립 지점(assembleRoomChannelPort)에서만 캡처되므로, 두 단계 각각의 미해석을 고정한다.
   it('occupants에 있으나 세션 색인에 없는 멤버(binding 없음)는 조용히 스킵한다', () => {
     // 방 1: 발화자 char-a1 + 색인에 등록되지 않은 char-ghost가 점유. 발화자만 세션 등록·소켓 보유.
     const roomA = makeRoom(1, ['char-a1', 'char-ghost'])
@@ -562,7 +562,7 @@ describe('assembleRoomChannelPort (#6 채팅 전파 — wiring 레벨)', () => {
     const ctx = createConnectionContext()
     sessionRegistry.register('char-a1', 'acct-1', ctx, () => {})
     socketByCtx.set(ctx, { id: 'sock-char-a1' })
-    // char-ghost는 세션 색인에 없다 → registry.get이 undefined → sendTo가 소켓 해소 전에 bail.
+    // char-ghost는 세션 색인에 없다 → registry.get이 undefined → sendTo가 소켓 해석 전에 bail.
 
     const safeSend = vi.fn<(socket: FakeSocket, event: ServerEvent) => void>()
     const channelPort = assembleRoomChannelPort<FakeSocket>({

@@ -18,11 +18,11 @@ import { createNoopChannelAdapter } from './noopChannelAdapter.js'
 import { createPermissivePermissionAdapter } from './permissivePermissionAdapter.js'
 
 /**
- * 전투 배선 테스트(Story 7) — `combatRegistry`를 세션 수명에 연결하고 `combat:attack`을 명령
- * 레지스트리에 등록하는 배선을 고정한다.
+ * 전투 연결 테스트(Story 7) — `combatRegistry`를 세션 수명에 연결하고 `combat:attack`을 명령
+ * 레지스트리에 등록하는 연결을 고정한다.
  *
- * 규칙 산술(명중·피해·보상 공식)은 각 규칙 모듈의 단위 테스트가 이미 소유한다. 여기서 검증하는 것은
- * **배선**뿐이다: (a) 월드 입장 시 전투상태가 등록되는가, (b) 세션 종료가 되쓰기→markDirty→release→
+ * 규칙 산술(명중·피해·보상 공식)은 각 규칙 모듈의 단위 테스트가 이미 담당한다. 여기서 검증하는 것은
+ * **연결**뿐이다: (a) 월드 입장 시 전투상태가 등록되는가, (b) 세션 종료가 되쓰기→markDirty→release→
  * remove 순서를 지키는가, (c) 공유 인스턴스(원장·발급기·템플릿)가 갈라지지 않는가, (d) 명령이
  * 레지스트리에 실리는가.
  */
@@ -221,7 +221,7 @@ describe('createLiveWorldWiring — 전투상태 세션 수명 연결', () => {
       realRemove(id)
     })
     h.markDirty.mockImplementation(() => order.push('markDirty'))
-    // release는 occupants.delete → onRoomLeft → registry.remove 순서를 소유한다 — 훅이 발화 마커다.
+    // release는 occupants.delete → onRoomLeft → registry.remove 순서를 담당한다 — 훅이 실행 마커다.
     h.onRoomLeft.mockImplementation(() => order.push('release'))
 
     wiring.lifecyclePort.onSessionEnd({
@@ -230,7 +230,7 @@ describe('createLiveWorldWiring — 전투상태 세션 수명 연결', () => {
       reason: 'idleTimeout',
     })
 
-    // 제거는 lifecyclePort가 아니라 조립 팩토리의 release 래퍼가 소유한다(place와 대칭) —
+    // 제거는 lifecyclePort가 아니라 조립 팩토리의 release 래퍼가 담당한다(place와 대칭) —
     // 그래서 release 훅 마커 뒤에 온다.
     expect(order).toEqual(['combat.get', 'markDirty', 'release', 'combat.remove'])
   })

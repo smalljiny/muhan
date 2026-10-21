@@ -35,11 +35,11 @@ import {
 } from './wsTestClient.testutil.js'
 
 // Story 8 — 라이브 월드 end-to-end 통합. Story 1~7이 세운 프로덕션 seam(진입·배치·이동·방 채널·세션 수명·
-// 종료 수렴·저장 엔진)을 실 TCP 소켓 2개로 관통시켜, 입장→배치→이동→occupants 갱신→방 채팅 전파→종료 저장의
+// 종료 정리·저장 엔진)을 실 TCP 소켓 2개로 관통시켜, 입장→배치→이동→occupants 갱신→방 채팅 전파→종료 저장의
 // 6단계를 한 흐름에서 순서대로 단언한다. 재접속 시 라이브 상태 보존은 자체 세션 수명을 갖는 별도 it()으로 검증한다.
 //
 // 이 파일은 테스트 전용이다 — 프로덕션 코드를 바꾸지 않는다. buildApp({ sessionAuth, liveWorldDeps })에
-// 2계정 인증 어댑터와 라이브 월드 묶음(실 SaveEngine markDirty 결선 포함)을 주입해 관측한다.
+// 2계정 인증 어댑터와 라이브 월드 묶음(실 SaveEngine markDirty 연결 포함)을 주입해 관측한다.
 
 // ── 결정적 인증 시드(2계정·2쿠키·2캐릭터) ─────────────────────────────────────────
 const COOKIE_A = 'e2e-cookie-a'
@@ -115,7 +115,7 @@ function makeRoom(roomId: number, exits: RoomNode['exits']): RoomNode {
   }
 }
 
-/** 지정 class의 훈련방 — flags 규칙(base RTRAIN + class-bit 역순)은 train.testutil이 소유한다. */
+/** 지정 class의 훈련방 — flags 규칙(base RTRAIN + class-bit 역순)은 train.testutil이 담당한다. */
 function makeTrainingRoom(roomId: number, cls: number): RoomNode {
   return { ...makeRoom(roomId, []), flags: trainingFlagsForClass(cls) }
 }
@@ -133,7 +133,7 @@ function makeExit(name: string, targetRoomId: number): RoomNode['exits'][number]
 interface FakeCharacterRepo {
   findById: ReturnType<typeof vi.fn<(id: string) => Promise<Character | null>>>
   /**
-   * 인벤 적재 경로. 이 스위트의 시나리오(이동·채팅·연마)는 소지품을 읽지 않아 빈 배열을 돌려주되,
+   * 인벤 로드 경로. 이 스위트의 시나리오(이동·채팅·연마)는 소지품을 읽지 않아 빈 배열을 돌려주되,
    * findById와 같이 vi.fn으로 감싸 재접속 시 **재로드가 없음**을 호출수로 단언한다.
    */
   hydrateInventory: ReturnType<typeof vi.fn<(id: string) => Promise<ObjectInstance[]>>>
@@ -169,7 +169,7 @@ interface LiveWorldHarness {
 }
 
 /**
- * 라이브 월드 묶음을 실 SaveEngine markDirty에 결선한 app을 만든다.
+ * 라이브 월드 묶음을 실 SaveEngine markDirty에 연결한 app을 만든다.
  *
  * bundle.markDirty = saveEngine.markDirty로 이어, 이동 write-through와 종료 lifecycle markDirty가 모두
  * 저장 엔진 tracker에 쌓이고 saveEngine.shutdown()의 강제 flush로 fake repo.updateById에 도달한다.
@@ -177,7 +177,7 @@ interface LiveWorldHarness {
  * 캐스트로 채운다 — 실제 히트되는 것은 characters.updateById와 characterRepo.findById뿐이다.
  *
  * onRoomEntered/onRoomLeft/logger는 vi.fn() stub이다 — 검증 대상 로직을 지운 게 아니라 인접 스코프
- * 경계다. occupants 변이는 실 entry.place·실 tryMove가 소유하고(훅은 activeSet 활성화·perm 리스폰이라
+ * 경계다. occupants 변이는 실 entry.place·실 tryMove가 담당하고(훅은 activeSet 활성화·perm 리스폰이라
  * 별도 토픽 계약), 이 스위트의 occupants 단언이 그 실 경로를 관통한다.
  */
 function buildHarness(): LiveWorldHarness {
@@ -230,7 +230,7 @@ function buildHarness(): LiveWorldHarness {
     },
     // 이 하네스의 다른 의존과 같이 합성으로 둔다 — 아직 소비자가 없고, 이 파일은 bundle 리터럴을
     // 자체 구성하므로 boot가 무엇을 실었는지는 여기서 검출되지 않는다. 필수 필드 type-check는
-    // 필드 존재만 증명하고 값의 정합성은 증명하지 못한다 — 실 검출자는 정본 인덱스를 싣는 study e2e다.
+    // 필드 존재만 증명하고 값의 정합성은 증명하지 못한다 — 실 검출자는 기준 인덱스를 싣는 study e2e다.
     objectTemplates: new Map(),
     // 사망 seam 원재료 — 이 하네스는 소환·리스폰 경로를 검증하지 않아 빈 인덱스와 신규 발급기를 싣는다.
     spawnTemplates: new Map(),
@@ -263,7 +263,7 @@ function buildHarness(): LiveWorldHarness {
 /**
  * 소켓을 connect→hello→ready→characterList→prompt→selectCharacter→entered→world:room까지 왕복시킨다.
  *
- * 라이브 월드 주입 시 배치가 entered 직후 world:room을 발화하므로(constraint #5), 그 여분 프레임을 명시적으로
+ * 라이브 월드 주입 시 배치가 entered 직후 world:room을 발생시키므로(constraint #5), 그 여분 프레임을 명시적으로
  * 소비해 이후 chat/echo 단언이 어긋나지 않게 한다. 진입 프레임(session:entered 또는 session:resumed)과 뒤이은
  * world:room을 함께 돌려줘 호출자가 재접속(resumed) 여부를 단언하게 한다.
  */
@@ -399,15 +399,15 @@ describe('라이브 월드 end-to-end (실 소켓 2세션)', () => {
     const bNextChat = await nextChatSaid(b.reader)
     expect(bNextChat).toMatchObject({ type: 'chat:said', speakerCharacterId: CHAR_B, text: '여기있음' })
 
-    // ── 7) 종료 저장 — 서버 주도 수렴으로 onSessionEnd(markDirty→release)를 구동한 뒤 강제 flush. ──
-    // 소켓 close 단독으로는 onSessionEnd가 발화하지 않으므로(link-dead만 표시), markShuttingDown→converge로
-    // 등록 바인딩을 일괄 종결해 lifecycle 어댑터를 구동한다.
+    // ── 7) 종료 저장 — 서버 주도 일괄 종료로 onSessionEnd(markDirty→release)를 실행한 뒤 강제 flush. ──
+    // 소켓 close 단독으로는 onSessionEnd가 실행되지 않으므로(link-dead만 표시), markShuttingDown→converge로
+    // 등록 바인딩을 일괄 종결해 lifecycle 어댑터를 실행한다.
     h.app.wsShutdown.markShuttingDown()
     h.app.wsShutdown.converge()
     await h.saveEngine.shutdown()
 
     // A 저장 = 도착 방(load-time 아닌 post-move 값). B 저장 = 시작 방 — B는 이동한 적 없어 오직 onSessionEnd의
-    // markDirty에서만 온다(종료 lifecycle 경로가 실제 구동됐음 증명, constraint #2).
+    // markDirty에서만 온다(종료 lifecycle 경로가 실제 실행됐음 증명, constraint #2).
     expect(h.characterRepo.updates.get(CHAR_A)).toMatchObject({ currentRoom: ROOM_DEST })
     expect(h.characterRepo.updates.get(CHAR_B)).toMatchObject({ currentRoom: ROOM_START })
   })
@@ -435,7 +435,7 @@ describe('라이브 월드 end-to-end (실 소켓 2세션)', () => {
     })
     expect(trained).not.toHaveProperty('correlationId')
 
-    // ── 3) 종료 저장 — 수렴 후 강제 flush로 write-behind 스냅샷을 fake repo에 도달시킨다. ──
+    // ── 3) 종료 저장 — 일괄 종료 후 강제 flush로 write-behind 스냅샷을 fake repo에 도달시킨다. ──
     h.app.wsShutdown.markShuttingDown()
     h.app.wsShutdown.converge()
     await h.saveEngine.shutdown()
@@ -477,7 +477,7 @@ describe('라이브 월드 end-to-end (실 소켓 2세션)', () => {
       h.characterRepo.findById.mock.calls.filter((call) => call[0] === CHAR_A).length
     expect(findByIdCallsForA()).toBe(1)
 
-    // 인벤 적재도 같은 기준선을 갖는다 — 진입당 정확히 1회(OQ3 왕복 상한).
+    // 인벤 로드도 같은 기준선을 갖는다 — 진입당 정확히 1회(OQ3 왕복 상한).
     const inventoryCallsForA = (): number =>
       h.characterRepo.hydrateInventory.mock.calls.filter((call) => call[0] === CHAR_A).length
     expect(inventoryCallsForA()).toBe(1)
@@ -486,7 +486,7 @@ describe('라이브 월드 end-to-end (실 소켓 2세션)', () => {
     clientA.close()
     await waitFor(() => h.app.wsSessionRegistry.get(CHAR_A)?.link === 'link-dead')
 
-    // grace 창 안에서 같은 계정으로 재접속 → enterWorld가 rebind로 이어 session:resumed를 발화한다.
+    // grace 창 안에서 같은 계정으로 재접속 → enterWorld가 rebind로 이어 session:resumed를 발생시킨다.
     // rebind가 아니라 register(evict-old)를 탔다면 findById 재호출·재hydrate가 일어나므로, resumed 프레임이
     // rebind 경로를 탔음을 증명하는 유일한 신호다(constraint #3).
     const clientA2 = trackedClient(url, COOKIE_A)
@@ -497,7 +497,7 @@ describe('라이브 월드 end-to-end (실 소켓 2세션)', () => {
 
     // 재접속은 재로드하지 않는다 — findById 호출수가 초기값(캐릭터당 1)으로 불변이다.
     expect(findByIdCallsForA()).toBe(1)
-    // 인벤도 재적재하지 않는다 — 두 벌이 생기지 않고 최초 적재분이 그대로 유지된다(D-G 1).
+    // 인벤도 재로드하지 않는다 — 두 벌이 생기지 않고 최초 로드분이 그대로 유지된다(D-G 1).
     expect(inventoryCallsForA()).toBe(1)
     // 라이브 레지스트리의 단일 출처(currentRoom)도 도착 방을 유지한다.
     expect(h.app.wsSessionRegistry.get(CHAR_A)?.link).toBe('live')

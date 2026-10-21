@@ -10,8 +10,8 @@ import type { MarkCharacterDirty } from '../world/markCharacterDirty.js'
  * 라이브 상태에 연결해 만들어 준다. `initiateAttack`이 HP<1을 판정한 뒤 `fireDeath`로 부르는 지점이
  * 여기로 들어온다.
  *
- * 이 모듈은 보상 산술도 방 처리도 소유하지 않는다. `distributeCreatureDeath`(exp 분배·전리품 계산)와
- * `onCreatureDeath`(perm 리스폰 타이머·MSUMMO 소환·방 제거)가 각각 소유하고, 여기서는 **둘을 어떤
+ * 이 모듈은 보상 산술도 방 처리도 담당하지 않는다. `distributeCreatureDeath`(exp 분배·전리품 계산)와
+ * `onCreatureDeath`(perm 리스폰 타이머·MSUMMO 소환·방 제거)가 각각 담당하고, 여기서는 **둘을 어떤
  * 순서로 잇고 결과를 라이브 레지스트리에 어떻게 반영하는지**만 정한다.
  *
  * ## 처리 순서가 load-bearing이다
@@ -32,27 +32,27 @@ import type { MarkCharacterDirty } from '../world/markCharacterDirty.js'
  * "경험치가 안 오른다"는 증상으로만 드러나므로, 이 순서를 테스트로 고정한다.
  *
  * ## alignmentDelta를 적용하지 않는다 (D7)
- * `DeathAward.alignmentDelta`는 계산해 받지만 캐릭터에 더하지 않는다. 오라클의 alignment 값역은
+ * `DeathAward.alignmentDelta`는 계산해 받지만 캐릭터에 더하지 않는다. 오라클의 alignment 값 범위는
  * `-1000..+1000`인데 현 구현의 `Character.alignment`는 `[0,2]`이고(#123), 학습 게이트 등이 그 1|2
- * 인코딩을 읽는다. 값역이 다른 델타를 더하면 인코딩이 깨져 무관한 규칙이 조용히 오작동한다. 값역
+ * 인코딩을 읽는다. 값 범위가 다른 델타를 더하면 인코딩이 깨져 무관한 규칙이 조용히 오작동한다. 값 범위
  * 정정(#123)이 먼저이고, 그 뒤에 이 적립을 켠다.
  *
  * ## drops를 방에 넣지 않는다 (D8)
  * `DeathDistribution.drops`(인벤토리 + 골드)도 받기만 하고 `room.items`에 넣지 않는다. 지금 명령
  * 어휘에 방 바닥 아이템을 줍는 수단이 없어서, 넣으면 아무도 회수할 수 없는 아이템만 방마다 쌓인다.
- * 줍기 명령이 배선되는 시점에 이 지점에서 투입한다.
+ * 줍기 명령이 연결되는 시점에 이 지점에서 투입한다.
  *
  * ## firePlayerDeath는 로그만 남긴다
- * 이 토픽에서는 구조적으로 도달 불가하다 — 몬스터가 반격하지 않고(몬스터 전투 tick 미배선) PvP도
- * 배선돼 있지 않다. 그래서 호출되면 그 자체가 배선 오류다. 흔적만 남기고 상태는 건드리지 않는다.
+ * 이 토픽에서는 구조적으로 도달 불가하다 — 몬스터가 반격하지 않고(몬스터 전투 tick 미연결) PvP도
+ * 연결돼 있지 않다. 그래서 호출되면 그 자체가 조립 오류다. 흔적만 남기고 상태는 건드리지 않는다.
  *
  * ⚠ **규칙은 이미 이식돼 있다 — 다시 만들지 마라.** `progression/death.ts`의 `applyPlayerDeath`가
  * exp 손실(레벨대별 공식·하한 클램프)·부활 방 이동·hp/mp 풀회복을 순수 함수로 갖고 있고 단위
  * 테스트도 붙어 있다(non-test caller 0건). 아직 없는 것은 **장비 낙하** 하나다. 여기서 지금 그것을
- * 부르지 않는 이유는 규칙이 없어서가 아니라 이 토픽 범위(스펙 §5)가 아니어서다 — 배선은 #99가 한다.
+ * 부르지 않는 이유는 규칙이 없어서가 아니라 이 토픽 범위(스펙 §5)가 아니어서다 — 연결은 #99가 한다.
  */
 
-/** 배선 오류를 기록하는 최소 logger seam(console 금지 — save/logger·EntryLogger 관례 미러). */
+/** 조립 오류를 기록하는 최소 logger seam(console 금지 — save/logger·EntryLogger 관례 미러). */
 export interface DeathSeamLogger {
   error(context: Record<string, unknown>, message: string): void
 }
@@ -60,7 +60,7 @@ export interface DeathSeamLogger {
 /**
  * 사망 seam 조립 의존성(전역 금지 — 인자 주입).
  *
- * `liveRegistry`는 기여자 조회·교체 등록에 쓰는 두 메서드만 요구한다(최소 표면). `ledgers`는 크리처별
+ * `liveRegistry`는 기여자 조회·교체 등록에 쓰는 두 메서드만 요구한다(최소 인터페이스). `ledgers`는 크리처별
  * 원장 라우터로, 공격 누적에 쓴 것과 **같은 인스턴스**여야 한다 — 다른 인스턴스를 주면 원장이 비어
  * 보상이 0이 된다. `creatureDeathDeps`는 `onCreatureDeath`가 소유하는 템플릿·id 발급기·rng seam이다.
  */
@@ -88,7 +88,7 @@ export function assembleDeathSeams(deps: DeathSeamDeps): DeathSeams {
    * 죽은 몬스터의 적 리스트는 세션 수명과 무관하게 남으므로 미등록은 정상 상태이지 오류가 아니다.
    *
    * 라이브 문서를 in-place로 고치지 않고 새 `LiveCharacter`·새 `Character`를 만들어 교체 등록한다
-   * (immutability 규칙). markDirty 스냅샷 복사는 `markCharacterDirty`가 단독으로 소유하므로 여기서
+   * (immutability 규칙). markDirty 스냅샷 복사는 `markCharacterDirty`가 단독으로 담당하므로 여기서
    * 다시 복사하지 않는다.
    */
   function creditExperience(playerId: string, exp: number): void {

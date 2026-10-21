@@ -43,8 +43,8 @@ import {
 
 // Story 9 — 공격(combat:attack) end-to-end 통합. 형제 스위트 `liveWorld.e2e.test.ts`(이동·채팅·연마)·
 // `studyLiveWorld.e2e.test.ts`(학습)와 같은 하네스 골격을 쓰되, **진입 → 지목 → 타격 → 통지 → 처치 →
-// 보상**의 한 흐름만 남긴다. 계층별 단위 테스트(Story 1~8)는 각 seam을 고정했지만 그 사이의 결선이
-// 실제로 이어졌는지는 증명하지 못한다 — 이 파일이 실 TCP 소켓 1개로 그 결선을 관통시킨다.
+// 보상**의 한 흐름만 남긴다. 계층별 단위 테스트(Story 1~8)는 각 seam을 고정했지만 그 사이의 연결이
+// 실제로 이어졌는지는 증명하지 못한다 — 이 파일이 실 TCP 소켓 1개로 그 연결을 관통시킨다.
 //
 // ## 이 스위트가 **단독으로** 닫는 구멍 — plugin.ts의 조립 한 줄
 // Story 7 시점에 `ws/plugin.ts`의 `attack: wiring.attackDeps` 한 줄을 지워도 전 스위트가 통과했다.
@@ -57,11 +57,11 @@ import {
 // 형제 스위트는 `onRoomEntered`/`onRoomLeft`를 `vi.fn()` stub으로 채우고 월드 런타임을 조립하지 않는다.
 // 이 스위트는 boot(`index.ts`)와 같이 `createWorldRuntime`을 세워 훅·`spawnTemplates`·`alloc`을 그
 // 산출물에서 가져오고(사망 seam이 실제로 소비하는 원재료다), `WorldClock`에 슬롯을 등록해 1Hz 틱을
-// 수동 구동한다. 그래야 "월드 틱이 도는데도 몬스터가 반격하지 않는다"(#99가 이 토픽 밖)를 회귀로
+// 수동 실행한다. 그래야 "월드 틱이 도는데도 몬스터가 반격하지 않는다"(#99가 이 토픽 밖)를 회귀로
 // 잠글 수 있다 — 틱이 아예 없으면 그 단언은 공허하다.
 //
 // ⚠ 여기서도 boot의 묶음 조립 자체는 미검증이다 — 이 파일 역시 `LiveWorldWiringBundle` 리터럴을 자체
-// 구성하므로, boot가 각 필드에 무엇을 싣는지는 검출되지 않는다(`index.ts`는 커버리지 제외 배선 코드라
+// 구성하므로, boot가 각 필드에 무엇을 싣는지는 검출되지 않는다(`index.ts`는 커버리지 제외 연결 코드라
 // 설계상 그렇다).
 //
 // 이 파일은 테스트 전용이다 — 프로덕션 코드를 바꾸지 않는다.
@@ -81,7 +81,7 @@ const ROOM_ARENA = 1
 // rng를 주입할 경로가 프로덕션에 존재하지 않는다.
 //
 // 그래서 묶음에 테스트용 optional 필드를 새로 뚫지 않고 **입력 스탯으로 결과를 강제**한다. 프로덕션
-// 표면을 넓히지 않는 쪽이 싸고, 아래 값들이 어느 굴림에서도 같은 결과를 내는 근거는 첫 it()이
+// 인터페이스를 넓히지 않는 쪽이 싸고, 아래 값들이 어느 굴림에서도 같은 결과를 내는 근거는 첫 it()이
 // **프로덕션 공식**(`hitThreshold`·`playerBaseDamage`)을 직접 호출해 단언한다 — 테이블만 대조하면
 // 공식이 바뀔 때 이 전제가 조용히 무너진다. 확률에 기대는 단언은 이 파일에 하나도 없다.
 //
@@ -91,11 +91,11 @@ const ROOM_ARENA = 1
 //   ② 피해 — 맨손(`weapon === null`)이면 숙련 p=0이라 크리 굴림 `rng(1,100) <= 0`이 항상 거짓이고,
 //      불발 굴림은 무기 착용 시에만 소비된다. 다중공격은 `multiAttackCount`가 초인(class 9)·초과
 //      클래스에서만 2 이상이라 class 5는 **PUPDMG를 갖고 있어도** 항상 1타다. 남는 것은
-//      `mdice(class_stats[class]) + bonus[strength]`뿐이라 값역이 닫힌 구간이 된다.
+//      `mdice(class_stats[class]) + bonus[strength]`뿐이라 값 범위가 닫힌 구간이 된다.
 //   ③ 그 닫힌 구간을 크리처 hp 양쪽에 둔다 — 생존 시나리오는 hp를 최대 피해보다 크게, 처치 시나리오는
 //      hp를 최소 피해보다 작게 잡는다.
 
-/** 캐릭터 class — MAGE(5). 맨손 피해 값역이 `class_stats[5]`(1d3)로 좁아 ③의 여유가 가장 크다. */
+/** 캐릭터 class — MAGE(5). 맨손 피해 값 범위가 `class_stats[5]`(1d3)로 좁아 ③의 여유가 가장 크다. */
 const CHAR_CLASS = 5
 /** 캐릭터 레벨 — THAC0 조회(circle = trunc((level+3)/4))의 입력. */
 const CHAR_LEVEL = 20
@@ -104,7 +104,7 @@ const CHAR_STRENGTH = 16
 const CHAR_STATS: [number, number, number, number, number] = [CHAR_STRENGTH, 18, 12, 10, 14]
 /** 공격 전 경험치 — 처치 보상 단언의 기준선이다(0에서 출발해 증가를 관측한다). */
 const CHAR_EXPERIENCE = 0
-/** 캐릭터 문서의 현재 HP — 반격 부재(T9.4) 단언의 기준값이다. */
+/** 캐릭터 문서의 현재 HP — 반격 없음(T9.4) 단언의 기준값이다. */
 const CHAR_HP = 42
 
 /** 크리처 armor — ①을 성립시킨다(trunc(160/8)=20 ≥ 어떤 클래스의 THAC0 상한 20). */
@@ -122,7 +122,7 @@ const KILL_EXP = 500
 
 /** 크리처 표시 이름 = 지목 질의. 방 목록·`combat:attacked.targetName`·질의가 모두 이 값을 쓴다. */
 const CREATURE_NAME = '고블린'
-/** 크리처 instanceId — `combat:attacked.targetInstanceId`·방 재투영 부재 단언의 기준값이다. */
+/** 크리처 instanceId — `combat:attacked.targetInstanceId`·방 뷰 재생성 없음 단언의 기준값이다. */
 const CREATURE_ID = `${ROOM_ARENA}:c0`
 
 /** 시드 캐릭터 문서 — 공유 픽스처에 이 시나리오가 근거로 삼는 필드만 명시 override한다. */
@@ -140,7 +140,7 @@ function seedCharacter(): Character {
 }
 
 /**
- * 시드 캐릭터의 전투상태 — 명중·피해 값역을 **프로덕션 공식으로** 평가하는 데 쓴다.
+ * 시드 캐릭터의 전투상태 — 명중·피해 값 범위를 **프로덕션 공식으로** 평가하는 데 쓴다.
  * 인벤을 비워 맨손으로 둔다(크리·불발·내구도 굴림이 전부 `weapon !== null` 게이트 뒤에 있다).
  */
 function seedCombatState(): PlayerCombatState {
@@ -148,7 +148,7 @@ function seedCombatState(): PlayerCombatState {
 }
 
 /**
- * 라운드 피해의 값역 — `playerBaseDamage`를 굴림 하한·상한 stub으로 평가한 값이다.
+ * 라운드 피해의 값 범위 — `playerBaseDamage`를 굴림 하한·상한 stub으로 평가한 값이다.
  * 손으로 재구현하지 않는다(공식이 바뀌면 값이 따라 움직여야 시나리오가 흔들리지 않는다).
  */
 const MIN_DAMAGE = playerBaseDamage(toCombatant(seedCombatState()), minRollRng)
@@ -204,22 +204,22 @@ interface AttackHarness {
   characterRepo: FakeCharacterRepo
   saveEngine: SaveEngine
   worldClock: WorldClock
-  /** 1Hz 월드 틱을 `seconds`초만큼 수동 진행시킨다(실타이머 없음 — FakeClock 구동). */
+  /** 1Hz 월드 틱을 `seconds`초만큼 수동 진행시킨다(실타이머 없음 — FakeClock 기반). */
   advanceWorld(seconds: number): void
 }
 
 /**
- * 라이브 월드 묶음을 실 SaveEngine·실 월드 런타임에 결선한 app을 만든다.
+ * 라이브 월드 묶음을 실 SaveEngine·실 월드 런타임에 연결한 app을 만든다.
  *
  * 형제 스위트와 다른 두 곳:
  *  1. `createWorldRuntime`을 세워 `onRoomEntered`/`onRoomLeft`·`spawnTemplates`·`alloc`을 그 산출물에서
  *     가져온다(boot `index.ts`의 조립 미러). 사망 seam이 소비하는 원재료라 stub으로 두면 처치 경로가
  *     프로덕션과 다른 인스턴스를 보게 된다 — `alloc`은 `createInstanceIdAllocator(worldGraph.values())`로
  *     방을 seed한 그 발급기다.
- *  2. `WorldClock`을 `FakeClock`으로 구동해 슬롯을 수동 진행시킨다. `now`도 boot와 같이
+ *  2. `WorldClock`을 `FakeClock` 기반으로 실행해 슬롯을 수동 진행시킨다. `now`도 boot와 같이
  *     `() => worldClock.currentTick()`이라 공격 쿨다운·틱·P-flag 만료가 **한 시각 도메인**을 공유한다.
  *
- * `objectTemplates`는 빈 인덱스다 — 시드 인벤이 비어 있어 페어링 대상이 없고(맨손 전제), 정본 인덱스가
+ * `objectTemplates`는 빈 인덱스다 — 시드 인벤이 비어 있어 페어링 대상이 없고(맨손 전제), 기준 인덱스가
  * 실제로 소비되는지는 `studyLiveWorld.e2e.test.ts`가 자기 흐름에서 검출한다(중복 관측 회피).
  *
  * bank/world/objects repo는 이 흐름에서 미사용이라 최소 stub을 캐스트로 채운다(형제 스위트 관례 미러).
@@ -230,7 +230,7 @@ function buildHarness(creature: CreatureInstance): AttackHarness {
 
   const characterRepo = makeCharacterRepo(seedCharacter())
 
-  // SaveEngine — FakeClock + 즉시 backoff(형제 스위트 미러). 주기 flush가 발화하지 않아 저장 타이밍이
+  // SaveEngine — FakeClock + 즉시 backoff(형제 스위트 미러). 주기 flush가 실행되지 않아 저장 타이밍이
   // 시나리오에 개입하지 않는다.
   const bankStub = {} as unknown as BankRepository
   const worldStub = {} as unknown as WorldRepository
@@ -303,7 +303,7 @@ function buildHarness(creature: CreatureInstance): AttackHarness {
 
 /**
  * 소켓을 connect→hello→ready→characterList→prompt→selectCharacter→entered→world:room까지 왕복시킨다
- * (형제 스위트 `enterWorld` 미러 — 배치가 발화하는 여분 `world:room` 프레임을 명시 소비한다).
+ * (형제 스위트 `enterWorld` 미러 — 배치가 발생시키는 여분 `world:room` 프레임을 명시 소비한다).
  */
 async function enterWorld(
   client: WebSocket,
@@ -371,7 +371,7 @@ describe('공격 end-to-end (실 소켓 · 실 월드 틱)', () => {
     return client
   }
 
-  it('시드 스탯이 명중·피해를 결정적으로 강제한다 (확률 단언 부재의 근거)', () => {
+  it('시드 스탯이 명중·피해를 결정적으로 강제한다 (확률 단언이 없는 근거)', () => {
     // 시나리오의 전제를 **프로덕션 공식에 대해** 고정한다. 테이블만 대조하고 공식을 손으로 다시
     // 쓰면 테이블 회귀는 잡지만 공식 회귀는 못 잡는다 — `hitThreshold`의 `/8`이 바뀌거나 피해
     // 분기가 재배치되면 이 단언은 통과한 채 아래 시나리오만 "가끔 빗나가서" 흔들린다. 그래서
@@ -388,12 +388,12 @@ describe('공격 end-to-end (실 소켓 · 실 월드 틱)', () => {
     expect(F_ISSET(attacker.flags, PBLIND)).toBe(false)
     expect(F_ISSET(attacker.flags, PFEARS)).toBe(false)
 
-    // ③ 피해 값역 — 굴림 하한·상한 stub으로 **같은 공식**을 양끝에서 평가한다. 맨손이라
-    //    크리·불발·다중공격이 모두 미발화하므로 이 값역이 곧 라운드 피해의 값역이다.
+    // ③ 피해 값 범위 — 굴림 하한·상한 stub으로 **같은 공식**을 양끝에서 평가한다. 맨손이라
+    //    크리·불발·다중공격이 모두 동작하지 않으므로 이 값 범위가 곧 라운드 피해의 값 범위다.
     expect(MIN_DAMAGE).toBe(playerBaseDamage(attacker, minRollRng))
     expect(MAX_DAMAGE).toBe(playerBaseDamage(attacker, maxRollRng))
 
-    // ④ 크리처 HP를 값역 양쪽에 둔다 — 생존 크리처는 최대 피해로도 죽지 않고, 처치 크리처는 최소
+    // ④ 크리처 HP를 값 범위 양쪽에 둔다 — 생존 크리처는 최대 피해로도 죽지 않고, 처치 크리처는 최소
     //    피해로도 죽는다. 등호가 아니라 진부등호라 경계에서 뒤집히지 않는다.
     expect(MAX_DAMAGE).toBeLessThan(SURVIVOR_HP)
     expect(MIN_DAMAGE).toBeGreaterThan(KILL_HP)
@@ -431,13 +431,13 @@ describe('공격 end-to-end (실 소켓 · 실 월드 틱)', () => {
     // 상태 이벤트라 상관 키를 반향하지 않는다(progress:trained·progress:studied 선례).
     // 명령에 id: 'atk-1'을 실었는데도 없어야 한다.
     expect(attacked).not.toHaveProperty('correlationId')
-    // 맨손 1타 — 다중공격이 미발화한다는 결정성 전제의 프레임 수준 확인이다. class 5는
+    // 맨손 1타 — 다중공격이 동작하지 않는다는 결정성 전제의 프레임 수준 확인이다. class 5는
     // `multiAttackCount`의 두 조건(초인 && level>100, class>초인) 어느 쪽도 아니라 항상 1타다.
     const attacks = attacked.type === 'combat:attacked' ? attacked.attacks : []
     expect(attacks).toHaveLength(1)
 
-    // ★ 계산한 값역을 **관측 피해와 연결한다.** 이 단언이 없으면 위 결정성 전제 테스트가 시나리오와
-    //   무관한 산술로 남는다 — 실제로 나온 피해가 그 값역 안이어야 논증이 닫힌다.
+    // ★ 계산한 값 범위를 **관측 피해와 연결한다.** 이 단언이 없으면 위 결정성 전제 테스트가 시나리오와
+    //   무관한 산술로 남는다 — 실제로 나온 피해가 그 값 범위 안이어야 논증이 닫힌다.
     const damage = attacked.type === 'combat:attacked' ? attacked.damage : -1
     expect(damage).toBeGreaterThanOrEqual(MIN_DAMAGE)
     expect(damage).toBeLessThanOrEqual(MAX_DAMAGE)
@@ -450,7 +450,7 @@ describe('공격 end-to-end (실 소켓 · 실 월드 틱)', () => {
       hpCurrent: CHAR_HP, // 몬스터가 반격하지 않으므로 공격자 HP는 불변이다.
     })
 
-    // 크리처는 살아남았고 실제로 피해를 입었다(라이브 방 노드 관측 — 프레임의 died:false와 정합).
+    // 크리처는 살아남았고 실제로 피해를 입었다(라이브 방 노드 관측 — 프레임의 died:false와 일치).
     expect(h.room.creatures).toHaveLength(1)
     expect(h.room.creatures[0]?.hpcur).toBeLessThan(SURVIVOR_HP)
     expect(h.room.creatures[0]?.hpcur).toBeGreaterThan(0)
@@ -495,7 +495,7 @@ describe('공격 end-to-end (실 소켓 · 실 월드 틱)', () => {
     const experience = stats.type === 'character:stats' ? stats.experience : -1
     expect(experience).toBeGreaterThan(CHAR_EXPERIENCE)
 
-    // (3) 방 재투영 — 이벤트 추가가 아니라 발화 지점 추가다(D14). 안 오면 클라 목록에 시체가 남는다.
+    // (3) 방 뷰 재생성 — 이벤트 추가가 아니라 발생 지점 추가다(D14). 안 오면 클라 목록에 시체가 남는다.
     const roomView = await s.reader.next()
     expect(roomView).toMatchObject({ type: 'world:room', roomId: ROOM_ARENA })
     const creatures = roomView.type === 'world:room' ? roomView.creatures : []
@@ -529,7 +529,7 @@ describe('공격 end-to-end (실 소켓 · 실 월드 틱)', () => {
     //  (a) creatureTick이 이 크리처를 실제로 처리했다 — next-action이 스케줄됐다.
     //  (b) 적 리스트가 비어 있지 않아 §3.5 조기종료 게이트를 통과했다 = 전투 디스패치 지점까지
     //      도달했다. 그 지점의 seam(`onCombatTick`)이 프로덕션 기본값 no-op이라는 것이 #99가 아직
-    //      배선되지 않았다는 사실 그 자체다.
+    //      연결되지 않았다는 사실 그 자체다.
     const live = h.room.creatures[0]
     expect(live?.nextActionAt).toBeGreaterThan(0)
     expect(live?.enemies).toContain(CHAR)

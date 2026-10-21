@@ -47,7 +47,7 @@ function assertNever(value: never): never {
 
 /**
  * 게임 소켓 경로. transport 위에 upgrade 전 인증 게이트(preValidation: Origin 403·세션 쿠키 401),
- * 버전 협상 핸드셰이크(Story 4), 명령 라우팅(Story 6)이 배선돼 있다.
+ * 버전 협상 핸드셰이크(Story 4), 명령 라우팅(Story 6)이 연결돼 있다.
  */
 export const GAME_SOCKET_PATH = '/game'
 
@@ -68,7 +68,7 @@ declare module 'fastify' {
     wsLifecyclePort: SessionLifecyclePort
     // characterId → SessionBinding 색인. 진단·재연결·테스트 관찰의 단일 출처(wsConnections 관례 미러).
     wsSessionRegistry: SessionRegistry
-    // 서버 주도 종료 수렴 핸들. index.ts 신호 핸들러가 markShuttingDown→converge로 등록 바인딩을 일괄 종결하고,
+    // 서버 주도 일괄 종료 핸들. index.ts 신호 핸들러가 markShuttingDown→converge로 등록 바인딩을 일괄 종결하고,
     // 소켓 close 핸들러가 isShuttingDown()으로 link-dead 진입을 우회한다(wsSessionRegistry 관례 미러).
     wsShutdown: ShutdownConverger
     // 인바운드 유량 제한기 factory. 연결 간 공유되는 계정 버킷 레지스트리를 소유하며, 소켓 open 시 연결 핸들을
@@ -78,7 +78,7 @@ declare module 'fastify' {
   interface FastifyRequest {
     account: AccountIdentity | null
     // 이 요청의 정원 슬롯을 반납하는 idempotent 클로저. reserve 성공 직후 preValidation이 요청별로 대입해
-    // 소켓 핸들러가 'close'에 배선한다. account 데코레이션 관례 미러(null 기본값, 요청별 대입).
+    // 소켓 핸들러가 'close'에 연결한다. account 데코레이션 관례 미러(null 기본값, 요청별 대입).
     releaseQuota: (() => void) | null
   }
 }
@@ -113,7 +113,7 @@ function frameToText(data: RawData): string {
  * 직렬화해 그 바이트 수를 bufferedAmount에 더한 값(`bufferedAmount + payloadBytes`)이 상한을 넘으면 느린
  * 소비자로 판정해 1013(Try Again Later)로 close하고 전송하지 않는다. enqueue 직전에 대기 중인 payload 크기까지
  * 회계에 넣는 hard cap이라, 단일 이벤트가 큐를 상한 너머로 밀어넣고도 살아남는 one-message overshoot가 없다.
- * 서버가 상태를 결정해 이벤트를 push하는 구조라 프레임을 드롭·유예하면 상태가 어긋나므로 close가 유일하게 안전한 응답이다. 상한은
+ * 서버가 상태를 결정해 이벤트를 push하는 구조라 프레임을 드롭·보류하면 상태가 어긋나므로 close가 유일하게 안전한 응답이다. 상한은
  * getConfig()로 호출 시점에 조회해 테스트가 env를 덮어쓸 수 있게 한다(팩토리 생성 시점 캡처 금지). payload는
  * 여기서 한 번만 직렬화해 send에 재사용한다(이중 직렬화 없음). (3) 콜백형 send — 비동기 전송 오류는 콜백으로
  * 받아 로깅하고 codeless close로 잘라낸다(backpressure의 1013과 달리 transport 실패이므로 코드 없이 닫는다,
@@ -136,15 +136,15 @@ export function createSafeSend(log: FastifyBaseLogger): (socket: WebSocket, even
         }
       })
     } catch {
-      // 전송 직전 소켓이 닫힌 경우. 곧 'close'가 발화해 cleanup이 돌므로 무시한다.
+      // 전송 직전 소켓이 닫힌 경우. 곧 'close'가 발생해 cleanup이 돌므로 무시한다.
     }
   }
 }
 
 /**
- * 세션 컨텍스트를 조립한다 — FSM 핸들러가 포트 호출·이벤트 발화에 쓸 컨텍스트(Lock E).
+ * 세션 컨텍스트를 조립한다 — FSM 핸들러가 포트 호출·이벤트 발생에 쓸 컨텍스트(Lock E).
  *
- * `ctx.account`를 여기서 1회 narrow한다: preValidation 게이트가 non-null을 보장하므로 null이면 배선
+ * `ctx.account`를 여기서 1회 narrow한다: preValidation 게이트가 non-null을 보장하므로 null이면 연결
  * 불변식 위반이라 throw한다(message 핸들러의 방어 try가 error{internal}로 격리). 이후 FSM 호출에
  * `account?.`를 스레드하지 않는다. `emit`은 주입 콜백으로 `safeSend`를 감싸 — 핸들러는 소켓을 직접
  * 만지지 않고 이 콜백으로만 이벤트를 내보낸다(3층 경계: 소켓은 셸에만 있다). `rearmDeadline`/`clearDeadline`도
@@ -155,8 +155,8 @@ export function createSafeSend(log: FastifyBaseLogger): (socket: WebSocket, even
  *
  * `liveWorld`(Story 4)는 라이브 월드 진입 seam이다 — 주입된 `LiveWorldBinding`(진입 코어+월드 그래프)이
  * 있을 때만 조립하고, 미주입이면 undefined로 둬 FSM이 hydrate/place/world:room을 통째로 건너뛰게 한다(T4.5,
- * 기존 동작 보존). lifecyclePort·channelPort 관례처럼 배선 시점에 주입되며, 실 boot 결선은 tryMove 프로덕션
- * 결선(movement/command 에픽)과 같은 dormant 경계를 따른다.
+ * 기존 동작 보존). lifecyclePort·channelPort 관례처럼 연결 시점에 주입되며, 실 boot 연결은 tryMove 프로덕션
+ * 연결(movement/command 에픽)과 같은 dormant 경계를 따른다.
  */
 function buildSession(
   ctx: ConnectionContext,
@@ -189,30 +189,30 @@ function buildSession(
 /**
  * `/game` upgrade 게이트 팩토리 — Origin allowlist·세션 쿠키를 검증하는 preValidation 훅을 만든다.
  *
- * 순서(다층 guard): (1) Origin 헤더를 config.WS_ALLOWED_ORIGINS와 대조해 부재·불일치면 403(fail-closed —
- * 브라우저는 upgrade에 항상 Origin을 싣지만 부재도 명시 거부); (2) `__session` 쿠키를 추출해
- * sessionAuth.validateSessionCookie로 검증, 부재·무효면 401. 통과하면 확정된 AccountIdentity를
+ * 순서(다층 guard): (1) Origin 헤더를 config.WS_ALLOWED_ORIGINS와 대조해 없거나 불일치면 403(fail-closed —
+ * 브라우저는 upgrade에 항상 Origin을 싣지만 없는 경우도 명시 거부); (2) `__session` 쿠키를 추출해
+ * sessionAuth.validateSessionCookie로 검증, 없거나 무효면 401. 통과하면 확정된 AccountIdentity를
  * req.account에 대입해 소켓 핸들러가 재사용하게 한다.
  *
  * (3) 정원 게이트 — 계정 신원이 확정된 뒤 quota.reserve로 슬롯 1개를 점유한다. 전역 초과는 503, 계정별
  * 초과는 429. reserve는 두 선행 게이트 뒤에 위치해 거부된 Origin·쿠키가 슬롯을 소비하지 않는다(check-then-
  * increment가 같은 동기 스택에서 끝나 overshoot 없음). 성공하면 이 요청 전용 idempotent 반납 클로저를 만들어
- * raw upgrade 소켓의 'close'(abort 포함)와 요청 데코레이션(소켓 핸들러가 ws 'close'에 배선)에 연결한다.
+ * raw upgrade 소켓의 'close'(abort 포함)와 요청 데코레이션(소켓 핸들러가 ws 'close'에 연결)에 연결한다.
  *
  * async 훅에서 `return reply.code().send()`는 라이프사이클을 단락시켜 upgrade를 완료하지 않는다(거부).
  * 통과 시 undefined를 반환해 라이프사이클을 계속 진행시킨다.
  *
- * 불변식(정원 누수 방어): `reserve`(정원 점유)부터 `releaseOnce` 배선(raw 소켓 'close' + req.releaseQuota 대입)
+ * 불변식(정원 누수 방어): `reserve`(정원 점유)부터 `releaseOnce` 연결(raw 소켓 'close' + req.releaseQuota 대입)
  * 그리고 그 직후의 `req.raw.socket?.destroyed` 체크까지의 구간은 `await` 없이 완전 동기로 실행되어야 한다.
  * hook 진입 시점(또는 아래 async-gap 참조)에 raw 소켓이 이미 파괴됐으면 Node의 once-only 'close'가 과거에
- * 발화하고 끝나 배선한 리스너가 영영 안 돌므로, 그 already-destroyed 경우를 위한 liveness 체크
- * (`req.raw.socket?.destroyed`)를 release 배선 직후에 두어 놓친 반납을 직접 수행한다(released 플래그가 이중
+ * 발생하고 끝나 연결한 리스너가 영영 안 돌므로, 그 already-destroyed 경우를 위한 liveness 체크
+ * (`req.raw.socket?.destroyed`)를 release 연결 직후에 두어 놓친 반납을 직접 수행한다(released 플래그가 이중
  * 반납을 차단하므로 살아 있는 소켓에는 무해).
  *
  * async-gap 커버리지: `validateSessionCookie`가 이제 async(`Promise` 반환)라 그 await 도중에 소켓이 파괴될 수
  * 있다. 하지만 그 await는 `reserve` **이전**에 있고, reserve~destroyed-체크 구간은 여전히 완전 동기다. 따라서
  * await 도중 파괴된 소켓은 reserve 시점에는 이미 destroyed=true이므로 :destroyed 체크가 그 슬롯을 직접 반납한다
- * (배선한 'close' 리스너가 안 돌아도). 이 async-gap 경로는 회귀 테스트로 고정한다(reserve와 배선 사이에 새 await를
+ * (연결한 'close' 리스너가 안 돌아도). 이 async-gap 경로는 회귀 테스트로 고정한다(reserve와 연결 사이에 새 await를
  * 절대 넣지 않는 것이 이 커버리지의 전제다).
  */
 export function gameAuthPreValidation(
@@ -228,9 +228,9 @@ export function gameAuthPreValidation(
       return reply.code(403).send({ error: 'forbidden_origin' })
     }
 
-    // (2) 세션 쿠키 게이트 — __session 부재·무효 모두 401. validateSessionCookie는 이제 async라 await한다.
+    // (2) 세션 쿠키 게이트 — __session 없음·무효 모두 401. validateSessionCookie는 이제 async라 await한다.
     // 이 await 도중 소켓이 파괴될 수 있으나, reserve~:245 destroyed 체크 구간은 아래에서 여전히 완전 동기라
-    // 그 체크가 await-도중-파괴 경우까지 커버한다(reserve와 배선 사이에 새 await를 넣지 않는다 — 불변식).
+    // 그 체크가 await-도중-파괴 경우까지 커버한다(reserve와 연결 사이에 새 await를 넣지 않는다 — 불변식).
     const cookie = extractSessionCookie(req.headers.cookie)
     const identity = cookie === undefined ? null : await sessionAuth.validateSessionCookie(cookie)
     if (identity === null) {
@@ -248,8 +248,8 @@ export function gameAuthPreValidation(
     }
 
     // reserve 성공 직후 이 요청 전용 반납 클로저를 정확히 하나 만든다. released 플래그가 load-bearing이다:
-    // 같은 연결의 release가 두 번(raw-close + ws-close) 발화해도 실제 quota.release는 한 번만 돌게 해, 다른
-    // 살아 있는 연결의 슬롯을 잘못 반납하는 cap 우회를 막는다(정원 레벨 가드로는 이 per-connection 이중 발화를
+    // 같은 연결의 release가 두 번(raw-close + ws-close) 발생해도 실제 quota.release는 한 번만 돌게 해, 다른
+    // 살아 있는 연결의 슬롯을 잘못 반납하는 cap 우회를 막는다(정원 레벨 가드로는 이 per-connection 이중 발생을
     // 구별할 수 없다). 예약한 바로 그 accountId를 캡처한다.
     let released = false
     const releaseOnce = (): void => {
@@ -257,14 +257,14 @@ export function gameAuthPreValidation(
       released = true
       quota.release(identity.accountId)
     }
-    // (Path 3, abort) raw TCP 소켓의 'close'는 handleUpgrade abort(악성 핸드셰이크)에서도 발화한다 — 소켓
-    // 핸들러에 도달하지 못하는 누수 경로를 이 배선이 커버한다.
+    // (Path 3, abort) raw TCP 소켓의 'close'는 handleUpgrade abort(악성 핸드셰이크)에서도 발생한다 — 소켓
+    // 핸들러에 도달하지 못하는 누수 경로를 이 연결이 커버한다.
     req.raw.socket?.once('close', releaseOnce)
-    // 소켓 핸들러가 ws 'close'에 배선하도록 같은 참조를 요청 데코레이션에 실어 넘긴다.
+    // 소켓 핸들러가 ws 'close'에 연결하도록 같은 참조를 요청 데코레이션에 실어 넘긴다.
     req.releaseQuota = releaseOnce
-    // 이미 파괴된 소켓이면 'close'는 과거에 한 번 발화하고 끝났으므로 위 리스너가 영영 안 돈다 —
+    // 이미 파괴된 소켓이면 'close'는 과거에 한 번 발생하고 끝났으므로 위 리스너가 영영 안 돈다 —
     // 놓친 반납을 여기서 직접 수행한다. releaseOnce의 released 플래그가 이중 반납을 막으므로,
-    // 소켓이 실제로 살아 있으면 리스너가 발화하고 이 직접 호출은 무해하게 중복 차단된다.
+    // 소켓이 실제로 살아 있으면 리스너가 실행되고 이 직접 호출은 무해하게 중복 차단된다.
     if (req.raw.socket?.destroyed) releaseOnce()
     return undefined
   }
@@ -280,7 +280,7 @@ export function gameAuthPreValidation(
  *
  * `lifecyclePort`는 세션 종결 후처리(영속화 seam)를 담는 포트다. 미주입 시 app.log에 로깅만 하는 no-op
  * 어댑터를 기본으로 세운다 — 실 저장 어댑터는 E4/E5에서 이 자리에 주입한다(sessionAuth 관례 미러).
- * 종결 경로 배선(resolveDisconnect 호출)은 후속 Story가 붙이며, 여기서는 포트를 wsLifecyclePort로 노출해
+ * 종결 경로 연결(resolveDisconnect 호출)은 후속 Story가 붙이며, 여기서는 포트를 wsLifecyclePort로 노출해
  * 후속 Story·테스트 관찰의 단일 출처로 둔다(wsConnections 데코레이션 관례 미러).
  *
  * `channelPort`는 자유채팅 발화를 채널 전파 계층으로 핸드오프하는 포트다. 미주입 시 전달 사실만 로깅하는
@@ -293,8 +293,8 @@ export function gameAuthPreValidation(
  * 관례 미러). dispatch가 payload 검증 성공 후·핸들러 전에 이 포트로 권한을 검사한다.
  *
  * `liveWorldDeps`(Story 7)는 라이브 월드 의존 묶음이다 — 주입 시 `createLiveWorldWiring`이 진입 seam·이동
- * seam·세션 수명 어댑터·방 해소자를 파생한다. 파생 결과로 (a) `channelPort`를 실 방 채널 어댑터로,
- * (b) `lifecyclePort`를 라이브 세션 수명 어댑터로, (c) `liveWorld`(진입 바인딩)를, (d) `world:move` 배선을
+ * seam·세션 수명 어댑터·방 리졸버를 파생한다. 파생 결과로 (a) `channelPort`를 실 방 채널 어댑터로,
+ * (b) `lifecyclePort`를 라이브 세션 수명 어댑터로, (c) `liveWorld`(진입 바인딩)를, (d) `world:move` 연결을
  * 세운다. 포트 우선순위는 **explicit-param > bundle-derived > default-noop**이다 — 명시 인자(테스트 스파이 등)가
  * 주어지면 묶음 파생이 덮지 않는다. transport 결합(sendTo)은 `assembleRoomChannelPort`에 격리하고, registry·
  * connections·safeSend를 그 조립 지점에서만 캡처한다(순수 팩토리는 transport 미접촉).
@@ -319,7 +319,7 @@ export function registerWebsocket(
   // 아니라 registerWebsocket 1회 인스턴스다(재연결이 이전 소켓의 바인딩을 찾으려면 하나의 색인이어야 한다).
   const registry = createSessionRegistry()
 
-  // 라이브 월드 의존 묶음이 주입되면 순수 팩토리로 진입·이동·수명 seam과 방 해소자를 파생한다(미주입이면 undefined).
+  // 라이브 월드 의존 묶음이 주입되면 순수 팩토리로 진입·이동·수명 seam과 방 리졸버를 파생한다(미주입이면 undefined).
   const wiring = liveWorldDeps === undefined ? undefined : createLiveWorldWiring(liveWorldDeps)
 
   // 채널 포트 우선순위(explicit > bundle-derived > noop). 묶음 파생 채널은 transport 결합 sendTo가 필요하므로
@@ -342,7 +342,7 @@ export function registerWebsocket(
   // 진입 seam 우선순위(explicit binding > bundle-derived binding). 명시 liveWorld(T4.5 seam)가 있으면 그대로 쓴다.
   const effectiveLiveWorld = liveWorld ?? wiring?.liveWorldBinding
 
-  // 명령 레지스트리는 무상태 핸들러의 배선표라 연결 간 공유 안전하다 — 채널 포트·(묶음 파생) 명령 deps 번들을
+  // 명령 레지스트리는 무상태 핸들러의 연결표라 연결 간 공유 안전하다 — 채널 포트·(묶음 파생) 명령 deps 번들을
   // 클로저 주입해 1회 조립한다. 번들의 move·train·study·attack 필드가 있으면 world:move·progress:train·
   // progress:study·combat:attack이 등록되고, 없으면 미등록(unknown_type)이다.
   const commandRegistry = createCommandRegistry(
@@ -377,7 +377,7 @@ export function registerWebsocket(
     logPortFailure: (err) => app.log.error({ err }, 'session lifecycle port onSessionEnd failed'),
   })
 
-  // 서버 주도 종료 수렴 조율기. registry.listBindings 스냅샷을 resolveDisconnect(reason:'shutdown')로 일괄
+  // 서버 주도 일괄 종료 조율기. registry.listBindings 스냅샷을 resolveDisconnect(reason:'shutdown')로 일괄
   // 종결한다. registerWebsocket 1회에 조립해 app.wsShutdown으로 노출한다 — index.ts 신호 핸들러가 종료 시퀀스
   // (markShuttingDown → converge)에 쓰고, 아래 소켓 close 핸들러가 isShuttingDown()으로 link-dead 진입을 우회한다.
   const converger = createShutdownConverger({
@@ -453,9 +453,9 @@ export function registerWebsocket(
         ctx.account = req.account
         connections.set(socket, ctx)
 
-        // (Path 2, 정상 close) 정원 반납을 ws 'close'에 별도 리스너로 배선한다 — 아래 close 핸들러(정리·grace)와
-        // 독립이다. releaseOnce는 idempotent라 raw-close와 이중 발화해도 한 번만 반납한다. 소켓 핸들러에 도달한
-        // 연결은 항상 reserve에 성공했으므로 releaseQuota는 non-null이지만, 데코레이션 null 기본값과의 정합을 위해
+        // (Path 2, 정상 close) 정원 반납을 ws 'close'에 별도 리스너로 연결한다 — 아래 close 핸들러(정리·grace)와
+        // 독립이다. releaseOnce는 idempotent라 raw-close와 이중 발생해도 한 번만 반납한다. 소켓 핸들러에 도달한
+        // 연결은 항상 reserve에 성공했으므로 releaseQuota는 non-null이지만, 데코레이션 null 기본값과의 일치를 위해
         // 방어적으로 가드한다.
         if (req.releaseQuota) socket.on('close', req.releaseQuota)
 
@@ -470,8 +470,8 @@ export function registerWebsocket(
           // 일치시킨다 — 즉시 재연결은 고갈 유지, refill-horizon 경과 후면 회복(churn 우회 차단, issue #77).
           ctx.rateLimiter = rateLimiterFactory.createConnection(accountId, performance.now())
 
-          // 계정 버킷 반납을 once-guard 클로저로 ws 'close'에 배선한다(releaseQuota 관례 미러). ws 'close'는 이
-          // 코드베이스에서 2회 이상 발화할 수 있어(그래서 releaseQuota도 releaseOnce다), 가드가 없으면
+          // 계정 버킷 반납을 once-guard 클로저로 ws 'close'에 연결한다(releaseQuota 관례 미러). ws 'close'는 이
+          // 코드베이스에서 2회 이상 발생할 수 있어(그래서 releaseQuota도 releaseOnce다), 가드가 없으면
           // releaseAccount가 이중 감소해 refCount를 조기에 0으로 만들어 살아 있는 형제 연결의 계정 엔트리를
           // 지운다(계정 차원 상한 우회). rateReleased 플래그가 load-bearing이라, 캡처한 accountId로 정확히 1회만 반납한다.
           let rateReleased = false
@@ -483,7 +483,7 @@ export function registerWebsocket(
         }
 
         // 서버 주도 하트비트를 시작해 죽은 연결을 감지·정리한다. env로 튜닝된 간격·임계를 매니저에 넘기고,
-        // 반환된 타이머 핸들을 ctx.heartbeat에 배선해 cleanup 경로가 이를 clear할 수 있게 한다.
+        // 반환된 타이머 핸들을 ctx.heartbeat에 연결해 cleanup 경로가 이를 clear할 수 있게 한다.
         const config = getConfig()
         const heartbeat = createHeartbeat(socket, {
           pingIntervalMs: config.WS_HEARTBEAT_PING_INTERVAL_MS,
@@ -495,7 +495,7 @@ export function registerWebsocket(
         // socket-open 즉시 설정한다 — pre-handshake 창(open → system:ready)도 진행 데드라인으로 묶어,
         // 인증 게이트를 통과했으나 핸드셰이크를 완료하지 않는(system:ready 미송신) 연결이 영구 잔존하는 것을
         // 막는다. accept 시 enterInitialState → enterState(characterSelect) → rearmDeadline이 같은 타이머를
-        // 새로 설정하므로 중복 arm은 무해하다(rearm은 기존 타이머를 clear 후 재설정). ctx.deadline에 배선해
+        // 새로 설정하므로 중복 arm은 무해하다(rearm은 기존 타이머를 clear 후 재설정). ctx.deadline에 연결해
         // cleanup이 clear한다.
         const deadline = createDeadline(socket, { deadlineMs: config.WS_SESSION_DEADLINE_MS })
         ctx.deadline = deadline
@@ -508,7 +508,7 @@ export function registerWebsocket(
 
         // 연결 직후 서버 버전을 알리는 system:hello를 push한다. 버전은 per-connection 권위인
         // ctx.protocolVersion을 단일 출처로 쓴다(핸드셰이크 대조와 같은 값). 동기 push는 injectWS
-        // 클라이언트가 message 리스너를 붙이기 전에 발화해 프레임이 드롭되는 레이스를 만든다 — setImmediate로
+        // 클라이언트가 message 리스너를 붙이기 전에 발생해 프레임이 드롭되는 레이스를 만든다 — setImmediate로
         // 지연시켜 클라이언트의 promise 기반 리스너 부착(process.nextTick보다 늦음) 뒤에 나가게 한다.
         setImmediate(() => {
           safeSend(socket, { type: 'system:hello', protocolVersion: ctx.protocolVersion })
@@ -538,7 +538,7 @@ export function registerWebsocket(
             switch (result.action) {
               case 'accept':
                 // 핸드셰이크 완료 → characterSelect로 진입시킨다. enterInitialState가 characterList + prompt를
-                // 발화한다(setImmediate 금지 — 대화 중 클라이언트는 이미 리스너를 붙였다). enterInitialState는
+                // 발생시킨다(setImmediate 금지 — 대화 중 클라이언트는 이미 리스너를 붙였다). enterInitialState는
                 // 이제 async라 await한다 — 큐가 이 프레임 완결까지 다음 프레임을 막으므로 emit 순서가 보존된다.
                 // ctx.state 변이는 FSM(enterState) 단일 지점에서만 일어난다(Lock D).
                 ctx.ready = true
@@ -565,14 +565,14 @@ export function registerWebsocket(
                 if (ctx.state === ConnectionState.command) {
                   // command/dispatch 분기는 동기로 유지한다 — permissionPort가 동기라 await가 불필요하며 FSM
                   // 경계 밖이다(SessionAuthPort async 마이그레이션은 이 분기를 건드리지 않는다). buildActorContext의
-                  // 배선 불변식 throw(account/boundCharacterId null)는 위 방어 try/catch가 error{internal}로 격리한다.
+                  // 연결 불변식 throw(account/boundCharacterId null)는 위 방어 try/catch가 error{internal}로 격리한다.
                   const actor = buildActorContext(ctx)
 
                   // 바인딩 신원 가드 — `ctx.state === command` 확인만으로는 부족하다. 서버 주도 종료(같은 캐릭터
-                  // 재로그인 evict·grace 만료·shutdown 수렴)의 teardown은 transport만 정리하고(cleanupConnection +
+                  // 재로그인 evict·grace 만료·shutdown 일괄 종료)의 teardown은 transport만 정리하고(cleanupConnection +
                   // sock.close) 옛 ctx의 `state`·`boundCharacterId`는 되돌리지 않으며, `ctx.closed`도 소켓 'close'
                   // 이벤트(별개 리스너, 다음 tick)에서야 true가 된다. 그 창에서 이미 버퍼된 프레임의 'message'가
-                  // 발화하면 밀려난 옛 소켓이 command 상태·바인딩 키를 그대로 쥔 채 dispatch에 도달하고,
+                  // 발생하면 밀려난 옛 소켓이 command 상태·바인딩 키를 그대로 쥔 채 dispatch에 도달하고,
                   // 라이브 레지스트리는 characterId 키라 그 명령이 **새 세션의** 엔트리를 변이한다(이동·gold 소비).
                   // 따라서 이 ctx가 여전히 그 캐릭터의 현재 live 바인딩일 때만 명령을 실행한다.
                   const binding = registry.get(actor.characterId)
@@ -607,7 +607,7 @@ export function registerWebsocket(
             }
           } catch (error) {
             // 방어선: handshake/dispatch/FSM 경로의 예상치 못한 throw·reject를 격리한다. 원인은 클라이언트에
-            // 노출하지 않되(정적 internal 메시지), 서버에는 로깅해 운영 신호를 남긴다 — buildSession의 배선
+            // 노출하지 않되(정적 internal 메시지), 서버에는 로깅해 운영 신호를 남긴다 — buildSession의 연결
             // 불변식 위반(account null 등)이 여기로 올라오므로 로그 없이는 무증상 실패가 된다.
             app.log.error({ err: error }, 'ws message handler failed')
             safeSend(socket, {
@@ -675,7 +675,7 @@ export function registerWebsocket(
         })
 
         socket.on('close', () => {
-          // close-race 가드: FSM이 포트 await로 멈춘 사이 이 close가 발화할 수 있다. 플래그를 먼저 세워, await
+          // close-race 가드: FSM이 포트 await로 멈춘 사이 이 close가 발생할 수 있다. 플래그를 먼저 세워, await
           // 재개 후 FSM(SessionContext.isClosed)이 죽은 연결에 대한 월드 등록·command 상태 대입을 건너뛰게 한다.
           ctx.closed = true
           // 매니저 stop()으로 ping 타이머를 정지하고 진행 데드라인을 clear한다.

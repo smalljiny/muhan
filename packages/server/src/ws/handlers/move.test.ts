@@ -83,7 +83,7 @@ function makeTryMoveDeps(rooms: RoomNode[]) {
   return { deps, graph }
 }
 
-// 이름을 해소하지 못하는 기본 해소자 — 점유자를 다루지 않는 케이스의 잡음을 없앤다.
+// 이름을 해석하지 못하는 기본 리졸버 — 점유자를 다루지 않는 케이스의 잡음을 없앤다.
 const noNames = (): undefined => undefined
 
 // 방 200 도착 시 world:room 완성 기대값 — 출발 100→도착 200(출구 '서'), 점유자·아이템·크리처 없음.
@@ -136,8 +136,8 @@ describe('createMoveHandler', () => {
       expect(dest.occupants.has('me')).toBe(true)
       // live 방 위치가 도착 방으로 갱신됐다(D-A1).
       expect(live.character.currentRoom).toBe(200)
-      // world:room 상태 이벤트 — correlationId 없음. 점유자는 이름 미해소(noNames)라 비어 있다
-      // (해소 케이스는 아래 별도 it이 소유한다).
+      // world:room 상태 이벤트 — correlationId 없음. 점유자는 이름 미해석(noNames)이라 비어 있다
+      // (해석 케이스는 아래 별도 it이 담당한다).
       expect(event).toEqual(ROOM_200_ARRIVAL_EVENT)
     })
 
@@ -181,7 +181,7 @@ describe('createMoveHandler', () => {
       })
     })
 
-    it('도착 방 점유자 이름을 resolveCharacterName으로 해소하고 본인도 그대로 싣는다', () => {
+    it('도착 방 점유자 이름을 resolveCharacterName으로 해석하고 본인도 그대로 싣는다', () => {
       // 도착 방에 먼저 다른 사람(char-2)이 있고, 이동한 본인('me')도 tryMove가 추가한다.
       const dest = makeRoom(200, [makeExitTo('서', 100)], ['char-2'])
       const source = makeRoom(100, [makeExitTo('동', 200)], ['me'])

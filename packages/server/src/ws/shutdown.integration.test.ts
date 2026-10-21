@@ -15,15 +15,15 @@ import {
 } from './wsTestClient.testutil.js'
 import { SEED_ACCOUNT_ID, SEED_CHARACTER_ID } from '../auth/seedSessionAuth.testutil.js'
 
-// Story 6 — shutdown 수렴 integration. 실 소켓 리슨 + WorldClock(실 1Hz interval)을 함께 세우고,
+// Story 6 — shutdown 일괄 종료 integration. 실 소켓 리슨 + WorldClock(실 1Hz interval)을 함께 세우고,
 // markShuttingDown → worldClock.stop → converge → app.close 종료 시퀀스가 (a) 등록 바인딩(link-dead 포함)을
 // reason 'shutdown'으로 종결하고 (b) SessionRegistry를 비우며 (c) 월드 틱·grace referenced 타이머를 0으로
 // 되돌리는지(테스트가 실타이머 30s grace 대기 없이 완료) 관측한다. injectWS 단위(plugin.test.ts T6.3)와
 // 구별되는 실 TCP + 실 setInterval 흐름이다.
 //
 // seed 캐릭터가 1개(SEED_CHARACTER_ID)뿐이라 live+link-dead 동시 구성은 불가하다. 문서화된 최소 시나리오대로
-// link-dead 바인딩 1건 + armed WorldClock으로 수렴·타이머 0을 검증한다(live 종결은 plugin.test.ts T6.3이 담당).
-describe('WS shutdown 수렴 integration (실 소켓 + WorldClock)', () => {
+// link-dead 바인딩 1건 + armed WorldClock으로 정리·타이머 0을 검증한다(live 종결은 plugin.test.ts T6.3이 담당).
+describe('WS shutdown 일괄 종료 integration (실 소켓 + WorldClock)', () => {
   let savedEnv: NodeJS.ProcessEnv
   // suite-level 추적 — 각 테스트가 만든 실 서버·클라이언트를 등록해 afterEach가 실패 경로에서도 정리한다
   // (리스닝 소켓 + 하트비트 인터벌 누수 방지). plugin.e2e.test.ts의 정리 규약을 미러한다.
@@ -51,7 +51,7 @@ describe('WS shutdown 수렴 integration (실 소켓 + WorldClock)', () => {
     resetConfigForTests()
   })
 
-  it('link-dead 바인딩 + armed WorldClock을 종료 시퀀스가 수렴하고 타이머를 0으로 되돌린다', async () => {
+  it('link-dead 바인딩 + armed WorldClock을 종료 시퀀스가 정리하고 타이머를 0으로 되돌린다', async () => {
     const port = spyPort()
     const app = buildSeededApp({ lifecyclePort: port })
     apps.push(app)
@@ -74,7 +74,7 @@ describe('WS shutdown 수렴 integration (실 소켓 + WorldClock)', () => {
       worldClock.start()
       expect(worldClock.running).toBe(true)
 
-      // 종료 시퀀스(index.ts 미러): 플래그 set → 월드 틱 정지 → 1차 수렴 → 서버 종료 → 2차 수렴(늦은 등록 방어).
+      // 종료 시퀀스(index.ts 미러): 플래그 set → 월드 틱 정지 → 1차 정리 → 서버 종료 → 2차 정리(늦은 등록 방어).
       app.wsShutdown.markShuttingDown()
       worldClock.stop()
       app.wsShutdown.converge()

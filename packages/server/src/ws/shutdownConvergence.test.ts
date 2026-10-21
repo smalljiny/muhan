@@ -11,8 +11,8 @@ import type { SessionLifecyclePort } from './sessionLifecyclePort.js'
 import { createConnectionContext } from './connection.js'
 
 // shutdownConvergence는 순수 단위다 — 주입된 registry.listBindings + resolveDisconnect만으로 관측한다.
-// 배선(호출 순서·index.ts 소유)은 여기서 테스트하지 않고, converge가 스냅샷 전체를 각각
-// resolveDisconnect(binding, 'shutdown')로 수렴하는 계약만 검증한다.
+// 연결(호출 순서·index.ts 담당)은 여기서 테스트하지 않고, converge가 스냅샷 전체를 각각
+// resolveDisconnect(binding, 'shutdown')로 정리하는 계약만 검증한다.
 
 /** 가짜 grace 타이머 핸들 — 실 setTimeout을 남기지 않으려고 마킹만 한다. */
 function fakeHandle(n: number): NodeJS.Timeout {
@@ -90,7 +90,7 @@ describe('createShutdownConverger', () => {
     expect(reasons).toEqual(['shutdown', 'shutdown', 'shutdown', 'shutdown'])
   })
 
-  it('통합: 실제 registry·resolveDisconnect 배선에서 converge 후 레지스트리가 비고 각 바인딩이 정확히 1회 포트 종결된다', () => {
+  it('통합: 실제 registry·resolveDisconnect 연결에서 converge 후 레지스트리가 비고 각 바인딩이 정확히 1회 포트 종결된다', () => {
     const registry = createSessionRegistry()
     const port = makePort()
     const teardown = vi.fn()
@@ -126,7 +126,7 @@ describe('createShutdownConverger', () => {
     expect(teardown).toHaveBeenCalledTimes(4)
   })
 
-  it('한 바인딩 종결이 throw해도 격리·로깅하고 나머지 바인딩을 계속 수렴한다', () => {
+  it('한 바인딩 종결이 throw해도 격리·로깅하고 나머지 바인딩을 계속 정리한다', () => {
     const b1 = makeBinding('c1', 'live')
     const boom = makeBinding('c2', 'link-dead')
     const b3 = makeBinding('c3', 'live')
@@ -154,7 +154,7 @@ describe('createShutdownConverger', () => {
     expect(logConvergeFailure).toHaveBeenCalledWith(boom, expect.any(Error))
   })
 
-  it('logConvergeFailure 미주입 시에도 throw를 조용히 격리하고 나머지를 계속 수렴한다', () => {
+  it('logConvergeFailure 미주입 시에도 throw를 조용히 격리하고 나머지를 계속 정리한다', () => {
     const boom = makeBinding('c1', 'live')
     const ok = makeBinding('c2', 'live')
     const resolveDisconnect = vi.fn<TerminateCallback>((binding) => {
@@ -182,16 +182,16 @@ describe('createShutdownConverger', () => {
     registry.register('c1', 'acc-1', createConnectionContext(), resolveDisconnect)
     const converger = createShutdownConverger({ registry, resolveDisconnect })
 
-    // 1차 수렴: c1 종결, 레지스트리 빔.
+    // 1차 정리: c1 종결, 레지스트리 빔.
     converger.converge()
     expect(registry.listBindings()).toEqual([])
     expect(port.onSessionEnd).toHaveBeenCalledTimes(1)
 
-    // 1차 수렴 이후 late 바인딩 등록(app.close 대기 중 enterWorld 레이스 시뮬레이션).
+    // 1차 정리 이후 late 바인딩 등록(app.close 대기 중 enterWorld 레이스 시뮬레이션).
     registry.register('c2', 'acc-2', createConnectionContext(), resolveDisconnect)
     expect(registry.listBindings()).toHaveLength(1)
 
-    // 2차 수렴: late 바인딩 c2 종결. converge가 idempotent·재호출 안전임을 증명한다(index.ts 2차 수렴 근거).
+    // 2차 정리: late 바인딩 c2 종결. converge가 idempotent·재호출 안전임을 증명한다(index.ts 2차 정리 근거).
     converger.converge()
     expect(registry.listBindings()).toEqual([])
     expect(port.onSessionEnd).toHaveBeenCalledTimes(2)

@@ -45,7 +45,7 @@ import { createInstanceIdAllocator } from '../world/spawn.js'
  * 하네스 골격(실 `SaveEngine` + `FakeClock` + 페이크 repo + `LiveWorldWiringBundle` 리터럴)은 형제
  * 스위트 `studyLiveWorld.e2e.test.ts`를 그대로 미러하되, transport(실 TCP 소켓)는 싣지 않는다. 이
  * 스위트가 고정하려는 것은 **세이브 계층과 진입 코어 사이의 인터리빙**이라, 검증에 필요한 제어점이
- * 소켓 왕복이 아니라 (a) `lifecyclePort.onSessionEnd({reason:'graceExpired'})` 직접 구동, (b) 큐
+ * 소켓 왕복이 아니라 (a) `lifecyclePort.onSessionEnd({reason:'graceExpired'})` 직접 실행, (b) 큐
  * backpressure·`findById` 지연의 게이트 고정, (c) `FakeClock` tick 시점이다. 소켓을 끼우면 그 세 축이
  * 전부 비결정 대기 뒤로 숨어 §8.4·§8.5를 "결정적으로" 구성할 수 없다.
  *
@@ -74,7 +74,7 @@ export const CHAR = 'revert-char'
 export const FILLER_A = 'revert-filler-a'
 export const FILLER_B = 'revert-filler-b'
 
-/** 출발 방 — 시드 캐릭터 클래스의 훈련방이다(§8.2 train이 여기서 발화한다). */
+/** 출발 방 — 시드 캐릭터 클래스의 훈련방이다(§8.2 train이 여기서 실행된다). */
 export const ROOM_TRAIN = 1
 /** 도착 방 — all-zero flags라 이동 게이트 건틀릿을 통과한다. */
 export const ROOM_DEST = 2
@@ -86,14 +86,14 @@ export const CHAR_CLASS = 5
 /** 캐릭터 레벨 — 시드 비법서 `ndice`(20)와 같게 잡아 study 레벨 게이트 경계(등호)를 통과시킨다. */
 export const CHAR_LEVEL = 20
 
-/** 시드 비법서 objnum — 정본 `objects.json`의 `혼동비서`(선정 근거는 형제 스위트 헤더 참조). */
+/** 시드 비법서 objnum — 기준 `objects.json`의 `혼동비서`(선정 근거는 형제 스위트 헤더 참조). */
 export const BOOK_OBJNUM = 142
 /** 시드 비법서가 담은 주문번호(`magicpower - 1`) — 카탈로그 12번. */
 export const BOOK_SPELL_NO = 12
 /** 시드 비법서 인스턴스 `_id` — objectDeletions 마킹·삭제 단언의 기준값이다. */
 export const BOOK_INSTANCE_ID = 'revert-book-1'
 
-/** 정본 템플릿 인덱스 — 파일당 1회 로드한다(읽기 전용, 206KB JSON). */
+/** 기준 템플릿 인덱스 — 파일당 1회 로드한다(읽기 전용, 206KB JSON). */
 export const OBJECT_TEMPLATES = loadObjectTemplates()
 export const BOOK_TEMPLATE: ObjectTemplate | undefined = OBJECT_TEMPLATES.get(BOOK_OBJNUM)
 
@@ -137,7 +137,7 @@ export const SNAPSHOT_KEYS = [
 
 /**
  * 최소 유효 Character 문서. `characterSchema.parse`를 통과시켜 만든다 — 리터럴을 그대로 쓰면 스키마가
- * 거부할 시드로도 시나리오가 통과해(페이크 repo는 로드 시 검증하지 않는다) 배선 검출력이 떨어진다.
+ * 거부할 시드로도 시나리오가 통과해(페이크 repo는 로드 시 검증하지 않는다) 연결 검출력이 떨어진다.
  *
  * exp·gold는 정확히 1레벨분만 싣는다(`neededExp`/`goldToTrain` 재유도 금지 — 임계의 단일 출처는
  * 그 두 함수다). 배치 do-while이 두 번째 반복에서 gold 부족으로 종료하므로 `levelsGained`가 결정적으로 1이다.
@@ -301,7 +301,7 @@ export interface Harness {
   readonly wiring: LiveWorldWiring
   readonly logger: { warn: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> }
   readonly saveLogger: { error: ReturnType<typeof vi.fn> }
-  /** hydrate 내부 두 조회의 실제 발화 순서(`peekPending` → `findById` 선형화 지점 확인용). */
+  /** hydrate 내부 두 조회의 실제 실행 순서(`peekPending` → `findById` 선형화 지점 확인용). */
   readonly callOrder: string[]
   readonly peekLog: PeekObservation[]
   readonly study: (command: ClientCommand) => ServerEvent | undefined
@@ -310,7 +310,7 @@ export interface Harness {
 }
 
 /**
- * 실 `SaveEngine`에 결선한 라이브 월드 묶음을 조립한다.
+ * 실 `SaveEngine`에 연결한 라이브 월드 묶음을 조립한다.
  *
  * `createLiveWorldWiring`을 그대로 통과시키므로 `markCharacterDirty`(실 `snapshotCharacter`)·
  * `peekPendingCharacter`(`'characters'` 1회 좁힘)·`entry`·`lifecyclePort`가 전부 프로덕션과 같은
@@ -424,7 +424,7 @@ export const barrier = (): Promise<void> => new Promise((resolve) => setTimeout(
 
 /**
  * 조건이 성립할 때까지 배리어를 돈다. 고정 대기(sleep N ms)를 쓰지 않으므로 느린 CI에서 조용히
- * 통과하거나 실패하지 않고, 상한을 넘으면 **크게 던진다**(무성 통과 금지).
+ * 통과하거나 실패하지 않고, 상한을 넘으면 **크게 던진다**(조용한 통과 금지).
  */
 export async function waitUntil(
   predicate: () => boolean,

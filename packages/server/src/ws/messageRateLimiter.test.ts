@@ -210,9 +210,9 @@ describe('createMessageRateLimiterFactory', () => {
     expect(factory.activeAccountCount()).toBe(1)
   })
 
-  it('[OQ1 refcount] 부재·중복 releaseAccount는 no-op이다 (음수·누수 없음)', () => {
+  it('[OQ1 refcount] 없는 계정·중복 releaseAccount는 no-op이다 (음수·누수 없음)', () => {
     const factory = makeFactory()
-    factory.releaseAccount('ghost') // 부재 계정 → 엔트리 생성 없이 no-op
+    factory.releaseAccount('ghost') // 없는 계정 → 엔트리 생성 없이 no-op
     expect(factory.activeAccountCount()).toBe(0)
 
     factory.createConnection('acct1', 0)

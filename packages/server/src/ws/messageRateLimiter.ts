@@ -4,7 +4,7 @@
  * 연결 하나마다 용량(capacity)과 초당 리필(refillPerSec)을 가진 버킷을 두고, 프레임이 도착할 때마다
  * `check(now)`로 토큰 1개를 소비 시도한다. clock을 인자로 받아 부수효과 없이(setTimeout·전송·close 없음)
  * verdict만 반환하는 순수 코어다 — 실제 전송·경고·종료 같은 부수효과는 상위 플러그인이 이 verdict를 읽고
- * 수행한다. 위반 카운터와 경고 엣지(warn-edge)를 코어가 소유해, 플러그인이 엣지를 재계산하지 않고 verdict만
+ * 수행한다. 위반 카운터와 경고 엣지(warn-edge)를 코어가 담당해, 플러그인이 엣지를 재계산하지 않고 verdict만
  * 소비하게 한다. 상한은 thunk로 지연 조회해(createConnectionQuota 관례 미러) 미설정 env가 팩토리 생성을
  * 막지 않게 하고, 첫 check 시점의 최신값을 시드로 반영한다.
  *
@@ -92,7 +92,7 @@ export interface ConnectionRateLimiter {
 
 /**
  * 유량 제한기 factory. 계정 버킷 레지스트리를 직접 소유하고 연결 핸들을 발급·정리한다.
- * plugin(배선 Story)이 소켓 open 시 `createConnection(accountId)`로 핸들을 얻고, 프레임마다
+ * plugin(연결 Story)이 소켓 open 시 `createConnection(accountId)`로 핸들을 얻고, 프레임마다
  * `handle.check(now)`/`handle.shouldTerminate()`를 호출하며, close 시 `releaseAccount(accountId)`로
  * 계정 참조를 반납한다.
  */
@@ -100,7 +100,7 @@ export interface MessageRateLimiterFactory {
   /**
    * 연결 핸들을 발급한다. `now`는 계정 버킷 리필용 단조 clock으로, `check`가 쓰는 것과 동일한
    * `performance.now()`를 넘긴다. 대상 계정 엔트리가 생존해 있으면 refCount를 올리고 기존 공유 버킷을
-   * `now`로 리필-후-재사용한다(즉시 재연결은 경과 0이라 고갈 유지, refill-horizon 경과 후면 회복). 부재
+   * `now`로 리필-후-재사용한다(즉시 재연결은 경과 0이라 고갈 유지, refill-horizon 경과 후면 회복). 없는
    * 계정이면 fresh 버킷을 refCount=1로 등록한다 — 이 경로에서는 상한을 조회하지 않는다(thunk 관례).
    * 연결 전용 버킷은 항상 fresh다.
    */
@@ -134,12 +134,12 @@ interface AccountEntry {
  * connectionQuota 카운터에 얹지 않는 별도 레지스트리다).
  *
  * `createConnection`은 계정 엔트리가 생존해 있으면 refCount를 올리고 기존 공유 버킷을 `now`로 리필-후-
- * 재사용한다(churn 재연결이 fresh full 버스트를 얻지 못하게). 부재 계정이면 버킷을 새로 만들어 refCount=1로
+ * 재사용한다(churn 재연결이 fresh full 버스트를 얻지 못하게). 없는 계정이면 버킷을 새로 만들어 refCount=1로
  * 등록한다. `releaseAccount`는 refCount를 내리되 0에 도달해도 엔트리를 삭제하지 않고 생존시킨다(keep-until-
- * refilled). 부재 계정 release나 zero-refcount 엔트리 이중 반납은 `refCount <= 0` 가드로 완전 no-op이다
+ * refilled). 없는 계정의 release나 zero-refcount 엔트리 이중 반납은 `refCount <= 0` 가드로 완전 no-op이다
  * (음수·누수 없음).
  *
- * 상한 조회(thunk)는 두 갈래다 — 부재 계정 생성은 상한을 조회하지 않아(각 버킷은 첫 `check`에서 자체
+ * 상한 조회(thunk)는 두 갈래다 — 없는 계정 생성은 상한을 조회하지 않아(각 버킷은 첫 `check`에서 자체
  * `lastRefill === null` 센티넬로 lazy 시드) fresh 팩토리에서 던지는 thunk로도 연결이 만들어진다. 생존
  * 엔트리 재사용만 리필을 위해 상한을 조회한다(그때는 이미 버킷이 존재하므로 조회가 안전하다).
  */
@@ -152,7 +152,7 @@ export function createMessageRateLimiterFactory(
     // Story 3 — zero-refcount 엔트리의 lazy sweep + 하드 캡 backstop으로 레지스트리를 스케줄러/타이머
     // 없이 bounded로 유지한다. 전체 블록을 accounts.size > 0 게이트 뒤에 둔다: 빈 맵(fresh factory의 첫
     // 연결)은 진입하지 않아 getLimits()를 조회하지 않는다. 이 무조회 보장은 "빈 맵의 첫 연결"에만
-    // 한정된다 — 맵이 비어있지 않으면 부재 계정 생성도 sweep 게이트를 통과해 getLimits()를 조회한다
+    // 한정된다 — 맵이 비어있지 않으면 없는 계정 생성도 sweep 게이트를 통과해 getLimits()를 조회한다
     // (lazy sweep가 상한 없이는 돌 수 없으므로 불가피하다). throwing-thunk 관례가 지키는 것은 fresh
     // factory의 첫 연결이 던지지 않는다는 것뿐이며, 이는 게이트로 충족된다. 런타임에는 env가 시작 시
     // Zod fail-fast로 파싱돼 getLimits()가 던지지 않으므로(테스트 전용 방어 계약), 조회 자체는 무해하다.
@@ -171,7 +171,7 @@ export function createMessageRateLimiterFactory(
       const isProtected = (id: string, candidateEntry: AccountEntry): boolean =>
         id === accountId || candidateEntry.refCount > 0
       // T3.1 lazy sweep — zero-refcount(대상·live 제외) 엔트리를 now로 리필하고, 완전 회복
-      // (tokens >= accountCapacity)이면 삭제한다(완전 회복 = 부재와 동치이므로 재연결해도 fresh full과
+      // (tokens >= accountCapacity)이면 삭제한다(완전 회복 = 엔트리가 없는 것과 동치이므로 재연결해도 fresh full과
       // 무차별). 매 createConnection마다 레지스트리를 한 번 순회하는 O(n) 비용이다(정렬은 아래 캡 초과
       // 드문 경로에서만). Map 순회 중 삭제는 아직 방문 안 한 키만 건너뛰므로 안전하다.
       for (const [id, candidateEntry] of accounts) {
@@ -188,7 +188,7 @@ export function createMessageRateLimiterFactory(
       // 축이라 마지막에 축출되므로, 대상 제외와 무관하게도 고갈 재연결 버킷이 자연 보호된다. 정렬은 캡
       // 초과라는 드문 경로에서만 실행된다.
       //
-      // 축출 임계는 이 호출이 엔트리를 추가하는지(willAdd)에 따라 갈린다. 신규(부재) 계정은 아래에서
+      // 축출 임계는 이 호출이 엔트리를 추가하는지(willAdd)에 따라 갈린다. 신규(엔트리 없음) 계정은 아래에서
       // 엔트리 1개가 추가되므로 캡 미만(size < cap)까지 축출해 최종 size <= cap을 보장한다. 반면 기존
       // 계정 재연결은 reuse 경로라 엔트리를 추가하지 않으므로 size <= cap이면 이미 규정 준수다 — 이때
       // size == cap에서 축출하면 무관한 고갈 계정을 불필요하게 제거해 그 계정의 churn 우회(fresh full
@@ -219,18 +219,18 @@ export function createMessageRateLimiterFactory(
     if (entry !== undefined) {
       // 생존 계정(refCount>0 또는 zero-refcount 생존) — 기존 공유 버킷을 now로 리필-후-재사용한다.
       // 즉시 재연결은 경과 0이라 고갈 유지, refill-horizon 경과 후면 회복. 상한 조회는 이 경로에서만
-      // 발생한다(부재 계정은 조회 없이 fresh 시드). refCount 증가는 refill 성공 뒤로 두어, 상한 조회가
+      // 발생한다(없는 계정은 조회 없이 fresh 시드). refCount 증가는 refill 성공 뒤로 두어, 상한 조회가
       // 예외를 던져도 증가가 누수(감소 없이 잔존)하지 않게 한다.
       const limits = getLimits()
       entry.bucket.refill(now, limits.accountCapacity, limits.accountRefillPerSec)
       entry.refCount += 1
     } else {
-      // 새(부재) 계정 — 공유 버킷을 만들어 첫 연결로 등록한다. 상한은 조회하지 않는다(thunk 관례).
+      // 새(엔트리 없음) 계정 — 공유 버킷을 만들어 첫 연결로 등록한다. 상한은 조회하지 않는다(thunk 관례).
       entry = { bucket: createTokenBucket(), refCount: 1 }
       accounts.set(accountId, entry)
     }
     // 이 연결이 공유하는 계정 버킷. keep-until-refilled라 releaseAccount 후에도 엔트리·버킷이 생존하고,
-    // 재연결은 같은 버킷을 리필-후-재사용하므로 이 참조는 계정 버킷의 단일 정본으로 유지된다.
+    // 재연결은 같은 버킷을 리필-후-재사용하므로 이 참조는 계정 버킷의 단일 기준으로 유지된다.
     const accountBucket = entry.bucket
     // 연결 전용 버킷·위반 카운터. 계정 차원과 달리 연결 단위로 이 핸들이 소유한다.
     const connectionBucket = createTokenBucket()
@@ -269,7 +269,7 @@ export function createMessageRateLimiterFactory(
   }
 
   function releaseAccount(accountId: string): void {
-    // 생존하고 refCount가 아직 양수인 엔트리에서만 감소한다. 부재 계정·이미 0인 zero-refcount 엔트리
+    // 생존하고 refCount가 아직 양수인 엔트리에서만 감소한다. 없는 계정·이미 0인 zero-refcount 엔트리
     // 이중 반납은 이 단일 가드로 완전 no-op이다(refCount를 음수로 만들지 않아 sibling-refcount 회계를
     // 지킨다 — Story 3 sweep의 전제).
     const entry = accounts.get(accountId)

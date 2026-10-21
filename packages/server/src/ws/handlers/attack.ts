@@ -32,12 +32,12 @@ import { makeErrorEvent } from '../serverEvent.js'
  * 확장해 받는다 — 사본을 두면 `ResolveContext`의 seam에 인자가 붙어도 타입 에러 없이 통과해(인자 적은
  * 함수는 인자 많은 함수 타입에 할당 가능) 새 인자를 조용히 무시하는 사본이 남는다.
  *
- * `liveRegistry`는 라이브 캐릭터 단일 출처로, 소비하는 두 메서드만 요구한다(최소 표면). `combatRegistry`는
- * 라이브 전투상태(hp·mp·쿨다운)의 단일 출처다. `resolveRoom`은 actor가 있는 방 노드 해소 seam이고,
- * `resolveRoomCreature`·`resolveRoomPlayer`는 방 스코프 대상 지목자다(질의 전처리·서수 규칙은 그들이 소유).
- * `resolveCharacterName`은 방 뷰 투영과 플레이어 해소가 **같은 인스턴스**를 공유해야 한다
+ * `liveRegistry`는 라이브 캐릭터 단일 출처로, 소비하는 두 메서드만 요구한다(최소 인터페이스). `combatRegistry`는
+ * 라이브 전투상태(hp·mp·쿨다운)의 단일 출처다. `resolveRoom`은 actor가 있는 방 노드 해석 seam이고,
+ * `resolveRoomCreature`·`resolveRoomPlayer`는 방 스코프 대상 지목자다(질의 전처리·서수 규칙은 그들이 담당).
+ * `resolveCharacterName`은 방 뷰 변환과 플레이어 해석이 **같은 인스턴스**를 공유해야 한다
  * (liveWorldWiring 불변식 #3). `now`는 현재 절대 틱 seam으로 `worldClock.currentTick()` 도메인이며,
- * 쿨다운 상수 단위(초)와 1Hz 틱이 일치한다. `rng`는 굴림 seam으로 프로덕션 배선이 `defaultCombatRng`를
+ * 쿨다운 상수 단위(초)와 1Hz 틱이 일치한다. `rng`는 굴림 seam으로 프로덕션 연결이 `defaultCombatRng`를
  * 꽂는다(전투 모듈은 순수 함수로 남는다). `ledgers`는 크리처별 데미지 원장 라우터로, 사망 seam에 준 것과
  * **같은 인스턴스**여야 보상이 0이 되지 않는다. `markCharacterDirty`는 write-behind 영속화 seam이다.
  */
@@ -57,7 +57,7 @@ export interface AttackHandlerDeps extends DeathSeams {
 
 /**
  * 거부 사유의 사람용 한국어 message — 이 핸들러가 직접 짓는 거부 2종이다(무적·PvP 게이트 문구는
- * `combat/pvp.ts`가 소유하고 `initiateAttack`이 `reason`으로 돌려주므로 여기서 다시 짓지 않는다).
+ * `combat/pvp.ts`가 담당하고 `initiateAttack`이 `reason`으로 돌려주므로 여기서 다시 짓지 않는다).
  *
  * `Record`가 누락을 컴파일에서 막는다(train·study 핸들러 선례).
  */
@@ -79,7 +79,7 @@ const REJECT_MESSAGES: Record<'cooldown' | 'player-target' | 'not-found', string
 type WireAttack = Extract<ServerEvent, { type: 'combat:attacked' }>['attacks'][number]
 
 /**
- * `AttackDescriptor`(7필드) → 와이어 원소(6필드). `specialAttack`은 와이어 계약에 없다(D11 — #99 소관).
+ * `AttackDescriptor`(7필드) → 와이어 원소(6필드). `specialAttack`은 와이어 계약에 없다(D11 — #99 담당).
  *
  * 반환 타입을 명시하는 것이 load-bearing이다. 추론에 맡기면 이 함수가 무엇을 내보내는지 **여기서는**
  * 아무도 검사하지 않고, `serverEventSchema`가 strict라 필드가 하나 새는 순간 런타임에 프레임 전체가
@@ -95,23 +95,23 @@ function toWireAttack(descriptor: AttackDescriptor): WireAttack {
 }
 
 /**
- * `combat:attack{target, ordinal?, id?}` 명령을 실 전투 개시로 배선하는 핸들러 팩토리.
+ * `combat:attack{target, ordinal?, id?}` 명령을 실 전투 개시로 연결하는 핸들러 팩토리.
  *
- * 게임 규칙 판정(무적 게이트·명중·피해·크리/불발·사망 발화·적대 등록)은 전부 `combat/initiateAttack`이,
+ * 게임 규칙 판정(무적 게이트·명중·피해·크리/불발·사망 실행·적대 등록)은 전부 `combat/initiateAttack`이,
  * 대상 지목(가시성 게이트·서수)은 `world/roomTargetResolvers`가, 보상 분배·방 제거는 사망 seam이
- * 소유한다 — 핸들러는 라이브 상태 조회·flags 합성·쿨다운 강제·결과 사상·되쓰기만 한다.
+ * 담당한다 — 핸들러는 라이브 상태 조회·flags 합성·쿨다운 강제·결과 사상·되쓰기만 한다.
  *
  * ## 관찰자 flags는 **1회만** 합성한다
- * `composeCharacterFlags(live.character, now)`의 결과를 대상 해소자·전투상태 조립기·쿨다운 실명 판정
+ * `composeCharacterFlags(live.character, now)`의 결과를 대상 리졸버·전투상태 조립기·쿨다운 실명 판정
  * 세 곳에 같은 스냅샷으로 넘긴다. 두 번 합성하면 두 `now()` 사이에 타이머 효과가 만료돼 가시성 판정과
  * 실명 판정이 서로 다른 시점을 보게 된다(study 핸들러 선례). `now()`도 1회만 부른다.
  *
  * ## ★ 공격 뒤 라이브 엔트리를 **다시 읽는다** (이 순서가 load-bearing이다)
- * `initiateAttack`은 대상이 죽으면 그 안에서 사망 seam을 발화하고, 그 seam은 기여자 경험치를 올린
+ * `initiateAttack`은 대상이 죽으면 그 안에서 사망 seam을 실행하고, 그 seam은 기여자 경험치를 올린
  * **새 `LiveCharacter`를 `liveRegistry.register`한다**(`ws/assembleDeathSeams.ts` 헤더 경고). 따라서
  * 공격 시작 시점에 읽어 둔 `live` 참조로 hp·mp를 되쓰면 방금 오른 경험치가 조용히 사라진다 —
  * 예외도 로그도 없이 "몹을 잡았는데 경험치가 안 오른다"로만 드러난다. 되쓰기 직전에 레지스트리를
- * 다시 읽어 그 최신 문서에 hp·mp만 얹고, `character:stats`도 **그 문서에서** 투영한다.
+ * 다시 읽어 그 최신 문서에 hp·mp만 얹고, `character:stats`도 **그 문서에서** 변환한다.
  *
  * ## 사람 대상은 PvP 게이트에 닿기 전에 거부한다 (D5)
  * `checkPvpGate`가 읽는 `PCHAOS`·`PFAMIL`은 `composeCharacterFlags`가 영원히 0을 돌려주는 비트라
@@ -130,17 +130,17 @@ function toWireAttack(descriptor: AttackDescriptor): WireAttack {
  *
  * 반환:
  *   - 성공 → `[combat:attacked, character:stats]`. 대상이 죽었으면 `world:room`을 세 번째로 덧붙인다
- *     (D14 — 이벤트 추가가 아니라 발화 지점 추가. 안 보내면 클라 방 목록에 죽은 몬스터가 남는다).
+ *     (D14 — 이벤트 추가가 아니라 발생 지점 추가. 안 보내면 클라 방 목록에 죽은 몬스터가 남는다).
  *     셋 다 상태 이벤트라 correlationId를 싣지 않는다(progress:trained 선례).
- *   - 쿨다운·대상 미해소·사람 지목·무적 게이트 실패 → `error{rule_rejected, message}`(id 있으면 반향).
- *   - 라이브 미등록 actor·방 미해소·되쓰기 직전 재조회 실패 → `error{internal}`(배선 격리).
+ *   - 쿨다운·대상 미해석·사람 지목·무적 게이트 실패 → `error{rule_rejected, message}`(id 있으면 반향).
+ *   - 라이브 미등록 actor·방 미해석·되쓰기 직전 재조회 실패 → `error{internal}`(연결 격리).
  */
 export function createAttackHandler(deps: AttackHandlerDeps): CommandHandler {
   return (
     command: ClientCommand,
     actor: ActorContext,
   ): ServerEvent | readonly ServerEvent[] | undefined => {
-    // (1) defensive narrow — router는 combat:attack type에만 이 핸들러를 배선하므로 false 갈래는
+    // (1) defensive narrow — router는 combat:attack type에만 이 핸들러를 연결하므로 false 갈래는
     //     구조적으로 도달 불가한 방어선이다. 형제 핸들러(train·study)와 같은 관용구로 undefined를
     //     돌려준다 — `normalizeHandlerEvents`가 빈 배열로 정규화한다.
     if (command.type !== 'combat:attack') return undefined
@@ -154,10 +154,10 @@ export function createAttackHandler(deps: AttackHandlerDeps): CommandHandler {
       return makeErrorEvent('internal', '캐릭터 라이브 상태를 찾을 수 없습니다', command.id)
     }
 
-    // (4) 관찰자 P-flag를 1회 합성해 해소자·조립기·실명 판정에 같은 스냅샷을 넘긴다(위 헤더 참조).
+    // (4) 관찰자 P-flag를 1회 합성해 리졸버·조립기·실명 판정에 같은 스냅샷을 넘긴다(위 헤더 참조).
     const flags = composeCharacterFlags(live.character, now)
 
-    // (5) 방 노드 해소. 세션 액터는 항상 방 안에 있으므로 미해소는 배선 오류다.
+    // (5) 방 노드 해석. 세션 액터는 항상 방 안에 있으므로 미해석은 조립 오류다.
     const room = deps.resolveRoom(actor.characterId)
     if (room === undefined) {
       return makeErrorEvent('internal', '현재 방을 찾을 수 없습니다', command.id)
@@ -171,7 +171,7 @@ export function createAttackHandler(deps: AttackHandlerDeps): CommandHandler {
     }
 
     // (7) 대상 지목 2단 — 크리처 **먼저**, 못 찾으면 플레이어(오라클 command5.c:71,76 순서).
-    //     `ordinal` 미지정은 해소자 기본값 1로 떨어진다(와이어 스키마가 하한 1을 강제).
+    //     `ordinal` 미지정은 리졸버 기본값 1로 떨어진다(와이어 스키마가 하한 1을 강제).
     const creature = deps.resolveRoomCreature(room, command.target, flags, command.ordinal)
     if (creature === undefined) {
       const playerId = deps.resolveRoomPlayer(room, command.target, command.ordinal)
@@ -189,7 +189,7 @@ export function createAttackHandler(deps: AttackHandlerDeps): CommandHandler {
     // (9) 쿨다운 베이스를 **오프너 앞에서** 소모한다 — 오라클 순서다(`command5.c:138`이 타이머를
     //     세팅하고 `:147` MUNKIL 게이트가 그 뒤에 온다). 즉 게이트에 막힌 공격도 1초(실명 6초)를
     //     먹는다. 뒤로 미루면 무적 몬스터 대상 공격이 공짜가 되어 이 명령의 유일한 유량 제한이
-    //     사라진다 — 명령마다 장비 페어링·스탯 투영이 돌고 MMGONL/MENONL 경로는 적대 등록까지 간다.
+    //     사라진다 — 명령마다 장비 페어링·스탯 변환이 돌고 MMGONL/MENONL 경로는 적대 등록까지 간다.
     //     등록된 상태 객체를 in-place로 갱신한다(라이브 가변 필드 carve-out — combatTick:173 관용).
     const base = F_ISSET(flags, PBLIND) ? ATTACK_COOLDOWN_BLIND : ATTACK_COOLDOWN_INTERVAL
     state.nextAttackAt = now + base
@@ -205,26 +205,26 @@ export function createAttackHandler(deps: AttackHandlerDeps): CommandHandler {
       ledger: deps.ledgers.for(creature.instanceId),
     })
     if (!result.ok) {
-      // 게이트 실패 — 문구는 게이트가 소유한다(여기서 다시 짓지 않는다). hp·경험치는 불변이고
+      // 게이트 실패 — 문구는 게이트가 담당한다(여기서 다시 짓지 않는다). hp·경험치는 불변이고
       // 쿨다운은 (9)에서 **이미 소모됐다**(오라클 순서 — 위 참조).
       return makeErrorEvent('rule_rejected', result.reason, command.id)
     }
 
     // (11) 게이트가 계산한 증분을 더한다 — 오라클도 PvP 분기에서 `interval += 3`으로 뒤에 더한다
     //      (`command5.c:201`). 증분이 0이 아닌 경로는 `checkPvpGate`(+3) 하나뿐인데 D5가 사람 대상을
-    //      그 앞에서 거부하므로 이 토픽에서는 항상 0이다. 그래도 항을 남긴다 — PvP가 배선되는 시점에
+    //      그 앞에서 거부하므로 이 토픽에서는 항상 0이다. 그래도 항을 남긴다 — PvP가 연결되는 시점에
     //      이 자리가 이미 맞아 있어야 한다.
     state.nextAttackAt += result.cooldownIncrement
 
     // (12) ★ 되쓰기 직전 재조회 — 공격 도중 사망 seam이 엔트리를 교체했을 수 있다(위 헤더 참조).
-    //      미등록은 이 토픽에 없는 상태이므로 배선 오류로 격리한다.
+    //      미등록은 이 토픽에 없는 상태이므로 조립 오류로 격리한다.
     const relive = deps.liveRegistry.get(actor.characterId)
     if (relive === undefined) {
       return makeErrorEvent('internal', '캐릭터 라이브 상태를 찾을 수 없습니다', command.id)
     }
     // 최신 문서에 hp·mp만 얹는다. `{ ...relive }`로 나머지(인벤토리)를 그대로 옮긴다 — 새 엔트리를
-    // 통째로 지으면 진입에서 1회 적재한 인벤이 조용히 사라지고 되돌릴 경로가 없다.
-    // 하한 0 클램프의 근거는 `combat/applyVitals.ts`가 단독 소유한다(되쓰기 지점이 둘이다).
+    // 통째로 지으면 진입에서 1회 로드한 인벤이 조용히 사라지고 되돌릴 경로가 없다.
+    // 하한 0 클램프의 근거는 `combat/applyVitals.ts`가 단독 담당한다(되쓰기 지점이 둘이다).
     const character: Character = applyVitals(relive.character, state)
     deps.liveRegistry.register({ ...relive, character })
     deps.markCharacterDirty(actor.characterId, character)
@@ -243,16 +243,16 @@ export function createAttackHandler(deps: AttackHandlerDeps): CommandHandler {
         died: outcome.died,
         attacks: outcome.messageInputs.attacks.map(toWireAttack),
       },
-      // 되쓰기 후 문서에서 투영한다 — 공격 시작 스냅샷을 쓰면 사망 보상 경험치가 한 박자 늦는다.
+      // 되쓰기 후 문서에서 변환한다 — 공격 시작 스냅샷을 쓰면 사망 보상 경험치가 한 박자 늦는다.
       characterStatsEvent(character),
     ]
     if (outcome.died) {
-      // 사망 seam이 이미 방 creatures[]에서 제거한 뒤라, 이 투영에는 죽은 개체가 없다(D14).
+      // 사망 seam이 이미 방 creatures[]에서 제거한 뒤라, 이 변환에는 죽은 개체가 없다(D14).
       //
       // ⚠ 이 방 뷰는 **공격자 소켓에만** 간다(핸들러 반환은 요청 소켓으로 나간다). 같은 방의 다른
       // 점유자는 통지를 받지 못해 죽은 크리처를 계속 목록에 두고 지목할 수 있다. 방 스코프 전파는
-      // 스펙 §5가 **#116**(방송 seam 결선)으로 유예한 범위다 — 이 핸들러의 누락이 아니라 아직
-      // 결선되지 않은 방송 경로다. #116이 붙는 시점에 이 발화도 방 전파로 함께 올린다.
+      // 스펙 §5가 **#116**(방송 seam 연결)으로 보류한 범위다 — 이 핸들러의 누락이 아니라 아직
+      // 연결되지 않은 방송 경로다. #116이 붙는 시점에 이 이벤트 발생도 방 전파로 함께 올린다.
       events.push({ type: 'world:room', ...projectRoomView(room, deps.resolveCharacterName) })
     }
     return events

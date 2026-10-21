@@ -24,9 +24,9 @@ import {
 } from './fsm/sessionFsm.js'
 import { SEED_ACCOUNT_ID, SEED_CHARACTER_ID } from '../auth/seedSessionAuth.testutil.js'
 
-// T3.6 — transport 배선 스펙. injectWS로 유효 쿠키+허용 Origin upgrade를 태워 라우트 마운트·프레임
+// T3.6 — transport 연결 스펙. injectWS로 유효 쿠키+허용 Origin upgrade를 태워 라우트 마운트·프레임
 // 하드닝·per-connection 정리·https pass-through를 관찰한다(E3-1 회귀 방어). 인증 게이트 자체 검증은
-// auth.gate.test.ts가 소유한다 — 여기선 게이트를 통과한 뒤의 transport 동작만 본다.
+// auth.gate.test.ts가 담당한다 — 여기선 게이트를 통과한 뒤의 transport 동작만 본다.
 describe('WS transport', () => {
   // 연결 핸들러가 getConfig()를 호출하고 preValidation 게이트가 WS_ALLOWED_ORIGINS를 소비하므로
   // 필수 env를 채워 fail-fast를 피한다. 앰비언트 env를 덮어쓰지 않도록 snapshot-restore로 복원한다.
@@ -94,14 +94,14 @@ describe('WS transport', () => {
     await app.close()
   })
 
-  it('연결 수락 시 하트비트 타이머를 시작해 ctx.heartbeat에 배선한다', async () => {
+  it('연결 수락 시 하트비트 타이머를 시작해 ctx.heartbeat에 연결한다', async () => {
     const app = buildSeededApp()
     await app.ready()
 
     const ws = await injectAuthedWS(app)
     await waitFor(() => app.wsConnections.size === 1)
 
-    // 하트비트 start()가 반환한 타이머 핸들이 ctx에 배선돼야 한다(cleanup·누수 방지 seam).
+    // 하트비트 start()가 반환한 타이머 핸들이 ctx에 연결돼야 한다(cleanup·누수 방지 seam).
     const ctx = [...app.wsConnections.values()][0]
     expect(ctx?.heartbeat).not.toBeNull()
 
@@ -200,7 +200,7 @@ describe('WS transport', () => {
     await app.ready()
 
     const ws = await injectAuthedWS(app)
-    // accept가 characterList+prompt 2프레임을 동기 발화하므로 유실 없는 리더로 소비한다(Lock A/B).
+    // accept가 characterList+prompt 2프레임을 동기 발생시키므로 유실 없는 리더로 소비한다(Lock A/B).
     const reader = createMessageReader(ws)
     await reader.next() // system:hello
     ws.send(JSON.stringify({ type: 'system:ready', protocolVersion: PROTOCOL_VERSION }))
@@ -218,7 +218,7 @@ describe('WS transport', () => {
     await app.close()
   })
 
-  it('핸드셰이크 완료 시 characterSelect로 진입해 characterList+prompt를 발화한다', async () => {
+  it('핸드셰이크 완료 시 characterSelect로 진입해 characterList+prompt를 발생시킨다', async () => {
     const app = buildSeededApp()
     await app.ready()
 
@@ -241,7 +241,7 @@ describe('WS transport', () => {
     await app.close()
   })
 
-  it('소유 캐릭터 선택 시 entered 발화 후 command로 전이하고 이후 debug:echo가 라우터에 도달한다', async () => {
+  it('소유 캐릭터 선택 시 entered 발생 후 command로 전이하고 이후 debug:echo가 라우터에 도달한다', async () => {
     const app = buildSeededApp()
     await app.ready()
 
@@ -357,11 +357,11 @@ describe('WS transport', () => {
     await app.close()
   })
 
-  it('lifecyclePort 미주입 시 no-op 어댑터를 wsLifecyclePort로 배선한다', async () => {
+  it('lifecyclePort 미주입 시 no-op 어댑터를 wsLifecyclePort로 연결한다', async () => {
     const app = buildSeededApp()
     await app.ready()
 
-    // 기본 경로(buildApp→registerWebsocket 2-arg)는 no-op 어댑터를 세운다 — onSessionEnd 표면이 존재한다.
+    // 기본 경로(buildApp→registerWebsocket 2-arg)는 no-op 어댑터를 세운다 — onSessionEnd 인터페이스가 존재한다.
     expect(typeof app.wsLifecyclePort.onSessionEnd).toBe('function')
     expect(() =>
       app.wsLifecyclePort.onSessionEnd({
@@ -384,8 +384,8 @@ describe('WS transport', () => {
     await plain.close()
   })
 
-  // ── Story 5 — 연결 수명주기 런타임(등록·close 판정·grace 재연결) 종단 배선 ──────────────────
-  // registry·resolveDisconnect·lifecycle가 실 소켓 close·재접속에 배선됐는지 injectWS로 관측한다.
+  // ── Story 5 — 연결 수명주기 런타임(등록·close 판정·grace 재연결) 종단 연결 ──────────────────
+  // registry·resolveDisconnect·lifecycle가 실 소켓 close·재접속에 연결됐는지 injectWS로 관측한다.
   // 종결 포트 호출 관측이 필요한 케이스는 스파이 lifecyclePort를 buildSeededApp으로 주입한다.
 
   /** onSessionEnd를 스파이하는 lifecyclePort. buildSeededApp({ lifecyclePort })로 주입해 종결을 관측한다. */
@@ -402,7 +402,7 @@ describe('WS transport', () => {
 
     const binding = app.wsSessionRegistry.get(SEED_CHARACTER_ID)
     expect(binding?.link).toBe('live')
-    // 바인딩의 connection이 이 소켓의 ctx를 가리킨다(등록 seam이 ctx를 배선).
+    // 바인딩의 connection이 이 소켓의 ctx를 가리킨다(등록 seam이 ctx를 연결).
     expect(binding?.connection).toBe([...app.wsConnections.values()][0])
 
     ws.terminate()
@@ -428,7 +428,7 @@ describe('WS transport', () => {
     await app.close()
   })
 
-  it('grace 내 같은 캐릭터 재접속·select 시 rebind되어 session:resumed 발화 + command 상태를 복원한다', async () => {
+  it('grace 내 같은 캐릭터 재접속·select 시 rebind되어 session:resumed 발생 + command 상태를 복원한다', async () => {
     const app = buildSeededApp()
     await app.ready()
 
@@ -449,7 +449,7 @@ describe('WS transport', () => {
     ws2.send(JSON.stringify({ type: 'session:selectCharacter', characterId: SEED_CHARACTER_ID }))
     const resumed = await reader.next()
 
-    // 재연결이라 entered가 아니라 resumed가 발화된다.
+    // 재연결이라 entered가 아니라 resumed가 발생한다.
     expect(resumed).toMatchObject({ type: 'session:resumed', characterId: SEED_CHARACTER_ID })
     // 새 바인딩이 map을 차지한다(옛 link-dead 객체가 아니라 새 ctx를 가리키는 live 바인딩).
     const rebound = app.wsSessionRegistry.get(SEED_CHARACTER_ID)
@@ -527,7 +527,7 @@ describe('WS transport', () => {
     await app.close()
   })
 
-  // ── Story 6 — 무입력(idle) 종료 종단 배선(재-arm·flood·만료) ─────────────────────────────────
+  // ── Story 6 — 무입력(idle) 종료 종단 연결(재-arm·flood·만료) ─────────────────────────────────
   // command 진입 후 idle 타이머가 arm되고, 유효 명령(dispatch handled)마다 재-arm되며, 거부(rejected)는
   // 재-arm하지 않고, 무입력이 창을 넘으면 resolveDisconnect(idleTimeout)로 종결하는지 injectWS로 관측한다.
 
@@ -567,7 +567,7 @@ describe('WS transport', () => {
   })
 
   it('command 진입 후 무입력이 WS_IDLE_TIMEOUT_MS를 넘으면 resolveDisconnect(idleTimeout)로 종결하고 포트를 1회 호출한다', async () => {
-    // 실 setTimeout으로 idle을 발화시키려 창을 짧게 오버라이드한다(하트비트 25s·데드라인 60s는 이 창 안에 발화 안 함).
+    // 실 setTimeout으로 idle을 실행시키려 창을 짧게 오버라이드한다(하트비트 25s·데드라인 60s는 이 창 안에 실행 안 함).
     process.env.WS_IDLE_TIMEOUT_MS = '80'
     resetConfigForTests()
     const port = spyPort()
@@ -596,10 +596,10 @@ describe('WS transport', () => {
     }
   })
 
-  // ── Story 6 — shutdown 수렴·소켓 종료 배선(app 레벨 단위) ──────────────────────────────────────
+  // ── Story 6 — shutdown 일괄 종료·소켓 종료 연결(app 레벨 단위) ──────────────────────────────────────
   // registerWebsocket이 조립한 app.wsShutdown(ShutdownConverger)이 등록 바인딩을 reason 'shutdown'으로
   // 일괄 종결하고, 종료 플래그(isShuttingDown)가 소켓 close 핸들러의 markLinkDead(link-dead 진입)를
-  // 우회하는지 injectWS로 관측한다. WorldClock 포함 실서버 수렴은 shutdown.integration.test.ts가 소유한다.
+  // 우회하는지 injectWS로 관측한다. WorldClock 포함 실서버 일괄 종료는 shutdown.integration.test.ts가 담당한다.
 
   it('markShuttingDown→converge가 live 바인딩을 reason shutdown으로 정확히 1회 종결하고 레지스트리를 비운다', async () => {
     const port = spyPort()

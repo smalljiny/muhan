@@ -6,7 +6,7 @@ import { applyVitals } from '../combat/applyVitals.js'
 import type { CombatRegistry } from '../combat/combatRegistry.js'
 
 /**
- * 라이브 세션 수명 어댑터 — 세션 종결 시 도메인 상태를 수렴시키는 `SessionLifecyclePort` 구현.
+ * 라이브 세션 수명 어댑터 — 세션 종결 시 도메인 상태를 정리하는 `SessionLifecyclePort` 구현.
  *
  * 포트(`sessionLifecyclePort.ts`)·no-op 형제(`noopSessionLifecycleAdapter.ts`)와 같은 ws/ 레이어에
  * 둔다 — 이 어댑터는 세션 종결이라는 transport 수명 이벤트에 반응하는 ws 관심사이고, world/ 레지스트리·
@@ -17,11 +17,11 @@ import type { CombatRegistry } from '../combat/combatRegistry.js'
  *  1. 라이브 전투상태(hp·mp)를 캐릭터 문서로 되쓴다.
  *  2. 그 문서를 dirty로 표시해 다음 저장 주기에 영속화되게 한다(최종 방 currentRoom도 함께 실린다).
  *  3. Story 3의 release 코어로 방 점유(occupants)와 라이브 레지스트리 엔트리를 제거한다.
- *     전투상태 레지스트리 엔트리 제거도 그 release가 함께 소유한다(아래 "제거 소유자" 절).
+ *     전투상태 레지스트리 엔트리 제거도 그 release가 함께 담당한다(아래 "제거 담당자" 절).
  *
  * no-op 어댑터(createNoopSessionLifecycleAdapter)와 달리 이 어댑터는 실제 도메인 상태를 변이한다.
  * 단, 실 DB write는 하지 않는다 — markDirty로 side registry에만 기록하고 실 flush는 저장 스케줄러/
- * 셧다운 수렴이 소유한다(§4 D5: markDirty만, saveNow 아님).
+ * 셧다운 일괄 종료가 담당한다(§4 D5: markDirty만, saveNow 아님).
  *
  * ── 동기 시그니처 근거 ──────────────────────────────────────────────
  * onSessionEnd는 `SessionLifecyclePort`의 계약대로 동기다(sessionLifecyclePort.ts:31). 이 어댑터는
@@ -42,10 +42,10 @@ import type { CombatRegistry } from '../combat/combatRegistry.js'
  * 스냅샷은 되쓰기 이전 값을 담고, 전투로 깎인 hp가 저장되지 않은 채 세션이 끝난다(다음 접속에
  * 만신으로 부활하는 형태 — 예외도 로그도 없다).
  *
- * ── 제거 소유자는 주입된 `release`다 (이 어댑터가 아니다) ──────────
+ * ── 제거 담당자는 주입된 `release`다 (이 어댑터가 아니다) ──────────
  * 전투상태 엔트리 제거는 이 어댑터가 직접 하지 않는다. 조립 팩토리(`liveWorldWiring.ts`)가 `place`(등록)와
  * `release`(제거)를 같은 래퍼에 대칭으로 두었고, 이 어댑터는 그 `release`를 마지막 단계에서 부를 뿐이다.
- * 여기서 따로 지우면 소유자가 둘이 된다. 결과 순서는 여전히 "되쓰기 → markDirty → release(제거)"라,
+ * 여기서 따로 지우면 담당자가 둘이 된다. 결과 순서는 여전히 "되쓰기 → markDirty → release(제거)"라,
  * 되쓰기가 전투상태를 읽는 시점에는 엔트리가 살아 있다.
  *
  * 전투상태가 없는 세션(전투를 한 번도 하지 않고 종료)은 되쓰기를 건너뛰고 기존 동작 그대로 간다.
@@ -57,7 +57,7 @@ import type { CombatRegistry } from '../combat/combatRegistry.js'
  * ── 이 markDirty가 언제 실제로 필요한가(중복 아님) ─────────────────────
  * 이동 핸들러(handlers/move.ts)가 이동 성공마다 currentRoom을 write-through로 markDirty하므로, 이동 뒤
  * 종료하는 경로에서는 이 어댑터의 markDirty가 그 값을 재-mark하는 것처럼 보인다. 그러나 이 markDirty는
- * **종료 경계의 단일 수렴 지점**이라 다음 경우에 유일한 영속 경로다: (a) 캐릭터가 로드 후 한 번도 이동하지
+ * **종료 경계의 단일 정리 지점**이라 다음 경우에 유일한 영속 경로다: (a) 캐릭터가 로드 후 한 번도 이동하지
  * 않고 종료 — write-through가 없어 이 markDirty만이 위치를 저장한다. 특히 (b) hydrate가 orphan
  * currentRoom을 DEFAULT_START_ROOM으로 교정한 경우(D-H), 그 교정은 이동 없이는 이 종료 markDirty로만
  * 영속된다. 향후 비-이동 currentRoom 변이(recall·teleport·respawn)도 자기-markDirty를 빠뜨리면 여기서
@@ -71,17 +71,17 @@ import type { CombatRegistry } from '../combat/combatRegistry.js'
  *
  * ── Story 3 release 코어 재사용(T6.2) ──────────────────────────────
  * 점유 해제는 Story 3의 `createLiveCharacterEntry(...).release`를 그대로 주입받아 쓴다(중복 구현 금지).
- * release는 occupants.delete → onRoomLeft(delete-before-hook) → registry.remove 순서를 소유하며
+ * release는 occupants.delete → onRoomLeft(delete-before-hook) → registry.remove 순서를 담당하며
  * 미등록 id에 no-op이다.
  *
- * ── 기본 배선은 그대로(T6.5) ────────────────────────────────────────
+ * ── 기본 연결은 그대로(T6.5) ────────────────────────────────────────
  * Story 6은 plugin.ts의 기본 lifecyclePort를 바꾸지 않는다 — 기본은 여전히 no-op 어댑터다. 이 라이브
  * 어댑터의 프로덕션 주입은 Story 7의 몫이다.
  *
  * ── deps 불변식 ────────────────────────────────────────────────────
  * `liveRegistry.get`과 `release`는 **같은 레지스트리 인스턴스**를 배후에 두어야 한다. get이 A 레지스트리를
  * 보고 release가 B 레지스트리를 정리하면 markDirty는 A의 값을 읽고 점유 해제는 B에서 일어나 상태가
- * 분기한다. Story 7 배선 시 두 참조를 반드시 동일 인스턴스에서 파생한다.
+ * 분기한다. Story 7 연결 시 두 참조를 반드시 동일 인스턴스에서 파생한다.
  */
 export interface LiveSessionLifecycleAdapterDeps {
   /** 라이브 엔트리 조회(read-only). 종료 시점 currentRoom을 읽는 데만 쓴다. */
@@ -90,18 +90,18 @@ export interface LiveSessionLifecycleAdapterDeps {
   readonly release: (characterId: string) => void
   /**
    * characters 변경 기록 seam(타입 좁힘 — 전체 Character 문서만 수용). 실 flush는 저장 스케줄러가
-   * 소유한다. 부분 스냅샷은 타입 에러다(markCharacterDirty.ts 스냅샷 계약).
+   * 담당한다. 부분 스냅샷은 타입 에러다(markCharacterDirty.ts 스냅샷 계약).
    */
   readonly markCharacterDirty: MarkCharacterDirty
   /**
-   * 라이브 전투상태 레지스트리 — 종료 시점 hp·mp를 읽는 용도다. `get` 하나만 요구한다(최소 표면).
+   * 라이브 전투상태 레지스트리 — 종료 시점 hp·mp를 읽는 용도다. `get` 하나만 요구한다(최소 인터페이스).
    *
-   * **제거(`remove`)는 이 어댑터의 표면이 아니다.** 전투상태 엔트리를 지우는 주체는 주입된
+   * **제거(`remove`)는 이 어댑터의 인터페이스가 아니다.** 전투상태 엔트리를 지우는 주체는 주입된
    * `release`(조립 팩토리의 래퍼)이며, deps 타입에 `remove`를 남겨 두면 "이 어댑터가 제거를
-   * 보장한다"고 읽혀 소유자가 둘로 보인다 — 타입 수준에서 하나로 좁힌다.
+   * 보장한다"고 읽혀 담당자가 둘로 보인다 — 타입 수준에서 하나로 좁힌다.
    *
    * **필수 필드다**(optional 아님). 미주입이면 전투로 깎인 hp가 저장되지 않은 채 세션이 끝나는데
-   * 그 실패는 예외도 로그도 남기지 않는다 — 배선 누락을 타입으로 차단한다(`peekPendingCharacter` 선례).
+   * 그 실패는 예외도 로그도 남기지 않는다 — 연결 누락을 타입으로 차단한다(`peekPendingCharacter` 선례).
    *
    * 공격 핸들러(`combatRegistry`)·진입 등록과 **같은 인스턴스**여야 한다. 갈리면 되쓰기가 빈
    * 레지스트리를 읽어 항상 건너뛰고, 종료된 세션의 hp가 저장되지 않는다.
@@ -138,7 +138,7 @@ export function createLiveSessionLifecycleAdapter(
 
       // (4) Story 3 release 코어 재사용(T6.2): occupants.delete → onRoomLeft → registry.remove.
       //     **전투상태 제거도 여기서 일어난다** — 조립 팩토리가 `place`(등록)와 `release`(제거)를
-      //     같은 래퍼에 대칭으로 뒀기 때문이다. 이 어댑터가 따로 제거하면 소유자가 둘이 된다.
+      //     같은 래퍼에 대칭으로 뒀기 때문이다. 이 어댑터가 따로 제거하면 담당자가 둘이 된다.
       deps.release(ctx.characterId)
     },
   }

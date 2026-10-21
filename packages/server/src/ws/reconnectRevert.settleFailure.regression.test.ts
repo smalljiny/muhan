@@ -23,7 +23,7 @@ import {
 /**
  * `saveEngine.ts`의 모듈 비공개 `stripImmutableId` 미러.
  *
- * 그 함수는 export되지 않으므로(스펙 §3.2 — 영속 경로와 조회 경로가 같은 인스턴스를 공유하되 표면은
+ * 그 함수는 export되지 않으므로(스펙 §3.2 — 영속 경로와 조회 경로가 같은 인스턴스를 공유하되 인터페이스는
  * 넓히지 않는다) 테스트가 같은 정규화를 재현한다. §8.8 하네스가 `SaveEngine`을 우회해 큐를 직접
  * 조립하기 때문에 그 한 곳에서만 쓰인다.
  */
@@ -38,9 +38,9 @@ function stripImmutableId(snapshot: unknown): unknown {
  *
  * ## 왜 SaveEngine을 쓰지 않는가
  * `SaveEngineOptions.queueOptions`는 `Omit<AsyncWriteQueueOptions, 'onSettled'>`다 — 엔진이 그 seam으로
- * tracker 반납을 배선하므로 호출자 주입을 **타입으로 막았다**(Story 2 결정). 따라서 통지 실패는
+ * tracker 반납을 연결하므로 호출자 주입을 **타입으로 막았다**(Story 2 결정). 따라서 통지 실패는
  * SaveEngine 경유로 도달 불가하고, 이 케이스만 엔진과 같은 형태로 큐·트래커·스케줄러를 직접 조립한다.
- * 검증 대상은 엔진의 배선이 아니라 **잔류 상태에서 hydrate가 안전하게 실패하는가**이므로 범위가 맞다.
+ * 검증 대상은 엔진의 연결이 아니라 **잔류 상태에서 hydrate가 안전하게 실패하는가**이므로 범위가 맞다.
  */
 describe('§8.8 완료 통지 실패로 잔류한 스냅샷의 hydrate 측 귀결', () => {
   it('엔트리가 inProgress에 잔류해도 hydrate 결과가 DB 문서와 일치하고 워커는 생존한다', async () => {
@@ -65,7 +65,7 @@ describe('§8.8 완료 통지 실패로 잔류한 스냅샷의 hydrate 측 귀�
       saveLogger,
       {
         sleep: () => Promise.resolve(),
-        // 반납 배선이 통째로 실패하는 상황을 주입한다.
+        // 반납 연결이 통째로 실패하는 상황을 주입한다.
         onSettled: () => {
           throw new Error('완료 통지 처리기 실패 주입')
         },
@@ -95,7 +95,7 @@ describe('§8.8 완료 통지 실패로 잔류한 스냅샷의 hydrate 측 귀�
     })
 
     // 학습 결과를 실 스냅샷 헬퍼로 마킹한다(손으로 만든 pending 리터럴 금지). 지식 비트도 손으로
-    // 계산하지 않고 정본 `setKnown`을 쓴다 — 비트 배치의 단일 출처는 shared다.
+    // 계산하지 않고 기준 `setKnown`을 쓴다 — 비트 배치의 단일 출처는 shared다.
     const learned = makeCharacter({ spells: setKnown(makeCharacter().spells, BOOK_SPELL_NO) })
     markCharacterDirty(CHAR, learned)
 

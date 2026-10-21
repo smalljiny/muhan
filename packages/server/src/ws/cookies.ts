@@ -28,7 +28,7 @@ export function parseCookieHeader(header: string | undefined): Record<string, st
 
 /**
  * `Cookie` 헤더에서 `__session` 쿠키 값을 추출한다. 없으면 undefined.
- * `__session`은 Firebase Hosting 세션 쿠키 관례이며 E5 실 어댑터와 정합한다.
+ * `__session`은 Firebase Hosting 세션 쿠키 관례이며 E5 실 어댑터와 일치한다.
  */
 export function extractSessionCookie(header: string | undefined): string | undefined {
   const cookies = parseCookieHeader(header)

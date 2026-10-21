@@ -15,8 +15,8 @@ import { makeErrorEvent } from '../serverEvent.js'
  * study 핸들러 의존성 seam(전역 금지 — 인자 주입).
  *
  * `liveRegistry`는 라이브 캐릭터 단일 출처다. 핸들러가 소비하는 두 메서드 `get`·`register`만 요구한다
- * (최소 표면) — `register`는 학습한 spells와 비법서를 뺀 인벤으로 엔트리를 교체하는 데 쓴다.
- * `objectTemplates`는 objnum → 템플릿 인덱스로, 소지품 이름 해소와 비법서 스탯(type·ndice·magicpower·
+ * (최소 인터페이스) — `register`는 학습한 spells와 비법서를 뺀 인벤으로 엔트리를 교체하는 데 쓴다.
+ * `objectTemplates`는 objnum → 템플릿 인덱스로, 소지품 이름 해석과 비법서 스탯(type·ndice·magicpower·
  * flags)의 출처다. `now`는 현재 절대 틱 seam으로, 관찰자 P-flag 합성 시점을 준다(worldClock 도메인).
  * `markCharacterDirty`·`markObjectDeleted`는 write-behind 영속화 seam으로, 성공 경로에서만 각 1회 소비한다.
  */
@@ -29,7 +29,7 @@ export interface StudyHandlerDeps {
 }
 
 /**
- * 거부 사유의 사람용 한국어 message — study() 실패 6종 + 해소 실패(`not-found`)를 빠짐없이 사상한다
+ * 거부 사유의 사람용 한국어 message — study() 실패 6종 + 해석 실패(`not-found`)를 빠짐없이 사상한다
  * (`Record`가 누락을 컴파일에서 막는다 — train 핸들러 `REJECT_MESSAGES` 선례).
  *
  * 문구는 오라클 `study`(`legacy/muhan/src/magic1.c:259-342`)를 따른다. 줄번호는 전부 **거부 메시지를
@@ -55,21 +55,21 @@ const REJECT_MESSAGES: Record<StudyFailure | 'not-found', string> = {
 }
 
 /**
- * `progress:study{target, ordinal?, id?}` 명령을 실 주문 학습으로 배선하는 핸들러 팩토리.
+ * `progress:study{target, ordinal?, id?}` 명령을 실 주문 학습으로 연결하는 핸들러 팩토리.
  *
  * 게임 규칙 판정(PBLIND → SCROLL 여부 → 레벨 → 성향 → 클래스 → 주문 존재 6게이트와 지식 비트 세팅)은
  * 전부 `magic/learning`의 `study()`가, 대상 지목(인벤 → 착용 슬롯 2단 탐색·가시성 게이트·서수)은
- * `items/carriedTargetResolver`가 소유한다 — 핸들러는 라이브 상태 조회·flags 합성·결과 사상·영속 마킹만 한다.
+ * `items/carriedTargetResolver`가 담당한다 — 핸들러는 라이브 상태 조회·flags 합성·결과 사상·영속 마킹만 한다.
  *
  * ## 관찰자 flags는 **1회만** 합성한다
- * `composeCharacterFlags(live.character, deps.now())`의 결과를 해소자 `observerFlags`와 `StudyChar.flags`
+ * `composeCharacterFlags(live.character, deps.now())`의 결과를 리졸버 `observerFlags`와 `StudyChar.flags`
  * 양쪽에 넘긴다. 두 번 합성하면 두 `now()` 사이에 타이머 효과가 만료돼, 가시성 판정(PDINVI)과 실명
  * 판정(PBLIND)이 서로 다른 시점을 보게 된다.
  *
- * ## 템플릿 미해소는 internal이 아니다
- * `ObjectInstance`에 `name`·`keys`가 없어 템플릿 미해소 인스턴스는 원리적으로 이름이 없고, 질의 시점에
- * "미소지"와 구분할 수단이 없다. 해소자가 후보에서 빼고 별도로 보고하지 않으므로(그 근거는
- * `items/carriedTargetResolver.ts` 헤더가 소유한다) 이 핸들러도 미해소를 배선 오류로 승격하지 않고
+ * ## 템플릿 미해석은 internal이 아니다
+ * `ObjectInstance`에 `name`·`keys`가 없어 템플릿 미해석 인스턴스는 원리적으로 이름이 없고, 질의 시점에
+ * "미소지"와 구분할 수단이 없다. 리졸버가 후보에서 빼고 별도로 보고하지 않으므로(그 근거는
+ * `items/carriedTargetResolver.ts` 헤더가 담당한다) 이 핸들러도 미해석을 조립 오류로 올리지 않고
  * `not-found`와 같은 거부로 응답한다.
  *
  * ## 마킹 순서 — characters 먼저, objectDeletions 나중
@@ -90,12 +90,12 @@ const REJECT_MESSAGES: Record<StudyFailure | 'not-found', string> = {
  *    푼다. 이 포트의 `composeCharacterFlags`는 **타이머 보유 효과 전용**이라 `PHIDDN`에 영속 경로가 없고
  *    (`character/flags.ts` 파티션 표의 마지막 행 — 구조적으로 봉쇄된 비트), 따라서 세울 수도 해제할 수도
  *    없다. 그 비트의 영속 표현이 정해지기 전에는 재현 불가다. <!-- 추적 이슈: #121 -->
- * ② **성향 실패 시 방 낙하 유예** — 오라클은 `alignment` 실패 시 비법서를 손에서 떼어 방 바닥에 떨어뜨린다
+ * ② **성향 실패 시 방 낙하 보류** — 오라클은 `alignment` 실패 시 비법서를 손에서 떼어 방 바닥에 떨어뜨린다
  *    (`del_obj_crt` + `add_obj_rom`, magic1.c:315-316). 이 포트의 `objectOwnerSchema`에는 room owner가
  *    없어(`character`|`bank` 둘뿐) 아이템을 방으로 옮길 표현 자체가 없으므로 인벤에 잔류시킨다. **즉
  *    alignment 거부는 아이템을 소모하지 않는다** — 다른 거부 사유와 동일하게 상태 무변이다. 방 바닥
- *    아이템 상태는 이 토픽 범위 밖이고(스펙 §5), 게다가 현 `alignment` 값역이 `[0,2]`라 이 게이트 자체가
- *    구조적으로 미발화하므로 지금은 관측되지 않는다. <!-- 추적 이슈: #123 (값역), 방 owner 표현은 미개설 -->
+ *    아이템 상태는 이 토픽 범위 밖이고(스펙 §5), 게다가 현 `alignment` 값 범위가 `[0,2]`라 이 게이트 자체가
+ *    구조적으로 동작하지 않으므로 지금은 관측되지 않는다. <!-- 추적 이슈: #123 (값 범위), 방 owner 표현은 미개설 -->
  * ③ **성공 시 방 브로드캐스트 미재현** — 오라클은 연마 성공을 방 전체에 알린다(magic1.c:333-334,
  *    `%M이 %1i의 내용을 읽고 연마합니다`). 이 핸들러는 발화자 본인에게만 `progress:studied`를 낸다.
  *    누락이 아니라 **와이어에 대응 이벤트가 없어서**다 — `ServerEvent`에 방 스코프 "누가 무엇을
@@ -103,24 +103,24 @@ const REJECT_MESSAGES: Record<StudyFailure | 'not-found', string> = {
  *
  * ## 스탯 통지는 `character:stats`로 통일한다 (D10)
  * 공격·연마와 같은 스냅샷 이벤트를 성공 경로에 **덧붙인다** — `progress:studied`의 기존 필드는 한 글자도
- * 바꾸지 않는다(D15). 투영 규칙의 단일 출처는 `ws/characterStatsEvent.ts`이고 여기서 재구현하지 않는다.
+ * 바꾸지 않는다(D15). 변환 규칙의 단일 출처는 `ws/characterStatsEvent.ts`이고 여기서 재구현하지 않는다.
  *
- * 투영 입력은 이 명령이 확정해 `liveRegistry.register`에 실은 그 `character`다. study()가 바꾸는 것은
- * `spells`뿐이라 지금은 시작 시점 문서로 투영해도 6필드 값이 같지만, 그것은 이 명령의 부수 효과가
+ * 변환 입력은 이 명령이 확정해 `liveRegistry.register`에 실은 그 `character`다. study()가 바꾸는 것은
+ * `spells`뿐이라 지금은 시작 시점 문서로 변환해도 6필드 값이 같지만, 그것은 이 명령의 부수 효과가
  * 좁다는 우연이지 계약이 아니다. 확정 문서를 넘기는 쪽이 `progress:train`·`combat:attack`과 같은 규칙이다.
  *
  * 반환:
  *   - 성공 → `[progress:studied, character:stats]`(둘 다 상태 이벤트라 correlationId 없음 — progress:trained 선례).
- *   - 게임 규칙 거부·대상 미해소 → `error{rule_rejected, message}` **1개**(id 있으면 correlationId 반향).
+ *   - 게임 규칙 거부·대상 미해석 → `error{rule_rejected, message}` **1개**(id 있으면 correlationId 반향).
  *     상태가 안 바뀌었으므로 스탯 스냅샷을 붙이지 않는다.
- *   - 라이브 미등록 actor → `error{internal}`(배선 격리 — 게임 규칙 거부와 구분).
+ *   - 라이브 미등록 actor → `error{internal}`(연결 격리 — 게임 규칙 거부와 구분).
  */
 export function createStudyHandler(deps: StudyHandlerDeps): CommandHandler {
   return (
     command: ClientCommand,
     actor: ActorContext,
   ): ServerEvent | readonly ServerEvent[] | undefined => {
-    // (1) defensive narrow — router는 progress:study type에만 이 핸들러를 배선하므로 false 갈래는
+    // (1) defensive narrow — router는 progress:study type에만 이 핸들러를 연결하므로 false 갈래는
     //     구조적으로 도달 불가한 방어선이다.
     if (command.type !== 'progress:study') return undefined
 
@@ -130,10 +130,10 @@ export function createStudyHandler(deps: StudyHandlerDeps): CommandHandler {
       return makeErrorEvent('internal', '캐릭터 라이브 상태를 찾을 수 없습니다', command.id)
     }
 
-    // (3) 관찰자 P-flag를 1회 합성해 해소자와 study() 양쪽에 같은 스냅샷을 넘긴다(위 헤더 참조).
+    // (3) 관찰자 P-flag를 1회 합성해 리졸버와 study() 양쪽에 같은 스냅샷을 넘긴다(위 헤더 참조).
     const observerFlags = composeCharacterFlags(live.character, deps.now())
 
-    // (4) 대상 지목 — 오라클 2단 탐색(인벤 find_obj → ready 착용 슬롯). `ordinal` 미지정은 해소자
+    // (4) 대상 지목 — 오라클 2단 탐색(인벤 find_obj → ready 착용 슬롯). `ordinal` 미지정은 리졸버
     //     기본값 1로 떨어진다(와이어 스키마가 하한 1을 강제하므로 0은 도달 불가).
     const found = resolveCarriedObject(
       live.inventory,
@@ -167,7 +167,7 @@ export function createStudyHandler(deps: StudyHandlerDeps): CommandHandler {
     }
 
     // (7) 표시용 주문 이름. study()의 마지막 게이트가 카탈로그 멤버십을 이미 확인했으므로 여기서
-    //     undefined는 도달 불가하지만, 비-null 단언 대신 배선 오류로 격리한다(계약이 갈리면 신호를 준다).
+    //     undefined는 도달 불가하지만, 비-null 단언 대신 조립 오류로 격리한다(계약이 갈리면 신호를 준다).
     const spellNo = found.template.magicpower - 1
     const entry = spellByNo(spellNo)
     if (entry === undefined) {
@@ -195,7 +195,7 @@ export function createStudyHandler(deps: StudyHandlerDeps): CommandHandler {
         spells: character.spells,
         consumedObjectId: found.instance._id,
       },
-      // 이 명령이 확정한 문서에서 투영한다(위 헤더 참조) — 라이브 엔트리에 실은 것과 같은 객체다.
+      // 이 명령이 확정한 문서에서 변환한다(위 헤더 참조) — 라이브 엔트리에 실은 것과 같은 객체다.
       characterStatsEvent(character),
     ]
   }

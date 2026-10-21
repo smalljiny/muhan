@@ -40,7 +40,7 @@ import {
  * `reconnectRevert.settleFailure.regression.test.ts`가 맡는다). 관통 경로는
  * `progress:study`/`progress:train` → `markCharacterDirty` → `SaveEngine`(DirtyTracker checkout/ack)
  * → `peekPending` → `hydrate` overlay → 주기 flush이며, 그 사이 어느 구간에서 grace가 만료되든
- * 진행도가 살아남는지를 본다. 시드·픽스처·하네스는 `reconnectRevert.testutil.ts`가 소유한다.
+ * 진행도가 살아남는지를 본다. 시드·픽스처·하네스는 `reconnectRevert.testutil.ts`가 담당한다.
  *
  * ## 이 파일은 테스트 전용이다 — 프로덕션 코드를 바꾸지 않는다.
  *
@@ -58,8 +58,8 @@ describe('재접속 진행도 revert 회귀 (#124 · grace 만료 비정상 종�
     vi.clearAllMocks()
   })
 
-  it('시드 비법서가 정본 objects.json에서 연마 가능한 SCROLL로 해소된다', () => {
-    // 시나리오 전제를 정본 데이터에 대해 직접 고정한다 — 데이터가 바뀌면 아래 회귀들이 알 수 없는
+  it('시드 비법서가 기준 objects.json에서 연마 가능한 SCROLL로 해석된다', () => {
+    // 시나리오 전제를 기준 데이터에 대해 직접 고정한다 — 데이터가 바뀌면 아래 회귀들이 알 수 없는
     // 이유로 깨지는 대신 여기가 먼저 터진다.
     expect(BOOK_TEMPLATE).toBeDefined()
     expect(BOOK_TEMPLATE?.type).toBe(SCROLL)
@@ -281,7 +281,7 @@ describe('재접속 진행도 revert 회귀 (#124 · grace 만료 비정상 종�
       '재접속 findById가 발행됨',
     )
 
-    // 선형화 지점: peekPending이 findById보다 먼저 발화했다.
+    // 선형화 지점: peekPending이 findById보다 먼저 실행됐다.
     expect(h.callOrder).toEqual([
       `peekPending:${CHARACTERS_COLLECTION}:${CHAR}`,
       `findById:${CHAR}`,
