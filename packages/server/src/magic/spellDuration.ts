@@ -83,7 +83,7 @@ function standardDurArith(
 export function computeBuffDur(spellNo: number, input: BuffDurInput): number {
   const meta = BUFF_DUR_META.get(spellNo)
   if (meta === undefined) {
-    throw new Error(`표준 버프가 아닌 주문번호: ${spellNo} (invis/levit/light는 Story 9 소관)`)
+    throw new Error(`표준 버프가 아닌 주문번호: ${spellNo} (invis/levit/light는 Story 9 담당)`)
   }
   return standardDurArith(input, BUFF_BASE, meta.classBonusClasses, meta.rpmext)
 }
@@ -156,7 +156,7 @@ export interface DebuffDurInput {
 export function computeDebuffDur(spellNo: number, input: DebuffDurInput, rng: CombatRng): number {
   const meta = DEBUFF_DUR_META.get(spellNo)
   if (meta === undefined) {
-    throw new Error(`fear/silence/charm이 아닌 주문번호: ${spellNo} (befuddle 등은 Story 8 소관)`)
+    throw new Error(`fear/silence/charm이 아닌 주문번호: ${spellNo} (befuddle 등은 Story 8 담당)`)
   }
   const roll = meta.rollDie > 0 ? rng(1, meta.rollDie) * meta.rollMult : 0
   let dur = meta.constant + roll + input.intBonus * meta.intMult

@@ -128,7 +128,7 @@ export function assembleDeathSeams(deps: DeathSeamDeps): DeathSeams {
       // 도달 불가 경로 — 상태를 바꾸지 않고 흔적만 남긴다(파일 상단 참조, 실 처리는 #99).
       deps.logger.error(
         { characterId: dead.characterId, roomId: room.roomId, now },
-        'firePlayerDeath: 플레이어 사망 처리는 아직 이식되지 않았다(배선 오류)',
+        'firePlayerDeath: 플레이어 사망 처리는 아직 이식되지 않았다(조립 오류)',
       )
     },
   }

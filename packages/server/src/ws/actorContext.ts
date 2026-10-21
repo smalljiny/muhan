@@ -43,7 +43,7 @@ export interface ActorContext {
 export function buildActorContext(ctx: ConnectionContext): ActorContext {
   if (ctx.account === null || ctx.boundCharacterId === null) {
     throw new Error(
-      '배선 불변식 위반: command 상태이나 account 또는 boundCharacterId가 없다',
+      '조립 불변식 위반: command 상태이나 account 또는 boundCharacterId가 없다',
     )
   }
   return { accountId: ctx.account.accountId, characterId: ctx.boundCharacterId }
