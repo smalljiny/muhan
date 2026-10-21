@@ -47,7 +47,7 @@ function makeChar(overrides: Partial<Character> = {}): Character {
 
 /**
  * class N의 훈련방(base RTRAIN + class-bit 역순 매칭)을 만든다.
- * 역순 규칙은 train.testutil.ts가 단일 출처로 소유한다(소비자마다 재구현하면 드리프트한다).
+ * 역순 규칙은 train.testutil.ts가 단일 출처로 담당한다(소비자마다 재구현하면 드리프트한다).
  */
 const trainingRoomForClass = trainingFlagsForClass
 
@@ -78,7 +78,7 @@ describe('train — location gate', () => {
 
   it('비대칭 class2: bit4가 set된 방(역순 버그면 통과할)이면 class-mismatch', () => {
     // 잘못된 방: base bit3 set + bit4 set (bit6 clear). 정순 버그라면 i=0→bit4로 매칭돼 통과.
-    // 정본(역순)에서는 i=0→bit6=0 !== bit[0]=1 → fail.
+    // 기준 구현(역순)에서는 i=0→bit6=0 !== bit[0]=1 → fail.
     const room = { flags: roomFlags(RTRAIN, 4) }
     const char = makeChar({ class: 2, level: 1, experience: 0, gold: 0 })
     const result = train(char, room, { markCharacterDirty: vi.fn() })
@@ -261,7 +261,7 @@ describe('train — markCharacterDirty 스냅샷 계약', () => {
     const markDirty = vi.fn((_collection: string, _id: string, snapshot: unknown) => {
       captured = snapshot
     })
-    // 실 헬퍼를 끼워 원시 seam에 도달한 스냅샷을 관찰한다 — distinct화 책임은 헬퍼가 소유하므로
+    // 실 헬퍼를 끼워 원시 seam에 도달한 스냅샷을 관찰한다 — distinct화 책임은 헬퍼가 담당하므로
     // 여기서 vi.fn()만 쓰면 반환 character와 같은 참조가 넘어와 아래 별칭 단언이 무의미해진다.
     const result = train(char, room, { markCharacterDirty: createMarkCharacterDirty(markDirty) })
     expect(markDirty).toHaveBeenCalledWith('characters', 'char-1', expect.anything())

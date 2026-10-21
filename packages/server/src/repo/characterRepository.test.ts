@@ -111,7 +111,7 @@ describe('CharacterRepository (integration)', () => {
 
   it('updateById는 status를 담지 않은 패치가 status default를 재주입하지 않는다 (무덤 부활 방지)', async () => {
     // 무덤(status='deleted') 문서에 status를 뺀 부분 패치를 적용한다. characterSchema.status에
-    // 걸린 .default('active')가 patch 검증에서 재발화하면 $set에 status:'active'가 섞여 무덤이
+    // 걸린 .default('active')가 patch 검증에서 다시 동작하면 $set에 status:'active'가 섞여 무덤이
     // 부활한다(silent lost-write). removeDefault 파생 패치 스키마가 이를 막는지 고정한다.
     const doc = makeCharacter({ status: 'deleted', deletedAt: new Date() })
     await repo.insert(doc)
@@ -235,7 +235,7 @@ describe('CharacterRepository (integration)', () => {
     expect(found).not.toBeNull()
     expect(found?.status).toBe('deleted')
     expect(found?.deletedAt).toBeInstanceOf(Date)
-    // 논리 부재 측: findByAccount는 무덤 캐릭터를 제외한다(재로그인 차단 불변식).
+    // 논리적으로 없는 측: findByAccount는 무덤 캐릭터를 제외한다(재로그인 차단 불변식).
     const list = await repo.findByAccount('acc-sd')
     expect(list.map((c) => c._id)).not.toContain('sd1')
   })
@@ -248,7 +248,7 @@ describe('CharacterRepository (integration)', () => {
     await expect(repo.deleteById('missing')).rejects.toThrow(DocumentNotFoundError)
   })
 
-  it('findById는 vitals·experience·spells·alignment 없는 v1 문서를 backfill 체인(V6∘V5∘V4∘V3∘V2)으로 승격해 parse 통과시킨다', async () => {
+  it('findById는 vitals·experience·spells·alignment 없는 v1 문서를 backfill 체인(V6∘V5∘V4∘V3∘V2)으로 올려 parse 통과시킨다', async () => {
     // repo.insert는 최신 스키마로 거부하므로 untyped 컬렉션에 raw v1 문서를 직접 주입한다.
     await db.collection<RawCharacterDoc>('characters').insertOne({
       _id: 'v1-load',
@@ -277,7 +277,7 @@ describe('CharacterRepository (integration)', () => {
     expect(found?.schemaVersion).toBe(6)
   })
 
-  it('findByAccount도 v1 문서를 backfill로 승격해 반환한다 (parse 이전 승격)', async () => {
+  it('findByAccount도 v1 문서를 backfill로 올려 반환한다 (parse 이전에 올림)', async () => {
     await db.collection<RawCharacterDoc>('characters').insertOne({
       _id: 'v1-acc',
       name: '옛사제',
@@ -300,7 +300,7 @@ describe('CharacterRepository (integration)', () => {
     expect(list[0]?.schemaVersion).toBe(6)
   })
 
-  it('★판별: level=50 v2 문서를 load하면 level·vitals를 보존하고 experience를 정합 시딩한다', async () => {
+  it('★판별: level=50 v2 문서를 load하면 level·vitals를 보존하고 experience를 level에 맞게 시딩한다', async () => {
     // 실데이터는 전부 level 1이라 level>1 문서라야 마이그레이션 클로버(level=1 리셋·vitals 재시딩)가
     // 드러난다. V2 가드/스탬프가 CURRENT(3)에 매이면 이 v2 문서가 V2로 흘러 level=1로 클로버된다.
     await db.collection<RawCharacterDoc>('characters').insertOne({

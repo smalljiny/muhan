@@ -109,8 +109,8 @@ export interface SaveEngineOptions {
   /**
    * AsyncWriteQueue 옵션(capacity·재시도·backoff sleep seam).
    *
-   * `onSettled`는 제외한다 — 엔진이 그 seam으로 DirtyTracker 반납을 배선하므로 호출자 값이
-   * 들어오면 반납이 발화하지 않아 스냅샷이 inProgress에 영구 잔류한다. 그 고장은 예외도 로그도
+   * `onSettled`는 제외한다 — 엔진이 그 seam으로 DirtyTracker 반납을 연결하므로 호출자 값이
+   * 들어오면 반납이 실행되지 않아 스냅샷이 inProgress에 영구 잔류한다. 그 고장은 예외도 로그도
    * 남기지 않으니, 넘길 수 있게 두고 무시하는 대신 타입으로 막는다.
    */
   readonly queueOptions?: Omit<AsyncWriteQueueOptions, 'onSettled'>
@@ -167,7 +167,7 @@ export class SaveEngine {
     }
     this.tracker = new DirtyTracker()
     // 실 logger 주입(NOOP 아님) — 무흔적 폐기 방지.
-    // onSettled 배선은 스프레드 **뒤**에 둔다. 호출자 값이 덮어쓰는 경로는 queueOptions의
+    // onSettled 연결은 스프레드 **뒤**에 둔다. 호출자 값이 덮어쓰는 경로는 queueOptions의
     // Omit이 이미 타입으로 막았고, 이 순서는 그 방어의 이중화다.
     this.queue = new AsyncWriteQueue(this.dispatch, logger, {
       ...options.queueOptions,

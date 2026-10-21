@@ -179,7 +179,7 @@ describe('wearGate', () => {
   })
 })
 
-describe('wearGate — E6 유예 명시 입력 게이트', () => {
+describe('wearGate — E6 보류 명시 입력 게이트', () => {
   // ── ⑤ 결혼 (type===ARMOR 조건부) ───────────────────────────────────────────
   it('⑤ OMARRI + 미혼이면 rejected', () => {
     const p = { ...baseParams(), flags: F_SET('', OMARRI), actor: { ...baseActor(), married: false } }
@@ -239,7 +239,7 @@ describe('wearGate — 슬롯 점유(⑥)·파손(⑦)', () => {
     expect(wearGate({ ...baseParams(), shotscur: 0 }).kind).toBe('rejected')
   })
 
-  it('⑦↔⑧ 순서 잠금: 파손 + OGOODO 성향위반 동시면 ⑦(파손) 먼저 발화 → rejected(bounced 아님)', () => {
+  it('⑦↔⑧ 순서 잠금: 파손 + OGOODO 성향위반 동시면 ⑦(파손) 먼저 동작 → rejected(bounced 아님)', () => {
     // 오라클 command3.c: ⑦ shotscur<1(line 148) → rejected가 ⑧ 성향(line 153) → bounced보다 앞선다.
     // 두 게이트의 outcome kind가 달라(rejected≠bounced) 순서 재배열 시 조용히 뒤집힐 수 있으므로 잠근다.
     const p = { ...baseParams(), shotscur: 0, flags: F_SET('', OGOODO), actor: { ...baseActor(), alignment: -60 } }
@@ -390,7 +390,7 @@ describe('readyGate — 오라클 command3.c:691~ 순서', () => {
   })
 
   // ── ② 마법사 무거운무기(dice합>14, ONOMAG 아님) ────────────────────────────
-  it('② SHARP dice합>14 + MAGE면 rejected (ONOMAG 없이도 발화)', () => {
+  it('② SHARP dice합>14 + MAGE면 rejected (ONOMAG 없이도 동작)', () => {
     // ndice5*sdice3+pdice0 = 15 > 14. ONOMAG 플래그 미설정.
     const p = { ...baseReadyParams(), ndice: 5, sdice: 3, pdice: 0, actor: { ...baseActor(), class: MAGE } }
     expect(readyGate(p).kind).toBe('rejected')
@@ -399,21 +399,21 @@ describe('readyGate — 오라클 command3.c:691~ 순서', () => {
     const p = { ...baseReadyParams(), ndice: 5, sdice: 3, pdice: 0, actor: { ...baseActor(), class: CLERIC } }
     expect(readyGate(p).kind).toBe('rejected')
   })
-  it('② SHARP dice합>14 + FIGHTER면 ② 미발화 → equipped', () => {
-    // dice 15, FIGHTER: ② 미발화(MAGE/CLERIC 아님). ⑪ check_dmg 15-7=8 not>15 → skip → equipped.
+  it('② SHARP dice합>14 + FIGHTER면 ② 동작하지 않음 → equipped', () => {
+    // dice 15, FIGHTER: ② 동작하지 않음(MAGE/CLERIC 아님). ⑪ check_dmg 15-7=8 not>15 → skip → equipped.
     const p = { ...baseReadyParams(), ndice: 5, sdice: 3, pdice: 0, actor: { ...baseActor(), class: FIGHTER } }
     expect(readyGate(p).kind).toBe('equipped')
   })
-  it('② dice합===14(경계, >14 아님) + MAGE면 ② 미발화 → equipped', () => {
+  it('② dice합===14(경계, >14 아님) + MAGE면 ② 동작하지 않음 → equipped', () => {
     // 14는 >14 아님. MAGE check_dmg 14 not >15 → ⑪ 통과 → equipped.
     const p = { ...baseReadyParams(), ndice: 7, sdice: 2, pdice: 0, actor: { ...baseActor(), class: MAGE } }
     expect(readyGate(p).kind).toBe('equipped')
   })
-  it('② questnum!==0이면 ② 미발화(dice>14 MAGE라도 통과)', () => {
+  it('② questnum!==0이면 ② 동작하지 않음(dice>14 MAGE라도 통과)', () => {
     const p = { ...baseReadyParams(), ndice: 5, sdice: 3, pdice: 0, questnum: 5, actor: { ...baseActor(), class: MAGE } }
     expect(readyGate(p).kind).toBe('equipped')
   })
-  it('② ONEWEV이면 ② 미발화(dice>14 MAGE라도 통과, isBoundOwner true)', () => {
+  it('② ONEWEV이면 ② 동작하지 않음(dice>14 MAGE라도 통과, isBoundOwner true)', () => {
     const p = { ...baseReadyParams(), flags: F_SET('', ONEWEV), ndice: 5, sdice: 3, pdice: 0, actor: { ...baseActor(), class: MAGE }, isBoundOwner: true }
     expect(readyGate(p).kind).toBe('equipped')
   })
@@ -435,7 +435,7 @@ describe('readyGate — 오라클 command3.c:691~ 순서', () => {
     const p = { ...baseReadyParams(), flags: F_SET('', ONOFEM), actor: { ...baseActor(), gender: MALE } }
     expect(readyGate(p).kind).toBe('equipped')
   })
-  it('③ BLUNT + ONOFEM + 여성이면 성별 게이트 미발화 → equipped (SHARP/THRUST 아님)', () => {
+  it('③ BLUNT + ONOFEM + 여성이면 성별 게이트 동작하지 않음 → equipped (SHARP/THRUST 아님)', () => {
     const p = { ...baseReadyParams(), type: BLUNT, flags: F_SET('', ONOFEM), actor: { ...baseActor(), gender: FEMALE } }
     expect(readyGate(p).kind).toBe('equipped')
   })
@@ -490,11 +490,11 @@ describe('readyGate — 오라클 command3.c:691~ 순서', () => {
     const p = { ...baseReadyParams(), ndice: 39, sdice: 1, pdice: 0, actor: { ...baseActor(), level: 300 } }
     expect(readyGate(p).kind).toBe('equipped')
   })
-  it('⑧ dice합>39이라도 questnum!==0이면 ⑧ 미발화(⑨/⑪도 우회) → equipped', () => {
+  it('⑧ dice합>39이라도 questnum!==0이면 ⑧ 동작하지 않음(⑨/⑪도 우회) → equipped', () => {
     const p = { ...baseReadyParams(), ndice: 40, sdice: 1, pdice: 0, questnum: 5 }
     expect(readyGate(p).kind).toBe('equipped')
   })
-  it('⑧ dice합>39이라도 ONEWEV이면 ⑧ 미발화(isBoundOwner true) → equipped', () => {
+  it('⑧ dice합>39이라도 ONEWEV이면 ⑧ 동작하지 않음(isBoundOwner true) → equipped', () => {
     const p = { ...baseReadyParams(), flags: F_SET('', ONEWEV), ndice: 40, sdice: 1, pdice: 0, isBoundOwner: true }
     expect(readyGate(p).kind).toBe('equipped')
   })
@@ -535,7 +535,7 @@ describe('readyGate — 오라클 command3.c:691~ 순서', () => {
   })
 
   // ── ⑪ 레벨 (check_dmg 직업별 감산) ─────────────────────────────────────────
-  it('⑪ dice합22 + FIGHTER(−7=15)면 ⑪ 미발화 → equipped(level 1)', () => {
+  it('⑪ dice합22 + FIGHTER(−7=15)면 ⑪ 동작하지 않음 → equipped(level 1)', () => {
     // 22-7=15, not >15 → 게이트 skip.
     const p = { ...baseReadyParams(), ndice: 22, sdice: 1, pdice: 0, actor: { ...baseActor(), class: FIGHTER, level: 1 } }
     expect(readyGate(p).kind).toBe('equipped')
@@ -565,11 +565,11 @@ describe('readyGate — 오라클 command3.c:691~ 순서', () => {
     const p = { ...baseReadyParams(), ndice: 22, sdice: 1, pdice: 0, actor: { ...baseActor(), class: BARBARIAN, level: 66 } }
     expect(readyGate(p).kind).toBe('equipped')
   })
-  it('⑪ questnum!==0이면 ⑪ 미발화 → equipped', () => {
+  it('⑪ questnum!==0이면 ⑪ 동작하지 않음 → equipped', () => {
     const p = { ...baseReadyParams(), ndice: 22, sdice: 1, pdice: 0, questnum: 5, actor: { ...baseActor(), class: BARBARIAN, level: 1 } }
     expect(readyGate(p).kind).toBe('equipped')
   })
-  it('⑪ ONEWEV이면 ⑪ 미발화(isBoundOwner true) → equipped', () => {
+  it('⑪ ONEWEV이면 ⑪ 동작하지 않음(isBoundOwner true) → equipped', () => {
     const p = { ...baseReadyParams(), flags: F_SET('', ONEWEV), ndice: 22, sdice: 1, pdice: 0, actor: { ...baseActor(), class: BARBARIAN, level: 1 }, isBoundOwner: true }
     expect(readyGate(p).kind).toBe('equipped')
   })
@@ -593,7 +593,7 @@ describe('readyGate — advisor 정밀 검증점', () => {
   })
 
   // 순서 잠금: ⑤ OCLSEL → ⑥ 성향 순서. wear.ts는 성향(⑧)→OCLSEL(⑨)로 역순이므로,
-  // readyGate를 wear.ts에 맞춰 재배열하면 reject↔bounce가 조용히 뒤집힌다. ⑤가 먼저 발화해 rejected여야 한다.
+  // readyGate를 wear.ts에 맞춰 재배열하면 reject↔bounce가 조용히 뒤집힌다. ⑤가 먼저 동작해 rejected여야 한다.
   it('순서 잠금: OCLSEL-mismatch(⑤) && OGOODO+성향<-50(⑥) → rejected (⑤ 먼저 — wear.ts와 역순)', () => {
     const flags = F_SET(F_SET('', OCLSEL), OGOODO)
     const p = { ...baseReadyParams(), flags, actor: { ...baseActor(), class: FIGHTER, alignment: -60 } }

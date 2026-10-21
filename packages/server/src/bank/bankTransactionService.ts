@@ -20,24 +20,24 @@ import { DocumentNotFoundError } from '../repo/types.js'
  * 불변식을 인라인으로 강제한다: `$gte:amt`가 비음수(음수 잔액 불가), `$lte:3억−amt`가 상한을
  * 대신한다. 스키마 위반 write는 도달 불가능하다.
  *
- * 에러 구분의 한계(가드-CAS 본질): 가드된 필터의 매칭0은 "문서 부재"와 "값 위반"을 구분하지
+ * 에러 구분의 한계(가드-CAS 본질): 가드된 필터의 매칭0은 "문서 없음"과 "값 위반"을 구분하지
  * 못한다 — 존재하지 않는 은행 계좌 입금은 BankCapExceededError로, 존재하지 않는 캐릭터 차감은
  * InsufficientFundsError로 표면화된다. 어느 경우든 돈은 이동하지 않고 트랜잭션이 abort되므로
- * 무결성 문제가 아닌 진단 정확도 한계다. 호출자가 부재/위반을 구분해야 하면 트랜잭션 내 존재
+ * 무결성 문제가 아닌 진단 정확도 한계다. 호출자가 없음/위반을 구분해야 하면 트랜잭션 내 존재
  * 사전조회를 추가한다(후속 seam).
  *
  * 불변식 6(은행 gold 상한 3억, 오라클 bank.c:314 유래): 입금은 value+amt ≤ 3억일 때만
  * 성공한다. MAX_BANK_GOLD 조건부 필터가 이를 원자적으로 강제한다.
  *
- * Open Q 3(character.gold 상한 유예): character 스키마는 min0-only(상한 없음)다. 출금
+ * Open Q 3(character.gold 상한 보류): character 스키마는 min0-only(상한 없음)다. 출금
  * 크레딧은 character.gold에 상한을 부과하지 않는다 — 상한 정책이 확정되면 이 seam에
  * 대칭 가드를 추가한다.
  *
  * 쓰기 경로 조정 계약(이슈 #43 — blocking): 이 서비스는 gold를 Mongo 트랜잭션으로 직접 쓴다.
  * 같은 characters·bankAccounts 문서가 SaveEngine의 write-behind 경로(markDirty→주기 flush)로도
- * 흘러가면, 트랜잭션 커밋 이후 도착한 stale 스냅샷 flush가 gold를 되돌릴 수 있다(무성 revert/손실).
+ * 흘러가면, 트랜잭션 커밋 이후 도착한 stale 스냅샷 flush가 gold를 되돌릴 수 있다(조용한 revert/손실).
  *
- * **gold는 이제 write-behind 경로에 진입했다.** `progress:train` 명령이 배선되면서 라이브 세션의
+ * **gold는 이제 write-behind 경로에 진입했다.** `progress:train` 명령이 연결되면서 라이브 세션의
  * 연마가 `insufficient-gold` 게이트로 비용을 검사하고 차감하며, 그 결과가 characters 전체 문서
  * 스냅샷(gold 포함)으로 markDirty에 실린다. 이동·세션 종료 flush도 같은 전체 문서를 싣는다. 즉
  * "gold를 dirty로 마킹하는 caller가 없다"는 이전 전제는 더 이상 참이 아니다.
@@ -46,7 +46,7 @@ import { DocumentNotFoundError } from '../repo/types.js'
  * 은행 명령 variant가 없고, 이 서비스의 non-test caller가 0건이다). 한쪽 경로만 활성화된 상태다.
  *
  * **blocking 계약: #43(evict/quiesce 또는 gold write-behind 배제)을 해소하기 전에는 은행 명령을
- * 배선하지 않는다.** 배선하는 순간 커밋된 입출금이 다음 이동·연마·종료 flush에 무성 revert된다.
+ * 연결하지 않는다.** 연결하는 순간 커밋된 입출금이 다음 이동·연마·종료 flush에 조용히 revert된다.
  *
  * 해소 방향(둘 중 하나를 택한다): (a) 트랜잭션 전후로 두 키를 SaveEngine에서 evict/quiesce하고
  * 커밋 후 최신 스냅샷으로 재-mark하거나, (b) gold 변이를 write-behind 밖에 두어 단일 authoritative
@@ -112,8 +112,8 @@ export class BankTransactionService {
   /**
    * 입금(캐릭터→은행). character.gold −amt, bankAccount.gold +amt를 한 트랜잭션에서 커밋한다.
    *
-   * step1: character.gold ≥ amt 조건에서 차감(부족·부재 시 매칭0 → InsufficientFundsError).
-   * step2: bankAccount.gold ≤ 3억−amt 조건에서 가산(상한 초과·부재 시 매칭0 → BankCapExceededError).
+   * step1: character.gold ≥ amt 조건에서 차감(부족하거나 문서가 없으면 매칭0 → InsufficientFundsError).
+   * step2: bankAccount.gold ≤ 3억−amt 조건에서 가산(상한 초과이거나 문서가 없으면 매칭0 → BankCapExceededError).
    * 두 단계 중 하나라도 매칭0이면 콜백 throw → withTransaction abort(부분 커밋 없음).
    */
   async deposit(characterId: string, bankAccountId: string, amount: number): Promise<void> {
@@ -150,8 +150,8 @@ export class BankTransactionService {
   /**
    * 출금(은행→캐릭터). bankAccount.gold −amt, character.gold +amt를 한 트랜잭션에서 커밋한다.
    *
-   * step1: bankAccount.gold ≥ amt 조건에서 차감(부족·부재 시 매칭0 → InsufficientFundsError).
-   * step2: character.gold 가산(상한 미부과, Open Q 3). character 부재 시 매칭0 →
+   * step1: bankAccount.gold ≥ amt 조건에서 차감(부족하거나 문서가 없으면 매칭0 → InsufficientFundsError).
+   * step2: character.gold 가산(상한 미부과, Open Q 3). character 문서가 없으면 매칭0 →
    *        DocumentNotFoundError(repo 계층 관례와 일관). 어느 단계든 매칭0이면 abort.
    */
   async withdraw(characterId: string, bankAccountId: string, amount: number): Promise<void> {

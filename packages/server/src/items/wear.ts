@@ -1,9 +1,9 @@
 /**
  * 방어구 착용(wear) 다층 게이트 — 오라클 command3.c wear()(라인 52~194)의 게이트 순서를
- * 글자 그대로 이식한 순수 함수. 실 인벤 이동·객체 파괴는 outcome만 반환하고 배선은 유예한다.
+ * 글자 그대로 이식한 순수 함수. 실 인벤 이동·객체 파괴는 outcome만 반환하고 연결은 보류한다.
  *
  * 게이트는 첫 실패에서 즉시 반환한다. questnum·ONEWEV(flags)를 반드시 스레드해야 소각·레벨
- * 게이트가 정확히 발화한다. 저주(OCURSE)는 게이트에 포함하지 않는다 — 저주는 탈착 시점 판정이다.
+ * 게이트가 정확히 동작한다. 저주(OCURSE)는 게이트에 포함하지 않는다 — 저주는 탈착 시점 판정이다.
  */
 
 import type { ObjectInstance } from 'shared'
@@ -47,7 +47,7 @@ const OTHER_AC_WEIGHT = 5
 const BURN_REASON = '푸른 연기와 함께 사라졌습니다.'
 
 /**
- * 착용 주체 — E6 유예 필드(married·수치 alignment)를 명시 입력으로 받는다.
+ * 착용 주체 — E6 보류 필드(married·수치 alignment)를 명시 입력으로 받는다.
  * gender는 1=남/2=여. race는 mtype.h RACE 인코딩.
  */
 export interface WearActor {
@@ -61,7 +61,7 @@ export interface WearActor {
 
 /**
  * wearGate 입력 — object의 instance + template 스탯 + 점유 슬롯 + 착용 주체.
- * questnum·flags(ONEWEV 포함)를 스레드해야 소각·레벨 게이트가 정확히 발화한다.
+ * questnum·flags(ONEWEV 포함)를 스레드해야 소각·레벨 게이트가 정확히 동작한다.
  */
 export interface WearParams {
   readonly flags: string
@@ -80,7 +80,7 @@ export interface WearParams {
  * 착용 결과 판별 유니온:
  * - equipped: 착용 성공, slot 설정된 새 인스턴스
  * - rejected: 게이트 거부(인벤에 그대로)
- * - burned: 밸런스 소각(파괴 — 배선 유예)
+ * - burned: 밸런스 소각(파괴 — 연결 보류)
  * - bounced: 성향 반발로 몸에서 튕겨 바닥 낙하(reject와 별개)
  */
 export type WearOutcome =
@@ -205,7 +205,7 @@ const HOLD_BOUNCE_REASON = '당신의 손에서 튕겨져 나가 땅에 떨어�
 
 /**
  * readyGate 입력 — object의 instance + template 무기 스탯 + 점유 슬롯 + 착용 주체 + 소유자 일치 여부.
- * isBoundOwner는 오라클 `strcmp(obj->key[2], ply->name)==0`(command3.c:820)의 명시 입력이다(배선 유예).
+ * isBoundOwner는 오라클 `strcmp(obj->key[2], ply->name)==0`(command3.c:820)의 명시 입력이다(연결 보류).
  */
 export interface ReadyParams {
   readonly flags: string
@@ -241,7 +241,7 @@ export interface HoldParams {
 
 /**
  * 무기 장착(ready) 다층 게이트 — 오라클 command3.c ready()(라인 691~835)의 순서를 글자 그대로 이식한다.
- * 게이트는 첫 실패에서 즉시 반환한다. 실 인벤 이동·객체 파괴는 outcome만 반환하고 배선은 유예한다.
+ * 게이트는 첫 실패에서 즉시 반환한다. 실 인벤 이동·객체 파괴는 outcome만 반환하고 연결은 보류한다.
  */
 export function readyGate(params: ReadyParams): WearOutcome {
   const { flags, type, wearflag, ndice, sdice, pdice, shotsmax, shotscur, questnum, instance, occupiedSlots, actor, isBoundOwner } =

@@ -120,7 +120,7 @@ describe('shopService.buy', () => {
 })
 
 /**
- * 몹 상점 취득 순수 함수 단위 테스트 — purchase(A8 §8 MPURIT)는 mobBuyPrice(max(10,value))로
+ * 몹 상점에서 아이템을 얻는 순수 함수 단위 테스트 — purchase(A8 §8 MPURIT)는 mobBuyPrice(max(10,value))로
  * 게이트하고, get/give/purchase 개수 상한 150을 pre-purchase strict `>`로 검사한다. buy와 달리
  * 가격 하한(floor 10)이 있어, 저가 아이템은 value보다 비싼 최소 10냥을 요구한다.
  */
@@ -208,7 +208,7 @@ describe('shopService.purchase', () => {
     expect(result.goldAfter).toBe(400)
   })
 
-  it('count 경계: invCount=150이면 성공한다(오라클 strict > — 150 보유자 취득 가능, 151에서 종료)', () => {
+  it('count 경계: invCount=150이면 성공한다(오라클 strict > — 150 보유자도 얻을 수 있음, 151에서 종료)', () => {
     const char: BuyerState = { gold: 500, invCount: 150 }
     const item = makeItem({ value: 100 })
     const result = purchase(char, item)

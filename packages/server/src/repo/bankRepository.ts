@@ -21,7 +21,7 @@ const bankAccountPatchSchema = bankAccountSchema.partial()
  * updateById(partial parse) 양쪽에서 범위 밖 gold를 거부한다. 별도 임계값을 중복 정의하지
  * 않고 스키마를 단일 출처로 삼는다.
  *
- * 인덱스 수명주기는 이 저장소가 소유한다 — init()이 owner unique 인덱스(계좌 1:1)를 보장한다.
+ * 인덱스 수명주기는 이 저장소가 담당한다 — init()이 owner unique 인덱스(계좌 1:1)를 보장한다.
  */
 export class BankRepository implements IRepository<BankAccount> {
   // 생성자 주입: Db와 ObjectRepository(holdings hydration용)를 외부에서 주입받는다.

@@ -8,7 +8,7 @@ import {
 } from './objectFixtures.testutil.js'
 
 describe('pairObject', () => {
-  it('objnum으로 템플릿이 해소되면 {instance, template} 쌍을 반환한다', () => {
+  it('objnum으로 템플릿이 해석되면 {instance, template} 쌍을 반환한다', () => {
     const template = makeTemplate({ objnum: 7, name: '비법서' })
     const instance = makeInstance({ _id: 'obj-a', objnum: 7 })
 
@@ -73,7 +73,7 @@ describe('pairObjects', () => {
     expect(result[2]?.instance).toBe(instances[2])
   })
 
-  it('템플릿 미해소 인스턴스만 제외하고 나머지 순서는 유지한다', () => {
+  it('템플릿 미해석 인스턴스만 제외하고 나머지 순서는 유지한다', () => {
     const index = makeIndex([makeTemplate({ objnum: 1 }), makeTemplate({ objnum: 3 })])
     const instances = [
       makeInstance({ _id: 'a', objnum: 1 }),
@@ -86,7 +86,7 @@ describe('pairObjects', () => {
     expect(result.map((p) => p.instance._id)).toEqual(['a', 'c'])
   })
 
-  it('모든 인스턴스가 미해소면 빈 배열을 반환한다', () => {
+  it('모든 인스턴스가 미해석이면 빈 배열을 반환한다', () => {
     const instances = [
       makeInstance({ _id: 'orphan-8', objnum: 8 }),
       makeInstance({ _id: 'orphan-9', objnum: 9 }),
@@ -127,7 +127,7 @@ describe('pairObjects', () => {
 
   it('산출물이 EquippedPair 계약을 만족한다(캐스팅 없이 projectEquipStats 입력 타입에 대입 가능)', () => {
     // 컴파일 레벨 검증 — #121이 이 산출물을 그대로 소비한다는 계약을 tsc가 지킨다.
-    // projectEquipStats를 호출하지는 않는다(장비 스탯 투영은 #121 범위).
+    // projectEquipStats를 호출하지는 않는다(장비 스탯 변환은 #121 범위).
     const index = makeIndex([makeTemplate({ objnum: 1, armor: 5 })])
     const paired = pairObjects([makeInstance({ objnum: 1, equipped: true, slot: 0 })], index)
 

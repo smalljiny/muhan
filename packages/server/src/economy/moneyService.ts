@@ -1,7 +1,7 @@
 /**
  * 금화 경제 순수 함수 — A8 §7(금화 경제)의 MONEY-object drop/pickup/give를 gold↔디스크립터
  * 순수 변환으로 이식한다. MongoDB·Character·ObjectInstance에 의존하지 않고 좁은 숫자 입력만
- * 다룬다. 영속화·바닥 배치·소유자 배선은 호출자(#106, 후속 토픽)의 책임이다.
+ * 다룬다. 영속화·바닥 배치·소유자 연결은 호출자(#106, 후속 토픽)의 책임이다.
  *
  * D1(스키마 동결): 이 모듈은 shared의 object.ts·character.ts·MAX_* 상수를 import하지 않는다.
  * MoneyDescriptor를 로컬로 정의해 cross-package import를 0으로 유지, 동시 worktree(#85)의
@@ -9,13 +9,13 @@
  *
  * gold 상한(서비스 계층 강제, min0-only): 금액 가드는 양의 정수(≥1)이며, 어떤 연산도 gold를
  * 음수로 만들지 않는다(amt>gold·amt>fromGold 거부로 보장). 스키마 `.max()`를 도입하지 않는다.
- * 상한 VALUE는 Open Q#3로 유예한다 — bankTransactionService.withdraw가 min0-only인 것과 대칭.
+ * 상한 VALUE는 Open Q#3로 보류한다 — bankTransactionService.withdraw가 min0-only인 것과 대칭.
  */
 
 /**
  * MONEY 디스크립터 — 좁은 객체이며 완전한 ObjectInstance가 아니다. objnum 0="동전" 템플릿,
  * type 10=MONEY(A8 §1 taxonomy). A8 §7 die()는 몹 gold를 obj->value=gold인 MONEY 객체로
- * 변환한다. 소유자·영속 필드가 없는 bare 디스크립터다(바닥 배치·소유자 배선은 #106의 몫).
+ * 변환한다. 소유자·영속 필드가 없는 bare 디스크립터다(바닥 배치·소유자 연결은 #106의 몫).
  */
 export interface MoneyDescriptor {
   readonly objnum: 0

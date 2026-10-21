@@ -29,7 +29,7 @@ export class InMemorySessionAuthAdapter implements SessionAuthPort {
 
   /**
    * 선택적 초기 상태를 받아 저장소를 구성한다. 인자를 생략하면 빈 어댑터가 된다.
-   * 시드는 createSeededAuthAdapter가 이 생성자로 주입한다(포트 표면에 register 메서드를 두지 않음).
+   * 시드는 createSeededAuthAdapter가 이 생성자로 주입한다(포트 인터페이스에 register 메서드를 두지 않음).
    */
   constructor(seed?: {
     cookieToAccount?: Record<string, string>
@@ -65,8 +65,8 @@ export class InMemorySessionAuthAdapter implements SessionAuthPort {
 
   createCharacter(accountId: string, dto: CreateCharacterInput): Promise<CharacterSummary> {
     // 인메모리 어댑터는 CharacterSummary만 저장하고 스탯·gender·weapon·alignment를 영속하지 않는다
-    // (요약엔 이 필드가 없다). 전체 DTO를 받되 요약에 필요한 name·class·race만 투영한다 — 종족 보정 수학은
-    // Character 문서를 조립하는 firebase 어댑터가 소유한다.
+    // (요약엔 이 필드가 없다). 전체 DTO를 받되 요약에 필요한 name·class·race만 변환한다 — 종족 보정 수학은
+    // Character 문서를 조립하는 firebase 어댑터가 담당한다.
     const summary: CharacterSummary = {
       characterId: `char-${this.nextCharacterSeq++}`,
       name: dto.name,

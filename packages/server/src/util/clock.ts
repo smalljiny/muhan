@@ -3,7 +3,7 @@
  *
  * saveScheduler·heartbeat·WorldClock 등 주기 콜백을 거는 컴포넌트가 전역 setInterval/
  * clearInterval을 직접 부르지 않고 이 모듈의 SchedulerClock을 통해 호출한다. 이 seam으로
- * (a) 테스트에서 FakeClock을 주입해 tick을 수동 구동하고(비결정적 실타이머 대기 제거),
+ * (a) 테스트에서 FakeClock을 주입해 tick을 수동 실행하고(비결정적 실타이머 대기 제거),
  * (b) 서로 다른 스케줄러가 clock 구현을 교체·공유할 수 있다. 전역 싱글턴을 쓰지 않고 의존성을
  * 생성자로 주입해 인스턴스 격리를 보장한다.
  *

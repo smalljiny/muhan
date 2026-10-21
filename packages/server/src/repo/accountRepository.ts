@@ -21,7 +21,7 @@ export type AccountUpsertInput = {
  * 계정 영속 저장소.
  *
  * Account의 `_id`(Firebase UID 문자열)를 Mongo `_id`로 그대로 매핑한다. 최초 인증 시
- * upsert로 account를 승격하고(role=player·status=active), 이후 권한 변경은 updateRole·
+ * upsert로 account를 등록하고(role=player·status=active), 이후 권한 변경은 updateRole·
  * setStatus가 담당한다.
  *
  * 경계 검증: upsert 반환 직후·findById 직후 accountSchema.parse로, 부분 갱신(updateRole·
@@ -46,7 +46,7 @@ export class AccountRepository {
   }
 
   /**
-   * 최초 인증 시 account 승격 경로. 존재하지 않으면 defaults로 생성하고, 이미 있으면
+   * 최초 인증 시 account 등록 경로. 존재하지 않으면 defaults로 생성하고, 이미 있으면
    * role·status·createdAt을 보존한다($setOnInsert는 insert 때만 기록되므로 멱등).
    */
   async upsert(input: AccountUpsertInput): Promise<Account> {
@@ -81,7 +81,7 @@ export class AccountRepository {
 
   // status='banned'를 기록하는 저장 경로는 여기 있으나, 연결 게이트(validateSessionCookie·
   // gameAuthPreValidation)는 아직 banned를 강제하지 않는다 — ban을 세팅하는 admin 명령이 A13
-  // (RBAC 명령 배선)로 유예됐기 때문이다. A13에서 ban 명령을 붙일 때 validateSessionCookie에
+  // (RBAC 명령 연결)로 보류됐기 때문이다. A13에서 ban 명령을 붙일 때 validateSessionCookie에
   // 접속 시점 banned 거부(또는 주기적 검사)를 함께 추가한다(assertRole defer와 동일 선). 지금은
   // 어떤 경로도 banned를 세팅하지 않아 트리거 불가한 잠복 갭이다.
   async setStatus(id: string, status: Account['status']): Promise<void> {

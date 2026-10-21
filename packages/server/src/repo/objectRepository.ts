@@ -18,7 +18,7 @@ const objectPatchSchema = objectSchema.partial()
  * 경계 검증: 저장(insert) 직전과 조회(findById·findByOwner) 직후 objectSchema.parse로
  * 검증한다. 손상된 DB 문서가 조용히 새어 나가지 않고 시끄럽게 드러나게 한다.
  *
- * 인덱스 수명주기는 이 저장소가 소유한다 — init()이 owner 복합 인덱스를 보장한다.
+ * 인덱스 수명주기는 이 저장소가 담당한다 — init()이 owner 복합 인덱스를 보장한다.
  */
 export class ObjectRepository implements IRepository<ObjectInstance> {
   // 생성자 주입: Db는 외부에서 주입받는다(전역·서비스 로케이터 미사용).
@@ -30,7 +30,7 @@ export class ObjectRepository implements IRepository<ObjectInstance> {
 
   /**
    * owner 복합 인덱스를 보장한다. createIndex는 멱등이라 반복 호출해도 안전하다.
-   * 인덱스 수명주기를 저장소가 자체 소유한다.
+   * 인덱스 수명주기를 저장소가 자체 담당한다.
    *
    * `_id`를 뒤에 붙이는 이유는 `findByOwner`의 `sort({ _id: 1 })`을 인덱스가 그대로 제공하게
    * 하기 위해서다 — 없으면 IXSCAN 뒤에 blocking in-memory SORT 스테이지가 붙는다.
@@ -38,7 +38,7 @@ export class ObjectRepository implements IRepository<ObjectInstance> {
    * 구 인덱스 `{owner.type, owner.id}`는 신 인덱스의 순수 prefix라 잉여지만 **여기서 드롭하지
    * 않는다**. 부팅 경로의 `dropIndex`는 (a) 롤링 배포 중 구버전 인스턴스가 다시 만들고 신버전이
    * 다시 지우는 thrash를 만들고, (b) 컬렉션 락을 잡는 DDL을 부팅 임계 경로에 두며, (c) 오퍼레이터가
-   * 진단용으로 만든 인덱스를 조용히 지운다. 정리는 1회성 마이그레이션 소관이다.
+   * 진단용으로 만든 인덱스를 조용히 지운다. 정리는 1회성 마이그레이션 담당이다.
    */
   async init(): Promise<void> {
     await this.collection.createIndex({ 'owner.type': 1, 'owner.id': 1, _id: 1 })
@@ -55,7 +55,7 @@ export class ObjectRepository implements IRepository<ObjectInstance> {
    * 소유 오브젝트 집합을 `_id` 오름차순으로 조회한다.
    *
    * 이 정렬은 인벤 서수(`비법서 2 연마`)의 **계약**이다. 근거·오라클 divergence는
-   * `world/liveCharacterEntry.ts` 헤더가 단독으로 소유한다.
+   * `world/liveCharacterEntry.ts` 헤더가 단독으로 담당한다.
    */
   async findByOwner(owner: ObjectOwner): Promise<ObjectInstance[]> {
     // dot-notation 필터: discriminated union에 대한 Filter<T> 타이핑이 dotted path를
@@ -76,7 +76,7 @@ export class ObjectRepository implements IRepository<ObjectInstance> {
   }
 
   async updateById(id: string, patch: Partial<Omit<ObjectInstance, '_id'>>): Promise<void> {
-    // 부분 갱신도 경계 검증한다($set 전체 필드 교체 시맨틱과 정합).
+    // 부분 갱신도 경계 검증한다($set 전체 필드 교체 시맨틱과 일치).
     const validated = objectPatchSchema.parse(patch)
     const result = await this.collection.updateOne({ _id: id }, { $set: validated })
     // matchedCount(NOT modifiedCount)로 판정 — 멱등 갱신(matched=1, modified=0)은 성공이다.

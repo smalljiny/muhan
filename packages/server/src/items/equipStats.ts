@@ -3,10 +3,10 @@ import type { ObjectTemplate } from './objectTemplate.js'
 import { WIELD_SLOT } from './taxonomy.js'
 
 /**
- * 착용 장비 파생 스탯 투영 — 착용 객체 집합을 `EffectiveStatContext` 기여 필드로 compute-on-read 투영한다.
+ * 착용 장비 파생 스탯 변환 — 착용 객체 집합을 `EffectiveStatContext` 기여 필드로 compute-on-read 변환한다.
  *
- * stats-core(computeAc·computeThaco)를 재구현하지 않는다. 여기서는 투영값만 산출하고,
- * stats-core resolver가 이 값을 판독한다. equipArmor는 computeAc가, weaponAdjustment·
+ * stats-core(computeAc·computeThaco)를 재구현하지 않는다. 여기서는 변환값만 산출하고,
+ * stats-core resolver가 이 값을 읽는다. equipArmor는 computeAc가, weaponAdjustment·
  * weaponProficiency는 computeThaco가 소비한다.
  */
 
@@ -23,7 +23,7 @@ export type EquipStatContribution = Pick<
 >
 
 /**
- * 착용 쌍 집합과 명시 숙련값을 EffectiveStatContext 기여 필드로 투영한다.
+ * 착용 쌍 집합과 명시 숙련값을 EffectiveStatContext 기여 필드로 변환한다.
  *
  * - **착용 판정**: `instance.equipped === true`인 쌍만 집계한다. 오라클 compute_ac(player.c:980)는
  *   `ready[]`(착용 슬롯 배열)만 순회하므로 미착용(equipped=false)·stale slot 인벤 아이템은 스탯에
@@ -32,7 +32,7 @@ export type EquipStatContribution = Pick<
  * - equipArmor = Σ template.armor (부호 유지 — 저주 장비 음수 armor·방패 포함, 착용 아이템 합).
  * - weaponAdjustment = WIELD 슬롯(0-based 19) 착용 아이템의 template.adjustment. 슬롯 번호로만
  *   판정한다 — HELD(16) 무기를 WIELD로 오인하지 않는다. WIELD 미착용이면 0.
- * - weaponProficiency = 명시 인자를 그대로 투영한다(Character.proficiency[5] 어댑터는 E6 유예).
+ * - weaponProficiency = 명시 인자를 그대로 변환한다(Character.proficiency[5] 어댑터는 E6 보류).
  *
  * 입력을 변형하지 않고 새 객체를 반환한다.
  */

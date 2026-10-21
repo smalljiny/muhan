@@ -1,6 +1,6 @@
 /**
  * rand_enchant 확률 순수 함수 — 오라클 object.c `rand_enchant`의 인챈트 확률표를
- * rng 주입으로 재현한다. 적용·저장(per-instance)은 유예하고 delta만 반환한다.
+ * rng 주입으로 재현한다. 적용·저장(per-instance)은 보류하고 delta만 반환한다.
  *
  * 오라클 계약: `m = mrand(1,100)` 포함 구간 [1,100].
  *   m>98 → {99,100}  → adjustment 3, pdice += 3   (2%)
@@ -9,7 +9,7 @@
  *   m≤50 → {1..50}   → 무변화                       (50%)
  *   합 = 2 + 8 + 40 + 50 = 100%.
  *
- * ⚠️ 스펙 §2/a8 문서의 "+3 3%"는 off-by-one 전사 오차(합 101%)다. 포팅 원칙(동작 충실)에
+ * ⚠️ 스펙 §2/a8 문서의 "+3 3%"는 off-by-one 옮겨 적기 오차(합 101%)다. 포팅 원칙(동작 충실)에
  *    따라 오라클 실값 `m>98` = 2%를 구현한다. 3%로 "정정"하지 않는다.
  */
 
@@ -25,7 +25,7 @@ const THRESHOLD_PLUS1 = 50 // m>50 → {51..90} → +1
  * - `adjustment`: 오라클 adjustment (0/1/2/3). enchant 분기에서만 세팅.
  * - `pdiceDelta`: pdice 증가분 = adjustment. 무변화면 0.
  *
- * 오라클 후처리 `pdice = MAX(pdice, adjustment)`는 per-instance 배선에서 적용한다
+ * 오라클 후처리 `pdice = MAX(pdice, adjustment)`는 per-instance 연결에서 적용한다
  * (본 순수 함수는 delta만 반환). pdice += adjustment 이후이므로 보통 pdice ≥ adjustment가
  * 성립하나, MAX 자체의 적용은 인스턴스 상태를 가지므로 여기서 수행하지 않는다.
  */
@@ -41,7 +41,7 @@ export interface EnchantResult {
  * 시드 주입으로 재현 가능하다.
  *
  * @param rng 포함 구간 정수 생성기 `(min,max)=>number`.
- * @returns EnchantResult 순수 delta (적용·저장 유예).
+ * @returns EnchantResult 순수 delta (적용·저장 보류).
  */
 export function randEnchant(rng: (min: number, max: number) => number): EnchantResult {
   const draw = rng(1, 100)

@@ -36,7 +36,7 @@
  *
  * 6. 완료 프로토콜 (onSettled) — 워커가 dispatch한 job의 종결을 소비자에게 통지한다. "write가
  *    언제 끝났는가"는 큐만 알기 때문에, 이 통지 없이는 소비자의 스냅샷 수명 계약이 성립하지
- *    않는다. 통지 대상·시점·예외 처리 계약은 `AsyncWriteQueueOptions.onSettled` 선언부가 정본이다.
+ *    않는다. 통지 대상·시점·예외 처리 계약은 `AsyncWriteQueueOptions.onSettled` 선언부가 기준이다.
  *
  * 소비자 계약 (SaveScheduler·SaveEngine):
  *
@@ -46,7 +46,7 @@
  * 2. `enqueue`는 pending이 capacity를 초과하면 backpressure로 block한다(즉시 반환 아님).
  *    틱 소유자는 enqueue가 await할 수 있음을 예상하고 호출해야 한다.
  * 3. snapshot은 **참조로 저장**된다(복사·동결하지 않는다). DirtyTracker가 fresh·immutable
- *    스냅샷을 공급해야 한다(dirtyTracker.ts의 "라이브 참조 금지" 계약과 정합).
+ *    스냅샷을 공급해야 한다(dirtyTracker.ts의 "라이브 참조 금지" 계약과 일치).
  * 4. 실제 logger 주입은 **필수**다(생성자 파라미터, 미주입 시 컴파일 에러). 미주입 시 permanent·
  *    재시도소진 실패가 무흔적으로 폐기되므로 타입 단계에서 계약을 강제한다.
  */
@@ -105,7 +105,7 @@ export interface AsyncWriteQueueOptions {
    * 따라서 이 통지는 "enqueue한 엔트리마다 1회"가 아니다 — 통지 수를 세어 미완료 job을 추적하는
    * refcount 용도로 쓰면 두 경로에서 어긋난다.
    *
-   * SaveEngine이 이 seam으로 DirtyTracker의 반납(ack/discard)을 배선한다. 인자 entry는 enqueue된
+   * SaveEngine이 이 seam으로 DirtyTracker의 반납(ack/discard)을 연결한다. 인자 entry는 enqueue된
    * 것과 같은 참조다 — tracker의 반납 조건이 참조 동일성이므로 복제본을 넘기면 조용한 no-op이 된다.
    * 콜백이 throw해도 워커 루프는 생존한다(work() 주석 참조).
    */

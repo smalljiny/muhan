@@ -10,7 +10,7 @@
  *   SchedulerClock·IntervalHandle·defaultClock 정의는 ../util/clock.js가 단일 출처이며
  *   (save·heartbeat·WorldClock 공유), 여기서는 back-compat용으로 재-export만 한다. 기본값은
  *   전역 setInterval/clearInterval을 위임하는 defaultClock이다. 이 seam으로 (a) 테스트에서
- *   FakeClock을 주입해 tick을 수동 구동하고(비결정적 실타이머 대기 제거), (b) heartbeat
+ *   FakeClock을 주입해 tick을 수동 실행하고(비결정적 실타이머 대기 제거), (b) heartbeat
  *   스케줄러로 clock을 교체할 수 있다. 전역 싱글턴을 쓰지 않고 의존성을 모두 생성자로 주입해
  *   인스턴스 격리를 보장한다.
  *

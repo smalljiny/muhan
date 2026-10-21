@@ -205,7 +205,7 @@ describe('BankTransactionService (integration, real replset)', () => {
     expect(after.bank).toBe(1000)
   })
 
-  // === 존재 확인 null 분기 (guarded 필터가 아닌 순수 부재) ===
+  // === 존재 확인 null 분기 (guarded 필터가 아니라 문서가 아예 없음) ===
   it('deposit: 은행 계좌가 존재하지 않으면 abort하고 character도 불변이다', async () => {
     await db.collection<Character>('characters').insertOne(makeCharacter({ gold: 500 }))
     // bank 없음 → step2 매칭0.
@@ -227,7 +227,7 @@ describe('BankTransactionService (integration, real replset)', () => {
   })
 
   it('withdraw: 캐릭터가 존재하지 않으면 DocumentNotFoundError로 abort하고 bank도 불변이다', async () => {
-    // bank는 잔고 충분(step1 통과) — character credit(step2)에서 부재로 실패해야 한다.
+    // bank는 잔고 충분(step1 통과) — character credit(step2)에서 문서가 없어 실패해야 한다.
     await db.collection<BankAccount>('bankAccounts').insertOne(makeBank({ gold: 1000 }))
     // character 없음.
 

@@ -17,7 +17,7 @@ import {
   CURRENT_CHARACTER_SCHEMA_VERSION,
 } from './characterBackfill.js'
 
-/** 판독 6필드는 더미(0/false), class·level만 유효값으로 채운 컨텍스트. */
+/** 나머지 6필드는 더미(0/false), class·level만 유효값으로 채운 컨텍스트. */
 function ctx(characterClass: number, level: number): EffectiveStatContext {
   return {
     effectiveDexterity: 0,
@@ -49,7 +49,7 @@ function rawV1(overrides: Record<string, unknown> = {}): Record<string, unknown>
 }
 
 describe('backfillCharacterV2', () => {
-  it('schemaVersion<2 문서를 level=1·hpCurrent·mpCurrent·schemaVersion=2로 승격한다', () => {
+  it('schemaVersion<2 문서를 level=1·hpCurrent·mpCurrent·schemaVersion=2로 올린다', () => {
     const result = backfillCharacterV2(rawV1())
     expect(result.level).toBe(1)
     expect(result.hpCurrent).toBe(computeHpMax(ctx(3, 1)))
@@ -57,8 +57,8 @@ describe('backfillCharacterV2', () => {
     expect(result.schemaVersion).toBe(2)
   })
 
-  it('V2 단독 승격 결과는 experience·spells가 없어 아직 parse를 통과하지 못한다 (후속 스텝 필요)', () => {
-    // V2는 v1→v2(vitals)만 담당하고 experience는 V3, spells·realm은 V5, alignment는 V6 스텝 소유다.
+  it('V2 단독으로 올린 결과는 experience·spells가 없어 아직 parse를 통과하지 못한다 (후속 스텝 필요)', () => {
+    // V2는 v1→v2(vitals)만 담당하고 experience는 V3, spells·realm은 V5, alignment는 V6 스텝 담당이다.
     // 전 체인(V6∘V5∘V4∘V3∘V2)을 합성해야 parse를 통과한다.
     const v2Only = backfillCharacterV2(rawV1())
     expect('experience' in v2Only).toBe(false)
@@ -84,7 +84,7 @@ describe('backfillCharacterV2', () => {
     expect(result.level).toBe(7)
   })
 
-  it('schemaVersion이 없는 문서도 v0으로 취급해 승격한다 (누락 버전 방어)', () => {
+  it('schemaVersion이 없는 문서도 v0으로 취급해 올린다 (누락 버전 방어)', () => {
     const noVersion = rawV1()
     delete noVersion.schemaVersion
     const result = backfillCharacterV2(noVersion)
@@ -110,7 +110,7 @@ describe('seedVitals', () => {
   })
 })
 
-/** experience 없는 v2 raw 문서(vitals·level 있음, schemaVersion:2). V3 승격 입력 형태. */
+/** experience 없는 v2 raw 문서(vitals·level 있음, schemaVersion:2). V3 스텝 입력 형태. */
 function rawV2(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     _id: 'v2',
@@ -131,14 +131,14 @@ function rawV2(overrides: Record<string, unknown> = {}): Record<string, unknown>
 }
 
 describe('backfillCharacterV3', () => {
-  it('schemaVersion<3 문서를 experience·schemaVersion=3으로 승격한다 (level=1 → exp 0)', () => {
+  it('schemaVersion<3 문서를 experience·schemaVersion=3으로 올린다 (level=1 → exp 0)', () => {
     const result = backfillCharacterV3(rawV2())
     expect(result.experience).toBe(0)
     expect(result.schemaVersion).toBe(3)
     expect(result.level).toBe(1)
   })
 
-  it('★판별: level=50 v2 문서를 승격해도 level·vitals를 보존하고 exp를 정합 계산한다', () => {
+  it('★판별: level=50 v2 문서를 올려도 level·vitals를 보존하고 exp를 level에 맞게 계산한다', () => {
     // 가드/스탬프가 CURRENT에 매이면 이 v2 문서가 V2로 흘러 level=1 클로버·vitals 재시딩된다.
     // level=50이라야 1→1 불가시 클로버가 드러난다(실데이터는 전부 level 1).
     const v2 = rawV2({ level: 50, hpCurrent: 777, mpCurrent: 333 })
@@ -165,7 +165,7 @@ describe('backfillCharacterV3', () => {
   })
 })
 
-/** experience 있는 v3 raw 문서(vitals·level·experience 있음, schemaVersion:3). V4 승격 입력 형태. */
+/** experience 있는 v3 raw 문서(vitals·level·experience 있음, schemaVersion:3). V4 스텝 입력 형태. */
 function rawV3(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     _id: 'v3',
@@ -195,14 +195,14 @@ describe('CURRENT_CHARACTER_SCHEMA_VERSION', () => {
 })
 
 describe('backfillCharacterV4', () => {
-  it('schemaVersion<4 문서를 schemaVersion=4로 승격한다 (버전 스탬프만, statusEffects 미시딩)', () => {
+  it('schemaVersion<4 문서를 schemaVersion=4로 올린다 (버전 스탬프만, statusEffects 미시딩)', () => {
     const result = backfillCharacterV4(rawV3())
     expect(result.schemaVersion).toBe(4)
     // statusEffects는 선택 필드라 시딩하지 않는다 — 버전만 3→4로 올린다.
     expect('statusEffects' in result).toBe(false)
   })
 
-  it('승격 시 기존 필드(vitals·level·experience)를 보존한다', () => {
+  it('버전을 올릴 때 기존 필드(vitals·level·experience)를 보존한다', () => {
     const result = backfillCharacterV4(rawV3({ level: 50, hpCurrent: 777, mpCurrent: 333, experience: 12345 }))
     expect(result.level).toBe(50)
     expect(result.hpCurrent).toBe(777)
@@ -218,7 +218,7 @@ describe('backfillCharacterV4', () => {
     expect(result.statusEffects).toEqual({ poison: { until: 60, interval: 6 } })
   })
 
-  it('schemaVersion이 없는 문서도 v0으로 취급해 승격한다 (누락 버전 방어)', () => {
+  it('schemaVersion이 없는 문서도 v0으로 취급해 올린다 (누락 버전 방어)', () => {
     const noVersion = rawV3()
     delete noVersion.schemaVersion
     const result = backfillCharacterV4(noVersion)
@@ -233,7 +233,7 @@ describe('backfillCharacterV4', () => {
   })
 })
 
-/** spells·realm 없는 v4 raw 문서(vitals·level·experience 있음, schemaVersion:4). V5 승격 입력 형태. */
+/** spells·realm 없는 v4 raw 문서(vitals·level·experience 있음, schemaVersion:4). V5 스텝 입력 형태. */
 function rawV4(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     _id: 'v4',
@@ -261,7 +261,7 @@ describe('seedSpellStore', () => {
 })
 
 describe('backfillCharacterV5', () => {
-  it('schemaVersion<5 문서를 spells=빈·realm=[0,0,0,0]·schemaVersion=5로 승격한다', () => {
+  it('schemaVersion<5 문서를 spells=빈·realm=[0,0,0,0]·schemaVersion=5로 올린다', () => {
     const result = backfillCharacterV5(rawV4())
     expect(result.spells).toEqual(new Array<number>(16).fill(0))
     expect(result.realm).toEqual([0, 0, 0, 0])
@@ -270,7 +270,7 @@ describe('backfillCharacterV5', () => {
     expect('buffs' in result).toBe(false)
   })
 
-  it('승격 시 기존 필드(vitals·level·experience)를 보존한다', () => {
+  it('버전을 올릴 때 기존 필드(vitals·level·experience)를 보존한다', () => {
     const result = backfillCharacterV5(
       rawV4({ level: 50, hpCurrent: 777, mpCurrent: 333, experience: 12345 }),
     )
@@ -294,7 +294,7 @@ describe('backfillCharacterV5', () => {
     expect(result.realm).toEqual([10, 20, 30, 40])
   })
 
-  it('schemaVersion이 없는 문서도 v0으로 취급해 승격한다 (누락 버전 방어)', () => {
+  it('schemaVersion이 없는 문서도 v0으로 취급해 올린다 (누락 버전 방어)', () => {
     const noVersion = rawV4()
     delete noVersion.schemaVersion
     const result = backfillCharacterV5(noVersion)
@@ -311,7 +311,7 @@ describe('backfillCharacterV5', () => {
   })
 })
 
-/** alignment 없는 v5 raw 문서(spells·realm 있음, schemaVersion:5). V6 승격 입력 형태. */
+/** alignment 없는 v5 raw 문서(spells·realm 있음, schemaVersion:5). V6 스텝 입력 형태. */
 function rawV5(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     _id: 'v5',
@@ -335,7 +335,7 @@ function rawV5(overrides: Record<string, unknown> = {}): Record<string, unknown>
 }
 
 describe('backfillCharacterV6', () => {
-  it('alignment 없는 v5 문서를 alignment=0·schemaVersion=6으로 승격한다', () => {
+  it('alignment 없는 v5 문서를 alignment=0·schemaVersion=6으로 올린다', () => {
     const result = backfillCharacterV6(rawV5())
     expect(result.alignment).toBe(0)
     expect(result.schemaVersion).toBe(6)
@@ -366,7 +366,7 @@ describe('backfillCharacterV6', () => {
     expect(backfillCharacterV6(rawV5({ alignment: 1.5 })).alignment).toBe(0)
   })
 
-  it('승격 시 기존 필드(vitals·level·experience·spells·realm)를 보존한다', () => {
+  it('버전을 올릴 때 기존 필드(vitals·level·experience·spells·realm)를 보존한다', () => {
     const result = backfillCharacterV6(
       rawV5({ level: 50, hpCurrent: 777, mpCurrent: 333, experience: 12345, realm: [1, 2, 3, 4] }),
     )
@@ -398,7 +398,7 @@ describe('backfillCharacterV6', () => {
     expect(result.alignment).toBe(2) // 실제 성향을 0으로 클로버하지 않는다.
   })
 
-  it('schemaVersion이 없는 문서도 v0으로 취급해 승격한다 (누락 버전 방어)', () => {
+  it('schemaVersion이 없는 문서도 v0으로 취급해 올린다 (누락 버전 방어)', () => {
     const noVersion = rawV5()
     delete noVersion.schemaVersion
     const result = backfillCharacterV6(noVersion)
