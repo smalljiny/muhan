@@ -1,7 +1,7 @@
 // WebSocket 전송 레이어 — 순수 TS(프레임워크 비의존). React UI는 subscribe/getSnapshot을
 // useSyncExternalStore로 소비한다. 송신 전 clientCommandSchema 검증, 수신 후 serverEventSchema parse,
 // hello→ready 버전 협상, 세션 상태(phase·characterList·activePrompt·lastError·본인 characterId)와
-// 방 상태(room) 노출, selectCharacter/replyPrompt/move 사용자 구동 명령, debug:echo 송신을 제공한다.
+// 방 상태(room) 노출, selectCharacter/replyPrompt/move 사용자 조작 기반 명령, debug:echo 송신을 제공한다.
 
 import {
   clientCommandSchema,
@@ -55,7 +55,7 @@ export interface SessionState {
  */
 export type RoomState = Omit<Extract<ServerEvent, { type: 'world:room' }>, 'type'>
 
-/** 브라우저 WebSocket과 호환되는 최소 표면 — 테스트가 fake를 주입할 수 있게 한다. */
+/** 브라우저 WebSocket과 호환되는 최소 인터페이스 — 테스트가 fake를 주입할 수 있게 한다. */
 export interface SocketLike {
   send(data: string): void
   close(): void
@@ -89,7 +89,7 @@ export interface WsClientSnapshot {
   events: readonly ServerEvent[]
   errors: readonly WsError[]
   session: SessionState
-  /** 마지막으로 통지받은 방. 방 상태가 없는 구간(서버가 발화를 생략한 경우)은 null이다. */
+  /** 마지막으로 통지받은 방. 방 상태가 없는 구간(서버가 이벤트 발생을 생략한 경우)은 null이다. */
   room: RoomState | null
 }
 
@@ -164,7 +164,7 @@ export class WsClient {
   }
 
   /**
-   * 소켓 핸들러를 떼어낸다. close()는 브라우저에서 onclose를 다음 틱에 발화하므로,
+   * 소켓 핸들러를 떼어낸다. close()는 브라우저에서 onclose를 다음 틱에 실행하므로,
    * 떼어내지 않으면 reconnect 이후 도착한 구 소켓의 onclose가 새 소켓 참조·status를 오염시킨다.
    */
   private detachHandlers(socket: SocketLike): void {

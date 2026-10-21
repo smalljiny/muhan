@@ -69,14 +69,14 @@ export const clientCommandSchema = z.discriminatedUnion('type', [
   }),
   // 이동 명령 — direction은 방 그래프 출구 이름과 정확 일치할 문자열이다(방 데이터의 출구 이름을 그대로 지목).
   // 상한 32는 입력 위생(방 그래프 어떤 출구 이름도 이 안에 든다 — 초과 입력은 형식 위반으로 조기 차단).
-  // mode(단축키·방향 별칭) 해소는 클라 책임이다 — 서버는 해소된 최종 direction 문자열만 받는다(D-B). id는 상관 키.
+  // mode(단축키·방향 별칭) 해석은 클라 책임이다 — 서버는 해석된 최종 direction 문자열만 받는다(D-B). id는 상관 키.
   z.strictObject({
     type: z.literal('world:move'),
     direction: z.string().min(1).max(32),
     id: z.string().optional(),
   }),
   // 연마 명령 — 인자가 없다. 훈련방 여부·클래스 일치·exp·gold 게이트는 전부 서버(progression/train)가
-  // 소유하므로 클라는 의도만 보낸다(대상·수량 같은 인자 표면을 두지 않아 입력 위생 부담이 0이다).
+  // 담당하므로 클라는 의도만 보낸다(대상·수량 같은 인자 인터페이스를 두지 않아 입력 위생 부담이 0이다).
   // id는 상관 키(선택) — 성공 통지 progress:trained는 상태 이벤트라 상관 키를 싣지 않고, 거부 시
   // error 이벤트가 이 id를 correlationId로 반향한다.
   z.strictObject({
@@ -84,11 +84,11 @@ export const clientCommandSchema = z.discriminatedUnion('type', [
     id: z.string().optional(),
   }),
   // 연마(주문 학습) 명령 — 소지품에서 비법서를 지목해 주문을 익힌다. progress:train과 달리 인자가 있다
-  // (오라클 `study`는 대상 아이템을 요구한다). 클래스·레벨·중복 습득 게이트는 서버가 소유하고, 클라는
+  // (오라클 `study`는 대상 아이템을 요구한다). 클래스·레벨·중복 습득 게이트는 서버가 담당하고, 클라는
   // 대상 지목만 보낸다. id는 상관 키(선택) — progress:studied는 상태 이벤트라 상관 키를 싣지 않고,
   // 거부 시 error 이벤트가 이 id를 correlationId로 반향한다.
   //
-  // target·ordinal 형태와 그 상한 근거는 payloads.ts의 targetOrdinalPayloadSchema가 소유한다.
+  // target·ordinal 형태와 그 상한 근거는 payloads.ts의 targetOrdinalPayloadSchema가 담당한다.
   // 그 블록을 spread해 리터럴 상한이 명령마다 흩어지는 것을 막는다(debug:echo가 freeTextPayloadSchema를
   // spread하는 관용구와 같다 — 리터럴 discriminator와 strict는 새 strictObject가 그대로 보존한다).
   z.strictObject({
@@ -96,8 +96,8 @@ export const clientCommandSchema = z.discriminatedUnion('type', [
     ...targetOrdinalPayloadSchema.shape,
     id: z.string().optional(),
   }),
-  // 공격 명령 — 방 안의 대상을 지목해 전투를 개시한다. 대상 해소는 방 대상 해소자가 소유하고,
-  // 명중·피해·사망 판정은 전부 서버(combat)가 소유한다. 클라는 지목만 보낸다.
+  // 공격 명령 — 방 안의 대상을 지목해 전투를 개시한다. 대상 해석은 방 대상 리졸버가 담당하고,
+  // 명중·피해·사망 판정은 전부 서버(combat)가 담당한다. 클라는 지목만 보낸다.
   // id는 상관 키(선택) — 성공 통지 combat:attacked는 상태 이벤트라 상관 키를 싣지 않고, 거부 시
   // error 이벤트가 이 id를 correlationId로 반향한다(progress:study 선례).
   //

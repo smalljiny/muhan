@@ -5,19 +5,19 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * mprofic 골든 전사-diff fixture 생성기 — manual oracle.
+ * mprofic 골든 옮겨 적기-diff fixture 생성기 — manual oracle.
  *
  * 원본 `player.c:1204-1261`의 클래스별 prof_array[12] 임계 테이블 + 십분위 보간을 **독립 리터럴**로
- * 전사해(전사 pass 2) {class, realm[], index} 조회 케이스로 감싼다. SUT `mprofic`(server/magic)은
- * mprofic.ts의 구현(전사 pass 1)을 소비하므로, approve가 두 전사의 불일치를 잡아낸다.
+ * 옮겨 적어(옮겨 적기 pass 2) {class, realm[], index} 조회 케이스로 감싼다. SUT `mprofic`(server/magic)은
+ * mprofic.ts의 구현(옮겨 적기 pass 1)을 소비하므로, approve가 옮겨 적은 두 결과의 불일치를 잡아낸다.
  *
- * expected는 이 파일의 `oracleMprofic`(player.c 독립 전사)에서 계산한다 — server mprofic.ts를 import하지
+ * expected는 이 파일의 `oracleMprofic`(player.c 독립 옮겨 적기)에서 계산한다 — server mprofic.ts를 import하지
  * 않는다. import하면 SUT와 fixture가 같은 코드가 되어 anti-tautology가 무너진다. 클래스 인덱스도 server
  * 상수를 참조하지 않고 mtype.h 리터럴로 직접 쓴다(MAGE=5·CLERIC=3·PALADIN=6·RANGER=7·INVINCIBLE=9…).
  *
- * `oracleMprofic`은 offensiveSpellFixture가 bns 기대값 계산에 재사용한다(shared 내 단일 pass-2 전사).
+ * `oracleMprofic`은 offensiveSpellFixture가 bns 기대값 계산에 재사용한다(shared 내 단일 pass-2 옮겨 적기).
  *
- * SUT 소비 approve는 server가 소유한다(`packages/server/src/magic/mprofic.test.ts`) — shared는 server를
+ * SUT 소비 approve는 server가 담당한다(`packages/server/src/magic/mprofic.test.ts`) — shared는 server를
  * import 못 하므로, 이 파일은 fixture만 생성하고 approve는 server 테스트가 디스크 json을 읽어 실행한다.
  *
  * ## 재생성 (수동 트리거)
@@ -35,7 +35,7 @@ export interface MproficInput {
   readonly index: number
 }
 
-// 독립 전사(pass 2) — player.c:1215-1258 클래스별 prof_array[12] 테이블. 클래스 리터럴은 mtype.h #define.
+// 독립 옮겨 적기(pass 2) — player.c:1215-1258 클래스별 prof_array[12] 테이블. 클래스 리터럴은 mtype.h #define.
 const PROF_MAGE = [0, 1024, 2048, 4096, 8192, 16384, 35768, 85536, 140000, 459410, 2073306, 500000000]
 const PROF_CLERIC = [0, 1024, 4092, 8192, 16384, 32768, 70536, 119000, 226410, 709410, 2973307, 500000000]
 const PROF_PALADIN = [0, 1024, 8192, 16384, 32768, 65536, 105000, 165410, 287306, 809410, 3538232, 500000000]
@@ -50,7 +50,7 @@ function oracleProfArray(cls: number): readonly number[] {
 }
 
 /**
- * 독립 전사 mprofic — player.c:1204-1261. n=realm[index-1], 엄격 <로 십분위 구간, trunc 보간.
+ * 독립 옮겨 적기 mprofic — player.c:1204-1261. n=realm[index-1], 엄격 <로 십분위 구간, trunc 보간.
  * OOB(n>=5억)는 port 결정으로 110 clamp(server mprofic.ts와 동일 정의된 동작).
  */
 export function oracleMprofic(cls: number, realm: readonly number[], index: number): number {
@@ -66,7 +66,7 @@ export function oracleMprofic(cls: number, realm: readonly number[], index: numb
   return 110
 }
 
-/** input을 oracleMprofic로 감싼 케이스로 만든다(expected는 독립 전사 계산값). */
+/** input을 oracleMprofic로 감싼 케이스로 만든다(expected는 독립 옮겨 적기 계산값). */
 function makeCase(input: MproficInput, note?: string): GoldenFixture<MproficInput, number>['cases'][number] {
   const base = { input, expected: oracleMprofic(input.class, input.realm, input.index) }
   return note ? { ...base, note } : base
@@ -74,7 +74,7 @@ function makeCase(input: MproficInput, note?: string): GoldenFixture<MproficInpu
 
 /**
  * 케이스를 조립한다:
- *   - realm=0 → 0 (전 몬스터 realm=0, 라이브 정본).
+ *   - realm=0 → 0 (전 몬스터 realm=0, 라이브 기준).
  *   - 엄격 < 경계(realm=1024 → 10, realm=1023 → 9대역): 경계 정확성.
  *   - 클래스별 테이블 분기(MAGE·CLERIC·PALADIN·default) 중간대역 보간.
  *   - trunc 분수항(MAGE 5000 → 32).

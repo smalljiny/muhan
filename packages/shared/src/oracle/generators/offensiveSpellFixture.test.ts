@@ -7,7 +7,7 @@ import { buildCases, buildFixture, writeFixtureFile } from './offensiveSpellFixt
 
 const FIXED_CLOCK = (): Date => new Date('2026-07-16T00:00:00.000Z')
 
-describe('offensiveSpellFixture — buildCases 독립 전사 앵커', () => {
+describe('offensiveSpellFixture — buildCases 독립 옮겨 적기 앵커', () => {
   it('각 case의 rolls 길이가 osp.ndice와 일치한다(dice 굴림 개수 계약)', () => {
     for (const c of buildCases()) {
       expect(c.input.rolls.length).toBe(c.input.osp.ndice)
@@ -26,7 +26,7 @@ describe('offensiveSpellFixture — buildCases 독립 전사 앵커', () => {
     expect(byNote.get('마법저항 완전무효: dmg 14→0, hp 불변')?.expected.dmg).toBe(0)
   })
 
-  it('사망 케이스: 오버킬 캡·death 발화·ledger가 정확하다', () => {
+  it('사망 케이스: 오버킬 캡·death 발생·ledger가 정확하다', () => {
     const byNote = new Map(buildCases().map((c) => [c.note, c]))
     const kill = byNote.get('creature 사망 + 오버킬 캡: m=5, finalHp=-9, deathFires=1')
     expect(kill?.expected).toEqual({ dmg: 14, finalHp: -9, died: true, ledgerAmount: 5, deathFires: 1 })

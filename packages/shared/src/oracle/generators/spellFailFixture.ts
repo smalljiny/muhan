@@ -5,17 +5,17 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * spell_fail 골든 전사-diff fixture 생성기 — manual oracle.
+ * spell_fail 골든 옮겨 적기-diff fixture 생성기 — manual oracle.
  *
- * 원본 `magic8.c:791-897`의 클래스별 chance switch를 **독립 리터럴**로 전사해(전사 pass 2) 결정적
+ * 원본 `magic8.c:791-897`의 클래스별 chance switch를 **독립 리터럴**로 옮겨 적어(옮겨 적기 pass 2) 결정적
  * 굴림 n과 함께 성공/실패(boolean) 케이스로 감싼다. SUT `spellFail`(server/magic)은 spellFail.ts의
- * 구현(전사 pass 1)을 소비하므로, approve가 두 전사의 불일치를 잡아낸다.
+ * 구현(옮겨 적기 pass 1)을 소비하므로, approve가 옮겨 적은 두 결과의 불일치를 잡아낸다.
  *
- * expected는 이 파일의 oracleFail(magic8.c 독립 전사)에서 계산한다 — spellFail.ts를 import하지 않는다.
+ * expected는 이 파일의 oracleFail(magic8.c 독립 옮겨 적기)에서 계산한다 — spellFail.ts를 import하지 않는다.
  * import하면 SUT와 fixture가 같은 코드가 되어 anti-tautology가 무너진다. 클래스 인덱스도 server
  * 상수를 참조하지 않고 magic8.c 리터럴(1-8)로 직접 쓴다.
  *
- * SUT 소비 approve는 server가 소유한다(`packages/server/src/magic/spellFail.test.ts`) — shared는 server를
+ * SUT 소비 approve는 server가 담당한다(`packages/server/src/magic/spellFail.test.ts`) — shared는 server를
  * import 못 하므로, 이 파일은 fixture만 생성하고 approve는 server 테스트가 디스크 json을 읽어 실행한다.
  *
  * ## 재생성 (수동 트리거)
@@ -35,7 +35,7 @@ interface SpellFailInput {
 }
 
 /**
- * 독립 전사(pass 2) — magic8.c:791-897 chance switch. base = L4 + bonus[intelligence].
+ * 독립 옮겨 적기(pass 2) — magic8.c:791-897 chance switch. base = L4 + bonus[intelligence].
  *   L4 = (level+3)/4 (C 정수 나눗셈 = Math.trunc). null = default(굴림 없이 무조건 성공).
  * cap 없음 — chance>100은 그대로 둔다(무cap 앵커가 이 성질을 검증한다).
  */
@@ -63,14 +63,14 @@ function oracleChance(cls: number, level: number, intBonus: number): number | nu
   }
 }
 
-/** 독립 전사 굴림 — n > chance면 실패(true), default(null)는 무조건 성공(false). */
+/** 독립 옮겨 적기 굴림 — n > chance면 실패(true), default(null)는 무조건 성공(false). */
 function oracleFail(input: SpellFailInput): boolean {
   const chance = oracleChance(input.class, input.level, input.intBonus)
   if (chance === null) return false
   return input.n > chance
 }
 
-/** input을 oracleFail로 감싼 케이스로 만든다(expected는 독립 전사 계산값). */
+/** input을 oracleFail로 감싼 케이스로 만든다(expected는 독립 옮겨 적기 계산값). */
 function makeCase(input: SpellFailInput, note?: string): GoldenFixture<SpellFailInput, boolean>['cases'][number] {
   const base = { input, expected: oracleFail(input) }
   return note ? { ...base, note } : base

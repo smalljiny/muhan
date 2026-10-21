@@ -6,16 +6,16 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * 버프/디버프 dur 골든 전사-diff fixture 생성기 — manual oracle(A6 §6·§7, magic2-8.c).
+ * 버프/디버프 dur 골든 옮겨 적기-diff fixture 생성기 — manual oracle(A6 §6·§7, magic2-8.c).
  *
- * 원본 magic2.c:374(버프)·magic8.c(디버프)의 dur 공식을 **독립 리터럴**로 전사해(전사 pass 2)
+ * 원본 magic2.c:374(버프)·magic8.c(디버프)의 dur 공식을 **독립 리터럴**로 옮겨 적어(옮겨 적기 pass 2)
  * 케이스로 감싼다. SUT computeBuffDur/computeDebuffDur(server)는 buffCatalog 메타 테이블을 소비하는
- * 다른 구조(전사 pass 1)이므로, approve가 두 전사의 불일치를 잡아낸다(anti-tautology).
+ * 다른 구조(옮겨 적기 pass 1)이므로, approve가 옮겨 적은 두 결과의 불일치를 잡아낸다(anti-tautology).
  *
  * ## 두 fixture 분리
  * computeBuffDur·computeDebuffDur는 별 함수라 fn·입력 셰이프가 다르다. buff_duration.json(fn=
  * computeBuffDur)·debuff_duration.json(fn=computeDebuffDur)으로 나눈다. SUT 소비 approve는
- * server(spellDuration.test.ts)가 소유한다 — shared는 server를 import 못 하므로 여기선 fixture만 만든다.
+ * server(spellDuration.test.ts)가 담당한다 — shared는 server를 import 못 하므로 여기선 fixture만 만든다.
  *
  * ## 디버프 굴림 결정성
  * fear/charm은 mrand(1,30)*10 굴림을 갖는다. case input에 `roll`(mrand 결과)을 실어 결정성을 확보하고,
@@ -43,14 +43,14 @@ export interface BuffDurInput {
   readonly rpmext: boolean
 }
 
-/** classBonus 대상 클래스(독립 전사) — protection/bless=CLERIC/PALADIN, detect*=MAGE, 그 외 없음. */
+/** classBonus 대상 클래스(독립 옮겨 적기) — protection/bless=CLERIC/PALADIN, detect*=MAGE, 그 외 없음. */
 function classBonusClasses(spellNo: number): readonly number[] {
   if (spellNo === SPELL_NO.SPROTE || spellNo === SPELL_NO.SBLESS) return [CLERIC, PALADIN]
   if (spellNo === SPELL_NO.SDINVI || spellNo === SPELL_NO.SDMAGI) return [MAGE]
   return []
 }
 
-/** RPMEXT 보너스(독립 전사) — detect/fly=600, 나머지 표준=800. */
+/** RPMEXT 보너스(독립 옮겨 적기) — detect/fly=600, 나머지 표준=800. */
 function rpmextAmount(spellNo: number): number {
   if (spellNo === SPELL_NO.SDINVI || spellNo === SPELL_NO.SDMAGI || spellNo === SPELL_NO.SFLYSP) {
     return 600
@@ -59,7 +59,7 @@ function rpmextAmount(spellNo: number): number {
 }
 
 /**
- * 독립 전사(pass 2) — magic2.c:374-385 표준 버프 dur.
+ * 독립 옮겨 적기(pass 2) — magic2.c:374-385 표준 버프 dur.
  *   비-CAST → 1200; CAST → MAX(300, 1200+B*600) [+ 60*L4] [+ rpmext].
  */
 export function oracleBuffDur(input: BuffDurInput): number {
@@ -120,7 +120,7 @@ export interface DebuffDurInput {
 }
 
 /**
- * 독립 전사(pass 2) — magic8.c fear/silence/charm dur.
+ * 독립 옮겨 적기(pass 2) — magic8.c fear/silence/charm dur.
  *   fear   : 600 + roll*10 + B*150.
  *   silence: 3600 고정(roll·B 무시).
  *   charm  : 300 + roll*10 + B*30.

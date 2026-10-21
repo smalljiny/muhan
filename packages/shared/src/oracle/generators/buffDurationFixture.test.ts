@@ -15,7 +15,7 @@ import {
 
 const FIXED_CLOCK = (): Date => new Date('2026-07-16T00:00:00.000Z')
 
-describe('buffDurationFixture — oracleBuffDur 독립 전사(A6 §6)', () => {
+describe('buffDurationFixture — oracleBuffDur 독립 옮겨 적기(A6 §6)', () => {
   it('base MAX(300, 1200+B*600)', () => {
     expect(oracleBuffDur({ spellNo: 5, intBonus: 0, level: 10, casterClass: 4, gated: true, rpmext: false })).toBe(1200)
     expect(oracleBuffDur({ spellNo: 22, intBonus: 2, level: 10, casterClass: 5, gated: true, rpmext: false })).toBe(2400)
@@ -33,7 +33,7 @@ describe('buffDurationFixture — oracleBuffDur 독립 전사(A6 §6)', () => {
   })
 })
 
-describe('buffDurationFixture — oracleDebuffDur 독립 전사(A6 §7)', () => {
+describe('buffDurationFixture — oracleDebuffDur 독립 옮겨 적기(A6 §7)', () => {
   it('fear/silence/charm base', () => {
     expect(oracleDebuffDur({ spellNo: 50, intBonus: 2, prmagi: false, roll: 5 })).toBe(950)
     expect(oracleDebuffDur({ spellNo: 54, intBonus: 5, prmagi: false, roll: 30 })).toBe(3600)
@@ -46,7 +46,7 @@ describe('buffDurationFixture — oracleDebuffDur 독립 전사(A6 §7)', () => 
   })
 })
 
-describe('buffDurationFixture — buildCases 정합', () => {
+describe('buffDurationFixture — buildCases 일치', () => {
   it('buff 각 case expected가 oracleBuffDur와 일치한다', () => {
     for (const c of buildBuffCases()) expect(c.expected).toBe(oracleBuffDur(c.input))
   })

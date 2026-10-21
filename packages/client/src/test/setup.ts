@@ -4,7 +4,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
 import { afterEach } from 'vitest'
 
-// globals: false 환경에서는 RTL 자동 cleanup이 등록되지 않으므로 명시적으로 배선한다.
+// globals: false 환경에서는 RTL 자동 cleanup이 등록되지 않으므로 명시적으로 연결한다.
 // 이게 없으면 여러 테스트에서 렌더한 DOM이 다음 테스트로 누수된다.
 afterEach(() => {
   cleanup()

@@ -40,7 +40,7 @@ export interface SpellNameEntry {
 }
 
 /**
- * 주문명 매칭 결과 — 오라클의 세 분기(확정 / 모호 거부 / 부재)를 `kind` 태그로 판별한다.
+ * 주문명 매칭 결과 — 오라클의 세 분기(확정 / 모호 거부 / 없음)를 `kind` 태그로 판별한다.
  * 호출자는 `ambiguous`·`notFound`에 각각 오라클 메시지를 대응시킨다.
  */
 export type SpellNameMatch =
@@ -49,7 +49,7 @@ export type SpellNameMatch =
   | { readonly kind: 'notFound' }
 
 /**
- * `query`로 주문 엔트리를 해소한다. 완전일치 우선, 그 외에는 유일 접두일 때만 확정한다.
+ * `query`로 주문 엔트리를 해석한다. 완전일치 우선, 그 외에는 유일 접두일 때만 확정한다.
  *
  * `query`가 빈 문자열이면 `strncmp(a, b, 0) === 0`이라 전 엔트리에 접두 일치한다 —
  * 거부 게이트를 넣지 않고 오라클 동작을 그대로 둔다(엔트리 2개 이상이면 모호가 된다).

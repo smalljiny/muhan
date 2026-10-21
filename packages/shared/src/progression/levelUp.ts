@@ -5,7 +5,7 @@ import { resolveHpMax, resolveMpMax, clampVital } from './maxResolvers.js'
 /**
  * progression/levelUp — 레벨업(`upLevel`)·강등(`downLevel`) 순수 변이.
  *
- * 원본 `player.c:770`(up_level)/`player.c:820`(down_level)의 progression 소관 부분을 D3·D4
+ * 원본 `player.c:770`(up_level)/`player.c:820`(down_level)의 progression 담당 부분을 D3·D4
  * 정책으로 재해석해 결정적 순수 함수로 옮긴다. level·stats·hpCurrent·mpCurrent만 바꾼 새
  * Character를 반환하고 나머지 필드는 스프레드 보존한다(immutability). stats는 새 튜플로 만든다.
  *
@@ -13,15 +13,15 @@ import { resolveHpMax, resolveMpMax, clampVital } from './maxResolvers.js'
  * - 능력치 성장은 **newLevel%4==0**일 때만 1개 대상 능력치를 +1(강등은 -1)한다.
  * - 대상 슬롯 index = **(newLevel-2)%10**, 대상 능력치 값 v = `level_cycle[class][index]`(1..5).
  * - stats 튜플 인덱스 = **v-1**(enum STR=1..PTY=5 → StatIndex strength=0..piety=4). v=0은 무변화.
- * - index는 항상 짝수(newLevel%4==0 ⇒ newLevel 짝수)라 level_cycle 홀수 슬롯은 판독되지 않는다.
+ * - index는 항상 짝수(newLevel%4==0 ⇒ newLevel 짝수)라 level_cycle 홀수 슬롯은 읽히지 않는다.
  *
  * ## 최대치·현재치 정책 (D3 재동기화 / D4 차이)
- * - 최대치는 %4 게이트 없이 **매 레벨 폐형 재동기화**한다(resolveHpMax/resolveMpMax of 새 레벨).
+ * - 최대치는 %4 게이트 없이 **매 레벨 닫힌 식 재동기화**한다(resolveHpMax/resolveMpMax of 새 레벨).
  * - hpCurrent/mpCurrent는 **올리지 않는다** — 새 최대치로 `clampVital` 클램프만 한다. 원본은
  *   %4==0에서 풀회복(hpcur=hpmax)했지만 신규는 재생이 격차를 메우도록 의도적으로 다르게 둔다(D4).
  */
 
-/** CARETAKER 등 dice·PUPDMG 분기는 progression 소관이 아니라 무시한다(combat/prestige X2). */
+/** CARETAKER 등 dice·PUPDMG 분기는 progression 담당이 아니라 무시한다(combat/prestige X2). */
 
 /**
  * 레벨업 — level+1, newLevel%4==0이면 level_cycle 슬롯 대상 능력치 +1, 최대치 재동기화,
@@ -66,7 +66,7 @@ function applyGrowth(char: Character, gateLevel: number, delta: number): Charact
 }
 
 /**
- * 새 레벨 폐형으로 HP/MP 최대치를 재동기화하고, 기존 현재치를 새 최대치로 클램프한다(미상승).
+ * 새 레벨 닫힌 식으로 HP/MP 최대치를 재동기화하고, 기존 현재치를 새 최대치로 클램프한다(미상승).
  * char은 이미 level·stats가 갱신된 상태로 들어온다.
  */
 function resync(char: Character): Character {

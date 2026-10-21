@@ -5,7 +5,7 @@ import { SPELL_NO } from './catalog.js'
  *
  * ## 역할: 선언 데이터, 산술 없음
  * dur 산술(MAX(300,…)·PRMAGI dur/2·rng 굴림)은 소비처(server spellDuration.ts computeBuffDur/
- * computeDebuffDur)가 소유한다. 이 모듈은 주문번호별 **상수·클래스 보너스 대상·RPMEXT 양·굴림 계수**만
+ * computeDebuffDur)가 담당한다. 이 모듈은 주문번호별 **상수·클래스 보너스 대상·RPMEXT 양·굴림 계수**만
  * 담는다(offensiveSpell의 OSPELL_GRID 선례 — 격자 데이터는 shared, 산술은 server).
  *
  * ## 범위 경계 (Story 5 = 표준 공식만)
@@ -15,11 +15,11 @@ import { SPELL_NO } from './catalog.js'
  * 여기 등록하지 않는다 — computeBuffDur가 미등록 주문에 throw해 Story 9 전 오용을 차단한다.
  *
  * DEBUFF_DUR_META는 A6 §7 **PRMAGI→dur/2 모델 3종**(fear·silence·charm)만 담는다. befuddle은 저항 시
- * dur=3(단축)·else MAX(5)라는 다른 모델이고 MRBEFD/MNOCHA 플래그·자기변형에 결합돼 Story 8 소관이다.
+ * dur=3(단축)·else MAX(5)라는 다른 모델이고 MRBEFD/MNOCHA 플래그·자기변형에 결합돼 Story 8 담당이다.
  *
  * ## 클래스 리터럴 (mtype.h)
  * classBonusClasses는 mtype.h 클래스 인덱스 리터럴이다: CLERIC=3·PALADIN=6·MAGE=5. shared는 server의
- * combat/constants.ts를 import하지 못하므로 mproficFixture 선례대로 리터럴+주석으로 전사한다.
+ * combat/constants.ts를 import하지 못하므로 mproficFixture 선례대로 리터럴+주석으로 옮겨 적는다.
  */
 
 /** 비-CAST(scroll/potion/wand) 버프 고정 지속 — magic2-8.c의 `else interval = 1200`. */

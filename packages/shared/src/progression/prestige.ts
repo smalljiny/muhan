@@ -6,16 +6,16 @@ import { resolveHpMax, resolveMpMax } from './maxResolvers.js'
  * 두 전환을 character→character 순수 함수로 옮긴다. Story 6 train이 `classifyPrestige`로
  * 게이트한 뒤 대응 전이 함수를 디스패치 소비한다(D6).
  *
- * 원본 `command7.c:607-635`(train 명령 내 승급 분기)의 progression 소관 부분만 재현한다.
+ * 원본 `command7.c:607-635`(train 명령 내 승급 분기)의 progression 담당 부분만 재현한다.
  * class·level·experience·vitals만 바꾼 새 Character를 반환하고 나머지 필드는 스프레드
  * 보존한다(immutability).
  *
- * ## 미소유 (다른 시스템 소관)
- * - **gold 차감**: 원본은 승급 시 goldneeded를 차감하지만, 비용 게이트·차감은 train 소관이다.
- *   prestige는 순수 class/level/experience/vitals 전이만 소유한다.
- * - **dice(ndice/sdice/pdice=4)**: 초인의 4d4+4 데미지는 combat 라이브 투영(#82
- *   PlayerCombatState) 소관이며 characterSchema에 dice 필드가 없다. progression은 class 전이만
- *   소유하고 dice는 미소유한다.
+ * ## 담당 밖 (다른 시스템 담당)
+ * - **gold 차감**: 원본은 승급 시 goldneeded를 차감하지만, 비용 게이트·차감은 train 담당이다.
+ *   prestige는 순수 class/level/experience/vitals 전이만 담당한다.
+ * - **dice(ndice/sdice/pdice=4)**: 초인의 4d4+4 데미지는 combat 라이브 변환(#82
+ *   PlayerCombatState) 담당이며 characterSchema에 dice 필드가 없다. progression은 class 전이만
+ *   담당하고 dice는 담당하지 않는다.
  * - **가족/소셜(edit_member PFAMIL)·broadcast(I/O)**: progression 무관, skip.
  *
  * ## vitals 정책 (D4 예외 — 풀회복)
@@ -24,10 +24,10 @@ import { resolveHpMax, resolveMpMax } from './maxResolvers.js'
  * 현재치에 그대로 대입한다(clamp 아님).
  */
 
-/** INVINCIBLE(무적) 클래스 인덱스(mtype.h 정본). */
+/** INVINCIBLE(무적) 클래스 인덱스(mtype.h 기준). */
 const INVINCIBLE = 9
 
-/** CARETAKER(초인) 클래스 인덱스(mtype.h 정본). */
+/** CARETAKER(초인) 클래스 인덱스(mtype.h 기준). */
 const CARETAKER = 10
 
 /** 무적 전환 트리거 레벨. */
@@ -53,8 +53,8 @@ export function classifyPrestige(char: Character): 'invincible' | 'caretaker' | 
 }
 
 /**
- * 무적 전환 — class=9·level=1·experience=0으로 전이하고 vitals를 새 형태 폐형 최대치로 풀회복한다.
- * 새 캐릭터는 class=9·level=1이라 초인 오버라이드(800/600) 대상이 아니라 폐형값을 따른다.
+ * 무적 전환 — class=9·level=1·experience=0으로 전이하고 vitals를 새 형태 닫힌 식 최대치로 풀회복한다.
+ * 새 캐릭터는 class=9·level=1이라 초인 오버라이드(800/600) 대상이 아니라 닫힌 식 값을 따른다.
  *
  * **Precondition: `classifyPrestige(char)==='invincible'`.** train이 게이트 후 호출한다
  * (downLevel의 소비자-책임 관례). 방어적 조건 재확인은 하지 않는다.

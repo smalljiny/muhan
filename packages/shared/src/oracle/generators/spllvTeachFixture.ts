@@ -7,21 +7,21 @@ export { writeFixtureFile }
 /**
  * spllv 전수등급 골든 fixture 생성기 — manual oracle.
  *
- * 원본 `magic1.c:212-235`의 spllv별 전수 권한 5-if 체인을 **독립 리터럴로 전사**(전사 pass 2)해
+ * 원본 `magic1.c:212-235`의 spllv별 전수 권한 5-if 체인을 **독립 리터럴로 옮겨 적어**(옮겨 적기 pass 2)
  * {class, spllv} → boolean(전수 가능 여부) 케이스로 감싼다. SUT `canTeachSpllv`(server/magic/learning)는
- * learning.ts의 구현(전사 pass 1)을 소비하므로, approve가 두 전사의 불일치를 잡아낸다.
+ * learning.ts의 구현(옮겨 적기 pass 1)을 소비하므로, approve가 옮겨 적은 두 결과의 불일치를 잡아낸다.
  *
- * expected는 이 파일의 `oracleCanTeachSpllv`(magic1.c 독립 전사)에서 계산한다 — server learning.ts를
+ * expected는 이 파일의 `oracleCanTeachSpllv`(magic1.c 독립 옮겨 적기)에서 계산한다 — server learning.ts를
  * import하지 않는다. import하면 SUT와 fixture가 같은 코드가 되어 anti-tautology가 무너진다. 클래스 인덱스도
  * server 상수를 참조하지 않고 mtype.h 리터럴로 직접 쓴다(CLERIC=3·MAGE=5·INVINCIBLE=9·CARETAKER=10·SUB_DM=11).
  *
- * ## 경계 주의 — spllv 테이블만 전사한다(base-class 게이트 제외)
+ * ## 경계 주의 — spllv 테이블만 옮겨 적는다(base-class 게이트 제외)
  * magic1.c teach()는 spllv 5-if 체인 앞에 base-class 게이트(CARETAKER/MAGE/CLERIC만 통과)를 둔다. 이 fixture는
- * spllv 체인만 독립 전사하므로 INVINCIBLE(9)→spllv1→true처럼 base 게이트가 실제로 막는 조합도 true로 나온다.
+ * spllv 체인만 독립적으로 옮겨 적으므로 INVINCIBLE(9)→spllv1→true처럼 base 게이트가 실제로 막는 조합도 true로 나온다.
  * 이는 SUT `canTeachSpllv`가 spllv 체크만 담당하는 계약과 정확히 대응한다 — base-class 게이트는 `teach()`가
  * 조합한다(server 단위 테스트가 별도 검증).
  *
- * SUT 소비 approve는 server가 소유한다(`packages/server/src/magic/learning.test.ts`) — shared는 server를
+ * SUT 소비 approve는 server가 담당한다(`packages/server/src/magic/learning.test.ts`) — shared는 server를
  * import 못 하므로, 이 파일은 fixture만 생성하고 approve는 server 테스트가 디스크 json을 읽어 실행한다.
  *
  * ## 재생성 (수동 트리거)
@@ -38,7 +38,7 @@ export interface SpllvTeachInput {
   readonly spllv: number
 }
 
-// 독립 전사(pass 2) — mtype.h #define 클래스 리터럴(server 상수 미참조).
+// 독립 옮겨 적기(pass 2) — mtype.h #define 클래스 리터럴(server 상수 미참조).
 const CLERIC = 3
 const MAGE = 5
 const INVINCIBLE = 9
@@ -46,14 +46,14 @@ const CARETAKER = 10
 const SUB_DM = 11
 
 /**
- * 독립 전사 canTeachSpllv — magic1.c:212-235 spllv 5-if 체인. 각 if는 조건 성립 시 전수 거부(return 0)이며,
+ * 독립 옮겨 적기 canTeachSpllv — magic1.c:212-235 spllv 5-if 체인. 각 if는 조건 성립 시 전수 거부(return 0)이며,
  * 여기서는 그 부정(전수 가능)을 반환한다:
  *   spllv 1: !(class!=CLERIC && class<INVINCIBLE)  →  class==CLERIC || class>=INVINCIBLE
  *   spllv 2: !(class!=MAGE   && class<INVINCIBLE)  →  class==MAGE   || class>=INVINCIBLE
  *   spllv 3: !(class<INVINCIBLE)                   →  class>=INVINCIBLE
  *   spllv 4: !(class<CARETAKER)                    →  class>=CARETAKER
  *   spllv 5: !(class<SUB_DM)                       →  class>=SUB_DM
- * spllv가 1-5 밖이면 매칭 if가 없어 어떤 거부도 발화하지 않는다 → 전수 가능(true).
+ * spllv가 1-5 밖이면 매칭 if가 없어 어떤 거부도 실행되지 않는다 → 전수 가능(true).
  */
 export function oracleCanTeachSpllv(cls: number, spllv: number): boolean {
   if (spllv === 1) return cls === CLERIC || cls >= INVINCIBLE
@@ -64,7 +64,7 @@ export function oracleCanTeachSpllv(cls: number, spllv: number): boolean {
   return true
 }
 
-/** input을 oracleCanTeachSpllv로 감싼 케이스로 만든다(expected는 독립 전사 계산값). */
+/** input을 oracleCanTeachSpllv로 감싼 케이스로 만든다(expected는 독립 옮겨 적기 계산값). */
 function makeCase(
   input: SpllvTeachInput,
   note?: string,

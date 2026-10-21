@@ -5,11 +5,11 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * class_stats 골든 전사-diff fixture 생성기 — manual oracle.
+ * class_stats 골든 옮겨 적기-diff fixture 생성기 — manual oracle.
  *
- * 원본 `global.c:37`의 클래스 성장 스탯 13×7 테이블을 **독립 리터럴**로 전사해(전사 pass 2)
- * 각 셀을 조회 케이스로 감싼다. SUT `classStatOf`는 `stats/tables.ts`(전사 pass 1)를 읽으므로,
- * approve가 두 전사의 불일치(오타)를 셀 단위로 잡아낸다(anti-tautology).
+ * 원본 `global.c:37`의 클래스 성장 스탯 13×7 테이블을 **독립 리터럴**로 옮겨 적어(옮겨 적기 pass 2)
+ * 각 셀을 조회 케이스로 감싼다. SUT `classStatOf`는 `stats/tables.ts`(옮겨 적기 pass 1)를 읽으므로,
+ * approve가 옮겨 적은 두 결과의 불일치(오타)를 셀 단위로 잡아낸다(anti-tautology).
  *
  * expected는 이 파일에서 tables.ts를 import하지 않고 오라클 블록에서 직접 옮긴 리터럴이다.
  *
@@ -37,7 +37,7 @@ const FIELD_ORDER: ClassStatsInput['field'][] = [
   'pdice',
 ]
 
-// 독립 전사(pass 2) — global.c:37. 행=클래스 인덱스, 열=FIELD_ORDER 순서.
+// 독립 옮겨 적기(pass 2) — global.c:37. 행=클래스 인덱스, 열=FIELD_ORDER 순서.
 // tables.ts를 import하지 않고 오라클 블록에서 직접 옮긴 리터럴이다.
 const CLASS_STATS_ORACLE: readonly (readonly number[])[] = [
   [1, 1, 1, 1, 1, 1, 1], // [0] placeholder

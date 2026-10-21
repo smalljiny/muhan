@@ -10,12 +10,12 @@ export { writeFixtureFile }
  *
  * 원본 `global.c:129`(needed_exp 테이블) + `command7.c:590`(neededExp) + `misc.c:472`
  * (exp_to_lev)의 동작을 참조 구현(`referenceNeededExp`/`referenceExpToLevel`)으로 옮기고,
- * 대표 12개 케이스를 fixture로 감싸 `fixtures/needed_exp.json`에 기록한다. 산술 정본은
+ * 대표 12개 케이스를 fixture로 감싸 `fixtures/needed_exp.json`에 기록한다. 산술 기준은
  * 런타임 `progression/expCurve.ts`(SUT)에 두며, 이 참조는 그 SUT와 **독립 표현**으로 작성한다:
  * - `referenceNeededExp`: 배열 인덱싱 대신 `.at()` + 선형항을 분배 형태로 재표현.
  * - `referenceExpToLevel`: 명령형 while 루프 대신 임계 배열 `filter` 카운트로 재표현
  *   (index 0..126이 단조 증가라 while 루프의 leading-threshold 카운트와 등가).
- * needed_exp 테이블 자체는 `progression/tables.ts`에서 import한다(재전사 금지).
+ * needed_exp 테이블 자체는 `progression/tables.ts`에서 import한다(다시 옮겨 적기 금지).
  *
  * ## 결정적 함정: 배열 상한 vs 선형 피벗 불일치
  * neededExp(128)=needed_exp[127]=190000000이지만 선형 확장·역산 피벗은 needed_exp[126]=
@@ -30,7 +30,7 @@ export { writeFixtureFile }
  * ```
  */
 
-/** 선형 확장 스칼라 — SUT와 동일 상수(스칼라 재정의는 128칸 테이블 전사 독립성을 해치지 않는다). */
+/** 선형 확장 스칼라 — SUT와 동일 상수(스칼라 재정의는 128칸 테이블 옮겨 적기 독립성을 해치지 않는다). */
 const LINEAR_STEP = 5_000_000
 const MAXALVL = 128
 
@@ -79,7 +79,7 @@ type NeededExpCaseDraft = Omit<NeededExpCase, 'expected'>
 
 /**
  * 골든 케이스 12개를 구성한다. expected는 생성기 정상 경로대로 참조 구현으로 채운다.
- * (테스트 측 Layer B 앵커는 이와 독립적으로 확정 정본 하드 리터럴로 tautology를 차단한다.)
+ * (테스트 측 Layer B 앵커는 이와 독립적으로 확정 기준 하드 리터럴로 tautology를 차단한다.)
  */
 export function buildCases(): NeededExpCase[] {
   const inputs: NeededExpCaseDraft[] = [

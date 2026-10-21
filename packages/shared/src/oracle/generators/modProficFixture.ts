@@ -5,11 +5,11 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * mod_profic 골든 전사-diff fixture 생성기 — manual oracle.
+ * mod_profic 골든 옮겨 적기-diff fixture 생성기 — manual oracle.
  *
  * 원본 `player.c:1032`의 클래스→숙련도 나눗수 switch를 인덱스 0-12 **독립 리터럴**로
- * 전사해(전사 pass 2) 각 클래스를 조회 케이스로 감싼다. SUT `proficDivisorOf`는
- * `stats/tables.ts`(전사 pass 1)를 읽으므로, approve가 두 전사의 불일치를 잡아낸다.
+ * 옮겨 적어(옮겨 적기 pass 2) 각 클래스를 조회 케이스로 감싼다. SUT `proficDivisorOf`는
+ * `stats/tables.ts`(옮겨 적기 pass 1)를 읽으므로, approve가 옮겨 적은 두 결과의 불일치를 잡아낸다.
  *
  * expected는 이 파일에서 tables.ts를 import하지 않고 오라클 블록에서 직접 옮긴 리터럴이다.
  *
@@ -20,7 +20,7 @@ export { writeFixtureFile }
  * ```
  */
 
-// 독립 전사(pass 2) — player.c:1032 switch. 인덱스=클래스, 값=나눗수.
+// 독립 옮겨 적기(pass 2) — player.c:1032 switch. 인덱스=클래스, 값=나눗수.
 // FIGHTER(4)/BARBARIAN(2)/INVINCIBLE(9)/CARETAKER(10)=20, RANGER(7)/PALADIN(6)=25,
 // THIEF(8)/ASSASSIN(1)/CLERIC(3)=30, 그 외(MAGE(5)/0/11/12)=40(default).
 const MOD_PROFIC_ORACLE: readonly number[] = [

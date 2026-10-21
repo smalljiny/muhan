@@ -1,7 +1,7 @@
 /**
  * stats/tables — 무한 전투·경제·레벨링의 정적 룩업 테이블 단일 물리 출처.
  *
- * 원본 C 전역 상수(`global.c`·`player.c`)를 32비트 oracle에서 전사한 4종 테이블과,
+ * 원본 C 전역 상수(`global.c`·`player.c`)를 32비트 oracle에서 옮겨 적은 4종 테이블과,
  * clamp 내장 접근자를 제공한다. 순수 데이터 모듈이며 런타임 I/O import(`node:fs` 등)를
  * 절대 포함하지 않는다 — 서버·클라이언트 어느 쪽에서도 안전하게 import된다.
  *
@@ -66,7 +66,7 @@ export function bonusOf(abilityScore: number): number {
 /**
  * 클래스 성장 스탯 한 행. 필드 순서는 C 구조체 `{hpstart, mpstart, hp, mp, ndice, sdice, pdice}`.
  * - hpstart/mpstart: 1레벨 기본 HP/MP.
- * - hp/mp: 레벨당 성장 계수(폐형 `start + trunc(coef*(level-1)/2)`).
+ * - hp/mp: 레벨당 성장 계수(닫힌 식 `start + trunc(coef*(level-1)/2)`).
  * - ndice/sdice/pdice: 클래스 타격 주사위(개수/면수/추가).
  */
 export type ClassStats = {
@@ -79,7 +79,7 @@ export type ClassStats = {
   pdice: number
 }
 
-/** 배열 튜플을 named 필드 객체로 감싸는 내부 헬퍼(전사 정합성 유지용). */
+/** 배열 튜플을 named 필드 객체로 감싸는 내부 헬퍼(옮겨 적기 정합성 유지용). */
 function makeClassStats(
   hpstart: number,
   mpstart: number,
@@ -171,7 +171,7 @@ export function thacoOf(input: { classIndex: number; levelIndex: number }): numb
 
 /**
  * `mod_profic[13]` — 클래스 인덱스→숙련도 나눗수. 원본 `player.c:1032`의 switch를
- * 인덱스 0-12로 전사한다. 나눗수가 클수록 숙련 상승이 느리다.
+ * 인덱스 0-12로 옮겨 적는다. 나눗수가 클수록 숙련 상승이 느리다.
  * FIGHTER/BARBARIAN/INVINCIBLE/CARETAKER=20, RANGER/PALADIN=25,
  * THIEF/ASSASSIN/CLERIC=30, 그 외(MAGE 및 placeholder/sub_dm/DM)=40(default).
  */

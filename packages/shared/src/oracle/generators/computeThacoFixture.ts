@@ -11,7 +11,7 @@ export { writeFixtureFile }
  *
  * 원본 `player.c:1001`의 THAC0 공식을 참조 구현(`referenceComputeThaco`)으로 옮기고,
  * 손 계산으로 확정한 9개 케이스를 fixture로 감싸 `fixtures/compute_thaco.json`에 기록한다.
- * Story 4는 산술 정본을 `oracle/*`가 아닌 **런타임 `stats/derived.ts`의 `computeThaco`**에
+ * Story 4는 산술 기준을 `oracle/*`가 아닌 **런타임 `stats/derived.ts`의 `computeThaco`**에
  * 둔다(직접 SUT 산술). 이 참조는 그 SUT와 **독립 표현**으로 작성해 판별력을 유지한다 —
  * 여기선 step-array reduce + 테이블 기반 하한, SUT는 직접 차감 체인 + if/return 분기.
  *
@@ -67,8 +67,8 @@ type ComputeThacoCase = { input: EffectiveStatContext; expected: number; note?: 
 type ComputeThacoCaseDraft = Omit<ComputeThacoCase, 'expected'>
 
 /**
- * compute_thaco가 판독하지 않는 컨텍스트 필드(effectiveDexterity·equipArmor·protection)를
- * 더미값으로 채워 전체 `EffectiveStatContext`를 구성한다. 판독 필드만 overrides로 지정한다.
+ * compute_thaco가 읽지 않는 컨텍스트 필드(effectiveDexterity·equipArmor·protection)를
+ * 더미값으로 채워 전체 `EffectiveStatContext`를 구성한다. 읽는 필드만 overrides로 지정한다.
  */
 function ctx(overrides: {
   effectiveStrength: number

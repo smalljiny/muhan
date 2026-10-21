@@ -44,7 +44,7 @@ describe('shared 루트 배럴 re-export', () => {
     expect(errorCodeSchema.safeParse('unauthorized').success).toBe(true)
   })
 
-  it('핸드셰이크 왕복이 버전 상수로 정합한다', () => {
+  it('핸드셰이크 왕복이 버전 상수로 일치한다', () => {
     expect(
       clientCommandSchema.safeParse({ type: 'system:ready', protocolVersion: PROTOCOL_VERSION })
         .success,

@@ -13,7 +13,7 @@ import { characterSummarySchema, promptKindSchema, promptOptionSchema } from './
 const SPELL_MASK_BYTES = 16
 
 /**
- * 오류 코드 열거 — error 이벤트가 싣는 기계 판독용 사유의 단일 출처.
+ * 오류 코드 열거 — error 이벤트가 싣는 기계가 읽는 사유의 단일 출처.
  *
  * handshake_required(핸드셰이크 전 명령 수신), unknown_type(미지 discriminator),
  * bad_payload(payload 형식 위반), internal(서버 내부 오류),
@@ -64,7 +64,7 @@ export const serverEventSchema = z.discriminatedUnion('type', [
     ...freeTextPayloadSchema.shape,
     correlationId: z.string().optional(),
   }),
-  // 오류 통지 — code는 기계 판독, message는 사람용. correlationId는 유발 명령과의 상관 키.
+  // 오류 통지 — code는 기계가 읽는 값, message는 사람용. correlationId는 유발 명령과의 상관 키.
   z.strictObject({
     type: z.literal('error'),
     code: errorCodeSchema,
@@ -93,12 +93,12 @@ export const serverEventSchema = z.discriminatedUnion('type', [
     type: z.literal('session:resumed'),
     characterId: z.string().min(1),
   }),
-  // 방 통지 — 이동/입장 성공 시 본인에게 1회 발화하는 방 스냅샷. 방 id·이름·설명·출구 이름 목록에
+  // 방 통지 — 이동/입장 성공 시 본인에게 1회 발생하는 방 스냅샷. 방 id·이름·설명·출구 이름 목록에
   // 더해 눈에 보이는 점유자·바닥 아이템·크리처를 싣는다(서버 `projectRoomView`가 오라클 방 표시 규칙으로
   // 숨김 개체·비밀 출구를 이미 걸러 낸다). 스냅샷이지 실시간 델타가 아니다 — 다른 사람의 입·퇴장은 다음
   // world:room까지 반영되지 않는다(#116).
   //
-  // `name`·`longDesc`는 빈 문자열이 유효하다 — 정본 월드 데이터에 빈 name 97방·빈 longDesc 433방이
+  // `name`·`longDesc`는 빈 문자열이 유효하다 — 기준 월드 데이터에 빈 name 97방·빈 longDesc 433방이
   // 실재하며, 대체 문구('이름 없는 곳'·'설명이 없다.') 선택은 표시 계층의 관심사다.
   // `exits`는 이름 문자열 배열을 유지한다 — 문 잠김·닫힘 상태를 노출하지 않고, 버튼을 눌러 막히면
   // 서버가 error{rule_rejected}로 답한다(OQ3). `shortDesc`는 2341방 중 2327방이 빈 문자열이라 싣지 않는다.
@@ -129,11 +129,11 @@ export const serverEventSchema = z.discriminatedUnion('type', [
     text: z.string().min(1).max(CHAT_TEXT_MAX),
     target: z.string().min(1).max(CHAT_TARGET_MAX).optional(),
   }),
-  // 연마 성공 통지 — train()이 확정한 성장 결과 스냅샷을 본인에게 1회 발화한다(D-C 최소 상태 통지).
+  // 연마 성공 통지 — train()이 확정한 성장 결과 스냅샷을 본인에게 1회 발생시킨다(D-C 최소 상태 통지).
   // world:room 선례를 따라 correlationId를 싣지 않는다(상태 이벤트 — 거부만 error로 상관 키를 반향한다).
   // stats는 characterSchema.stats와 동일한 5-튜플이다 — 와이어 계약이라 길이 드리프트를 타입으로 막는다.
   // 나머지 numeric 필드도 characterSchema의 하한을 그대로 미러한다 — 클라(wsClient)가 인바운드
-  // 프레임을 이 스키마로 safeParse하므로 형식적 정합이 아니라 실 입력 검증 표면이다.
+  // 프레임을 이 스키마로 safeParse하므로 형식적 일치가 아니라 실 입력 검증 접점이다.
   // prestige는 이번 연마의 승급 결과(무적·초인 전이 또는 일반 상승)다.
   z.strictObject({
     type: z.literal('progress:trained'),
@@ -147,7 +147,7 @@ export const serverEventSchema = z.discriminatedUnion('type', [
     stats: z.tuple([z.int(), z.int(), z.int(), z.int(), z.int()]),
     prestige: z.enum(['invincible', 'caretaker', 'none']),
   }),
-  // 학습 성공 통지 — study()가 확정한 주문 습득 결과를 본인에게 1회 발화한다. progress:trained 선례대로
+  // 학습 성공 통지 — study()가 확정한 주문 습득 결과를 본인에게 1회 발생시킨다. progress:trained 선례대로
   // correlationId를 싣지 않는다(상태 이벤트 — 거부만 error로 상관 키를 반향한다).
   //
   // spells는 characterSchema.spells와 **같은 형태를 따로 선언한 것**이다 — 프로토콜은 schema/(영속·도메인)와
@@ -158,10 +158,10 @@ export const serverEventSchema = z.discriminatedUnion('type', [
   // 바꾸는 필드를 싣는다")을 따르면, 주문 비트만 싣고 사라진 비법서를 빼는 것은 자기 연산을 절반만
   // 보고하는 것이다. 특정 클라 소비자를 전제하지 않는다 — 인벤 패널(E12/E13)이 어떤 모양으로 오든
   // 이 근거는 유효하다. 다만 그 토픽이 인벤 변경 신호를 따로 세우면 경로가 둘이 되므로, 그때 어느 쪽을
-  // 정본으로 삼을지 정해야 한다.
+  // 기준으로 삼을지 정해야 한다.
   //
   // spellName은 표시용 주문 이름이다. spellNo로 카탈로그를 찾으면 대개 파생되지만(spellByNo), 카탈로그는
-  // 0~55만 담고 spellNo 값역은 [0,127]이라 카탈로그 밖 주문에서는 파생이 불가능하다. 서버가 실어 보낸다.
+  // 0~55만 담고 spellNo 값 범위는 [0,127]이라 카탈로그 밖 주문에서는 파생이 불가능하다. 서버가 실어 보낸다.
   z.strictObject({
     type: z.literal('progress:studied'),
     // 상한은 16바이트 = 128비트에서 파생한다(비트 f = 주문번호 f). 손으로 계산한 127을 적지 않는다.
@@ -173,7 +173,7 @@ export const serverEventSchema = z.discriminatedUnion('type', [
     spells: z.array(z.int().min(0).max(255)).length(SPELL_MASK_BYTES),
     consumedObjectId: z.string().min(1),
   }),
-  // 전투 라운드 결과 통지 — 한 번의 공격 라운드가 확정한 결과를 본인에게 1회 발화한다.
+  // 전투 라운드 결과 통지 — 한 번의 공격 라운드가 확정한 결과를 본인에게 1회 발생시킨다.
   // progress:trained 선례대로 correlationId를 싣지 않는다(상태 이벤트 — 거부만 error로 상관 키를 반향한다).
   //
   // 대상은 instanceId와 표시 이름을 함께 싣는다 — world:room의 items·creatures가 쓰는 것과 같은
@@ -187,10 +187,10 @@ export const serverEventSchema = z.discriminatedUnion('type', [
   // top-level hit·damage·critical·fumble은 라운드 전체의 집계이고(다중공격 타격들의 합·OR),
   // attacks는 그 집계를 만든 개별 타격의 목록이다. 표시 계층이 타격별 문장을 쓰려면 목록이 필요하고,
   // 요약만 쓰려면 집계 필드로 충분하다 — 둘 다 싣는 이유다.
-  // damage에 하한을 두지 않는다 — 서버 집계 결과를 그대로 싣고, 값역 해석은 전투 규칙이 소유한다.
+  // damage에 하한을 두지 않는다 — 서버 집계 결과를 그대로 싣고, 값 범위 해석은 전투 규칙이 담당한다.
   //
   // attacks 원소 6필드는 server/src/combat/resolveAttack.ts의 AttackDescriptor 7필드에서
-  // specialAttack을 뺀 것이다(D11). 몬스터 특수공격 마커는 이슈 #99 소관이라 이 토픽의 와이어 계약에
+  // specialAttack을 뺀 것이다(D11). 몬스터 특수공격 마커는 이슈 #99 담당이라 이 토픽의 와이어 계약에
   // 넣지 않는다 — 그때 필드를 추가하면 version bump 대상이다. strict라서 지금 실어 보내면 거부된다.
   //
   // progress:studied의 spells와 같은 상황이다 — 저쪽 형태를 **따로 선언한 것**이지 파생한 것이 아니다.
@@ -217,17 +217,17 @@ export const serverEventSchema = z.discriminatedUnion('type', [
       }),
     ),
   }),
-  // 스탯 스냅샷 통지 — 전투·회복으로 바뀐 자원과 성장 수치를 본인에게 발화한다. 델타가 아니라 스냅샷이라
+  // 스탯 스냅샷 통지 — 전투·회복으로 바뀐 자원과 성장 수치를 본인에게 발생시킨다. 델타가 아니라 스냅샷이라
   // 놓친 이벤트가 있어도 다음 통지에서 상태가 수렴한다(world:room 선례).
   // progress:trained 선례대로 correlationId를 싣지 않는다(상태 이벤트).
   //
   // hpCurrent·mpCurrent·experience·level은 characterSchema에 대응 필드가 있어 그 하한을 미러한다 —
-  // 클라(wsClient)가 인바운드 프레임을 이 스키마로 safeParse하므로 형식적 정합이 아니라 실 입력 검증
-  // 표면이다. level 하한 1은 progress:trained와 같다.
+  // 클라(wsClient)가 인바운드 프레임을 이 스키마로 safeParse하므로 형식적 일치가 아니라 실 입력 검증
+  // 접점이다. level 하한 1은 progress:trained와 같다.
   //
   // hpMax·mpMax는 characterSchema에 없다 — 저장하지 않고 stats/derived.ts의 computeHpMax·computeMpMax로
   // 매번 파생하는 값이라(compute-on-read), 미러할 대응 필드가 없어 자원 하한 0만 둔다. 그래서 hpMax 0이
-  // 형식상 통과한다 — 살아 있는 캐릭터에서는 나타나지 않는 값이고, 값역 해석은 성장 규칙이 소유한다.
+  // 형식상 통과한다 — 살아 있는 캐릭터에서는 나타나지 않는 값이고, 값 범위 해석은 성장 규칙이 담당한다.
   // hpCurrent ≤ hpMax 같은 교차 필드 불변식도 두지 않는다(progress:trained와 같은 결).
   z.strictObject({
     type: z.literal('character:stats'),

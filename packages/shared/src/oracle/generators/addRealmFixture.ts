@@ -5,11 +5,11 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * realmGrowthAmount 골든 전사-diff fixture 생성기 — manual oracle.
+ * realmGrowthAmount 골든 옮겨 적기-diff fixture 생성기 — manual oracle.
  *
- * 원본 `magic1.c:1122-1130`의 realm 숙련 성장량 공식을 **독립 리터럴**로 전사해(전사 pass 2) {m, exp,
- * hpmax} 조회 케이스로 감싼다. SUT `realmGrowthAmount`(server/magic)은 realmGrowth.ts 구현(전사 pass 1)을
- * 소비하므로, approve가 두 전사의 불일치를 잡아낸다.
+ * 원본 `magic1.c:1122-1130`의 realm 숙련 성장량 공식을 **독립 리터럴**로 옮겨 적어(옮겨 적기 pass 2) {m, exp,
+ * hpmax} 조회 케이스로 감싼다. SUT `realmGrowthAmount`(server/magic)은 realmGrowth.ts 구현(옮겨 적기 pass 1)을
+ * 소비하므로, approve가 옮겨 적은 두 결과의 불일치를 잡아낸다.
  *
  * ## combat exp 분배와 동형(Criterion 5)
  * oracleRealmGrowth의 공식 `MIN(trunc((m*exp)/MAX(1,hpmax)), exp)`는 deathDistribution 기여자 exp
@@ -17,10 +17,10 @@ export { writeFixtureFile }
  * realm 성장에 대응물 없음 — base expdiv에만 동형). server 테스트가 이 fixture를 realmGrowthAmount로
  * approve하고, 나아가 단일 기여자 distributeCreatureDeath award와 동치임을 대조해 동형을 고정한다.
  *
- * PvE 가드(`crt->type != PLAYER`)·realm 슬롯 적용(realm[i]+=)은 호출자·#99 소관이라 fixture는 순수
+ * PvE 가드(`crt->type != PLAYER`)·realm 슬롯 적용(realm[i]+=)은 호출자·#99 담당이라 fixture는 순수
  * 성장량 스칼라만 pin한다(오라클 delta 반환 선례 충실).
  *
- * SUT 소비 approve는 server가 소유한다(`packages/server/src/magic/realmGrowth.test.ts`) — shared는 server를
+ * SUT 소비 approve는 server가 담당한다(`packages/server/src/magic/realmGrowth.test.ts`) — shared는 server를
  * import 못 하므로, 이 파일은 fixture만 생성하고 approve는 server 테스트가 디스크 json을 읽어 실행한다.
  *
  * ## 재생성 (수동 트리거)
@@ -38,7 +38,7 @@ export interface RealmGrowthInput {
 }
 
 /**
- * 독립 전사(pass 2) — magic1.c:1122-1130.
+ * 독립 옮겨 적기(pass 2) — magic1.c:1122-1130.
  *   addrealm = MIN(trunc((m*exp)/MAX(1,hpmax)), exp).
  * base 공식은 creature.c:287 expdiv와 동일(combat exp 분배 동형). delta 스칼라만 반환.
  */
@@ -46,7 +46,7 @@ export function oracleRealmGrowth(input: RealmGrowthInput): number {
   return Math.min(Math.trunc((input.m * input.exp) / Math.max(1, input.hpmax)), input.exp)
 }
 
-/** input을 oracleRealmGrowth로 감싼 케이스로 만든다(expected는 독립 전사 계산값). */
+/** input을 oracleRealmGrowth로 감싼 케이스로 만든다(expected는 독립 옮겨 적기 계산값). */
 function makeCase(input: RealmGrowthInput, note?: string): GoldenFixture<RealmGrowthInput, number>['cases'][number] {
   const base = { input, expected: oracleRealmGrowth(input) }
   return note ? { ...base, note } : base

@@ -1,7 +1,7 @@
 /**
  * stats/derived — `EffectiveStatContext`를 입력으로 받는 파생 스탯 resolver 런타임 계층.
  *
- * 산술 정본은 `oracle/*`에 단일 출처로 두고, 이 계층은 공통 컨텍스트를 각 oracle 함수의
+ * 산술 기준은 `oracle/*`에 단일 출처로 두고, 이 계층은 공통 컨텍스트를 각 oracle 함수의
  * 좁은 입력으로 어댑트해 호출하는 얇은 wrapper만 제공한다(Open Q #5: wrap). 방어도·명중률
  * 등 산술식을 여기서 재정의하지 않는다 — 드리프트 0을 위해 산술은 oracle 한 곳에만 존재한다.
  */
@@ -13,7 +13,7 @@ import type { EffectiveStatContext } from './context.js'
 
 /**
  * 방어도 resolver — `EffectiveStatContext`를 `ComputeAcInput`으로 어댑트해 oracle
- * `computeAc`를 호출하는 얇은 wrapper. 산술식은 `oracle/computeAc.ts`가 정본이다.
+ * `computeAc`를 호출하는 얇은 wrapper. 산술식은 `oracle/computeAc.ts`가 기준이다.
  */
 export function computeAc(context: EffectiveStatContext): number {
   const input: ComputeAcInput = {
@@ -27,7 +27,7 @@ export function computeAc(context: EffectiveStatContext): number {
 /**
  * 명중(THAC0) resolver — `player.c:1001`의 compute_thaco를 직접 산술로 구현한 SUT.
  *
- * computeAc와 달리 oracle 산술 모듈이 없다 — 산술 정본이 이 함수 자체다. 독립 참조는
+ * computeAc와 달리 oracle 산술 모듈이 없다 — 산술 기준이 이 함수 자체다. 독립 참조는
  * `oracle/generators/computeThacoFixture.ts`의 `referenceComputeThaco`가 골든 fixture용으로
  * 별도 표현으로 보유한다.
  *
@@ -78,22 +78,22 @@ export function maxWeight(context: EffectiveStatContext): number {
 }
 
 /**
- * 최대 HP resolver — `player.c:805`의 up_level HP 성장 폐형을 직접 산술로 구현한 SUT.
+ * 최대 HP resolver — `player.c:805`의 up_level HP 성장 닫힌 식을 직접 산술로 구현한 SUT.
  *
  * `hpMax = hpstart + trunc(hp * (level-1) / 2)`. `hpstart`(1레벨 기본)와 `hp`(레벨당 성장
- * 계수)는 `classStatOf`로 판독한다. 현재 HP·재생은 파생하지 않는다 — 최대치만 계산한다.
+ * 계수)는 `classStatOf`로 읽는다. 현재 HP·재생은 파생하지 않는다 — 최대치만 계산한다.
  *
  * ## 결정적 함정: 정수 나눗셈 그룹핑
  * C 원본 `hp * (level-1) / 2`는 `*`·`/` 동일 우선순위·좌결합이라 `(hp*(level-1))/2`이며
  * truncation이 **곱 결과에 적용**된다. `Math.trunc(hp * (level - 1) / 2)`로 그룹핑한다 —
  * `hp * Math.trunc((level-1)/2)`로 잘못 묶으면 오답이다(fighter L10이 83 아닌 80).
  *
- * ## oracle과의 차이 수용: 폐형만 구현
- * 원본 `up_level`은 폐형(805–808) 이전에 홀짝 증분(779–780)을 수행하고, 폐형 재계산은
+ * ## oracle과의 차이 수용: 닫힌 식만 구현
+ * 원본 `up_level`은 닫힌 식(805–808) 이전에 홀짝 증분(779–780)을 수행하고, 닫힌 식 재계산은
  * `level==1`·`level%4==0`에서만 도달한다(791행 조기 return). `level%4≠0` 레벨은 증분
- * 누적값이 잔존해 폐형과 **어긋나며** 그 값이 디스크에 저장·관측된다(fighter hpMax:
- * L2 게임56/폐형59, L5 71/68, L7 77/74). 이 어긋남은 `level%4` 조기 return이 만든 구현
- * 버그로 판단해 신규 스택은 **폐형 하나만** 구현한다 — 어긋나는 레벨에서 원본과 다를 수 있으며
+ * 누적값이 잔존해 닫힌 식과 **어긋나며** 그 값이 디스크에 저장·관측된다(fighter hpMax:
+ * L2 게임56/닫힌 식59, L5 71/68, L7 77/74). 이 어긋남은 `level%4` 조기 return이 만든 구현
+ * 버그로 판단해 신규 스택은 **닫힌 식 하나만** 구현한다 — 어긋나는 레벨에서 원본과 다를 수 있으며
  * 수용된 결정이다(근거: `docs/notes/game-analysis-20260625/a7-player-progression.md` §2 정정).
  */
 export function computeHpMax(context: EffectiveStatContext): number {
@@ -104,12 +104,12 @@ export function computeHpMax(context: EffectiveStatContext): number {
 }
 
 /**
- * 최대 MP resolver — `player.c:806`의 up_level MP 성장 폐형을 직접 산술로 구현한 SUT.
+ * 최대 MP resolver — `player.c:806`의 up_level MP 성장 닫힌 식을 직접 산술로 구현한 SUT.
  *
  * `mpMax = mpstart + trunc(mp * (level-1) / 2)`. computeHpMax와 동일한 그룹핑 규칙을 따른다 —
- * truncation은 곱 결과에 적용한다. `mpstart`·`mp`는 `classStatOf`로 판독한다.
- * oracle과의 차이 수용(폐형만 구현)도 computeHpMax와 동일하다 — MP는 짝수 레벨 증분이라
- * `level%4≠0` 짝수 레벨에서 폐형과 어긋난다(같은 A7 §2 근거).
+ * truncation은 곱 결과에 적용한다. `mpstart`·`mp`는 `classStatOf`로 읽는다.
+ * oracle과의 차이 수용(닫힌 식만 구현)도 computeHpMax와 동일하다 — MP는 짝수 레벨 증분이라
+ * `level%4≠0` 짝수 레벨에서 닫힌 식과 어긋난다(같은 A7 §2 근거).
  */
 export function computeMpMax(context: EffectiveStatContext): number {
   const { characterClass, level } = context

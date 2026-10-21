@@ -74,7 +74,7 @@ describe('StatKey/StatIndex — 5-tuple 고정 순서 (mstruct.h:177-181)', () =
 })
 
 // ---------------------------------------------------------------------------
-// T1.3 — class_stats / thaco_list / mod_profic 전사 + 접근자
+// T1.3 — class_stats / thaco_list / mod_profic 옮겨 적기 + 접근자
 // ---------------------------------------------------------------------------
 describe('class_stats — global.c:37', () => {
   it('13개 행(placeholder 포함)을 가진다', () => {
@@ -157,10 +157,10 @@ describe('mod_profic — player.c:1032', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 제약 2 — class_stats 교차검증 (A7 §2 폐형 HP/MP 재현)
-// HP/MP resolver 자체는 Story 5 소관. 여기선 class_stats 값 검증용 인라인 계산.
+// 제약 2 — class_stats 교차검증 (A7 §2 닫힌 식 HP/MP 재현)
+// HP/MP resolver 자체는 Story 5 담당. 여기선 class_stats 값 검증용 인라인 계산.
 // ---------------------------------------------------------------------------
-describe('class_stats 교차검증 — A7 §2 폐형 HP/MP', () => {
+describe('class_stats 교차검증 — A7 §2 닫힌 식 HP/MP', () => {
   const hpmax = (hpstart: number, hp: number, level: number): number =>
     hpstart + Math.trunc((hp * (level - 1)) / 2)
   const mpmax = (mpstart: number, mp: number, level: number): number =>
@@ -193,7 +193,7 @@ describe('class_stats 교차검증 — A7 §2 폐형 HP/MP', () => {
 })
 
 // ---------------------------------------------------------------------------
-// T1.4 — 골든 전사-diff fixture 대조 (approve)
+// T1.4 — 골든 옮겨 적기-diff fixture 대조 (approve)
 // SUT(접근자)는 tables.ts를 읽고, fixture expected는 C oracle 리터럴이다.
 // ---------------------------------------------------------------------------
 function loadFixture<I, O>(name: string): GoldenFixture<I, O> {
@@ -202,7 +202,7 @@ function loadFixture<I, O>(name: string): GoldenFixture<I, O> {
   return goldenFixtureSchema.parse(parsed) as GoldenFixture<I, O>
 }
 
-describe('골든 전사-diff — class_stats', () => {
+describe('골든 옮겨 적기-diff — class_stats', () => {
   type Input = { classIndex: number; field: keyof ClassStats }
   it('approve(class_stats fixture, classStatOf)가 전 셀을 통과한다', () => {
     const fixture = loadFixture<Input, number>('class_stats')
@@ -217,7 +217,7 @@ describe('골든 전사-diff — class_stats', () => {
   })
 })
 
-describe('골든 전사-diff — thaco_list', () => {
+describe('골든 옮겨 적기-diff — thaco_list', () => {
   type Input = { classIndex: number; levelIndex: number }
   it('approve(thaco_list fixture, thacoOf)가 전 셀을 통과한다', () => {
     const fixture = loadFixture<Input, number>('thaco_list')
@@ -232,7 +232,7 @@ describe('골든 전사-diff — thaco_list', () => {
   })
 })
 
-describe('골든 전사-diff — mod_profic', () => {
+describe('골든 옮겨 적기-diff — mod_profic', () => {
   it('approve(mod_profic fixture, proficDivisorOf)가 전 클래스를 통과한다', () => {
     const fixture = loadFixture<number, number>('mod_profic')
     expect(fixture.cases.length).toBe(13) // 클래스 0-12

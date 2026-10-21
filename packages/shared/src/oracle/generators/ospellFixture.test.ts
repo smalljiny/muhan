@@ -20,7 +20,7 @@ describe('ospellFixture — buildCases', () => {
     }
   })
 
-  it('예외 셀(화선도 sdice=7·pdice=1)이 오라클 리터럴에 전사돼 있다', () => {
+  it('예외 셀(화선도 sdice=7·pdice=1)이 오라클 리터럴에 옮겨 적혀 있다', () => {
     const burns = buildCases().find((c) => c.input === SPELL_NO.SBURNS)
     expect(burns?.expected).toEqual({
       spellNo: 27,
@@ -75,8 +75,8 @@ describe('체크인된 ospell.json 골든 fixture', () => {
   })
 
   it('approve가 catalog ospellOf SUT로 20 케이스를 throw 없이 통과한다', () => {
-    // anti-tautology: fixture expected는 ospellFixture.ts의 독립 전사(global.c),
-    // SUT ospellOf는 catalog.ts 격자 전사. 두 전사가 diff되면 approve가 throw한다.
+    // anti-tautology: fixture expected는 ospellFixture.ts의 독립 옮겨 적기(global.c),
+    // SUT ospellOf는 catalog.ts 격자 옮겨 적기. 옮겨 적은 두 결과가 diff되면 approve가 throw한다.
     const url = new URL('../fixtures/ospell.json', import.meta.url)
     const parsed: unknown = JSON.parse(readFileSync(url, 'utf8'))
     const result = goldenFixtureSchema.safeParse(parsed)

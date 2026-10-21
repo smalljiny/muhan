@@ -16,7 +16,7 @@ export const noArgsPayloadSchema = z.strictObject({})
  * 위생이다(초과 입력은 지목 의도가 아니라 입력 사고다).
  *
  * 채팅의 CHAT_TARGET_MAX(64)와 값이 다르다 — 저쪽은 전파되는 **표시 문자열**이라 이름 전체를 담아야
- * 하고, 이쪽은 서버가 접두로 해소하는 **지목 키**다. 용도가 달라 상한도 따로 둔다.
+ * 하고, 이쪽은 서버가 접두로 해석하는 **지목 키**다. 용도가 달라 상한도 따로 둔다.
  */
 export const COMMAND_TARGET_MAX = 32
 
@@ -26,8 +26,8 @@ export const COMMAND_ORDINAL_MAX = 99
 /**
  * (b) 대상 + 서수 — 같은 이름의 대상이 여럿일 때 ordinal로 n번째를 지목한다(생략 시 첫 번째).
  *
- * ordinal 하한 1이 대상 해소자의 ordinal 0 갈래를 라이브에서 도달 불가로 만든다 — 오라클 근거와
- * 그 갈래의 처리는 server/src/items/carriedTargetResolver.ts 헤더가 소유한다(중복 서술 방지).
+ * ordinal 하한 1이 대상 리졸버의 ordinal 0 갈래를 라이브에서 도달 불가로 만든다 — 오라클 근거와
+ * 그 갈래의 처리는 server/src/items/carriedTargetResolver.ts 헤더가 담당한다(중복 서술 방지).
  */
 export const targetOrdinalPayloadSchema = z.strictObject({
   target: z.string().min(1).max(COMMAND_TARGET_MAX),

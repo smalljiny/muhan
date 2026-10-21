@@ -7,7 +7,7 @@ import { buildCases, buildFixture, oracleRealmGrowth, writeFixtureFile } from '.
 
 const FIXED_CLOCK = (): Date => new Date('2026-07-16T00:00:00.000Z')
 
-describe('addRealmFixture — oracleRealmGrowth 독립 전사', () => {
+describe('addRealmFixture — oracleRealmGrowth 독립 옮겨 적기', () => {
   it('growth=MIN(trunc(m*exp/hpmax), exp)', () => {
     // m=15, exp=100, hpmax=30 → trunc(1500/30)=50, MIN(50,100)=50.
     expect(oracleRealmGrowth({ m: 15, exp: 100, hpmax: 30 })).toBe(50)

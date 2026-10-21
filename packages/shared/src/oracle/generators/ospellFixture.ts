@@ -5,14 +5,14 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * ospell 골든 전사-diff fixture 생성기 — manual oracle.
+ * ospell 골든 옮겨 적기-diff fixture 생성기 — manual oracle.
  *
- * 원본 `global.c:637-659`의 osp_t 20행을 **독립 리터럴**로 전사해(전사 pass 2) 각 행을
+ * 원본 `global.c:637-659`의 osp_t 20행을 **독립 리터럴**로 옮겨 적어(옮겨 적기 pass 2) 각 행을
  * spellNo 조회 케이스로 감싼다. SUT `ospellOf`는 `magic/catalog.ts`의 realm×tier 격자
- * 전개(전사 pass 1)를 읽으므로, approve가 두 전사의 불일치를 잡아낸다.
+ * 전개(옮겨 적기 pass 1)를 읽으므로, approve가 옮겨 적은 두 결과의 불일치를 잡아낸다.
  *
  * expected는 이 파일에서 catalog.ts를 import하지 않고 오라클 블록에서 직접 옮긴 리터럴이다 —
- * catalog 값을 여기로 복사하면 anti-tautology가 무너지므로 global.c 원본에서만 전사한다.
+ * catalog 값을 여기로 복사하면 anti-tautology가 무너지므로 global.c 원본에서만 옮겨 적는다.
  * realm 코드: EARTH=1 WIND=2 FIRE=3 WATER=4 (mtype.h:142-145).
  *
  * ## 재생성 (수동 트리거)
@@ -35,7 +35,7 @@ interface OspellRow {
   readonly bonusType: number
 }
 
-// 독립 전사(pass 2) — global.c:637-659 ospell[] 20행. { splno, realm, mp, ndice, sdice, pdice, bonus_type }.
+// 독립 옮겨 적기(pass 2) — global.c:637-659 ospell[] 20행. { splno, realm, mp, ndice, sdice, pdice, bonus_type }.
 const OSPELL_ORACLE: readonly OspellRow[] = [
   { spellNo: 1, realm: 2, mp: 3, ndice: 1, sdice: 8, pdice: 0, bonusType: 1 }, // SHURTS WIND  삭풍
   { spellNo: 26, realm: 1, mp: 3, ndice: 1, sdice: 8, pdice: 0, bonusType: 1 }, // SRUMBL EARTH 지동술
