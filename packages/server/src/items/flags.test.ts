@@ -110,7 +110,7 @@ describe('genderAllowed — ONOFEM=여성 거부·ONOMAL=남성 거부(명명 �
   })
 })
 
-describe('alignmentAllowed — OGOODO/OEVILO 정렬 경계', () => {
+describe('alignmentAllowed — OGOODO/OEVILO 성향 경계', () => {
   it('OGOODO 세트: alignment=-50 통과, -51 거부', () => {
     const flags = F_SET(EMPTY, OGOODO)
     expect(alignmentAllowed(flags, -50)).toBe(true)
@@ -121,7 +121,7 @@ describe('alignmentAllowed — OGOODO/OEVILO 정렬 경계', () => {
     expect(alignmentAllowed(flags, 50)).toBe(true)
     expect(alignmentAllowed(flags, 51)).toBe(false)
   })
-  it('플래그 없으면 극단 정렬도 허용', () => {
+  it('플래그 없으면 극단 성향도 허용', () => {
     expect(alignmentAllowed(EMPTY, -1000)).toBe(true)
     expect(alignmentAllowed(EMPTY, 1000)).toBe(true)
   })

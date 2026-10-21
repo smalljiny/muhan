@@ -68,7 +68,7 @@ export interface DeathAward {
   readonly playerId: string
   /** 획득 경험치(MIN(expgroup, 몬스터 exp) 캡 적용). */
   readonly exp: number
-  /** 정렬 변동 delta(-trunc(dead.alignment/5)). 누적·클램프는 #99. */
+  /** 성향 변동 delta(-trunc(dead.alignment/5)). 누적·클램프는 #99. */
   readonly alignmentDelta: number
 }
 

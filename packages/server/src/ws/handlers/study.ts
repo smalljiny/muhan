@@ -57,7 +57,7 @@ const REJECT_MESSAGES: Record<StudyFailure | 'not-found', string> = {
 /**
  * `progress:study{target, ordinal?, id?}` 명령을 실 주문 학습으로 배선하는 핸들러 팩토리.
  *
- * 게임 규칙 판정(PBLIND → SCROLL 여부 → 레벨 → 정렬 → 클래스 → 주문 존재 6게이트와 지식 비트 세팅)은
+ * 게임 규칙 판정(PBLIND → SCROLL 여부 → 레벨 → 성향 → 클래스 → 주문 존재 6게이트와 지식 비트 세팅)은
  * 전부 `magic/learning`의 `study()`가, 대상 지목(인벤 → 착용 슬롯 2단 탐색·가시성 게이트·서수)은
  * `items/carriedTargetResolver`가 소유한다 — 핸들러는 라이브 상태 조회·flags 합성·결과 사상·영속 마킹만 한다.
  *
@@ -90,7 +90,7 @@ const REJECT_MESSAGES: Record<StudyFailure | 'not-found', string> = {
  *    푼다. 이 포트의 `composeCharacterFlags`는 **타이머 보유 효과 전용**이라 `PHIDDN`에 영속 경로가 없고
  *    (`character/flags.ts` 파티션 표의 마지막 행 — 구조적으로 봉쇄된 비트), 따라서 세울 수도 해제할 수도
  *    없다. 그 비트의 영속 표현이 정해지기 전에는 재현 불가다. <!-- 추적 이슈: #121 -->
- * ② **정렬 실패 시 방 낙하 유예** — 오라클은 `alignment` 실패 시 비법서를 손에서 떼어 방 바닥에 떨어뜨린다
+ * ② **성향 실패 시 방 낙하 유예** — 오라클은 `alignment` 실패 시 비법서를 손에서 떼어 방 바닥에 떨어뜨린다
  *    (`del_obj_crt` + `add_obj_rom`, magic1.c:315-316). 이 포트의 `objectOwnerSchema`에는 room owner가
  *    없어(`character`|`bank` 둘뿐) 아이템을 방으로 옮길 표현 자체가 없으므로 인벤에 잔류시킨다. **즉
  *    alignment 거부는 아이템을 소모하지 않는다** — 다른 거부 사유와 동일하게 상태 무변이다. 방 바닥

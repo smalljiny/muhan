@@ -240,7 +240,7 @@ describe('resolveAttack — 플레이어 attacker 기본 파이프', () => {
     expect(creature.hpcur).toBe(26)
   })
 
-  it('PALADIN 정렬>250: max(1,n) 이후·크리 이전에 mrand(1,3) 보정', () => {
+  it('PALADIN 성향>250: max(1,n) 이후·크리 이전에 mrand(1,3) 보정', () => {
     const player = makePlayer({ class: 6, alignment: 300 }) // PALADIN, 나눗수25
     const creature = makeCreature({ hpcur: 30 })
     // seq: hit=20, mdice=4 → base=4, max(1)=4, align roll=2 → 6, crit=50(p=0), fumble=50, dura=1

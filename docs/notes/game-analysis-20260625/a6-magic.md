@@ -42,7 +42,7 @@
 | 명령(함수) | how | 주문번호 소스 | 쿨다운 slot·초 | 소모 | 게이트 |
 |---|---|---|---|---|---|
 | `cast` (magic1.c:23) | CAST | `spllist` 한글명 접두 매칭 | LT_SPELL — CLERIC/MAGE/CARETAKER **3**, DM/SUB_DM **0**, 그외 **5** | 마나 | 마나·클래스·knowledge (각 fn 내부) |
-| `read` (magic1.c:352) | SCROLL | `obj->magicpower-1` | LT_READS **3** | 두루마리 소멸(`free_obj`) | spell_fail, 오브젝트 정렬·클래스·레벨(ndice) |
+| `read` (magic1.c:352) | SCROLL | `obj->magicpower-1` | LT_READS **3** | 두루마리 소멸(`free_obj`) | spell_fail, 오브젝트 성향·클래스·레벨(ndice) |
 | `drink` (magic1.c:496) | POTION | `obj->magicpower-1` | LT_SPELL **3** | 물약 `shotscur--` | spell_fail, POTION은 self 전용 |
 | `zap`/`zap_obj` (magic1.c:673/776) | WAND | `obj->magicpower-1` | LT_SPELL **3** | 지팡이 `shotscur--` | spell_fail, `ODDICE`면 obj도 fn에 전달 |
 
@@ -58,7 +58,7 @@ if(class != CLERIC && != PALADIN && < INVINCIBLE && how == CAST){…} // 클래�
 if(!S_ISSET(ply_ptr, SVIGOR) && how == CAST) { 미터득; return 0; } // knowledge
 ```
 
-→ **결론: 두루마리·물약·지팡이는 클래스·마나·주문지식을 전부 무시하고 발동**한다. 아이템 경로의 유일한 실패 요인은 진입부 `spell_fail` 굴림과 오브젝트 자체 제약(정렬 OGOODO/OEVILO, 클래스 OCLSEL, 레벨 ndice)이다.
+→ **결론: 두루마리·물약·지팡이는 클래스·마나·주문지식을 전부 무시하고 발동**한다. 아이템 경로의 유일한 실패 요인은 진입부 `spell_fail` 굴림과 오브젝트 자체 제약(성향 OGOODO/OEVILO, 클래스 OCLSEL, 레벨 ndice)이다.
 
 > **#1 결정 포인트**: 신규 스택에서 주문을 (a) 원본대로 **단일 effect 함수 + how enum 4진입**으로 모델링할지, (b) effect(순수 함수)와 delivery(cast/scroll/potion/wand 어댑터)를 분리할지. 현 판단: 원본의 "how==CAST 게이트" 의미(아이템은 게이트 우회)는 **콘텐츠**이므로 보존하되, 4중 `how==CAST` 반복은 effect 함수를 `{gated: boolean}` 컨텍스트로 한 번만 받게 재설계한다.
 
@@ -229,7 +229,7 @@ B=`bonus[int]`, L4=`(level+3)/4`. `MAX(300,…)` 하한은 지능 페널티(bonu
 
 **주문 지식 = `spells[16]` 비트마스크**(mstruct.h:196, 128비트=최대 128주문). `S_ISSET(p,f) = spells[f/8] & 1<<(f%8)`(mtype.h:570). 획득 두 경로:
 
-- **study(연마)**(magic1.c:259): 비법서(type==SCROLL 오브젝트)를 연마 → `S_SET(ply, obj->magicpower-1)`로 주문 비트 영구 획득, 비법서 소멸. 게이트: PBLIND 거부, `obj->ndice > level`이면 레벨 부족, 정렬(OGOODO/OEVILO), 클래스(OCLSEL + class 비트). **같은 SCROLL 오브젝트가 `study`(영구 학습)와 `read`(1회 시전) 두 용도** — ndice=레벨제한, magicpower=주문번호로 공유.
+- **study(연마)**(magic1.c:259): 비법서(type==SCROLL 오브젝트)를 연마 → `S_SET(ply, obj->magicpower-1)`로 주문 비트 영구 획득, 비법서 소멸. 게이트: PBLIND 거부, `obj->ndice > level`이면 레벨 부족, 성향(OGOODO/OEVILO), 클래스(OCLSEL + class 비트). **같은 SCROLL 오브젝트가 `study`(영구 학습)와 `read`(1회 시전) 두 용도** — ndice=레벨제한, magicpower=주문번호로 공유.
 - **teach(전수)**(magic1.c:125): CARETAKER/MAGE/CLERIC이 방의 다른 플레이어에게 `S_SET(대상, 주문번호)`. 시전자가 그 주문을 알아야(S_ISSET). **`spllist`의 `spllv`(전수등급)가 여기서만 쓰인다** — spllv 1(CLERIC↑)·2(MAGE↑)·3(INVINCIBLE↑)·4(CARETAKER↑)·5(SUB_DM↑)만 전수 가능. cast에는 spllv가 관여하지 않는다(레벨 게이트는 study의 obj->ndice가 담당).
 
 ---

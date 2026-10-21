@@ -178,7 +178,7 @@ if(board_dir[i].num == board_obj[fd]->type) …   /* obj->type == board_dir.num 
 | `게시판` | `global.c:383`→`look_board` | (이름 매칭, special 미검사) | 게시판 |
 | `선전포고` | `global.c:353`→`call_war` | (아이템 무관) | 패거리 전쟁 |
 
-**주문 학습 연계**(`readscroll`, `magic1.c`): SCROLL 타입 오브젝트를 `읽어`로 읽으면 SP_MAPSC 텍스트를 먼저 보여주고, 이어 주문서 학습 로직 실행 — `ndice`(요구 레벨) 검사, 정렬 불일치 시 두루마기 소멸(`OGOODO`/`OEVILO` + alignment), 직업 금서(`OCLSEL`), `RNOMAG` 방 차단, `LT_READS` 쿨다운(3초) 후 `magicpower-1` 인덱스 주문 습득. 이 부분은 A6(마법)와 경계 — 여기서는 SP_MAPSC 훅이 주문서 열람의 진입점이라는 사실만 기록.
+**주문 학습 연계**(`readscroll`, `magic1.c`): SCROLL 타입 오브젝트를 `읽어`로 읽으면 SP_MAPSC 텍스트를 먼저 보여주고, 이어 주문서 학습 로직 실행 — `ndice`(요구 레벨) 검사, 성향 불일치 시 두루마기 소멸(`OGOODO`/`OEVILO` + alignment), 직업 금서(`OCLSEL`), `RNOMAG` 방 차단, `LT_READS` 쿨다운(3초) 후 `magicpower-1` 인덱스 주문 습득. 이 부분은 A6(마법)와 경계 — 여기서는 SP_MAPSC 훅이 주문서 열람의 진입점이라는 사실만 기록.
 
 ---
 

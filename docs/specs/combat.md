@@ -1,7 +1,7 @@
 # combat — 근접 전투 해결·특수공격·사망 분배·전투 AI
 
 > 무한의 4중 인라인 복제 근접 전투를 단일 `resolveAttack` 파이프로 통합하고(#82, E6a-1), 그 위에 몬스터
-> 특수공격 6종·상태이상 DoT·몬스터 사망 후처리(exp·정렬·전리품)·전투 AI 타깃선정/도주·#91 라운드순서
+> 특수공격 6종·상태이상 DoT·몬스터 사망 후처리(exp·성향·전리품)·전투 AI 타깃선정/도주·#91 라운드순서
 > 충실화를 얹은(#83, E6a-2) 서버 전투 계층. **플레이어 오프너(`combat:attack`)는 #121이 라이브 세션에
 > 연결했고**, 몬스터 틱 구동 라운드·특수공격 마커·DoT 조립은 여전히 #99가 소유한다.
 
@@ -16,7 +16,7 @@
 원본의 명중·피해 코드는 플레이어 근접(`command5.c attack_crt`)과 몬스터 근접(`update.c update_active`
 인라인)에 **4중으로 인라인 복제**돼 있다. 이 계층은 그 복제를 단일 `resolveAttack(attacker, defender, ctx)`
 파이프로 통합하고, 스케일 차이(`mrand(1,30)` vs `mrand(1,20)`·피해식·크리티컬 유무)를 `attacker.kind`로
-분기한다. 그 위에 몬스터 특수공격(브레스 등 6종)·상태이상 DoT·사망 시 exp·정렬·전리품 분배·전투 AI(선공
+분기한다. 그 위에 몬스터 특수공격(브레스 등 6종)·상태이상 DoT·사망 시 exp·성향·전리품 분배·전투 AI(선공
 타깃선정·도주)를 얹어, `resolveAttack`이 감지·발화만 하던 죽음과 타격을 **결과**로 완성한다.
 
 핵심 분리: **공식·수치·라운드 박자·게이트 의미는 콘텐츠**(충실히 이식), **연결 리스트 순회·인라인
@@ -26,7 +26,7 @@
 선다.
 
 **순수 로직·seam 레벨 경계**: 이 계층은 규칙(확률 게이트·공식·순서·데이터 계약)까지만 구현한다.
-production boot에서 누가 이 seam들을 조립하는지(health-pulse xor 접합·특수공격 status 실적용·exp/정렬
+production boot에서 누가 이 seam들을 조립하는지(health-pulse xor 접합·특수공격 status 실적용·exp/성향
 실누적·전리품 방 floor push·flee/aggro dispatch)는 전부 #99가 소유한다. 각 함수는 무엇을 반환하는지로
 자신의 계약을 표현하며, 호출부 부재는 결함이 아니라 설계다(`creatureDeath.ts`·`progression/death.ts`
 선례).
@@ -45,14 +45,14 @@ production boot에서 누가 이 seam들을 조립하는지(health-pulse xor 접
 | `playerState.ts` | `PlayerCombatState`(라이브 플레이어 전투상태)·`WeaponDamage` 타입 + `toPlayerCombatState` 조립 헬퍼. `flags`는 합성하지 않고 **인자로 받는다**([character-flags.md](character-flags.md)). |
 | `combatRegistry.ts` | `CombatRegistry` — characterId-keyed 라이브 전투상태 인메모리 저장소(register/get/remove/has). |
 | `combatant.ts` | `Combatant` discriminated-union 어댑터 — 플레이어(`PlayerCombatState`)·몬스터(`CreatureInstance`)를 전투 operand로 통일. `toCombatant` 오버로드. |
-| `attackStats.ts` | 명중 임계값·피해 분기·PALADIN 정렬 보정(순수). 플레이어=stats-core 파생 소비, 몬스터=템플릿 read. |
+| `attackStats.ts` | 명중 임계값·피해 분기·PALADIN 성향 보정(순수). 플레이어=stats-core 파생 소비, 몬스터=템플릿 read. |
 | `pvp.ts` | 개시 자격 게이트(순수) — `checkTargetImmunityPre`(MUNKIL) + `checkTargetImmunityPost`(MMGONL/MENONL) + `checkPvpGate`(PvP 3중). |
 | `enmity.ts` | 적대 등록(`registerEnemy`)·병렬 데미지 원장(`createDamageLedger`/`accumulateDamage`). |
 | `resolveAttack.ts` | 단일 파이프 `resolveAttack(attacker, defender, ctx)` — 명중→피해→특수공격 훅→크리/불발→적용, 다중공격 루프, 내구도. **fire-free**(died 반환, death seam은 호출자 소유). |
 | `specialAttack.ts` | 몬스터 특수공격 6종(브레스·에너지드레인·독·질병·실명·장비용해) 확률 게이트·효과의 순수 이식 — `resolveSpecialAttack`. |
 | `statusEffects.ts` | 명명 상태이상(poison/disease/blind/silence/fear)의 부여·해제·판독 순수 헬퍼 + 명명 필드 → combat flag hex 뷰 투영(`projectStatusFlags`). silence·fear는 판독만 배선되고 시전 경로는 미배선. |
 | `dot.ts` | `resolvePlayerDot(char, room, ctx)` — 독/질병/위험방 DoT damage-only resolver. `dotApplied` 반환으로 재생과의 xor 계약 확정. |
-| `deathDistribution.ts` | `distributeCreatureDeath(dead, room, ledger, deps)` — 데미지비례 exp 분배·정렬 보정·전리품/골드 드롭을 순수 계산해 반환. |
+| `deathDistribution.ts` | `distributeCreatureDeath(dead, room, ledger, deps)` — 데미지비례 exp 분배·성향 보정·전리품/골드 드롭을 순수 계산해 반환. |
 | `aggro.ts` | `selectAggroTarget`/`dexEvades`/`resolveAggro` — 선공 가중 랜덤 타깃선정 + 민첩 회피. |
 | `flee.ts` | `decideFlee` — PWIMPY/PFEARS 도주 결정(순수, boolean 반환). |
 | `combatTick.ts` | `createCombatTick(deps)` — `onCombatTick` 핸들러 팩토리(몬스터 근접 + MMAGIC seam + 적 플레이어 반격 + #91 라운드순서). |
@@ -111,7 +111,7 @@ PBLIND(42)·PFEARS(43)·PSILNC(44)가 전부 byte 5라 통째로 소실된다. �
 | 명중 굴림 | `rng(1,30) >= n`(`HIT_ROLL_MAX_PLAYER`) | `rng(1,20) >= n`(`HIT_ROLL_MAX_MONSTER`) |
 | 특수공격 훅 | 없음 | 명중 직후 `resolveSpecialAttack` 게이트(아래 절) |
 | 피해 | 무기: `mdice(무기)+bonus[힘]+trunc(profic/10)` · 바바리안/초인: `mdice(self)+bonus+trunc((level+3)/4)` · MAGE/CLERIC override: 숙련·성장 항 제거 후 재굴림 | `special.breathDamage ?? (mdice(self) − trunc((70−armor)/5), <1이면 1, MBEFUD면 trunc(n/3))` |
-| 정렬 보정 | PALADIN: `alignment<0`→`trunc(n/2)`, `>250`→`n+rng(1,3)` | 없음 |
+| 성향 보정 | PALADIN: `alignment<0`→`trunc(n/2)`, `>250`→`n+rng(1,3)` | 없음 |
 | 크리티컬/불발 | `rng(1,100) <= mod_profic` 또는 OALCRT → `n *= rng(3,6)`. 미크리&무기 착용 시 `rng(1,100) <= (5−mod_profic)` & 비 OCURSE → `n=0`·무기 낙하 | 없음 |
 | 적용 | 정상타만 `max(1,n)`. 내구도 `rng(0,3)===0`이면 durabilityHit | breath 발동 시 MBEFUD 추가 `/3`(melee path와 별도 fork). 재클램프 없음 |
 | 다중공격 | 초인 전용 `count` 증가 루프(PUPDMG) | 단타 |
@@ -122,7 +122,7 @@ PBLIND(42)·PFEARS(43)·PSILNC(44)가 전부 byte 5라 통째로 소실된다. �
   하드코딩하던 동안 두 보정은 구조적으로 미발화였다. 이제 조립 호출부가
   `composeCharacterFlags(character, now)` 결과를 주입하면 `statusEffects.blind`·`.fear`에서 파생된
   실 비트를 읽는다([character-flags.md](character-flags.md)). 주입 자체는 배선 토픽(#121) 소관이다.
-- **정렬 보정 PALADIN은 known-divergence로 미발화**: `alignment` 실 값역이 `[0,2]`(생성 인터뷰 1|2 +
+- **성향 보정 PALADIN은 known-divergence로 미발화**: `alignment` 실 값역이 `[0,2]`(생성 인터뷰 1|2 +
   backfill 중립 sentinel 0)라 `<0`·`>250` 두 분기가 모두 거짓이고 항상 `n`을 반환한다. 오라클 임계값을
   **재조정하지 않는다** — 보존해야 E6 성향 시스템(`-1000..+1000`, [#123](https://github.com/smalljiny/muhan/issues/123))
   도입 시 코드 변경 없이 발화한다. 같은 성격의 미발화 게이트가 `aggro.ts`(MGAGGR/MEAGGR)·
@@ -208,7 +208,7 @@ flags 필드가 없으므로 병합이 아니라 ZERO_FLAGS에서 활성 비트�
   순서). 이 필터가 오라클의 적 리스트 멤버십 게이트를 분배 시점에 재현한다(§오라클과 다른 구현 참조).
 - **exp**: `expdiv = trunc(exp * dmg / max(hpmax,1))`. 그룹킬(기여자 2명+)이면
   `expdiv + trunc(exp/10)`, 상한 `min(., exp)`로 캡.
-- **정렬**: 기여자마다 `alignmentDelta = -trunc(alignment/5)`(delta만 반환, 누적·±1000 클램프는 #99).
+- **성향**: 기여자마다 `alignmentDelta = -trunc(alignment/5)`(delta만 반환, 누적·±1000 클램프는 #99).
 - **전리품**: MTRADE 몬스터는 인벤토리 드롭 없음(creature.c:311), 그 외는 `dead.inventory`를 그대로
   drops에 포함. **골드는 MTRADE 무관 항상 드롭**하며(creature.c:325, 루프 밖·무게이트),
   `ItemInstance(instanceId=\`${dead.instanceId}:gold\`, name=\`${gold}냥\`, value=gold)`로 만든다 —
@@ -371,7 +371,7 @@ characterId-keyed `CombatRegistry`로 관리한다.
   결정적 대체한다.
 - **독 공식 단일화**: 오라클 harm-room 변형(`mrand(1,4)`)을 축약해, `resolvePlayerDot`은 어느 분기든
   `MAX(1, rng(1, trunc(hpmax/5)) - con)` 단일 공식을 쓴다.
-- **정렬 페널티 기여자마다 적용**: `distributeCreatureDeath`는 오라클 `die_crt` 루프 내부 그대로,
+- **성향 페널티 기여자마다 적용**: `distributeCreatureDeath`는 오라클 `die_crt` 루프 내부 그대로,
   alignment 페널티를 기여자마다(살해자 1인이 아니라) 적용한다 — behavioral truth를 채택했다.
 - **breath-replace(additive 아님)**: 브레스 발동 시 breath 데미지가 normal melee를 **대체**한다(`??`
   lazy). `monsterDamage`는 breath 미발동 시에만 굴려진다.
@@ -379,7 +379,7 @@ characterId-keyed `CombatRegistry`로 관리한다.
   pick 패스에 누락하는 two-pass desync 버그가 있다. `selectAggroTarget`은 eligible set을 1회 계산해
   weight-sum·pick 둘 다 이 단일 집합에서 파생한다.
 - **기여자 축 divergence(오라클 대비 축소)**: 오라클 분배 루프 게이트는 `find_who(ep->enemy)`(present
-  여부, 데미지 무관)라 present인 0-데미지 적도 exp(버림 후 0)·정렬 페널티·groupkill 카운트를 받는다. 이
+  여부, 데미지 무관)라 present인 0-데미지 적도 exp(버림 후 0)·성향 페널티·groupkill 카운트를 받는다. 이
   포트는 기여자를 `damage > 0`으로 좁혀 그런 적을 제외한다 — awards·groupkill·alignment가 present
   축이 아닌 damage 축으로 게이팅된다. 라이브 조립(#99)이 이 축을 present 기준으로 재검토할 수 있다.
 - **골드 드롭 표현**: 별도 room 필드 없이, 골드를 `ItemInstance(value=금액)`로 만들어 `room.items[]`에

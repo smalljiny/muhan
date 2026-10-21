@@ -194,16 +194,16 @@ describe('wearGate — E6 유예 명시 입력 게이트', () => {
     expect(wearGate(p).kind).toBe('equipped')
   })
 
-  // ── ⑧ 정렬 (전 착용템) ─────────────────────────────────────────────────────
-  it('⑧ OGOODO + 정렬<-50이면 bounced', () => {
+  // ── ⑧ 성향 (전 착용템) ─────────────────────────────────────────────────────
+  it('⑧ OGOODO + 성향<-50이면 bounced', () => {
     const p = { ...baseParams(), flags: F_SET('', OGOODO), actor: { ...baseActor(), alignment: -60 } }
     expect(wearGate(p).kind).toBe('bounced')
   })
-  it('⑧ OEVILO + 정렬>50이면 bounced', () => {
+  it('⑧ OEVILO + 성향>50이면 bounced', () => {
     const p = { ...baseParams(), flags: F_SET('', OEVILO), actor: { ...baseActor(), alignment: 60 } }
     expect(wearGate(p).kind).toBe('bounced')
   })
-  it('⑧ OGOODO + 정렬>=-50이면 통과', () => {
+  it('⑧ OGOODO + 성향>=-50이면 통과', () => {
     const p = { ...baseParams(), flags: F_SET('', OGOODO), actor: { ...baseActor(), alignment: -50 } }
     expect(wearGate(p).kind).toBe('equipped')
   })
@@ -239,8 +239,8 @@ describe('wearGate — 슬롯 점유(⑥)·파손(⑦)', () => {
     expect(wearGate({ ...baseParams(), shotscur: 0 }).kind).toBe('rejected')
   })
 
-  it('⑦↔⑧ 순서 잠금: 파손 + OGOODO 정렬위반 동시면 ⑦(파손) 먼저 발화 → rejected(bounced 아님)', () => {
-    // 오라클 command3.c: ⑦ shotscur<1(line 148) → rejected가 ⑧ 정렬(line 153) → bounced보다 앞선다.
+  it('⑦↔⑧ 순서 잠금: 파손 + OGOODO 성향위반 동시면 ⑦(파손) 먼저 발화 → rejected(bounced 아님)', () => {
+    // 오라클 command3.c: ⑦ shotscur<1(line 148) → rejected가 ⑧ 성향(line 153) → bounced보다 앞선다.
     // 두 게이트의 outcome kind가 달라(rejected≠bounced) 순서 재배열 시 조용히 뒤집힐 수 있으므로 잠근다.
     const p = { ...baseParams(), shotscur: 0, flags: F_SET('', OGOODO), actor: { ...baseActor(), alignment: -60 } }
     expect(wearGate(p).kind).toBe('rejected')
@@ -290,7 +290,7 @@ describe('wearGate — OCLSEL(⑨)·OSIZE(⑩)·INVINCIBLE 우회', () => {
 
 describe('wearGate — advisor 정밀 검증점', () => {
   // 1. 융합 방지 판별: OGOODO(⑧ bounced) + OCLSEL-mismatch(⑨ rejected) 동시 → ⑧ 먼저 → bounced
-  it('융합 방지: OGOODO+정렬<-50 && OCLSEL-mismatch면 bounced (rejected 아님)', () => {
+  it('융합 방지: OGOODO+성향<-50 && OCLSEL-mismatch면 bounced (rejected 아님)', () => {
     const flags = F_SET(F_SET('', OGOODO), OCLSEL)
     const p = { ...baseParams(), flags, actor: { ...baseActor(), alignment: -60, class: FIGHTER } }
     expect(wearGate(p).kind).toBe('bounced')
@@ -457,16 +457,16 @@ describe('readyGate — 오라클 command3.c:691~ 순서', () => {
     expect(readyGate(p).kind).toBe('equipped')
   })
 
-  // ── ⑥ 정렬 → bounced ───────────────────────────────────────────────────────
-  it('⑥ OGOODO + 정렬<-50이면 bounced', () => {
+  // ── ⑥ 성향 → bounced ───────────────────────────────────────────────────────
+  it('⑥ OGOODO + 성향<-50이면 bounced', () => {
     const p = { ...baseReadyParams(), flags: F_SET('', OGOODO), actor: { ...baseActor(), alignment: -60 } }
     expect(readyGate(p).kind).toBe('bounced')
   })
-  it('⑥ OEVILO + 정렬>50이면 bounced', () => {
+  it('⑥ OEVILO + 성향>50이면 bounced', () => {
     const p = { ...baseReadyParams(), flags: F_SET('', OEVILO), actor: { ...baseActor(), alignment: 60 } }
     expect(readyGate(p).kind).toBe('bounced')
   })
-  it('⑥ OGOODO + 정렬>=-50이면 통과', () => {
+  it('⑥ OGOODO + 성향>=-50이면 통과', () => {
     const p = { ...baseReadyParams(), flags: F_SET('', OGOODO), actor: { ...baseActor(), alignment: -50 } }
     expect(readyGate(p).kind).toBe('equipped')
   })
@@ -586,15 +586,15 @@ describe('readyGate — 오라클 command3.c:691~ 순서', () => {
 })
 
 describe('readyGate — advisor 정밀 검증점', () => {
-  // 순서 잠금: OGOODO 정렬위반(⑥ bounced) + dice>39(⑧ burned) 동시 → ⑥ 먼저 → bounced
-  it('순서 잠금: OGOODO+정렬<-50 && dice>39면 bounced (burned 아님)', () => {
+  // 순서 잠금: OGOODO 성향위반(⑥ bounced) + dice>39(⑧ burned) 동시 → ⑥ 먼저 → bounced
+  it('순서 잠금: OGOODO+성향<-50 && dice>39면 bounced (burned 아님)', () => {
     const p = { ...baseReadyParams(), flags: F_SET('', OGOODO), ndice: 40, sdice: 1, pdice: 0, actor: { ...baseActor(), class: FIGHTER, alignment: -60 } }
     expect(readyGate(p).kind).toBe('bounced')
   })
 
-  // 순서 잠금: ⑤ OCLSEL → ⑥ 정렬 순서. wear.ts는 정렬(⑧)→OCLSEL(⑨)로 역순이므로,
+  // 순서 잠금: ⑤ OCLSEL → ⑥ 성향 순서. wear.ts는 성향(⑧)→OCLSEL(⑨)로 역순이므로,
   // readyGate를 wear.ts에 맞춰 재배열하면 reject↔bounce가 조용히 뒤집힌다. ⑤가 먼저 발화해 rejected여야 한다.
-  it('순서 잠금: OCLSEL-mismatch(⑤) && OGOODO+정렬<-50(⑥) → rejected (⑤ 먼저 — wear.ts와 역순)', () => {
+  it('순서 잠금: OCLSEL-mismatch(⑤) && OGOODO+성향<-50(⑥) → rejected (⑤ 먼저 — wear.ts와 역순)', () => {
     const flags = F_SET(F_SET('', OCLSEL), OGOODO)
     const p = { ...baseReadyParams(), flags, actor: { ...baseActor(), class: FIGHTER, alignment: -60 } }
     expect(readyGate(p).kind).toBe('rejected')
@@ -717,12 +717,12 @@ describe('holdGate — 오라클 command3.c:860~ 순서', () => {
     expect(holdGate(p).kind).toBe('equipped')
   })
 
-  // ── ⑦ 정렬 → bounced (플랜 T6.2 요약 초과) ─────────────────────────────────
-  it('⑦ OGOODO + 정렬<-50이면 bounced', () => {
+  // ── ⑦ 성향 → bounced (플랜 T6.2 요약 초과) ─────────────────────────────────
+  it('⑦ OGOODO + 성향<-50이면 bounced', () => {
     const p = { ...baseHoldParams(), flags: F_SET('', OGOODO), actor: { ...baseActor(), alignment: -60 } }
     expect(holdGate(p).kind).toBe('bounced')
   })
-  it('⑦ OEVILO + 정렬>50이면 bounced', () => {
+  it('⑦ OEVILO + 성향>50이면 bounced', () => {
     const p = { ...baseHoldParams(), flags: F_SET('', OEVILO), actor: { ...baseActor(), alignment: 60 } }
     expect(holdGate(p).kind).toBe('bounced')
   })

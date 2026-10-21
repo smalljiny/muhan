@@ -62,9 +62,9 @@ export const MSILNC = 48
 export const MBLIND = 49
 /** 매혹 불가 — MNOCHA(mtype.h:473 "Monster cannot be charmed"). charm 완전 반탄 조건(magic8.c:751). */
 export const MNOCHA = 62
-/** 선한 유저 공격형(정렬 alg=-1). */
+/** 선한 유저 공격형(성향 alg=-1). */
 export const MGAGGR = 39
-/** 악한 유저 공격형(정렬 alg=1). */
+/** 악한 유저 공격형(성향 alg=1). */
 export const MEAGGR = 40
 /** DM 추종 몬스터(wander-out 제외 조건). */
 export const MDMFOL = 46
@@ -162,9 +162,9 @@ export const OPERM2 = 9
 export const ONOTAK = 17
 /** 배경 소품(회수 불가). */
 export const OSCENE = 18
-/** 선인 전용 아이템 — OGOODO(mtype.h:488). study 정렬 게이트(alignment<-100이면 연마 실패, magic1.c:305). */
+/** 선인 전용 아이템 — OGOODO(mtype.h:488). study 성향 게이트(alignment<-100이면 연마 실패, magic1.c:305). */
 export const OGOODO = 12
-/** 악인 전용 아이템 — OEVILO(mtype.h:489). study 정렬 게이트(alignment>100이면 연마 실패, magic1.c:305). */
+/** 악인 전용 아이템 — OEVILO(mtype.h:489). study 성향 게이트(alignment>100이면 연마 실패, magic1.c:305). */
 export const OEVILO = 13
 /** 저주받은 무기 — OCURSE(mtype.h:498). 불발 시 무기 낙하 제외 조건(command5.c:298). */
 export const OCURSE = 22

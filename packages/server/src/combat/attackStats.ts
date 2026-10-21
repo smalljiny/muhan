@@ -6,7 +6,7 @@ import { BARBARIAN, CLERIC, MAGE, INVINCIBLE } from './constants.js'
 import type { Combatant, PlayerCombatant, CreatureCombatant } from './combatant.js'
 
 /**
- * attackStats — 명중 임계·피해 분기·PALADIN 정렬 보정의 오라클 충실 이식(command5.c / update.c).
+ * attackStats — 명중 임계·피해 분기·PALADIN 성향 보정의 오라클 충실 이식(command5.c / update.c).
  *
  * byte-fidelity 최우선 함정: 모든 `/`는 C 정수 나눗셈(0 방향 절사) = Math.trunc(절대 Math.floor 아님).
  * 음수 피제수(음수 armor의 armor/8, armor>70의 (70−armor)/5)에서 floor와 갈려 명중/피해가 뒤집힌다.
@@ -19,7 +19,7 @@ import type { Combatant, PlayerCombatant, CreatureCombatant } from './combatant.
  * 명중 임계 — command5.c:231-236(플레이어) / update.c:373-383(몬스터).
  *   n = attacker.thaco − trunc(defender.armor/8)
  *   플레이어: PFEARS면 +2, PBLIND면 +5(명중 어려워짐).
- *   몬스터: max(1, n) 하한(PALADIN 정렬 보정은 명중이 아니라 피해에 적용 — 여기 없음).
+ *   몬스터: max(1, n) 하한(PALADIN 성향 보정은 명중이 아니라 피해에 적용 — 여기 없음).
  * 명중 판정은 호출부가 `mrand(1, HIT_ROLL_MAX) >= n`으로 수행한다(임계만 반환).
  */
 export function hitThreshold(attacker: Combatant, defender: Combatant): number {
@@ -78,14 +78,14 @@ export function monsterDamage(
 }
 
 /**
- * PALADIN 정렬 보정 — command5.c:266-278. MAX(1,n) 이후·크리티컬 이전에 적용하는 순수 헬퍼.
+ * PALADIN 성향 보정 — command5.c:266-278. MAX(1,n) 이후·크리티컬 이전에 적용하는 순수 헬퍼.
  * Story 8 파이프가 시퀀싱한다(Story 5는 base만 반환하고 이 헬퍼를 노출만).
  *   alignment<0 → trunc(n/2)(악행 페널티), alignment>250 → n + mrand(1,3)(선행 보너스), 그 외 → n.
  *
  * known divergence — 현 `alignment` 값역은 [0,2](생성 인터뷰 1|2 + backfill sentinel 0)라 두 분기가
- * 모두 거짓이고 PALADIN 정렬 보정은 실 데이터에서 미발화한다(항상 n 반환). 오라클 임계값을 보존해
+ * 모두 거짓이고 PALADIN 성향 보정은 실 데이터에서 미발화한다(항상 n 반환). 오라클 임계값을 보존해
  * E6 성향 시스템(-1000..+1000, #123)에서 코드 변경 없이 발화하게 둔다 — `magic/learning.ts`의
- * study 정렬 게이트 주석과 같은 성격이다.
+ * study 성향 게이트 주석과 같은 성격이다.
  */
 export function applyPaladinAlignment(n: number, alignment: number, rng: CombatRng): number {
   if (alignment < 0) return Math.trunc(n / 2)

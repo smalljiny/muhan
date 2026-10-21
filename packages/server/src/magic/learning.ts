@@ -9,7 +9,7 @@ import { SCROLL } from '../items/taxonomy.js'
  * ## 범위 경계 — 순수 함수 + seam(라이브 라우팅 #106)
  * study/teach는 게이트를 평가하고 통과 시 spell store 비트를 set한 **새 store를 반환**한다. 입력
  * char/caster/target·book을 변형하지 않는다(immutability). 라이브 command 라우팅(cast/study/teach)·
- * 비법서 소멸(free_obj)·정렬실패 시 방 낙하·전수 broadcast 메시지는 배선 계층(#106) 소관이다 — 이
+ * 비법서 소멸(free_obj)·성향실패 시 방 낙하·전수 broadcast 메시지는 배선 계층(#106) 소관이다 — 이
  * 모듈은 지식 획득 규칙만 이식한다.
  *
  * ## Caster 계약을 쓰지 않는 이유
@@ -57,11 +57,11 @@ export interface SpellBook {
   readonly ndice: number
   /** 담긴 주문번호+1 — 성공 시 S_SET(magicpower-1)(magic1.c:336). */
   readonly magicpower: number
-  /** object flags(hex string) — OGOODO/OEVILO(정렬)·OCLSEL(클래스) 게이트. */
+  /** object flags(hex string) — OGOODO/OEVILO(성향)·OCLSEL(클래스) 게이트. */
   readonly flags: string
 }
 
-/** study 입력 char — PlayerCombatState가 구조적으로 만족한다(레벨·클래스·정렬·지식·상태 플래그). */
+/** study 입력 char — PlayerCombatState가 구조적으로 만족한다(레벨·클래스·성향·지식·상태 플래그). */
 export interface StudyChar {
   readonly level: number
   readonly class: number
@@ -84,7 +84,7 @@ export interface StudyResult {
 
 /**
  * 비법서를 연마해 주문을 영구 학습한다(magic1.c:259 study). 게이트를 순서대로 평가하고 첫 실패에서
- * 접는다: PBLIND → SCROLL 여부 → 레벨(ndice>level) → 정렬(OGOODO/OEVILO) → 클래스(OCLSEL). 통과 시
+ * 접는다: PBLIND → SCROLL 여부 → 레벨(ndice>level) → 성향(OGOODO/OEVILO) → 클래스(OCLSEL). 통과 시
  * setKnown(magicpower-1)한 새 store를 반환한다. 입력 char/book을 변형하지 않는다(순수).
  */
 export function study(char: StudyChar, book: SpellBook): StudyResult {
@@ -99,12 +99,12 @@ export function study(char: StudyChar, book: SpellBook): StudyResult {
   // ③ 레벨 제한 — book.ndice > level이면 내용을 파악 못 해 실패(magic1.c:300).
   if (book.ndice > char.level) return unchanged('level')
 
-  // ④ 정렬 — OGOODO인데 alignment<-100, 또는 OEVILO인데 alignment>100이면 실패(magic1.c:305).
+  // ④ 성향 — OGOODO인데 alignment<-100, 또는 OEVILO인데 alignment>100이면 실패(magic1.c:305).
   //    원작은 이때 비법서를 방에 떨어뜨리지만, 그 소멸/이동은 배선 계층 소관(store만 불변 반환).
   //
   //    known divergence — 현 alignment는 생성 인터뷰가 고른 1(선)|2(악) 스칼라이고 backfill 시드는
   //    0(중립)이라, 값역이 [0,2]다. 따라서 아래 두 분기(<-100, >100)는 실 데이터에서 항상 거짓이며
-  //    OGOODO/OEVILO 게이트는 미발화한다 — 현재 어떤 캐릭터도 정렬로 연마를 거부당하지 않는다.
+  //    OGOODO/OEVILO 게이트는 미발화한다 — 현재 어떤 캐릭터도 성향으로 연마를 거부당하지 않는다.
   //    임계값은 오라클(-100/+100)을 그대로 이식해 두고, E6에서 -1000..+1000 성향 시스템을 도입해
   //    alignment가 실제로 그 범위를 오르내리면 코드 변경 없이 발화한다. 임계값을 현 1|2 값역에
   //    맞춰 재조정하지 않는다(오라클 상수 보존이 E6 확장 시 재해석을 불필요하게 만든다).

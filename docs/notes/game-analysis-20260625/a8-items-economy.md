@@ -12,7 +12,7 @@
 
 아이템의 게임 동작은 세 축이다. ① **착용/장비** — 방어구는 `wear`, 무기는 `ready`, 쥠물건은 `hold`가 처리하며, 각각 `creature.ready[20]` 슬롯 배열의 정해진 칸에 포인터를 꽂는다. 착용 효과(AC·명중)는 필드를 직접 가감하지 않고 **`ready[]` 전체를 매번 재계산**(`compute_ac`/`compute_thaco`)한다 — [[a7-player-progression]] §12의 "파생 스탯은 유효 상태의 함수" 원칙과 정확히 일치한다. ② **소비** — 물약/지팡이는 사용 시 `shotscur--`로 충전이 닳고, 소진되면 부서진다. ③ **경제** — `object.value`(long) 하나가 모든 가격의 기준이며, 상점 구매(100%)·전당포 판매(50%)·수리(25%)·몬스터 상점(max(10,value))이 그 위에 상수 배수로 얹힌다.
 
-착용은 **다층 게이트**를 통과해야 한다: 클래스·성별·결혼·정렬·종족 크기 제한, 그리고 **아이템 강도에 비례한 레벨 요구**(방어구 `armor*5`, 무기 `(ndice·sdice+pdice)*3`). 게이트를 넘는 초강력 아이템(방어구 AC환산 >151, 무기 dice합 >39)은 착용 시도 시 **"푸른 연기와 함께 사라진다"** — 밸런스를 벗어난 아이템을 자동 소각하는 방어 장치다.
+착용은 **다층 게이트**를 통과해야 한다: 클래스·성별·결혼·성향·종족 크기 제한, 그리고 **아이템 강도에 비례한 레벨 요구**(방어구 `armor*5`, 무기 `(ndice·sdice+pdice)*3`). 게이트를 넘는 초강력 아이템(방어구 AC환산 >151, 무기 dice합 >39)은 착용 시도 시 **"푸른 연기와 함께 사라진다"** — 밸런스를 벗어난 아이템을 자동 소각하는 방어 장치다.
 
 은행은 구조적으로 특이하다. 잔고는 `creature` 필드가 **아니라** 플레이어별 **별도 object 파일**(`PLAYERPATH/bank/<이름>`)이며, 그 object가 컨테이너로 동작해 현금은 `value`에, 보관 물품은 중첩 인벤토리에 담긴다. 이자는 없다(단순 금고). 이 "은행=object 파일" 구조가 신규 스택의 계좌 모델(MongoDB 문서)을 가른다.
 
@@ -25,7 +25,7 @@
 | 1 | **아이템 = `object` 352B 단일 구조체.** type 0~14로 성격 결정. 무기 0~4(Sharp/Thrust/Blunt/Pole/Missile), 5~13(Armor·Potion·Scroll·Wand·Container·Money·Key·LightSource·Misc), 14(Container2, help 미기재) | 콘텐츠(taxonomy) |
 | 2 | **착용 = `ready[20]` 슬롯 배열.** wearflag(1~20)이 슬롯 인덱스(`ready[wearflag-1]`). BODY·팔·다리·목×2·손·머리·발·손가락×8·쥠·방패·얼굴·무기. 방어구=`wear`, 무기=`ready`, 쥠=`hold` | 콘텐츠(장비) |
 | 3 | **착용 효과는 필드 직접변형 아님 — `ready[]` 재계산.** `compute_ac`=`… − Σ ready[i]->armor …`, `compute_thaco`=`… − ready[WIELD]->adjustment …`. wear/ready/remove가 재계산 트리거. [[a7-player-progression]] §12 원칙과 일치 | 이식(공식)/재설계(트리거) |
-| 4 | **착용 다층 게이트.** 클래스(ONOMAG·OCLSEL)·성별(ONOFEM=남/ONOMAL=여, 명명 역전)·결혼(OMARRI)·정렬(OGOODO/OEVILO ±50)·종족크기(OSIZE 3계급)·**레벨(방어구 armor*5, BODY armor*2 / 무기 dice합*3)** | 콘텐츠(규칙) |
+| 4 | **착용 다층 게이트.** 클래스(ONOMAG·OCLSEL)·성별(ONOFEM=남/ONOMAL=여, 명명 역전)·결혼(OMARRI)·성향(OGOODO/OEVILO ±50)·종족크기(OSIZE 3계급)·**레벨(방어구 armor*5, BODY armor*2 / 무기 dice합*3)** | 콘텐츠(규칙) |
 | 5 | **밸런스 초과 아이템 자동 소각.** 착용 시 방어구 AC환산 >151, 무기 `ndice·sdice+pdice` >39, shots >600 → questnum·ONEWEV 아니면 free("푸른 연기와 함께 사라집니다") | 콘텐츠(가드) |
 | 6 | **소비 아이템 = `magicpower-1` 스펠 시전.** Potion=`drink`, Scroll=`readscroll`, Wand=`zap` → `shotscur--` → [[a6-magic]] spllist[magicpower-1]를 각 컨텍스트로 시전. 무기 데미지는 [[a5-combat]] | 콘텐츠(→a6/a5) |
 | 7 | **가격 = `object.value` 단일 필드 × 상수 배수.** 상점구매=value(1:1), 전당포판매=min(value/2, 10만), 수리=value/4, 몹구매=max(10, value) | 콘텐츠(경제) |
@@ -138,7 +138,7 @@ if(!obj_ptr->wearflag || obj_ptr->wearflag == WIELD || obj_ptr->wearflag == HELD
 5. **결혼**: ARMOR + `OMARRI` + 미혼(PMARRI 없음) → 거부.
 6. **슬롯 점유**: NECK1·NECK2 둘 다 참 → "더이상 목에 걸 수 없습니다". FINGER1~8 전부 참 → "더이상 손가락에 낄 수 없습니다". 그 외 부위는 `ready[wearflag-1]`이 이미 있으면 "이미 착용 중".
 7. **파손**: `shotscur < 1` → "부서져서 입을 수 없게 되었습니다".
-8. **정렬**: `OGOODO` + alignment < −50 → 튕겨냄(바닥으로). `OEVILO` + alignment > 50 → 튕겨냄.
+8. **성향**: `OGOODO` + alignment < −50 → 튕겨냄(바닥으로). `OEVILO` + alignment > 50 → 튕겨냄.
 9. **직업 선택 무기/방어구**: `OCLSEL` 세트면 `OCLSEL + class` 비트가 켜져야 착용 가능(§6).
 10. **종족 크기**(§6): `OSIZE1·OSIZE2` 조합이 종족과 안 맞으면 거부.
 
@@ -168,7 +168,7 @@ compute_ac(ply_ptr);
 2. **마법사 무기 제한**: (SHARP 또는 THRUST) + `ndice·sdice+pdice > 14` + (MAGE/CLERIC) → 거부. 약한 단검류만 허용.
 3. **성별**(SHARP/THRUST 한정 ONOFEM/ONOMAL).
 4. **슬롯 점유**: `ready[WIELD-1]` 있으면 "이미 무장하고 있습니다".
-5. **직업 선택**(OCLSEL), **정렬**(OGOODO/OEVILO → 바닥으로), **종족 크기**(§6).
+5. **직업 선택**(OCLSEL), **성향**(OGOODO/OEVILO → 바닥으로), **종족 크기**(§6).
 6. **밸런스 소각**: `ndice·sdice+pdice > 39`, `shotsmax/cur > 600`, `ONSHAT && OALCRT` → questnum·ONEWEV 아니면 free("푸른 빛을 내며 사라집니다").
 7. **레벨 게이트**(`command3.c:820`):
    ```c

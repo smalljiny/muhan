@@ -18,7 +18,7 @@
 
 몬스터 AI 틱(`update_active`)은 각 active 몬스터에 대해: **공격 타이머**(민첩에 따라 2~3초) 게이트 → 상태이상 해제·**재생**(HP/MP) → **scavenge**(바닥 아이템 줍기) → **wander-out**(적 없으면 확률적 소멸) → **전투**(적 리스트 처리: 주문/근접, breath/드레인/상태이상/아이템 파괴) → **어그로**(적 없는 공격형 몬스터가 타깃 선정). 타깃은 **piety(신앙심) 역가중 랜덤** — 신앙심 낮은 플레이어가 더 자주 표적이 된다.
 
-핵심 분리: **공격성 3종(MAGGRE/MGAGGR/MEAGGR)·piety 역가중 타깃·정렬/레벨 필터·재생율(HP hpmax/10·MP mpmax/6 per 60초)·공격 주기(민첩 2~3초)·scavenge 15%/20초·배회 확률=traffic·리스폰 주기(사망 게이트)·스폰 그룹 크기·breath/드레인/상태이상 발동율·어그로 리스트 회전·대화 응답·charm/소환 규칙은 콘텐츠**(충실히 이식), **first_active 단일 리스트·add/del malloc·time(0) 초 폴링·perm_mon lasttime 배열·하드코딩 침공 좌표(방 8000~8300·3601~3630, 몹 732~755·265~299)·데드 스캐폴드(check_for_flee·talkbuf·MSAYTLK)·goto·add_enm_crt 주석-코드 불일치는 구현 방식**(재설계).
+핵심 분리: **공격성 3종(MAGGRE/MGAGGR/MEAGGR)·piety 역가중 타깃·성향/레벨 필터·재생율(HP hpmax/10·MP mpmax/6 per 60초)·공격 주기(민첩 2~3초)·scavenge 15%/20초·배회 확률=traffic·리스폰 주기(사망 게이트)·스폰 그룹 크기·breath/드레인/상태이상 발동율·어그로 리스트 회전·대화 응답·charm/소환 규칙은 콘텐츠**(충실히 이식), **first_active 단일 리스트·add/del malloc·time(0) 초 폴링·perm_mon lasttime 배열·하드코딩 침공 좌표(방 8000~8300·3601~3630, 몹 732~755·265~299)·데드 스캐폴드(check_for_flee·talkbuf·MSAYTLK)·goto·add_enm_crt 주석-코드 불일치는 구현 방식**(재설계).
 
 ## 핵심 발견 요약
 
@@ -27,8 +27,8 @@
 | 1 | **active 리스트 = 플레이어 근접 시뮬레이션.** `first_active` 단일 연결 리스트에 등록된 몬스터만 매 초 `update_active`가 순회. 방에 플레이어 진입 시 방 몬스터 전원 `add_active`, 방이 비면(`!rom_ptr->first_ply`) 즉시 `del_active` | 재설계(스케줄링) |
 | 2 | **스폰 트리거 3모델.** ① perm_mon=**입장 구동**(add_ply_rom→add_permcrt_rom, lazy) ② random=**폴링 20초**(p=traffic) ③ invasion=**폴링 4000·5000초**(하드코딩 좌표) | 이식(규칙)/재설계(트리거) |
 | 3 | **리스폰 = 사망 게이트 + 입장 재검사.** `perm_mon[i]`={interval,ltime,misc}. 사망 시 `die_perm_crt`가 `ltime=사망시각` 세팅, 다음 입장 때 `ltime+interval ≤ 현재`면 재스폰. 스케줄러가 아니라 lazy 검사 | 이식(주기)/재설계(구현) |
-| 4 | **어그로 타깃 = piety 역가중 랜덤.** `lowest_piety`(MAGGRE)=Σmax(1,25−piety) 가중, `low_piety_alg`(MGAGGR/MEAGGR)=Σmax(1,30−piety) + 정렬 필터(±100) + 레벨 필터(첫 루프만, §4.2 비대칭). 신앙심 낮을수록 표적 확률↑ | 콘텐츠(공식) |
-| 5 | **공격성 3종.** MAGGRE(무차별)·MGAGGR(선한 유저 공격, alg=−1)·MEAGGR(악한 유저 공격, alg=1). 정렬-공격형은 레벨 티어로 표적을 편향(저렙 가중치 배제)하나 **선택 루프엔 레벨 필터가 없어 저렙 완전 배제는 보장 안 됨(원본 비대칭)**. 민첩 높은 유저는 30% 초기 회피 | 이식(규칙)/재설계(비대칭) |
+| 4 | **어그로 타깃 = piety 역가중 랜덤.** `lowest_piety`(MAGGRE)=Σmax(1,25−piety) 가중, `low_piety_alg`(MGAGGR/MEAGGR)=Σmax(1,30−piety) + 성향 필터(±100) + 레벨 필터(첫 루프만, §4.2 비대칭). 신앙심 낮을수록 표적 확률↑ | 콘텐츠(공식) |
+| 5 | **공격성 3종.** MAGGRE(무차별)·MGAGGR(선한 유저 공격, alg=−1)·MEAGGR(악한 유저 공격, alg=1). 성향-공격형은 레벨 티어로 표적을 편향(저렙 가중치 배제)하나 **선택 루프엔 레벨 필터가 없어 저렙 완전 배제는 보장 안 됨(원본 비대칭)**. 민첩 높은 유저는 30% 초기 회피 | 이식(규칙)/재설계(비대칭) |
 | 6 | **적 리스트 = `first_enm` etag 큐, END append.** 주석은 "front 추가"라지만 코드는 tail append(주석-코드 불일치). `first_enm`=주 타깃 유지, 나머지 auto-counterattack. 타깃 이탈 시 `end_enm_crt`로 큐 뒤로 회전 | 이식(규칙)/재설계(불일치) |
 | 7 | **AI 틱 게이트 = LT_ATTCK 타이머.** 민첩<20 → interval 3초, 아니면 2초. 타이머 미도래면 스킵. 매 초 루프지만 몬스터별 행동은 2~3초 간격 | 이식(주기)/재설계(폴링) |
 | 8 | **재생.** LT_HEALS 60초마다 HP += max(1,hpmax/10), MP += max(1,mpmax/6). while 루프로 밀린 만큼 소급 적용 | 콘텐츠(율) |
@@ -165,9 +165,9 @@ while 루프라 밀린 시간만큼 소급 적용된다(방을 오래 비웠다 
 적이 없는 공격형 몬스터는 매 틱 방에서 새 표적을 고른다(update.c:587).
 
 - **MAGGRE (무차별)** → `lowest_piety`(player.c:1314): 방 플레이어 각각에 가중치 `MAX(1, 25 − piety)`를 부여, 총합에서 `mrand(1, total)` 뽑아 누적 도달 플레이어 선택. **신앙심(piety)이 낮을수록 가중치↑ → 표적 확률↑**. 숨음(PHIDDN)·투명(PINVIS, 몬스터가 MDINVI면 무시)·DM투명(PDMINV)은 제외.
-- **MGAGGR / MEAGGR (정렬-공격)** → `low_piety_alg`(player.c:1473): 가중치 `MAX(1, 30 − piety)` + **필터 2종**:
-  - **정렬**: `alg=−1`(MGAGGR) → alignment ≥ 100(선한) 플레이어만. `alg=1`(MEAGGR) → alignment ≤ −100(악한) 플레이어만. *(update.c:594에서 `MGAGGR ? −1 : 1`. MGAGGR="선한 유저 공격", MEAGGR="악한 유저 공격" 주석과 일치.)*
-  - **레벨 (원본 비대칭 주의)**: `low_piety_alg`는 두 번 순회한다. **첫 루프(가중치 합산)**는 플레이어 레벨 티어 `(level+3)/4 < lvl`(몬스터 티어)이면 제외해 저렙을 `total`에서 뺀다. 그러나 **둘째 루프(pick 도달 선택)에는 레벨 필터가 없다**(정렬 필터만). 결과적으로 저렙 제외 `total`로 `pick`을 뽑되 선택 누적엔 저렙 가중치가 다시 들어가, **리스트 순서에 따라 저렙 플레이어가 표적으로 선택될 수 있다** — 저렙 편향(가중치 배제)은 있으나 완전 배제는 보장되지 않는다. add_enm_crt(§4.1)와 같은 장르의 oracle 비대칭이다. MAGGRE(`lowest_piety`)는 레벨 필터 자체가 없다.
+- **MGAGGR / MEAGGR (성향-공격)** → `low_piety_alg`(player.c:1473): 가중치 `MAX(1, 30 − piety)` + **필터 2종**:
+  - **성향**: `alg=−1`(MGAGGR) → alignment ≥ 100(선한) 플레이어만. `alg=1`(MEAGGR) → alignment ≤ −100(악한) 플레이어만. *(update.c:594에서 `MGAGGR ? −1 : 1`. MGAGGR="선한 유저 공격", MEAGGR="악한 유저 공격" 주석과 일치.)*
+  - **레벨 (원본 비대칭 주의)**: `low_piety_alg`는 두 번 순회한다. **첫 루프(가중치 합산)**는 플레이어 레벨 티어 `(level+3)/4 < lvl`(몬스터 티어)이면 제외해 저렙을 `total`에서 뺀다. 그러나 **둘째 루프(pick 도달 선택)에는 레벨 필터가 없다**(성향 필터만). 결과적으로 저렙 제외 `total`로 `pick`을 뽑되 선택 누적엔 저렙 가중치가 다시 들어가, **리스트 순서에 따라 저렙 플레이어가 표적으로 선택될 수 있다** — 저렙 편향(가중치 배제)은 있으나 완전 배제는 보장되지 않는다. add_enm_crt(§4.1)와 같은 장르의 oracle 비대칭이다. MAGGRE(`lowest_piety`)는 레벨 필터 자체가 없다.
 
 **민첩 회피** (update.c:601): 타깃의 민첩 > 몬스터 민첩이고 `mrand(1,10)<4`(30%)면 이번 틱 공격 개시 스킵 — 날쌘 플레이어는 선제 어그로를 확률적으로 흘린다.
 
@@ -253,7 +253,7 @@ while 루프라 밀린 시간만큼 소급 적용된다(방을 오래 비웠다 
 | 재생 | HP hpmax/10 · MP mpmax/6 per 60초, 소급 적용 | while 루프 catch-up |
 | scavenge | 20초/15%, 아이템 플래그 존중, MHASSC | 바닥 first_obj 직접 접근 |
 | wander-out | 배회 몹 확률 퇴장(=traffic) | free_crt 즉시 메모리 회수 |
-| 어그로 | piety 역가중 랜덤, 정렬·레벨 필터, 민첩 30% 회피 | lowest_piety/low_piety_alg 2회 순회 |
+| 어그로 | piety 역가중 랜덤, 성향·레벨 필터, 민첩 30% 회피 | lowest_piety/low_piety_alg 2회 순회 |
 | 공격성 3종 | MAGGRE/MGAGGR/MEAGGR 의미론 | 비트 플래그 인덱스 |
 | 적 리스트 | FIFO 큐, damage 누적, 타깃 이탈 시 회전, 다중 자동반격 | etag 리스트, **주석-코드 불일치**(add_enm_crt) |
 | 특수 공격 | breath 4변종·드레인·독·질병·실명·용해 발동율 | dice() 호출, F_ISSET 분기 |
@@ -273,7 +273,7 @@ while 루프라 밀린 시간만큼 소급 적용된다(방을 오래 비웠다 
 
 4. **AI 틱 = 몬스터별 next-action 시각을 가진 우선순위 큐.** 매 초 전체 순회 대신, 각 active 몬스터의 다음 행동 시각(민첩 연동 2~3초)을 힙에 넣어 도래분만 처리한다. 재생·scavenge·wander·전투는 몬스터 상태에 붙은 개별 타이머로 분리한다.
 
-5. **어그로 타깃 = piety 역가중 랜덤 공식을 그대로 이식.** `MAX(1, 25−piety)` / `MAX(1, 30−piety)` 가중치, 정렬 필터(±100), 레벨 티어 필터, 민첩 30% 회피는 게임 밸런스의 일부이므로 수치까지 보존한다. 단 `low_piety_alg`의 레벨 필터는 두 루프 중 첫 번째(가중치 합산)에만 있고 선택 루프엔 없는 **원본 비대칭**이라, 신규 구현이 "저렙 완전 배제"로 정규화하면 밸런스가 미묘하게 달라진다 — as-shipped 재현이 기본이면 이 비대칭까지 재현하거나, 의도를 살려 정규화할지 명시 결정한다. 적 리스트는 FIFO 큐 + 이탈 시 회전 + 다중 자동반격 의미론을 재현하되, add_enm_crt의 주석은 무시하고 코드 동작(tail append)을 따른다.
+5. **어그로 타깃 = piety 역가중 랜덤 공식을 그대로 이식.** `MAX(1, 25−piety)` / `MAX(1, 30−piety)` 가중치, 성향 필터(±100), 레벨 티어 필터, 민첩 30% 회피는 게임 밸런스의 일부이므로 수치까지 보존한다. 단 `low_piety_alg`의 레벨 필터는 두 루프 중 첫 번째(가중치 합산)에만 있고 선택 루프엔 없는 **원본 비대칭**이라, 신규 구현이 "저렙 완전 배제"로 정규화하면 밸런스가 미묘하게 달라진다 — as-shipped 재현이 기본이면 이 비대칭까지 재현하거나, 의도를 살려 정규화할지 명시 결정한다. 적 리스트는 FIFO 큐 + 이탈 시 회전 + 다중 자동반격 의미론을 재현하되, add_enm_crt의 주석은 무시하고 코드 동작(tail append)을 따른다.
 
 6. **대화 = 데이터 구동 상태 기계.** 몬스터 대화 파일을 JSON(키워드→{응답, action: attack/social/cast/give, 파라미터})으로 이식하면 talk_action 분기가 그대로 매핑된다. 정적 talk 문자열과 MTLKAG(대화 후 적대)도 몬스터 데이터 필드로 유지한다.
 
