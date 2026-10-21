@@ -4,12 +4,12 @@
 
 ## 개요
 
-골든 fixture 하네스(`docs/specs/golden-fixture-harness.md`)가 **특정 입력의 정확값**을 C oracle과 대조하는 반면, property 테스트는 다른 축이다 — **입력 범위 전체의 불변식**(값 범위·단조성·전이 totality 등)을 검증한다. 이를 결정적으로 재현하려면 RNG 시드 고정이 전제다.
+골든 fixture 하네스(`docs/specs/golden-fixture-harness.md`)가 **특정 입력의 정확값**을 C 오라클과 대조하는 반면, property 테스트는 다른 축이다 — **입력 범위 전체의 불변식**(값 범위·단조성·전이 totality 등)을 검증한다. 이를 결정적으로 재현하려면 RNG 시드 고정이 전제다.
 
 이 프레임워크는 세 조각으로 이뤄진다:
 1. **시드 결정적 PRNG** — 같은 시드가 항상 같은 굴림 시퀀스를 내는 의존 0 순수 PRNG.
 2. **불변식 헬퍼 + 범위 생성기** — property 공통 assert(순수, fast-check 무의존)와 fast-check arbitrary 범위 생성기(test-only).
-3. **시연 property 테스트** — 지금 존재하는 결정적 규칙(E4 스폰 확장 지점(seam)·문 FSM·`checkExits` + oracle `compute_ac`)에 프레임워크를 적용해 실제 회귀를 잡음을 증명한다(vacuous 아님).
+3. **시연 property 테스트** — 지금 존재하는 결정적 규칙(E4 스폰 확장 지점(seam)·문 FSM·`checkExits` + 오라클 `compute_ac`)에 프레임워크를 적용해 실제 회귀를 잡음을 증명한다(vacuous 아님).
 
 실 전투·마법·exp 공식의 불변식(E6)은 본 프레임워크 범위 밖이며, 그 규칙이 구현되는 E6에서 이 위에 얹는다.
 

@@ -70,13 +70,13 @@
   - 기준은 [`progression.md`](progression.md)다.
 - `{ type: 'progress:study', target: string(min 1, max 32), ordinal?: int(min 1, max 99), id?: string }` — 비법서 연마(#120).
   - `progress:train`과 달리 **대상 인자가 있다**. 오라클이 소지품에서 이름으로 책을 지목하기 때문이다. `target`은 아이템 이름이나 별칭(`keys`)과 대조할 문자열이고, 상한 32는 입력 위생용이다(어떤 아이템 이름도 이 안에 든다).
-  - `ordinal`은 같은 이름의 아이템 중 몇 번째인지를 나타낸다(`비법서 2 연마`). 오브젝트 id는 와이어로 받지 않는다. 클라가 남의 오브젝트 id를 지목할 여지 자체를 없애기 위해서다. 대상 해석은 서버가 행위자 인벤 스코프 안에서만 한다.
+  - `ordinal`은 같은 이름의 아이템 중 몇 번째인지를 나타낸다(`비법서 2 연마`). 아이템 id는 와이어로 받지 않는다. 클라가 남의 아이템 id를 지목할 여지 자체를 없애기 위해서다. 대상 해석은 서버가 행위자 인벤 스코프 안에서만 한다.
   - 하한 `min 1`은 오라클 파서가 서수가 없을 때 `val[1]=1`을 넣는 것과 일치한다.
   - 기준은 [`magic-progression.md`](magic-progression.md)다.
 
 - `{ type: 'combat:attack', target: string(min 1, max 32), ordinal?: int(min 1, max 99), id?: string }` — 근접 공격(#121).
-  - `targetOrdinalPayloadSchema.shape`를 spread해 `progress:study`와 같은 지목 문법을 쓴다(상한 정의를 두 곳에 흩지 않는다). `target`은 방 안 크리처 이름이나 별칭과 대조할 문자열이고, `ordinal`은 같은 이름의 크리처 중 몇 번째인지다.
-  - **크리처 `instanceId`를 와이어로 받지 않는다.** 클라가 다른 방 개체를 지목할 여지 자체를 없애기 위해서다. 대상 해석은 서버가 행위자의 현재 방 스코프 안에서만 한다.
+  - `targetOrdinalPayloadSchema.shape`를 spread해 `progress:study`와 같은 지목 문법을 쓴다(상한 정의를 두 곳에 흩지 않는다). `target`은 방 안 몬스터 이름이나 별칭과 대조할 문자열이고, `ordinal`은 같은 이름의 몬스터 중 몇 번째인지다.
+  - **몬스터 `instanceId`를 와이어로 받지 않는다.** 클라가 다른 방 개체를 지목할 여지 자체를 없애기 위해서다. 대상 해석은 서버가 행위자의 현재 방 스코프 안에서만 한다.
   - 사람을 지목하면 PvP는 범위 밖이므로 `rule_rejected`로 거부한다.
   - 기준은 [`combat.md`](combat.md)다.
 
@@ -112,7 +112,7 @@
 
 - `{ type: 'combat:attacked', targetName: string(min 1), targetInstanceId: int(min 0), hit: boolean, damage: int(min 0), critical: boolean, fumble: boolean, died: boolean, attacks: {hit, damage, critical, fumble, durabilityHit, weaponDropped}[] }` — 공격 결과 통지(#121). 공격한 본인에게 1회 보낸다.
   - `world:room` 선례를 따라 **`correlationId`를 싣지 않는다**(상태 이벤트).
-  - `targetInstanceId`를 이름과 함께 싣는 이유는, 같은 이름의 크리처가 방에 여럿일 때 클라가 어느 개체를 맞혔는지 짝지어야 하기 때문이다.
+  - `targetInstanceId`를 이름과 함께 싣는 이유는, 같은 이름의 몬스터가 방에 여럿일 때 클라가 어느 개체를 맞혔는지 짝지어야 하기 때문이다.
   - `attacks`는 타격별 배열이다. 지금은 `PUPDMG`가 영속되지 않아 항상 원소가 1개다(다중공격은 구조상 동작하지 않음). 그래도 배열 형태를 지금 고정해 두면, #61이 타격별 연출을 붙일 때 version bump를 다시 하지 않아도 된다.
   - 서버측 원천은 `combat/resolveAttack.ts`의 `AttackDescriptor`다. shared는 server를 import할 수 없으므로, 일치 여부는 반대편(`combat/attackDescriptorWire.test.ts` 컴파일타임 대조)에서 강제한다.
   - 기준은 [`combat.md`](combat.md)다.
@@ -140,7 +140,7 @@
 
 `plugin.ts`가 연결의 중심이다. `GAME_SOCKET_PATH = '/game'`, `MAX_FRAME_BYTES = 64 * 1024`.
 
-- **`connection.ts`** — 연결마다 하나씩 두는 컨텍스트. `ConnectionContext { protocolVersion: number(불변, 서버 권위), ready: boolean(핸드셰이크 완료 여부), heartbeat: NodeJS.Timeout | null }`. `createConnectionContext()`가 `PROTOCOL_VERSION`·`ready=false`·`heartbeat=null`로 초기화한다. `cleanupConnection()`은 남은 ping 타이머를 `clearInterval`(멱등)로 정리하고 레지스트리에서 컨텍스트를 제거한다.
+- **`connection.ts`** — 연결마다 하나씩 두는 컨텍스트. `ConnectionContext { protocolVersion: number(불변, 서버가 기준), ready: boolean(핸드셰이크 완료 여부), heartbeat: NodeJS.Timeout | null }`. `createConnectionContext()`가 `PROTOCOL_VERSION`·`ready=false`·`heartbeat=null`로 초기화한다. `cleanupConnection()`은 남은 ping 타이머를 `clearInterval`(멱등)로 정리하고 레지스트리에서 컨텍스트를 제거한다.
 - **`frame.ts`** — 파싱된 프레임(`unknown`)에서 payload 스키마 검증 전에 필드를 안전하게 읽는 primitive.
   - `readField(parsed, key)`: 객체이고 null이 아니며 키가 있는지 확인한 뒤 값을 반환한다. 아니면 undefined를 반환한다.
   - `readStringField(parsed, key)`: 문자열일 때만 반환한다. 빈 문자열도 유효하다.
@@ -167,7 +167,7 @@
 
 1. `createConnectionContext()`로 컨텍스트를 만들어 `wsConnections`에 등록한다.
 2. `getConfig()`의 튜닝값으로 `createHeartbeat(socket, ...)`을 만들고, `start()`의 타이머 핸들을 `ctx.heartbeat`에 연결한다. `socket.on('pong')`은 `notePong()`으로 미스 카운터를 리셋한다.
-3. `setImmediate`로 `system:hello{protocolVersion}`를 push한다. 동기적으로 push하면 injectWS 클라이언트가 message 리스너를 붙이기 전에 프레임이 나가 드롭되는 레이스가 생긴다. 그래서 리스너 부착(promise 기반이라 `process.nextTick`보다 늦음) 뒤로 미룬다. 버전은 연결별 권위 값인 `ctx.protocolVersion`을 단일 출처로 쓴다.
+3. `setImmediate`로 `system:hello{protocolVersion}`를 push한다. 동기적으로 push하면 injectWS 클라이언트가 message 리스너를 붙이기 전에 프레임이 나가 드롭되는 레이스가 생긴다. 그래서 리스너 부착(promise 기반이라 `process.nextTick`보다 늦음) 뒤로 미룬다. 버전은 연결별 기준 값인 `ctx.protocolVersion`을 단일 출처로 쓴다.
 4. `socket.on('close')`가 `heartbeat.stop()`과 `cleanupConnection()`으로 타이머를 멈추고 정리한다.
 
 서버에서 클라로 가는 전송은 모두 `safeSend(socket, event)`를 거친다. `readyState === OPEN`일 때만 전송하고, 프레임을 받은 뒤 응답하기 전에 피어가 닫아서 `send`가 throw하는 경우는 삼킨다(곧 `close`가 발생해 cleanup이 실행된다). 여기에 아웃바운드 backpressure 가드가 더해져 있다. payload를 미리 직렬화해 `bufferedAmount + payloadBytes > WS_MAX_BUFFERED_BYTES`이면 느린 소비자로 보고 `close(1013)`한다. send 콜백 오류는 로깅한 뒤 코드 없는 `close()`로 끊는다(기준 [`ws-resource-guard.md`](ws-resource-guard.md)). 서버가 종료될 때 소켓 닫기는 `@fastify/websocket` 기본 `preClose`가 맡는다.
@@ -190,7 +190,7 @@
 | ready | `system:ready`(중복) | `error` | `error{handshake_required}` push |
 | ready | 그 외 | `pass` | 라우터로 디스패치 |
 
-버전 대조는 **서버 권위 기준의 정확 비교**다(`readField(parsed, 'protocolVersion') === ctx.protocolVersion`, 강제 변환 없음). 핸드셰이크는 type과 버전만 게이트하고 `clientCommandSchema` strict 파싱은 하지 않는다. 그래서 여분 필드가 있어도 `ready`로 전이한다. 하지만 ready 이후의 모든 command는 라우터가 strict 검증하므로 우회 경로는 없다. `reload`는 프레임을 먼저 보내고 `setImmediate`로 close한다. 같은 tick에 close하면 프레임 플러시보다 close가 먼저 일어나 클라이언트가 reload를 받지 못하는 injectWS 특이 동작이 있어서다.
+버전 대조는 **서버 값이 기준인 정확 비교**다(`readField(parsed, 'protocolVersion') === ctx.protocolVersion`, 강제 변환 없음). 핸드셰이크는 type과 버전만 게이트하고 `clientCommandSchema` strict 파싱은 하지 않는다. 그래서 여분 필드가 있어도 `ready`로 전이한다. 하지만 ready 이후의 모든 command는 라우터가 strict 검증하므로 우회 경로는 없다. `reload`는 프레임을 먼저 보내고 `setImmediate`로 close한다. 같은 tick에 close하면 프레임 플러시보다 close가 먼저 일어나 클라이언트가 reload를 받지 못하는 injectWS 특이 동작이 있어서다.
 
 3. **`pass` 위임 분기** — 핸드셰이크를 통과한 프레임을 어디로 넘길지는 세션 상태에 따라 갈린다. `ctx.state === command`이면 라우터(`dispatch`)로, 그 이전 단계(`characterSelect`·`create`)이면 FSM `handleInput`으로 보낸다. 이미 파싱된 객체를 다시 파싱하지 않고 넘긴다.
 

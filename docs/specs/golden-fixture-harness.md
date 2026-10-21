@@ -1,10 +1,10 @@
 # 골든 fixture 하네스
 
-> C oracle 대조 frozen 골든 fixture로 게임 규칙 공식을 검증하는 approval-test 인프라. `packages/shared/src/oracle/`에 위치한다.
+> C 오라클 대조 frozen 골든 fixture로 게임 규칙 공식을 검증하는 approval-test 인프라. `packages/shared/src/oracle/`에 위치한다.
 
 ## 개요
 
-`legacy/muhan/src`의 원본 C 함수를 behavioral oracle로 삼아, 그 동작을 JS 재구현이 재현하는지 검증하는 approval-test 하네스다(characterization = golden master = approval 동일 기법, ADR D7 §3.9). oracle은 fixture *생성기*로만 쓰고 산출물(기대 출력)을 JSON으로 체크인하며, CI는 순수 TypeScript로 체크인 fixture와 SUT(system under test) 출력을 대조한다 — 32비트 i386 툴체인은 CI에 불필요하고 생성 시점(개발자 로컬)에만 쓰인다.
+`legacy/muhan/src`의 원본 C 함수를 동작 명세(오라클)로 삼아, 그 동작을 JS 재구현이 재현하는지 검증하는 approval-test 하네스다(characterization = golden master = approval 동일 기법, ADR D7 §3.9). 오라클은 fixture *생성기*로만 쓰고 산출물(기대 출력)을 JSON으로 체크인하며, CI는 순수 TypeScript로 체크인 fixture와 SUT(system under test) 출력을 대조한다 — 32비트 i386 툴체인은 CI에 불필요하고 생성 시점(개발자 로컬)에만 쓰인다.
 
 이 하네스는 E6(게임 규칙 엔진: 전투·마법·진행·경제)의 선행 조건이다. E6가 각 공식을 골든 fixture로 TDD하려면 포맷·러너·생성기 규약이 먼저 존재해야 한다. 대표 공식 `compute_ac`(방어도) 하나로 생성기→fixture→러너 루프를 end-to-end 증명한다.
 
@@ -102,5 +102,5 @@ end-to-end 데모는 (a) 체크인 fixture 전 케이스가 `computeAc`를 throw
 
 - ADR: `docs/specs/architecture.md` §3.9(D7 테스트 전략)
 - 분석 노트: `docs/notes/game-analysis-20260625/a5-combat.md`(공식 기준, `compute_ac`는 §184)
-- oracle 코드: `legacy/muhan/src/player.c:971`(방어도 공식)
+- 오라클 코드: `legacy/muhan/src/player.c:971`(방어도 공식)
 - 부모 에픽·이슈: #33(E8), #70(본 토픽), #71(E8-2 property), #36(E6 소비자)

@@ -1,6 +1,6 @@
 # 세이브 정책 엔진 (E2-2)
 
-> 인메모리 권위 상태를 MongoDB에 영속화하는 행위 계층이다. 세 가지를 제공한다: dirty-flag 주기 flush와 비동기 배치 write-behind, 이벤트 즉시 저장(`saveNow`), 은행 gold 이동의 원자적 트랜잭션.
+> 인메모리 기준 상태(authoritative)를 MongoDB에 영속화하는 행위 계층이다. 세 가지를 제공한다: dirty-flag 주기 flush와 비동기 배치 write-behind, 이벤트 즉시 저장(`saveNow`), 은행 gold 이동의 원자적 트랜잭션.
 
 ## 개요
 
@@ -184,7 +184,7 @@ bounded 큐와 비동기 워커가 Mongo write를 게임 틱과 분리해 처리
 - **#43이 해결될 때까지 은행 명령 연결은 막혀 있다(blocking)**:
   - `BankTransactionService`는 gold를 트랜잭션으로 직접 쓰고, `SaveEngine`은 같은 컬렉션을 write-behind로 쓴다. 두 경로 사이에 키별로 조정하는 지점이 없다. 그래서 gold 엔티티를 두 경로로 흘리면 트랜잭션 커밋 뒤에 도착한 stale flush가 결과를 되돌릴 수 있다.
   - **`progress:train` 연결로 gold가 write-behind 경로에 들어왔다**(연마 비용 차감이 전체 문서 스냅샷에 실린다). 즉 한쪽 경로는 이미 동작 중이다. 충돌할 상대인 은행 직접 write는 아직 동작하지 않으므로(`clientCommandSchema`에 은행 명령 없음, `BankTransactionService`의 non-test caller 0건) 지금은 충돌이 일어날 수 없다.
-  - 그래서 계약을 고정한다: **#43을 해결하기 전에는 은행 명령을 연결하지 않는다.** 해결 방향은 둘 중 하나다. (a) 트랜잭션 전후로 두 키를 SaveEngine에서 evict/quiesce한 뒤 다시 mark한다. (b) gold 변이를 write-behind 밖에 둬서 권위 있는 경로를 하나로 유지한다([smalljiny/muhan#43](https://github.com/smalljiny/muhan/issues/43), 코드 계약은 `bankTransactionService.ts` 도크스트링).
+  - 그래서 계약을 고정한다: **#43을 해결하기 전에는 은행 명령을 연결하지 않는다.** 해결 방향은 둘 중 하나다. (a) 트랜잭션 전후로 두 키를 SaveEngine에서 evict/quiesce한 뒤 다시 mark한다. (b) gold 변이를 write-behind 밖에 둬서 기준이 되는 경로를 하나로 유지한다([smalljiny/muhan#43](https://github.com/smalljiny/muhan/issues/43), 코드 계약은 `bankTransactionService.ts` 도크스트링).
 - **재접속 pending revert는 `characters`에서만 해결됐다(#124)**: hydrate가 `peekPending('characters', id)`를 DB 문서 위에 덮어쓴다(overlay). 보장 문장은 "pending이 `DirtyTracker`에 살아 있는 동안 hydrate가 그것을 채택한다"이고, 수명 계약이 그 "살아 있는 동안"을 정의한다. **`objectDeletions`는 합성하지 않는다.** 그래서 재접속하면 삭제 마킹된 비법서가 인벤토리에 유령처럼 남는다. 지금은 해가 없다. 재연마 시 `setKnown`·`markObjectDeleted`가 모두 멱등이라 결국 맞춰지고, 줍기·버리기·건네주기 경로가 0건이기 때문이다. #119(teach)와 #121(attack)이 건네주기와 전리품 경로를 열면 다시 평가해야 한다.
 - **write가 영구 실패한 스냅샷은 복구하지 않는다**: permanent 실패나 재시도 소진이면 `discard`로 버린다. 그 뒤 그 키의 `peekPending`은 `undefined`가 되어 hydrate가 저장소 값을 쓴다(진행도 손실). 복구하려면 WAL 수준의 영속 큐가 필요하므로, write-behind 손실 모델(아래 Durable WAL 없음)이 이미 받아들인 범위다. 실패는 logger로 확인할 수 있다.
 - **`character.gold`에는 상한이 없다**: 은행 gold는 3억 상한(불변식 6)이 있지만 출금으로 늘어나는 `character.gold`에는 상한을 두지 않는다. 원작 오라클에 소지 gold 상한이 있는지 다시 확인해 확정되면 이 seam에 같은 가드를 추가한다(persistence.md §제약사항의 미결 항목과 연동).

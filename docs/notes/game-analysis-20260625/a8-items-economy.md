@@ -1,13 +1,13 @@
 # A8 아이템·장비·경제·은행
 
-> 무한에서 다음 세 영역이 oracle에서 *무엇을 하는지*를 정리한다.
+> 무한에서 다음 세 영역이 오라클에서 *무엇을 하는지*를 정리한다.
 > - 아이템 체계: 타입 taxonomy, 착용/장비 규칙, object 필드
 > - 경제: 금화, 가치, 상점, 전당포, 수리, 거래
 > - 은행
 >
 > 아이템 속성, 가격 배수, 착용 게이트, 거래 규칙은 게임 규칙이므로 충실히 이식한다. 반면 다음은 원작의 구현 방식이므로 자유롭게 재설계한다: 은행을 별도 object 파일 컨테이너로 두는 구조, 직렬화되지 않는 `ready[]` 포인터 배열, 상점 재고를 인접방에 두는 규약, 가드 없는 gold signed long. 이슈 #8. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)와 변환 산출물 `data/world/objects.json`이며, 코드를 이식하지 않고 동작만 추출한다.
 >
-> **oracle 읽기 주의**: 하네스의 `grep` 래퍼가 `-I`(binary skip)를 붙이기 때문에 EUC-KR 파일을 건너뛴다. `command grep -a` 또는 `iconv -f EUC-KR -t UTF-8 -c … | grep`로 우회한다([[muhan-oracle-toolchain]]).
+> **오라클 읽기 주의**: 하네스의 `grep` 래퍼가 `-I`(binary skip)를 붙이기 때문에 EUC-KR 파일을 건너뛴다. `command grep -a` 또는 `iconv -f EUC-KR -t UTF-8 -c … | grep`로 우회한다([[muhan-oracle-toolchain]]).
 >
 > **전투·마법·진행 공식은 다시 유도하지 않는다**: 무기 데미지·명중·숙련은 [[a5-combat]], 물약/두루마기/지팡이의 주문 시전은 [[a6-magic]], AC/thaco 닫힌 식과 스탯 보정은 [[a7-player-progression]]에서 이미 확정했다. 이 노트는 그 공식들에 **아이템이 기여하는 항**(장비 armor 합산, 무기 adjustment 명중 보정)만 더한다.
 
@@ -19,7 +19,7 @@
 - help에는 없는 CONTAINER2(14)
 
 아이템의 게임 동작은 세 가지로 나뉜다.
-- ① **착용/장비**: 방어구는 `wear`, 무기는 `ready`, 쥠물건은 `hold`가 처리한다. 각 명령은 `creature.ready[20]` 슬롯 배열의 정해진 칸에 포인터를 넣는다. 착용 효과(AC·명중)는 필드를 직접 더하거나 빼지 않고, **매번 `ready[]` 전체로 다시 계산**한다(`compute_ac`/`compute_thaco`). 이는 [[a7-player-progression]] §12의 "파생 스탯은 유효 상태의 함수" 원칙과 정확히 같다.
+- ① **착용/장비**: 방어구는 `wear`, 무기는 `ready`, 쥠 아이템은 `hold`가 처리한다. 각 명령은 `creature.ready[20]` 슬롯 배열의 정해진 칸에 포인터를 넣는다. 착용 효과(AC·명중)는 필드를 직접 더하거나 빼지 않고, **매번 `ready[]` 전체로 다시 계산**한다(`compute_ac`/`compute_thaco`). 이는 [[a7-player-progression]] §12의 "파생 스탯은 유효 상태의 함수" 원칙과 정확히 같다.
 - ② **소비**: 물약/지팡이는 쓸 때마다 `shotscur--`로 충전이 줄고, 다 쓰면 부서진다.
 - ③ **경제**: `object.value`(long) 하나가 모든 가격의 기준이다. 상점 구매(100%), 전당포 판매(50%), 수리(25%), 몬스터 상점(max(10,value))은 이 값에 상수 배수를 곱해 정한다.
 
@@ -28,7 +28,7 @@
 은행은 구조가 특이하다. 잔고는 `creature` 필드가 아니라 플레이어별 **별도 object 파일**(`PLAYERPATH/bank/<이름>`)에 있다. 그 object가 컨테이너로 동작해, 현금은 `value`에, 보관 물품은 중첩 인벤토리에 담는다. 이자는 없다(단순 금고). 신규 스택의 계좌 모델(MongoDB 문서)은 이 "은행=object 파일" 구조를 어떻게 바꿀지에 따라 달라진다.
 
 핵심 분리:
-- **콘텐츠(충실히 이식):** 타입 taxonomy, 착용 슬롯, 레벨/직업/성별/크기 게이트, 가격 배수(100/50/25%), 소지 한도(150/200), 몹 소지금 랜덤화, 거래 거부 조건.
+- **콘텐츠(충실히 이식):** 타입 taxonomy, 착용 슬롯, 레벨/직업/성별/크기 게이트, 가격 배수(100/50/25%), 소지 한도(150/200), 몬스터 소지금 랜덤화, 거래 거부 조건.
 - **구현 방식(재설계):** 은행=별도 object 파일 컨테이너, `ready[]` 포인터 배열, 상점 재고=`rom_num+1` 인접방, 가드 없는 gold signed long, time(0) 기반 확률, 데드 statement.
 
 ## 핵심 발견 요약
@@ -41,9 +41,9 @@
 | 4 | **착용 다층 게이트.** 클래스(ONOMAG·OCLSEL)·성별(ONOFEM=남/ONOMAL=여, 명명 역전)·결혼(OMARRI)·성향(OGOODO/OEVILO ±50)·종족크기(OSIZE 3계급)·**레벨(방어구 armor*5, BODY armor*2 / 무기 dice합*3)** | 콘텐츠(규칙) |
 | 5 | **밸런스 초과 아이템 자동 소각.** 착용 시 방어구 AC환산 >151, 무기 `ndice·sdice+pdice` >39, shots >600 → questnum·ONEWEV 아니면 free("푸른 연기와 함께 사라집니다") | 콘텐츠(가드) |
 | 6 | **소비 아이템 = `magicpower-1` 스펠 시전.** Potion=`drink`, Scroll=`readscroll`, Wand=`zap` → `shotscur--` → [[a6-magic]] spllist[magicpower-1]를 각 컨텍스트로 시전. 무기 데미지는 [[a5-combat]] | 콘텐츠(→a6/a5) |
-| 7 | **가격 = `object.value` 단일 필드 × 상수 배수.** 상점구매=value(1:1), 전당포판매=min(value/2, 10만), 수리=value/4, 몹구매=max(10, value) | 콘텐츠(경제) |
-| 8 | **상점 재고 = 인접방 `rom_num+1` object를 복제, 무소진.** buy는 창고방에서 로드→복제 지급. 몹 상점(MPURIT)은 `carry[]` objnum 템플릿 복제(무한 재고) | 이식(규칙)/재설계(방 규약) |
-| 9 | **금화 = `creature.gold`(long, offset 348) 무가드.** 몹 처치 시 `die()`가 gold를 바닥의 MONEY object로 변환. 몹 소지금은 스폰 시 `mrand(gold/10, gold)` 랜덤(MNRGLD면 고정) | 이식(드롭)/재설계(무가드) |
+| 7 | **가격 = `object.value` 단일 필드 × 상수 배수.** 상점구매=value(1:1), 전당포판매=min(value/2, 10만), 수리=value/4, 몬스터 구매=max(10, value) | 콘텐츠(경제) |
+| 8 | **상점 재고 = 인접방 `rom_num+1` object를 복제, 무소진.** buy는 창고방에서 로드→복제 지급. 몬스터 상점(MPURIT)은 `carry[]` objnum 템플릿 복제(무한 재고) | 이식(규칙)/재설계(방 규약) |
+| 9 | **금화 = `creature.gold`(long, offset 348) 무가드.** 몬스터 처치 시 `die()`가 gold를 바닥의 MONEY object로 변환. 몬스터 소지금은 스폰 시 `mrand(gold/10, gold)` 랜덤(MNRGLD면 고정) | 이식(드롭)/재설계(무가드) |
 | 10 | **상점/서비스 방 = room flag.** RSHOPP=0(상점)·RPAWNS=2(전당포)·RREPAI=7(수리)·RDUMPR=1(덤프)·RBANK=39(은행)·RMARRI=41(결혼) | 이식(게이트)/재설계(비트) |
 | 11 | **은행 = 별도 object 파일 컨테이너.** `bank/<이름>` 파일, 현금=`object.value`, 물품=중첩 인벤토리(슬롯 200). 입금/출금/잔액/보관물/받아. **이자 없음, 3억 상한, 수수료·이체 없음** | 재설계(영속화) |
 | 12 | **거래 다중 거부.** 판매: gold<20·저품질(shots≤max/8)·ONEWEV·컨테이너내용·두루마기/물약. 양도: questnum·ONEWEV·이벤트. 습득: ONOTAK·OSCENE·MGUARD 감시 | 콘텐츠(규칙) |
@@ -118,7 +118,7 @@
 | 7 | HEAD | 머리 | wear |
 | 8 | FEET | 발 | wear |
 | 9–16 | FINGER1–8 | 손가락(8칸) | wear |
-| 17 | HELD | 쥔 물건 | hold |
+| 17 | HELD | 쥔 아이템 | hold |
 | 18 | SHIELD | 방패 | wear |
 | 19 | FACE | 얼굴 | wear |
 | 20 | WIELD | 무기 | ready |
@@ -202,7 +202,7 @@ compute_ac(ply_ptr);
 
 **방패**는 wearflag=SHIELD(18)이므로 `ready()`가 아니라 `wear()`가 처리한다(`ready[SHIELD-1]`, AC에 기여).
 
-**쥠 물건**은 `hold()`(`command3.c:860`)가 처리한다.
+**쥠 아이템**은 `hold()`(`command3.c:860`)가 처리한다.
 - wearflag가 HELD 또는 WIELD여야 한다.
 - 임무템, 이벤트템, 강력한 무기(dice합 >100)는 거부한다.
 - `type < ARMOR`(무기)를 쥐면 `F_SET(OWHELD)`를 켠다.
@@ -319,9 +319,9 @@ obj_ptr->pdice = MAX(obj_ptr->pdice, obj_ptr->adjustment);
 
 **금화가 늘거나 줄어드는 지점**(`command grep`으로 전부 조사):
 
-- **몹 처치 드롭**(`creature.c:331`): 몹에게 `gold`가 있으면 `die()`가 `load_obj(0,…)`(objnum 0 = 머니 템플릿)로 MONEY object를 만들고, `obj->value = crt->gold`로 설정해 방에 떨어뜨린다. 즉 **몹의 소지금이 그대로 바닥의 "N냥" 오브젝트가 된다**.
-- **몹 소지금 랜덤화**(`creature.c:879`): 스폰할 때 `if(!MNRGLD && crt->gold) crt->gold = mrand(gold/10, gold)`를 적용한다. 고정금액 플래그(MNRGLD=25)가 없으면 소지금이 10~100% 사이에서 랜덤으로 정해진다. 몹 재고 아이템도 `value = mrand(value·9/10, value·11/10)`로 ±10% 변동한다(`creature.c:872`).
-- **줍기**(`command2.c:807/888/990/1105`, 은행 553): `if(type==MONEY){ gold += value; free_obj; }` — 오브젝트는 사라지고 gold에 더해진다.
+- **몬스터 처치 드롭**(`creature.c:331`): 몬스터에게 `gold`가 있으면 `die()`가 `load_obj(0,…)`(objnum 0 = 머니 템플릿)로 MONEY object를 만들고, `obj->value = crt->gold`로 설정해 방에 떨어뜨린다. 즉 **몬스터의 소지금이 그대로 바닥의 "N냥" 아이템이 된다**.
+- **몬스터 소지금 랜덤화**(`creature.c:879`): 스폰할 때 `if(!MNRGLD && crt->gold) crt->gold = mrand(gold/10, gold)`를 적용한다. 고정금액 플래그(MNRGLD=25)가 없으면 소지금이 10~100% 사이에서 랜덤으로 정해진다. 몬스터 재고 아이템도 `value = mrand(value·9/10, value·11/10)`로 ±10% 변동한다(`creature.c:872`).
+- **줍기**(`command2.c:807/888/990/1105`, 은행 553): `if(type==MONEY){ gold += value; free_obj; }` — 아이템은 사라지고 gold에 더해진다.
 - **떨어뜨리기**(`drop_money`, `command2.c:1444`): `load_obj(0)`로 MONEY object를 만들고 `name="N냥"`, `value=amt`로 설정해 방에 추가한 뒤 `gold -= amt`.
 - **양도**(`give_money`, `command8.c:143`): `"N냥"` 접미사를 파싱하고, `amt<1 || amt>gold`면 거부한다. 받는 쪽은 `gold += amt`, 주는 쪽은 `gold -= amt`다. **세금이나 수수료는 없다**.
 - **기타 수입**: 불태우기는 `gold += 4`이고, 1/250 확률로 `gold += 100000`이다(`command2.c:1742`). 가문 가입 시에도 들어온다(`command11.c:638`).
@@ -351,11 +351,11 @@ F_CLR(OPERM2/OPERMT/OTEMPP);              // 영구 플래그 제거 후 지급
 ply_ptr->gold -= obj_ptr->value;          // 재고는 소진되지 않음
 ```
 
-**구매가 = `value`**(배수 없음). 재고는 **인접 방 번호 `rom_num+1`**(상점 방 바로 다음 번호)에 실제로 놓인 오브젝트를 복제해 준다. "상점 방 = 진열, rom_num+1 = 창고"라는 규약이다. 원본 오브젝트는 그대로 남으므로 **재고가 무한**하다. 개수 한도는 200이다(장착 포함 `count_inv`).
+**구매가 = `value`**(배수 없음). 재고는 **인접 방 번호 `rom_num+1`**(상점 방 바로 다음 번호)에 실제로 놓인 아이템을 복제해 준다. "상점 방 = 진열, rom_num+1 = 창고"라는 규약이다. 원본 아이템은 그대로 남으므로 **재고가 무한**하다. 개수 한도는 200이다(장착 포함 `count_inv`).
 
-### 몹 상점 — `purchase` (`command10.c:492`)
+### 몬스터 상점 — `purchase` (`command10.c:492`)
 
-몹이 `MPURIT`(36) 플래그를 가지면 상인이다. 재고는 `crt->carry[]`의 objnum이며, `load_obj`로 **템플릿을 복제**하므로 무한하다.
+몬스터가 `MPURIT`(36) 플래그를 가지면 상인이다. 재고는 `crt->carry[]`의 objnum이며, `load_obj`로 **템플릿을 복제**하므로 무한하다.
 
 ```c
 amt = MAX(10, obj_ptr->value * 1);        // command10.c:573 — 최저 10냥
@@ -363,7 +363,7 @@ if(ply_ptr->gold < amt) 거절;
 gold -= amt; add_obj_crt(복제본);
 ```
 
-**몹 구매가 = `max(10, value)`**다(`*1`은 의미가 없다). 개수 한도는 150이다.
+**몬스터 구매가 = `max(10, value)`**다(`*1`은 의미가 없다). 개수 한도는 150이다.
 
 ### 판매 — `sell` (`command7.c:227`), 전당포 50%
 
@@ -376,7 +376,7 @@ gold = MIN(obj_ptr->value / 2, 100000);   // command7.c:258 — 50%, 상한 10�
 - `gold < 20`(= value < 40) → "그런 쓰레기는 안사요".
 - **저품질**: 무기/방어구 `shotscur ≤ shotsmax/8`, 지팡이/열쇠 `shotscur < 1`.
 - `ONEWEV`(개인 귀속) → 거부.
-- 내부에 다른 오브젝트가 든 컨테이너(`first_obj`) → 거부.
+- 내부에 다른 아이템이 든 컨테이너(`first_obj`) → 거부.
 - SCROLL 또는 POTION → 거부("두루마기나 독약같은것은 안사요").
 
 **1/250 확률 "기분 좋은 날" 2배 지급은 정상 동작이다**(`command7.c:272`):
@@ -409,9 +409,9 @@ else shotscur = shotsmax * mrand(5,9)/10;              // 성공: 내구 50~90% 
 
 ### 교환·양도
 
-- **trade**(`command10.c:664`, 몹 `MTRADE=37`): 물물교환이다. `ONAMED`(명명) 아이템은 교환할 수 없고, 마모품(`shotscur ≤ shotsmax/10`, MISC 제외)은 거부한다. 대가로 주는 objnum은 `carry[found+4]`다. 몹이 받은 물건을 보관하지 않는 미완성 로직이다(§10).
+- **trade**(`command10.c:664`, 몬스터 `MTRADE=37`): 물물교환이다. `ONAMED`(명명) 아이템은 교환할 수 없고, 마모품(`shotscur ≤ shotsmax/10`, MISC 제외)은 거부한다. 대가로 주는 objnum은 `carry[found+4]`다. 몬스터가 받은 아이템을 보관하지 않는 미완성 로직이다(§10).
 - **give**(`command8.c:28`): 다른 플레이어에게 양도한다. questnum 임무템(class<DM), `ONEWEV`, 이벤트템, 이런 아이템을 담은 컨테이너는 줄 수 없다. 대상이 PLAYER가 아니면 거부한다.
-- **get 거부**(`command2.c:694`): `ONOTAK`, `OSCENE`, `OINVIS`, 이미 완수한 questnum, `MGUARD`(7) 몹이 지키는 경우, "초인의 돌"(value==1001).
+- **get 거부**(`command2.c:694`): `ONOTAK`, `OSCENE`, `OINVIS`, 이미 완수한 questnum, `MGUARD`(7) 몬스터가 지키는 경우, "초인의 돌"(value==1001).
 
 ### 소지 한도
 
@@ -457,7 +457,7 @@ bnk_ptr->value -= amt;  ply_ptr->gold += amt;
 
 - 입력은 `"N냥"` 접미사를 파싱하고(`atol`), `amt < 1`이면 거부한다("음수가 될수 없습니다"). `입금 모두`는 소지금 전부, `출금 모두`는 잔고 전부다.
 - **잔고 상한은 3억**(300000000, `bank.c:314`)이다. 수수료는 없고(1:1), **이자도 없다**. 전체 소스에서 `interest`/`이자`를 grep하면 0건이다. 단순한 금고다.
-- **이체·송금 없음**: 각 계좌는 `bank/<본인이름>` 파일로 분리돼 있다. 물품을 꺼낼 때 MONEY 타입 오브젝트는 gold에 더해진다.
+- **이체·송금 없음**: 각 계좌는 `bank/<본인이름>` 파일로 분리돼 있다. 물품을 꺼낼 때 MONEY 타입 아이템은 gold에 더해진다.
 - 물품 보관 슬롯 상한은 200이다(`shotscur ≥ shotsmax`면 "더이상 넣을 수 없습니다"). 컨테이너(OCONTN) 계열은 보관할 수 없다.
 
 ### `bank_check.c` — 독립 관리 유틸 (데몬 아님)
@@ -481,7 +481,7 @@ bnk_ptr->value -= amt;  ply_ptr->gold += amt;
 | d | **`gold` signed long 무가드** — 상한·음수 검증 없음, `+=100000` 등 | 구현 방식/결함 | 상한·검증 추가(또는 BigInt/unsigned) |
 | e | **`time(0)` 기반 확률**(전당포 2배 `command7.c:272`) — 벽시계 의존 | 구현 방식 | 결정적 RNG/스케줄러로 대체(확률 1/250은 유지) |
 | f | **은행 초기화 `F_ISSET(bnk_ptr, OCONTN)`**(`bank.c:311`) — 테스트 매크로를 설정처럼 호출, **플래그가 실제로 안 켜짐** | 버그(데드) | 신규 계좌 문서는 컨테이너 성격을 명시. 원본 OCONTN 의존 코드 영향 재확인 |
-| g | **trade 몹이 받은 물건 미보관**(`command10.c` 주석 처리) — 대가만 지급 | 미완성 | 물물교환을 완결형으로 재설계할지 결정 |
+| g | **trade 몬스터가 받은 아이템 미보관**(`command10.c` 주석 처리) — 대가만 지급 | 미완성 | 물물교환을 완결형으로 재설계할지 결정 |
 | h | **CONTAINER2(14)** — 헤더 정의되나 help 미기재, 실사용 미확인 | 불명 | `data/world/objects.json` 카운트로 확정, 0이면 제외 |
 | i | **파생 스탯 수동 재계산 트리거** — wear/ready/remove가 `compute_ac`/`compute_thaco` 직접 호출(누락 시 stale) | 구현 방식 | [[a7-player-progression]] §12대로 유효 스탯 함수화 |
 | j | **밸런스 소각 임계 하드코딩**(AC>151, dice합>39, shots>600) — 매직넘버 | 구현 방식 | 아이템 검증 규칙을 데이터/config로 |
@@ -490,13 +490,13 @@ bnk_ptr->value -= amt;  ply_ptr->gold += amt;
 
 ## 11. 아키텍처 시사점
 
-1. **아이템 = 단일 `object` 문서, 착용은 슬롯 참조.** 무한의 모든 컨테이너(방·몹·플레이어·은행)가 같은 object를 담는다. 따라서 MongoDB에서도 object를 단일 스키마로 모델링하고, 컨테이너는 objectId 배열로 참조한다. 착용은 `ready[]` 슬롯을 objectId 맵(`{ WIELD: id, BODY: id, … }`)으로 재현한다.
+1. **아이템 = 단일 `object` 문서, 착용은 슬롯 참조.** 무한의 모든 컨테이너(방·몬스터·플레이어·은행)가 같은 object를 담는다. 따라서 MongoDB에서도 object를 단일 스키마로 모델링하고, 컨테이너는 objectId 배열로 참조한다. 착용은 `ready[]` 슬롯을 objectId 맵(`{ WIELD: id, BODY: id, … }`)으로 재현한다.
 
 2. **파생 스탯은 `ready[]`의 순수 함수**다(§4). AC=`f(dex, Σ 착용 armor, 보호)`, thaco=`f(class, level, 무기 adjustment, 숙련, str)`이다. 착용/해제할 때 필드를 더하고 빼는 대신 "슬롯 변경 → 재계산"으로 처리하면, [[a7-player-progression]] §12의 최우선 재설계(base+modifier 분리)와 자연스럽게 합쳐진다. 무기 `adjustment`는 명중 modifier로, 방어구 `armor`는 AC modifier로 각각 태깅한다.
 
-3. **경제는 `value` 하나에 상수 배수를 곱하는 구조다.** 구매 100%, 판매 50%(cap 10만), 수리 25%, 몹 구매 max(10,value)다. 이 배수는 코드가 아니라 **경제 config**(JSON)에 두어 튜닝을 코드와 분리한다. `value`는 아이템 템플릿의 기준 필드로 이식한다.
+3. **경제는 `value` 하나에 상수 배수를 곱하는 구조다.** 구매 100%, 판매 50%(cap 10만), 수리 25%, 몬스터 구매 max(10,value)다. 이 배수는 코드가 아니라 **경제 config**(JSON)에 두어 튜닝을 코드와 분리한다. `value`는 아이템 템플릿의 기준 필드로 이식한다.
 
-4. **상점 재고를 선언적으로 정의한다.** 원본은 재고를 "인접 방 번호 규약"으로 표현한다(§8). 이는 방 번호가 이웃해야만 동작하는 구현 방식이다. 신규 스택은 상점에 명시적인 재고 목록(무한/유한, 복제 여부)을 주고, 몹 상점의 `carry[]`도 상인 인벤토리로 모델링한다.
+4. **상점 재고를 선언적으로 정의한다.** 원본은 재고를 "인접 방 번호 규약"으로 표현한다(§8). 이는 방 번호가 이웃해야만 동작하는 구현 방식이다. 신규 스택은 상점에 명시적인 재고 목록(무한/유한, 복제 여부)을 주고, 몬스터 상점의 `carry[]`도 상인 인벤토리로 모델링한다.
 
 5. **은행은 계좌 도메인으로 분리한다**(§9). 원본의 "은행=object 파일 컨테이너"는 기존 구조를 잘 재사용한 것이지만 원작의 구현 방식이다. 계좌를 `{owner, gold, items[], slotLimit:200, cap:3억}` 문서로 두면 현금과 보관 물품을 명확히 나누면서도 원본 의미(이자 없음, 3억 상한, 이체 없음)를 그대로 이식할 수 있다. **이자가 없다는 점은 설계상 선택할 지점**이다. 무한 원작에 충실할지, 경제를 확장할지 결정해야 할 항목으로 표시한다.
 
@@ -511,13 +511,13 @@ bnk_ptr->value -= amt;  ply_ptr->gold += amt;
 ## 검증 메모
 
 - **직접 읽어 확인**(byte-level): `wear`·`wear_all`·`remove_all`·`ready`·`hold`·`equip_list`(command3.c 전 게이트·슬롯 설정 로직), object type/wearflag/object-flag 상수(mtype.h:123–139·206–230·476–526), 상점 방 플래그(mtype.h:304–312·340·342), OBJ/CRT 오프셋(templates.js).
-- **경제·은행 핵심 수치 원본 재확인**(에이전트 단독 출처였던 load-bearing 값): 판매가 `MIN(value/2, 100000)`(command7.c:258 확정), 수리비 `value/4`(command8.c:249 확정), 몹구매 `MAX(10, value*1)`(command10.c:573 확정), 은행 3억 상한 `value+amt > 300000000`(bank.c:314 확정), 현금=object.value(입금 `bnk_ptr->value += amt` 확정), buy 함수명(command7.c:169 확정).
+- **경제·은행 핵심 수치 원본 재확인**(에이전트 단독 출처였던 load-bearing 값): 판매가 `MIN(value/2, 100000)`(command7.c:258 확정), 수리비 `value/4`(command8.c:249 확정), 몬스터 구매 `MAX(10, value*1)`(command10.c:573 확정), 은행 3억 상한 `value+amt > 300000000`(bank.c:314 확정), 현금=object.value(입금 `bnk_ptr->value += amt` 확정), buy 함수명(command7.c:169 확정).
 - **정정**: 전당포 "2배 지급"은 **버그가 아니라 정상 동작**이다. lucky 분기는 if 안의 `gold += gold`와 if/else 밖의 가산이 겹쳐 실제로 2배를 지급한다(command7.c:277·284 확인). 처음 추출할 때는 이를 미지급 버그로 잘못 읽었으나, 라인을 다시 확인해 정정했다. 이와 별개로, 은행 초기화의 `F_ISSET(bnk_ptr, OCONTN)`(bank.c:311)은 테스트 매크로를 잘못 써서 플래그가 실제로 켜지지 않는 **데드 statement**다(§10-f).
 - **에이전트 추출 + 직접 확인 안 함**(신뢰하되 인용 라인 표기):
   - 소비 아이템의 magic1.c 시전 경로(`drink`/`readscroll`/`zap`, magicpower-1 → [[a6-magic]] 위임)
-  - `die()` 금화 변환(creature.c:331)·몹 소지금 랜덤(creature.c:879)
+  - `die()` 금화 변환(creature.c:331)·몬스터 소지금 랜덤(creature.c:879)
   - give/trade/get 거부 조건 세부(command8.c·command10.c·command2.c)
   - bank_check.c가 독립 유틸이라는 점
 - **위임**: 무기 데미지·명중·숙련 공식은 [[a5-combat]], 물약/두루마기/지팡이 스펠 효과와 마법 계열은 [[a6-magic]], AC/thaco 닫힌 식·`max_weight`·스탯 보정은 [[a7-player-progression]]이 담당한다. 이 노트는 아이템 기여 항(Σ armor·adjustment)만 더했고, 기본 공식은 다시 유도하지 않았다.
-- **미확인/근사**: CONTAINER2(14)가 실제로 쓰이는지는 `data/world/objects.json`에서 개수를 세어 확정해야 한다. 원거리/특수공격의 type별 분기는 command5.c 근접 경로만 확인했다(special1.c 등은 꼼꼼히 읽지 않았다). 몹 `carry[]` 5칸과 오버로드(carry[0]=WIMPYVALUE) 세부는 몹 AI 범위로 넘긴다.
+- **미확인/근사**: CONTAINER2(14)가 실제로 쓰이는지는 `data/world/objects.json`에서 개수를 세어 확정해야 한다. 원거리/특수공격의 type별 분기는 command5.c 근접 경로만 확인했다(special1.c 등은 꼼꼼히 읽지 않았다). 몬스터 `carry[]` 5칸과 오버로드(carry[0]=WIMPYVALUE) 세부는 몬스터 AI 범위로 넘긴다.
 - `command grep` 래퍼가 `-I`로 EUC-KR 파일을 건너뛰는 함정을 다시 확인했다. `command grep -a`/`iconv`를 쓴다([[muhan-oracle-toolchain]]).

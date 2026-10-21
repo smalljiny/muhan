@@ -1,8 +1,8 @@
 # A7 플레이어 진행·스탯·클래스/종족
 
-> 무한의 플레이어 진행 체계(스탯 5종·능력치 보정·클래스/종족 효과·레벨업 곡선·hp/mp 재생)가 oracle에서 *무엇을 하는지*를 정리한다. 스탯 의미·성장 곡선·보정표는 밸런스 정의이므로 충실히 이식하고, 세이브 직렬화(디스크 구조체 → MongoDB)·유효값/기본값 미분리 필드 조작·데드코드는 원작의 구현 방식이므로 자유롭게 재설계한다. 이슈 #7. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)와 변환 산출물 `data/world/creatures.json`. 코드 이식이 아니라 동작 추출.
+> 무한의 플레이어 진행 체계(스탯 5종·능력치 보정·클래스/종족 효과·레벨업 곡선·hp/mp 재생)가 오라클에서 *무엇을 하는지*를 정리한다. 스탯 의미·성장 곡선·보정표는 밸런스 정의이므로 충실히 이식하고, 세이브 직렬화(디스크 구조체 → MongoDB)·유효값/기본값 미분리 필드 조작·데드코드는 원작의 구현 방식이므로 자유롭게 재설계한다. 이슈 #7. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)와 변환 산출물 `data/world/creatures.json`. 코드 이식이 아니라 동작 추출.
 >
-> **oracle 읽기 주의**: 하네스 `grep` 래퍼가 `-I`(binary skip)를 붙여 EUC-KR 파일을 스킵한다. `command grep -a` 또는 `iconv -f EUC-KR -t UTF-8 -c … | grep`로 우회한다([[muhan-oracle-toolchain]]).
+> **오라클 읽기 주의**: 하네스 `grep` 래퍼가 `-I`(binary skip)를 붙여 EUC-KR 파일을 스킵한다. `command grep -a` 또는 `iconv -f EUC-KR -t UTF-8 -c … | grep`로 우회한다([[muhan-oracle-toolchain]]).
 
 ## 개요
 

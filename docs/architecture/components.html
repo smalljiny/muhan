@@ -330,7 +330,7 @@
       <h2>L1 — 시스템 컨텍스트</h2>
       <span class="sec-tag">context · 외부 경계 + 빌드타임 입력</span>
     </div>
-    <p class="sec-note">왼쪽 3개는 <strong>빌드타임 파이프라인</strong>입니다 — 1993년 32비트 구조체 덤프를 <code>port/</code>가 JSON으로 풀고, 서버는 그 JSON만 읽습니다. <code>legacy/muhan/src</code>는 실행 대상이 아니라 <strong>동작 명세(oracle)</strong>이고, 런타임 의존이 아니라 사람과 골든 fixture가 참조하는 경로라 점선 테두리로 뒀습니다.</p>
+    <p class="sec-note">왼쪽 3개는 <strong>빌드타임 파이프라인</strong>입니다 — 1993년 32비트 구조체 덤프를 <code>port/</code>가 JSON으로 풀고, 서버는 그 JSON만 읽습니다. <code>legacy/muhan/src</code>는 실행 대상이 아니라 <strong>동작 명세(오라클)</strong>이고, 런타임 의존이 아니라 사람과 골든 fixture가 참조하는 경로라 점선 테두리로 뒀습니다.</p>
 
     <div class="dia">
       <div class="dia-scroll">
@@ -859,11 +859,11 @@
     { id: "disk", col: 0, ms: 0, ext: true, t: "원본 디스크 덤프", s: "rooms/ · objmon/",
       kind: "입력 데이터", desc: "1993년 32비트 raw 구조체 덤프. <code>room</code>=480 · <code>exit_</code>=44 · <code>object</code>=352 · <code>creature</code>=1184 바이트." },
     { id: "port", col: 1, ms: 1, t: "port/ 변환기", s: "순수 JS · 의존성 0",
-      kind: "빌드타임 도구", desc: "디스크 포맷 파서·변환기. <code>parseRoom</code> · <code>templates</code> · <code>convertWorld</code>. C oracle과 바이트 단위 대조로 검증됐다(object 907 + creature 1049 전 필드 일치)." },
+      kind: "빌드타임 도구", desc: "디스크 포맷 파서·변환기. <code>parseRoom</code> · <code>templates</code> · <code>convertWorld</code>. C 오라클과 바이트 단위 대조로 검증됐다(object 907 + creature 1049 전 필드 일치)." },
     { id: "world", col: 2, ms: 1, t: "data/world/ JSON", s: "방 2341 · orphan 제외",
       kind: "기준 산출물", desc: "변환 결과이자 서버의 유일한 월드 입력. 방의 진짜 ID는 로드 경로의 번호이지 구조체 내부 <code>rom_num</code>이 아니다." },
     { id: "server", col: 3, ms: 2, t: "서버 프로세스", s: "Node 24 · ws · 1Hz 틱",
-      kind: "단일 배포 단위", desc: "인메모리 권위 객체 그래프 + 1Hz 중앙 틱. 프로세스가 하나라 C4의 Context와 Container 레벨이 하나로 합쳐진다 — 그래서 L1을 패키지 목록이 아니라 컨텍스트로 잡았다." },
+      kind: "단일 배포 단위", desc: "인메모리 기준(authoritative) 객체 그래프 + 1Hz 중앙 틱. 프로세스가 하나라 C4의 Context와 Container 레벨이 하나로 합쳐진다 — 그래서 L1을 패키지 목록이 아니라 컨텍스트로 잡았다." },
     { id: "mongo", col: 4, ms: 5, ext: true, t: "MongoDB", s: "write-behind · 트랜잭션",
       kind: "외부 저장소", desc: "부팅 시 월드 전량 로드, 이후 dirty-flag 주기 flush. 은행만 Mongo 트랜잭션을 직접 쓴다 — 두 경로에 공유 조정점이 없다(#43)." },
     { id: "fb", col: 4, ms: 4, ext: true, t: "Firebase Auth", s: "세션 쿠키 검증",
@@ -893,7 +893,7 @@
     { id: "ws", col: 1, ms: 2, t: "전송·세션", s: "ws · 33 모듈",
       kind: "구획", desc: "핸드셰이크·세션 FSM·명령 라우터·재연결 레지스트리·유량 제한·정원 게이트. <code>plugin.ts</code> 692줄이 포트 우선순위(<code>explicit &gt; bundle &gt; noop</code>)를 담는다." },
     { id: "world", col: 2, ms: 1, t: "월드 런타임", s: "world · 23 모듈",
-      kind: "구획", desc: "1Hz 틱 슬롯·방 그래프·<code>tryMove</code>·문 상태머신·스폰 3트리거·활성 크리처 큐·라이브 캐릭터 레지스트리." },
+      kind: "구획", desc: "1Hz 틱 슬롯·방 그래프·<code>tryMove</code>·문 상태머신·스폰 3트리거·활성 몬스터 큐·라이브 캐릭터 레지스트리." },
     { id: "auth", col: 2, ms: 4, t: "인증", s: "auth · 10 모듈",
       kind: "구획", desc: "<code>SessionAuthPort</code> + 어댑터 3종(Firebase·dev 시드·인메모리). 종족 보정 테이블도 여기 있다." },
     { id: "persist", col: 2, ms: 5, t: "영속화", s: "repo+save+db · 15 모듈",

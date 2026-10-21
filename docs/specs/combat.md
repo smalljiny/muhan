@@ -25,7 +25,7 @@
 
 - **콘텐츠(충실히 이식)**: 공식, 수치, 라운드 박자, 게이트 의미.
 - **구현 방식(재설계)**: 연결 리스트 순회, 인라인 복제, 초 단위 폴링, 데이터 표현(hex flags→명명 필드,
-  floor 골드→오브젝트 드롭).
+  floor 골드→아이템 드롭).
 
 전투가 참조하는 파생 스탯(플레이어 thaco/AC)은 [stats-core](stats-core.md)가 순수 함수로 확정한 값을
 **소비만** 한다(재구현 금지). 몬스터 operand, 활성 집합, 틱은 [creature-spawn](creature-spawn.md)이 확정한
@@ -70,14 +70,14 @@ server에 두고, 순수 공식 하위 모듈로 나눠 테스트하기 쉽게 �
 
 이 토픽에서 두 모듈에 새 상수를 추가했다.
 
-- `world/hexFlags.ts`(크리처/플레이어/오브젝트 hex flags):
+- `world/hexFlags.ts`(몬스터/플레이어/아이템 hex flags):
   - 특수공격 관련 M-flag 8개(브레스 3비트 포함): MBRETH/MBRWP1/MBRWP2/MENEDR/MPOISS/MDISEA/MDISIT/MBLNDR
   - PPOISN/PDISEA/PBLIND
   - PWIMPY/PHIDDN/PINVIS/PDMINV
   - MAGGRE/MGAGGR/MEAGGR/MDINVI
 - `world/roomFlags.ts`(위험방과 realm의 `number[]` flags): RPHARM/RPPOIS/RPMPDR/RPBEFU, REARTH/RWINDR/RFIRER/RWATER
 
-두 모듈은 서로 다른 엔티티(크리처/플레이어 vs 방)의 flags라 비트 값이 겹쳐도 문제가 없다.
+두 모듈은 서로 다른 엔티티(몬스터/플레이어 vs 방)의 flags라 비트 값이 겹쳐도 문제가 없다.
 
 `hexFlags.ts`에는 이후 P-flag 합성을 위해 `PSILNC`(44)·`PFEARS`(43) 상수와 바이트 OR 헬퍼 `orFlags(a, b)`를
 추가했다. `orFlags`는 **8바이트를 고정으로 순회**해 입력 길이와 관계없이 항상 16자를 반환한다.
@@ -134,7 +134,7 @@ stale 공격이나 재진입 공격이 사망 뒤에 death seam을 다시 실행
   하드코딩하던 동안에는 두 보정이 구조적으로 동작할 수 없었다. 이제 조립 호출부가
   `composeCharacterFlags(character, now)` 결과를 주입하면 `statusEffects.blind`·`.fear`에서 파생된
   실제 비트를 읽는다([character-flags.md](character-flags.md)). 주입은 연결 토픽(#121)이 담당한다.
-- **PALADIN 성향 보정은 known-divergence로 동작하지 않는다**: `alignment`의 실제 값 범위가
+- **PALADIN 성향 보정은 알려진 차이(known-divergence)로 동작하지 않는다**: `alignment`의 실제 값 범위가
   `[0,2]`(생성 인터뷰의 1|2와 backfill 중립 sentinel 0)라 `<0`·`>250` 두 분기가 모두 거짓이고 항상 `n`을
   반환한다. 오라클 임계값은 **다시 조정하지 않는다**. 그대로 둬야 E6 성향 시스템(`-1000..+1000`,
   [#123](https://github.com/smalljiny/muhan/issues/123))을 도입할 때 코드를 고치지 않고 동작한다. 같은
@@ -357,11 +357,11 @@ death ripple → 적대 등록을 차례로 묶은 것이다.
   room owner 없음) 넣으면 못 줍는 아이템만 쌓인다.
 - ~~**ledger per-creature 스코핑(BLOCKING)**~~ — **#121이 해결했다.** `DamageLedger` 타입은 그대로 두고
   연결 코드가 `creatureLedgers.ts`(`Map<instanceId, DamageLedger>`)로 라우팅한다. `distributeCreatureDeath`는
-  전달받은 ledger를 "이 죽은 크리처에 한정된 데미지"로 믿는다. 이 전제는 그대로이며, 이제 호출자가 실제로
+  전달받은 ledger를 "이 죽은 몬스터에 한정된 데미지"로 믿는다. 이 전제는 그대로이며, 이제 호출자가 실제로
   지킨다. 타입 자체를 defender-scoped로 바꾸면 `enmity`, `resolveAttack`, `combatTick`까지 영향이 가므로
   여전히 #99가 담당한다.
 
-  남은 갭: `discard`를 부르는 곳이 사망 경로 하나뿐이다. 그래서 공격받다가 **배회로 방을 떠난** 크리처의
+  남은 갭: `discard`를 부르는 곳이 사망 경로 하나뿐이다. 그래서 공격받다가 **배회로 방을 떠난** 몬스터의
   원장은 회수되지 않는다(`instanceId`가 방별 monotonic이라 키를 재사용하지도 않아 Map이 계속 커진다). 사망이
   아닌 소멸을 알리는 seam이 없어 지금은 해결할 수 없고, **#147**이 담당한다.
 - 건강 펄스(health-pulse) xor를 어디서 조립할지(`resolvePlayerDot`과 progression 재생 provider를 누가
@@ -378,7 +378,7 @@ death ripple → 적대 등록을 차례로 묶은 것이다.
 - 영속 write-back → save 정책. 이 토픽은 인메모리 라이브 상태와 순수 변이만 다룬다.
 - 마법 데미지와 몬스터 시전 공식 → [magic](magic.md).
 - **의도적 미이식(#82 계승)**: 크리 시 무기 파괴 굴림, 불발 시 `compute_thaco` 재계산, 숙련 XP 적립, 무기
-  오브젝트의 실제 이동(낙하, 마모)은 플래그로만 드러낸다. PHASTE 가속과 PBLESS thaco는 출시본에서도 동작하지
+  아이템의 실제 이동(낙하, 마모)은 플래그로만 드러낸다. PHASTE 가속과 PBLESS thaco는 출시본에서도 동작하지
   않는(as-shipped dead) 코드다. `update.c`의 return 2 라운드 재시작은 이식하지 않았다.
 
 ### 오라클과 다른 구현 (as-built)
@@ -415,6 +415,6 @@ death ripple → 적대 등록을 차례로 묶은 것이다.
 
 ## 관련 문서
 
-- oracle: `docs/notes/game-analysis-20260625/a5-combat.md` §5~7·§9
+- 오라클: `docs/notes/game-analysis-20260625/a5-combat.md` §5~7·§9
 - 의존 스펙: [stats-core.md](stats-core.md)(파생 thaco/AC·테이블·hp 상한) · [creature-spawn.md](creature-spawn.md)(활성 집합·`onCombatTick`/`onCreatureDeath` seam·`CreatureInstance`) · [persistence.md](persistence.md)(`characterSchema` 영속 필드·`statusEffects` v4) · [runtime-foundation.md](runtime-foundation.md)(1Hz `WorldClock`) · [progression.md](progression.md)(`applyPlayerDeath`·재생 슬롯 — DoT xor·사망 분배가 접합할 경계)
 - 후속: #99(전투/마법 tick production boot 연결 — ledger per-creature 라우팅·특수공격 실적용·DoT xor 조립·사망 분배 실누적·aggro/flee dispatch) · #86(아이템·장비 — 장비용해·마모 substrate) · #100(offensive spell_fail 연결) · [magic.md](magic.md)(마법 코어 — `castSpell`·`fireDeath` seam 소비)

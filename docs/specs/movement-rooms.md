@@ -4,7 +4,7 @@
 
 ## 개요
 
-E4-1a 런타임 뼈대(1Hz `WorldClock`·타이머 주입 확장 지점(seam)·graceful shutdown) 위에 무한 월드의 이동·방 서브시스템을 얹는다. 콘텐츠 출처는 `docs/notes/game-analysis-20260625/a4-movement-rooms.md`(A4)이며, 무한 월드가 **좌표 없는 방향성 그래프**, 이동이 **순차 게이트 건틀릿 → 점유자 리스트 재배치**, 문이 별도 엔티티가 아니라 **출구 플래그 상태머신**, 방이 곧 **메시지 채널**이라는 오라클 분석을 충실히 이식한다. 구현 방식(원본 4중 이동 코드 복제·`load_rom` LRU 캐시·연결 리스트·`F_ISSET` 비트 배열)은 신규 스택으로 재설계한다.
+E4-1a 런타임 뼈대(1Hz `WorldClock`·타이머 주입 확장 지점(seam)·graceful shutdown) 위에 무한 월드의 이동·방 서브시스템을 얹는다. 콘텐츠 출처는 `docs/notes/game-analysis-20260625/a4-movement-rooms.md`(A4)이며, 무한 월드가 **좌표 없는 방향성 그래프**, 이동이 **순차 게이트 검사 → 점유자 리스트 재배치**, 문이 별도 엔티티가 아니라 **출구 플래그 상태머신**, 방이 곧 **메시지 채널**이라는 오라클 분석을 충실히 이식한다. 구현 방식(원본 4중 이동 코드 복제·`load_rom` LRU 캐시·연결 리스트·`F_ISSET` 비트 배열)은 신규 스택으로 재설계한다.
 
 캐릭터 스탯·전투·진영·레벨 게이트의 *실 강제*, 인벤토리·플레이어 WS 명령 연결, 클라측 automap 렌더는 범위 밖이며 seam으로 남긴다. A4 §1 20단 게이트 순서는 콘텐츠로 보존하되 **입력이 존재하는 강제 게이트 6종만 실 거부**하고 나머지는 순서-유지 pass-through stub이다.
 
@@ -18,7 +18,7 @@ E4-1a 런타임 뼈대(1Hz `WorldClock`·타이머 주입 확장 지점(seam)·g
 | `loadWorldGraph` | `packages/server/src/world/worldGraph.ts` | `data/world/rooms.json` → `Map<roomId, RoomNode>` 로드 |
 | `createGameTime` | `packages/server/src/world/gameTime.ts` | 게임시각 진행 월드클럭 슬롯 + `currentHour()` seam |
 | `tryMove`·`chooseFleeExit` | `packages/server/src/world/tryMove.ts` | 통합 이동 경로 + flee 출구 선택 |
-| `evaluateMoveGates` + 게이트 predicate | `packages/server/src/world/moveGates.ts` | A4 §1 게이트 건틀릿(강제 6 + 순서-유지 stub) |
+| `evaluateMoveGates` + 게이트 predicate | `packages/server/src/world/moveGates.ts` | A4 §1 게이트 검사(강제 6 + 순서-유지 stub) |
 | door 전이 함수·`keyMatch`·플래그 헬퍼 | `packages/server/src/world/door.ts` | open/close/lock/unlock 상태머신 + 열쇠 매칭 |
 | `createCheckExitsSlot` | `packages/server/src/world/checkExits.ts` | 출구 타이머 자동 재잠금/재닫힘 월드클럭 슬롯 |
 | `createRoomChannelAdapter` | `packages/server/src/ws/roomChannelAdapter.ts` | `ChannelPort` 실 구현 — 방 멤버 동기 fan-out |
@@ -62,19 +62,19 @@ export function getDirectionHints(room: RoomNode): DirectionHints
 
 ### tryMove 통합 이동 경로
 
-원본 A4 §8의 4중 복제 이동 코드(`move`/`go`/`flee`/`sneak`)를 단일 `tryMove(deps, actor, selector, mode)`로 통합한다. `mode ∈ {directional, named, flee, sneak}`는 **출구 선택 방식만** 분기하고 게이트 건틀릿 본체·통과 후 부수효과는 전 mode가 공유한다.
+원본 A4 §8의 4중 복제 이동 코드(`move`/`go`/`flee`/`sneak`)를 단일 `tryMove(deps, actor, selector, mode)`로 통합한다. `mode ∈ {directional, named, flee, sneak}`는 **출구 선택 방식만** 분기하고 게이트 검사 본체·통과 후 부수효과는 전 mode가 공유한다.
 
 의존성은 인자 주입 seam(`TryMoveDeps`: `resolveRoom`·`currentHour`·`broadcastLeave`·`broadcastJoin`·`rng`)으로 받는다(전역 금지). 순서:
 
 1. 출발 방 = `resolveRoom(actor.currentRoomId)`. 없으면 거부.
 2. mode별 출구 해석 — `directional/named/sneak`는 `selector`와 이름이 일치하고 `XNOSEE` 아닌 출구를 선형 탐색, `flee`는 가시 출구 중 `chooseFleeExit(visibleExits, rng)`로 선택. 못 찾으면 거부.
-3. 도착 방 = `resolveRoom(exit.targetRoomId)`. 미해석(dangling)이면 undefined를 그대로 건틀릿에 넘긴다.
-4. 공유 게이트 건틀릿 `evaluateMoveGates` 실행. 거부면 이동 취소(재배치·방송 없음).
+3. 도착 방 = `resolveRoom(exit.targetRoomId)`. 미해석(dangling)이면 undefined를 그대로 게이트 검사에 넘긴다.
+4. 공유 게이트 검사 `evaluateMoveGates` 실행. 거부면 이동 취소(재배치·방송 없음).
 5. 통과 시 순서: `broadcastLeave`(actor가 아직 출발 방 점유자) → `occupants` 재배치(`source.delete`/`target.add`) → `broadcastJoin`(actor가 이미 도착 방 점유자).
 
 `flee` 확률 선택은 `FleeRng` seam에 위임한다. E4-1b 기본 `defaultFleeRng`는 첫 가시 출구를 고르는 결정적 stub이라 단위 테스트가 결정적으로 통과한다. 실 확률(65%+dex 굴림)·시드 규약은 E8-2 RNG 규약과 일치하도록 맞춰 이 seam에 주입한다. `directional/named/sneak`는 출구 선택 단계에서 의도적으로 동일한 이름 탐색이다 — 은신 유지 판정은 게이트 14(stub) 담당이라 선택 단계에서 갈리지 않는다.
 
-### 게이트 건틀릿 (`moveGates.ts`)
+### 게이트 검사 (`moveGates.ts`)
 
 A4 §1 순서(1b~20)를 `MOVE_GATE_GAUNTLET` 배열 순서로 인코딩한다. `evaluateMoveGates`가 순차 평가하며 첫 거부에서 즉시 정지한다. 순수 함수 — 입력을 변형하지 않는다.
 
@@ -96,7 +96,7 @@ A4 §1 순서(1b~20)를 `MOVE_GATE_GAUNTLET` 배열 순서로 인코딩한다. `
 | 17 | 정원 `RONEPL`/`RTWOPL`/`RTHREE` | **강제(근사)** | 가시성 필터 E5 |
 | 18·19·20 | 패거리·결혼 | stub(pass) | E5/E7 |
 
-gate 1(출구 존재)과 `XNOSEE` 이름 탐색 제외는 `tryMove`가 담당한다(건틀릿 밖). `MOVE_GATE_ORDER`는 게이트 이름을 순서대로 노출해 순서 검증 테스트에 쓴다.
+gate 1(출구 존재)과 `XNOSEE` 이름 탐색 제외는 `tryMove`가 담당한다(게이트 검사 밖). `MOVE_GATE_ORDER`는 게이트 이름을 순서대로 노출해 순서 검증 테스트에 쓴다.
 
 **시간 게이트**는 게임시각(`currentHour`, 0~23)으로 strict 비교한다 — `XNGHTO`(야간전용)는 `6<t<20`에 거부(t=6·20 통과), `XDAYON`(주간전용)은 `t<6 || t>20`에 거부. **정원 게이트**는 알려진 근사다 — 원본은 가시 플레이어 수(`PINVIS` 제외)로 판정하나 여기서는 `occupants.size` 전 카운트로 근사한다(E5 가시성 필터 도입 후 정정).
 
@@ -121,14 +121,14 @@ gate 1(출구 존재)과 `XNOSEE` 이름 탐색 제외는 `tryMove`가 담당한
 |---|---|---|
 | 출구 | `XSECRT`(0) · `XINVIS`(1) · `XNOSEE`(19) 중 하나 | 바이트당 한 원소인 `number[]` → `door.hasFlag` |
 | 바닥 아이템 | `OHIDDN`(1) · `OSCENE`(18) · `OINVIS`(2) 중 하나 | 16자 hex string → `hexFlags.F_ISSET` |
-| 크리처 | `MHIDDN`(1) · `MINVIS`(2) 중 하나, 또는 `hpcur ≤ 0` | 위와 동일 |
+| 몬스터 | `MHIDDN`(1) · `MINVIS`(2) 중 하나, 또는 `hpcur ≤ 0` | 위와 동일 |
 | 점유자 | 이름 해석 실패(라이브 엔트리 없음·빈 문자열) | — |
 
-`door.ts`의 `XSECRT`·`XINVIS` 상수는 이 필터 전용이다 — 문 상태머신 전이 함수는 읽지 않는다. `hexFlags.ts`의 `MHIDDN=1`·`MINVIS=2`는 같은 비트값의 `PHIDDN`·`PINVIS`와 공존한다(원작이 플레이어·몬스터·오브젝트를 같은 `char flags[8]`로 다루므로 네임스페이스별 동일 비트 공존은 이 파일의 기존 관례다 — `MPERMT`/`PBLESS`/`OPERMT`가 전부 0인 것과 같다).
+`door.ts`의 `XSECRT`·`XINVIS` 상수는 이 필터 전용이다 — 문 상태머신 전이 함수는 읽지 않는다. `hexFlags.ts`의 `MHIDDN=1`·`MINVIS=2`는 같은 비트값의 `PHIDDN`·`PINVIS`와 공존한다(원작이 플레이어·몬스터·아이템을 같은 `char flags[8]`로 다루므로 네임스페이스별 동일 비트 공존은 이 파일의 기존 관례다 — `MPERMT`/`PBLESS`/`OPERMT`가 전부 0인 것과 같다).
 
-`name`·`longDesc`는 빈 문자열도 그대로 옮긴다(표시 fallback은 클라이언트 담당). `contains`(컨테이너 중첩 아이템)로 재귀하지 않는다 — 오라클 방 표시는 바닥 오브젝트만 나열한다. 점유자는 **본인을 제외하지 않는다**(제외는 클라이언트 책임).
+`name`·`longDesc`는 빈 문자열도 그대로 옮긴다(표시 fallback은 클라이언트 담당). `contains`(컨테이너 중첩 아이템)로 재귀하지 않는다 — 오라클 방 표시는 바닥 아이템만 나열한다. 점유자는 **본인을 제외하지 않는다**(제외는 클라이언트 책임).
 
-**표시 필터 ≠ 통행 게이트 (의도된 비대칭)**: `world:room.exits`는 `XSECRT`·`XINVIS`를 제외하지만, `tryMove`의 출구 해석(위 §게이트 건틀릿 — `XNOSEE`만 제외)은 그대로다. 비밀 출구는 버튼 목록에서 사라지되 방향 문자열을 직접 보내면 통행 가능하다 — 오라클과 일치하는 동작이다. `tryMove`를 "일관성 정정" 목적으로 고치면 이동 동작이 조용히 바뀐다.
+**표시 필터 ≠ 통행 게이트 (의도된 비대칭)**: `world:room.exits`는 `XSECRT`·`XINVIS`를 제외하지만, `tryMove`의 출구 해석(위 §게이트 검사 — `XNOSEE`만 제외)은 그대로다. 비밀 출구는 버튼 목록에서 사라지되 방향 문자열을 직접 보내면 통행 가능하다 — 오라클과 일치하는 동작이다. `tryMove`를 "일관성 정정" 목적으로 고치면 이동 동작이 조용히 바뀐다.
 
 **관찰자 비의존 (봉인된 게이트 2개)**: `projectRoomView`는 관찰자를 인자로 받지 않아 오라클의 다음 두 게이트를 구현하지 않는다.
 
@@ -162,10 +162,10 @@ gate 1(출구 존재)과 `XNOSEE` 이름 탐색 제외는 `tryMove`가 담당한
 
 - **강제 게이트 6종만 실 거부** — 출구 존재+`XNOSEE`·dangling·`XLOCKD`·`XCLOSD`·시간·정원. 나머지 15종(진영·레벨·전투·경비 등)은 순서-유지 pass-through stub이며 입력 에픽(E4-2/E5/E6/E7) 대기다.
 - **정원 게이트 근사** — 전 점유자 카운트로 판정한다(가시 플레이어 필터 `PINVIS`는 E5 입력). 투명 플레이어가 있으면 원본보다 빨리 만원 판정될 수 있다.
-- **문 명령·인벤토리·picklock 미연결** — 전이 함수·`keyMatch` predicate만 제공한다. 플레이어 WS 명령(openexit/lock 등)·열쇠 오브젝트 실 조회·picklock(도둑 클래스·쿨다운·dex)은 호출자 seam(명령/인벤토리 에픽·E5).
+- **문 명령·인벤토리·picklock 미연결** — 전이 함수·`keyMatch` predicate만 제공한다. 플레이어 WS 명령(openexit/lock 등)·열쇠 아이템 실 조회·picklock(도둑 클래스·쿨다운·dex)은 호출자 seam(명령/인벤토리 에픽·E5).
 - **이동 leave/join 방송 미연결** — `broadcastLeave`/`broadcastJoin`은 프로덕션 연결에서 no-op이다. 방 채팅 전파는 채널 포트가 담당하고, 이동 통지(누가 들어왔다/나갔다)는 후속 토픽 몫이다.
 - **라이브 상태만 — write-back 없음** — 방 점유자·문 상태는 인메모리 라이브 상태다. 영속화(write-back)는 seam이며 재부팅 시 문 상태는 기본값(`ltime=0`·`interval=60`)으로 복귀한다.
-- **좌표 없음** — 서버는 그래프+방향 힌트만 권위다. automap 좌표 합성·렌더는 클라 파생(E11에서도 미구현 — 현재 방만 렌더한다).
+- **좌표 없음** — 서버가 기준으로 삼는 것은 그래프+방향 힌트뿐이다. automap 좌표 합성·렌더는 클라 파생(E11에서도 미구현 — 현재 방만 렌더한다).
 - **방 표시 가시성 필터가 관찰자 비의존** — 점유자 은신(`PHIDDN`/`PINVIS`/`PDMINV`)·광원/실명 게이트를 구현하지 않는다. 지금은 해당 상태를 세울 라이브 경로가 없어 누출이 없으나, `magic/`·`combat/` 연결 또는 광원 이식이 이 전제를 깬다(위 §방 표시 가시성 필터).
 - **flag 52 latent bug 미재현** — A4 §8이 경고한 `F_ISSET(ext, 52)` 경계 밖 접근(비트 52는 4바이트 출구 flags 범위 밖 → ltime 침범)은 어떤 게이트·flee 로직도 읽지 않는다.
 

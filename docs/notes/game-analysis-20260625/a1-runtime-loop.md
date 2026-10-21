@@ -1,6 +1,6 @@
 # A1 런타임 루프·틱·타이밍 모델
 
-> 무한 서버의 메인 루프, 틱(heartbeat) 케이던스, 엔티티 타이머 메커니즘을 oracle에서 추출한다. 이슈 #1. 출처는 `legacy/muhan/src`.
+> 무한 서버의 메인 루프, 틱(heartbeat) 케이던스, 엔티티 타이머 메커니즘을 오라클에서 추출한다. 이슈 #1. 출처는 `legacy/muhan/src`.
 
 ## 개요
 
@@ -44,7 +44,7 @@ last_update = t;
 
 | 하위 시스템 | 간격(초) | 역할 | 출처 |
 |---|---|---|---|
-| `update_active` | **매초** (`t != last_active_update`) | 활성 크리처 처리 — 전투 라운드 진행, 적대 행동 | `update.c:53` |
+| `update_active` | **매초** (`t != last_active_update`) | 활성 몬스터 처리 — 전투 라운드 진행, 적대 행동 | `update.c:53` |
 | `update_users` | ≥20 | 플레이어 타임아웃 플래그·유휴 점검(유휴 300초 경고 후 disconnect, DM 제외) | `update.c:49,85` |
 | `update_random` | ≥`Random_update_interval` | 플레이어 점유 방에 랜덤 몬스터 스폰 | `update.c:51,114` |
 | `update_time` | ≥150 | 게임 시간(주야 등) 진행 | `update.c:55` |

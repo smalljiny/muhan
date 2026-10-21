@@ -3,13 +3,13 @@
 
 ## Executive Summary
 
-인메모리 권위 상태 + DB write-behind는 MMO 아키텍처의 표준 선택이며, "DB는 진실의 원천이 아니다"는 명제가 명시적으로 문서화돼 있다 ([PRDeving](https://prdeving.wordpress.com/2023/09/29/mmo-architecture-source-of-truth-dataflows-i-o-bottlenecks-and-how-to-solve-them/)). 템플릿/인스턴스 분리 역시 가상 세계의 보편 구조로, 사실상 모든 가상 세계가 **읽기 전용 템플릿 저장소 + 읽기·쓰기 인스턴스 저장소** 최소 2개를 유지한다 ([Raph Koster](https://www.raphkoster.com/2021/10/07/digital-objects-how-virtual-worlds-work-part-3/)). 즉 본 토픽이 세우려는 구조(템플릿 인덱스 인메모리 상주 + 인스턴스 문서 컬렉션)는 관행에 부합한다.
+인메모리 기준 상태(authoritative) + DB write-behind는 MMO 아키텍처의 표준 선택이며, "DB는 진실의 원천이 아니다"는 명제가 명시적으로 문서화돼 있다 ([PRDeving](https://prdeving.wordpress.com/2023/09/29/mmo-architecture-source-of-truth-dataflows-i-o-bottlenecks-and-how-to-solve-them/)). 템플릿/인스턴스 분리 역시 가상 세계의 보편 구조로, 사실상 모든 가상 세계가 **읽기 전용 템플릿 저장소 + 읽기·쓰기 인스턴스 저장소** 최소 2개를 유지한다 ([Raph Koster](https://www.raphkoster.com/2021/10/07/digital-objects-how-virtual-worlds-work-part-3/)). 즉 본 토픽이 세우려는 구조(템플릿 인덱스 인메모리 상주 + 인스턴스 문서 컬렉션)는 관행에 부합한다.
 
 가장 값진 발견은 **동기 핸들러를 async로 바꿀 때의 구체적 실패 모드**다. `ox_inventory` PR #1950은 아이템 이동 경로에서 "카운트 변형 → **yield** → dirty 플래그 세팅" 순서 때문에 접속 종료가 그 사이에 끼어들어 **아이템이 복제되는** 버그를 문서화했고, 수정은 yield를 임계 구간 밖으로 밀어내는 것이었다 ([ox_inventory#1950](https://github.com/overextended/ox_inventory/pull/1950)). 이는 dirty-flag 기반 write-behind를 쓰는 모든 시스템의 공통 함정이다 ([Redis Patterns](https://redis.antirez.com/fundamental/write-behind.html)).
 
 async 전환 비용에 관해서는 두 갈래 조언이 대립하지 않고 층이 다르다. 인터페이스 차원에서는 **동기/비동기 핸들러를 한 계약으로 통일**하는 편이 낫다는 주장이 설득력 있게 제시되고 ([Software Engineering SE](https://softwareengineering.stackexchange.com/questions/418036/combining-synchronous-and-asynchronous-commands-when-using-the-command-pattern)), 실행 차원에서는 async 전환이 "주로 시그니처가 깨지는" 파급 작업이며 작은 PR 다수로 쪼개야 한다고 경고한다 ([Start Debugging](https://startdebugging.net/2026/07/migrate-from-blocking-result-and-wait-calls-to-async-all-the-way-up-in-csharp/)).
 
-## 1. 인메모리 권위 상태와 write-behind 영속화
+## 1. 인메모리 기준 상태와 write-behind 영속화
 
 **DB를 진실의 원천으로 두면 산술이 무너진다.** PRDeving은 1000명 플레이어가 초당 1회 행동을 보내는 것만으로 초당 N회 쓰기가 발생하며, 여기에 경험치·타격·채팅이 얹힌다고 지적한다. 결론은 명시적이다 — "온라인 게임에서 세계 상태의 진실의 원천은 인메모리 월드 상태이지 데이터베이스가 아니다. DB는 진실의 원천이 아니라 **영속화 매체**로 간주한다" ([PRDeving](https://prdeving.wordpress.com/2023/09/29/mmo-architecture-source-of-truth-dataflows-i-o-bottlenecks-and-how-to-solve-them/)).
 
@@ -82,11 +82,11 @@ async 전환은 찾아 바꾸기가 아니다. "**깨지는 것은 대부분 시
 - **컨테이너 아이템 수가 많아지면 지연이 발생한다**는 서버 측 이슈가 오픈소스 MUD 계열(Forgotten Server)에 보고돼 있다 ([otland/forgottenserver#1150](https://github.com/otland/forgottenserver/issues/1150)).
 - **인메모리 상주 접근이 표준**이라는 §1의 명제는 eager 쪽에 무게를 싣는다 — 진실의 원천이 메모리라면 명령 시점마다 DB를 조회하는 것은 그 전제와 상충한다 ([PRDeving](https://prdeving.wordpress.com/2023/09/29/mmo-architecture-source-of-truth-dataflows-i-o-bottlenecks-and-how-to-solve-them/)).
 
-> **추론(출처 없음, 낮은 확신)**: 위 세 갈래를 종합하면 세션 진입 시 hydrate해 라이브 상주시키는 쪽이 인메모리 권위 모델과 일치하고 §3.3의 yield 위험도 회피한다. 다만 "로그인 지연"이라는 단점이 실재하므로, 인벤토리 규모가 큰 캐릭터에 대한 측정 없이 단정할 수는 없다.
+> **추론(출처 없음, 낮은 확신)**: 위 세 갈래를 종합하면 세션 진입 시 hydrate해 라이브 상주시키는 쪽이 인메모리 기준 모델과 일치하고 §3.3의 yield 위험도 회피한다. 다만 "로그인 지연"이라는 단점이 실재하므로, 인벤토리 규모가 큰 캐릭터에 대한 측정 없이 단정할 수는 없다.
 
 ## Key Takeaways
 
-- **인메모리 권위 + DB write-behind는 확증된 표준이다.** 기존 `save-policy.md` 입장을 바꿀 근거는 발견되지 않았다 ([PRDeving](https://prdeving.wordpress.com/2023/09/29/mmo-architecture-source-of-truth-dataflows-i-o-bottlenecks-and-how-to-solve-them/)).
+- **인메모리 기준 상태 + DB write-behind는 확증된 표준이다.** 기존 `save-policy.md` 입장을 바꿀 근거는 발견되지 않았다 ([PRDeving](https://prdeving.wordpress.com/2023/09/29/mmo-architecture-source-of-truth-dataflows-i-o-bottlenecks-and-how-to-solve-them/)).
 - **템플릿=불변·읽기 전용, 인스턴스=가변·영속**이 필드 분할의 판정 기준이다. 변하지 않는 필드는 인스턴스에 두지 않는다 ([Raph Koster](https://www.raphkoster.com/2021/10/07/digital-objects-how-virtual-worlds-work-part-3/), [OpenMU](https://github.com/MUnique/OpenMU/blob/master/src/DataModel/Entities/Item.cs)).
 - **가장 중요한 설계 제약: 상태 변형과 dirty 마킹 사이에 `await`를 두지 않는다.** 그 사이의 정지점이 접속 종료와 만나면 아이템 복제로 이어지며, 슬롯 락은 이를 막지 못한다 ([ox_inventory#1950](https://github.com/overextended/ox_inventory/pull/1950)).
 - **심층 방어로 세션 종료 경로는 dirty 여부와 무관하게 저장**하는 것이 검증된 보완책이다 ([ox_inventory#1950](https://github.com/overextended/ox_inventory/pull/1950)).
