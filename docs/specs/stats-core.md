@@ -100,5 +100,5 @@ resolver 5종이 판독하는 필드의 합집합. 각 필드는 이미 합성�
 - **상태·영속·스케줄러 없음** — 재생 틱·버프 만료 스케줄러 배선, 레벨업·능력치 성장·승급 로직, 장비 착용/해제 트리거는 범위 밖이다.
 - **modifier 소비 전용** — 장비 armor·주문 버프 등 실제 modifier 값 생성은 전투·마법·아이템 소유 토픽이 담당한다.
 - **HP/MP는 최대치만** — 현재 HP/MP·데미지 상태·재생은 파생하지 않는다.
-- **HP/MP 폐형은 oracle과 부분 발산(수용)** — 원본 `up_level`은 `level%4≠0` 레벨에서 791행 조기 return으로 증분 누적값을 유지하고 4의 배수 레벨에서만 폐형으로 재동기화한다. stats-core는 이 드리프트를 `level%4` 조기 return이 만든 구현 버그로 판단해 깔끔한 폐형 하나만 구현한다 — 발산 레벨에서 원본과 다를 수 있으며 수용된 결정이다(근거: `docs/notes/game-analysis-20260625/a7-player-progression.md` §2).
+- **HP/MP 폐형은 oracle과 부분적으로 어긋남(수용)** — 원본 `up_level`은 `level%4≠0` 레벨에서 791행 조기 return으로 증분 누적값을 유지하고 4의 배수 레벨에서만 폐형으로 재동기화한다. stats-core는 이 드리프트를 `level%4` 조기 return이 만든 구현 버그로 판단해 깔끔한 폐형 하나만 구현한다 — 어긋나는 레벨에서 원본과 다를 수 있으며 수용된 결정이다(근거: `docs/notes/game-analysis-20260625/a7-player-progression.md` §2).
 - **maxWeight barbarian 항 무클램프** — 원본 그대로 재현하며 L≥81에서 소지량이 발산한다.

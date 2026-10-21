@@ -205,7 +205,7 @@ flags 필드가 없으므로 병합이 아니라 ZERO_FLAGS에서 활성 비트�
 시그니처는 무변경이다 — 라이브 조립(누가 사망 seam에서 이 함수를 호출하는가)은 #99 소관이다.
 
 - **기여자 집합**: `dead.enemies` 멤버 AND `ledger.get(id) > 0`인 플레이어(순서는 `enemies` 배열
-  순서). 이 필터가 오라클의 적 리스트 멤버십 게이트를 분배 시점에 재현한다(§구현 발산 참조).
+  순서). 이 필터가 오라클의 적 리스트 멤버십 게이트를 분배 시점에 재현한다(§오라클과 다른 구현 참조).
 - **exp**: `expdiv = trunc(exp * dmg / max(hpmax,1))`. 그룹킬(기여자 2명+)이면
   `expdiv + trunc(exp/10)`, 상한 `min(., exp)`로 캡.
 - **정렬**: 기여자마다 `alignmentDelta = -trunc(alignment/5)`(delta만 반환, 누적·±1000 클램프는 #99).
@@ -231,7 +231,7 @@ flags 필드가 없으므로 병합이 아니라 ZERO_FLAGS에서 활성 비트�
 `dexEvades(attacker, target, rng)`가 `target.dexterity > attacker.dexterity && rng(1,10) < 4`(30%
 회피)면 해당 라운드 스킵한다(dex 열세면 단축평가로 rng 미소비). `resolveAggro`가 타깃선정→회피를
 오라클 순서로 합성한다. `decideFlee(player, rng)`가 PWIMPY(`hpCurrent <= wimpyValue`, 굴림 없음) →
-PFEARS(`ff` 공식 굴림) else-if 체인으로 도주 여부를 boolean으로 결정한다(§구현 발산의 PFEARS 공식
+PFEARS(`ff` 공식 굴림) else-if 체인으로 도주 여부를 boolean으로 결정한다(§오라클과 다른 구현의 PFEARS 공식
 정정 참조). 두 모듈 모두 결정 로직까지만 제공하며, 실 aggro 등록(`registerEnemy`)·flee 이동 dispatch는
 #99 유예다. MDINVI 은신 플레이어 탐지·몬스터 자체 도주(MFLEER)는 각각 substrate 부재·오라클
 dead code라 미이식이다.
@@ -358,7 +358,7 @@ characterId-keyed `CombatRegistry`로 관리한다.
   오브젝트 실 이동(낙하·마모)은 플래그로만 표면화. PHASTE 가속·PBLESS thaco는 as-shipped dead. `update.c`
   return 2 라운드 재시작 미이식.
 
-### 구현 발산 (as-built)
+### 오라클과 다른 구현 (as-built)
 
 의도적 divergence(오라클 대비, 포팅 원칙에 따른 loud 정정):
 
@@ -379,7 +379,7 @@ characterId-keyed `CombatRegistry`로 관리한다.
   pick 패스에 누락하는 two-pass desync 버그가 있다. `selectAggroTarget`은 eligible set을 1회 계산해
   weight-sum·pick 둘 다 이 단일 집합에서 파생한다.
 - **기여자 축 divergence(오라클 대비 축소)**: 오라클 분배 루프 게이트는 `find_who(ep->enemy)`(present
-  여부, 데미지 무관)라 present인 0-데미지 적도 exp(절삭 0)·정렬 페널티·groupkill 카운트를 받는다. 이
+  여부, 데미지 무관)라 present인 0-데미지 적도 exp(버림 후 0)·정렬 페널티·groupkill 카운트를 받는다. 이
   포트는 기여자를 `damage > 0`으로 좁혀 그런 적을 제외한다 — awards·groupkill·alignment가 present
   축이 아닌 damage 축으로 게이팅된다. 라이브 조립(#99)이 이 축을 present 기준으로 재검토할 수 있다.
 - **골드 드롭 표현**: 별도 room 필드 없이, 골드를 `ItemInstance(value=금액)`로 만들어 `room.items[]`에

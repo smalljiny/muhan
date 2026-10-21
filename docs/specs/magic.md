@@ -4,7 +4,7 @@
 
 ## 개요
 
-무한의 마법은 **단일 주문 함수 집합을 네 진입 경로(CAST·SCROLL·POTION·WAND)가 공유**하는 구조다. 원본은 주문 하나가 `int fn(caster, cmnd, how)`이고 `how`만 바꿔 재사용하며, 시전자가 플레이어든 몬스터든 같은 함수를 탄다 — 몬스터 마법조차 `crt_spell`이 크리처를 시전자 자리에 넣어 동일 함수를 CAST 경로로 호출한다. 결정적 비대칭은 **마나·클래스·주문지식 게이트가 전부 `how==CAST` 조건**이라는 점이다. 아이템 경로는 이 게이트를 우회하고 대신 소모·`spell_fail` 굴림으로 게이트된다.
+무한의 마법은 **단일 주문 함수 집합을 네 진입 경로(CAST·SCROLL·POTION·WAND)가 공유**하는 구조다. 원본은 주문 하나가 `int fn(caster, cmnd, how)`이고 `how`만 바꿔 재사용하며, 시전자가 플레이어든 몬스터든 같은 함수를 탄다 — 몬스터 마법조차 `crt_spell`이 크리처를 시전자 자리에 넣어 동일 함수를 CAST 경로로 호출한다. 핵심 비대칭은 **마나·클래스·주문지식 게이트가 전부 `how==CAST` 조건**이라는 점이다. 아이템 경로는 이 게이트를 우회하고 대신 소모·`spell_fail` 굴림으로 게이트된다.
 
 이 계층은 그 구조를 **effect/delivery 분리**(ADR 전역 불변식 3)로 재설계한다. `how==CAST` 4중 조건 분기는 `CastContext.gated` 단일 boolean으로 접히고, 주문 정본(`global.c`의 `spllist`·`ospell` 정적 테이블)은 선언 카탈로그로 외부화된다. 공식·수치·게이트 *의미*는 콘텐츠로 충실히 이식하고, 함수 포인터 테이블·인라인 게이트·선형 탐색은 원작의 구현 방식이므로 재설계한다.
 
@@ -142,7 +142,7 @@ offensive effect는 **명중 굴림을 하지 않는다**(주문은 auto-hit). �
 4. 오버킬 캡 `m = min(hpBefore, dmg)`(저항 後·차감 前).
 5. ledger 누적 `accumulateDamage(casterId, m)` — creature 대상만.
 6. `hp -= dmg`(원본 참조 in-place — 스냅샷이 아니라 `instance.hpcur`/`state.hpCurrent`).
-7. `hp < 1`이면 death seam(`fireDeath`) **정확히 1회** — combat 근접과 공유하는 death seam을 재사용해 사망 경로 발산을 막는다.
+7. `hp < 1`이면 death seam(`fireDeath`) **정확히 1회** — combat 근접과 공유하는 death seam을 재사용해 사망 경로가 갈라지는 것을 막는다.
 
 `registerOffensiveSpells`가 `OSPELL_GRID` 20종을 순회하며 각 spellNo에 osp를 캡처한 핸들러를 디스패처에 등록한다.
 
@@ -170,7 +170,7 @@ combat `createCombatTick`의 `castSpell?` 의존에 `crtSpell`을 주입한다. 
 - **라이브 플레이어 `cast`/`read`/`drink`/`zap` 명령 라우팅** → 별도 command dispatcher 토픽. #84는 순수 seam만 제공.
 - **MMAGIO proficiency 기반 시전 확률** → 미이식.
 
-### 구현 발산 (as-built)
+### 오라클과 다른 구현 (as-built)
 
 - **spell_fail이 offensive 경로에 미배선(#100 추적)**: 오라클은 `offensive_spell` 안에서 마나 소비 後·데미지 前 `spell_fail`을 굴리지만(magic1.c:1089), 이 포트의 시전 경로(`crtSpell → applyCastGate → offensiveSpell`)는 굴리지 않는다. `spellFail` 모듈은 standalone fixture-lock돼 있다. 실재 12개 전사계 MMAGIC offensive 캐스터의 fizzle-after-consume은 미재현이며, 게이트-타이밍 재설계와 얽힌 비-trivial 작업이라 후속 토픽(#100)에 유예한다.
 - **몬스터 시전이 production boot에 미배선(#99 추적)**: `crtSpell`은 `createCombatTick` 주입 테스트로 end-to-end 검증되나, 근접 tick을 포함한 combat tick 전체가 라이브 world runtime boot(`index.ts`)에 아직 composition되지 않았다(Non-goals의 라이브 라우팅 유예). production combat tick 배선(registry/ledger/death/broadcast 포함)은 combat 라이브화 후속 토픽(#99) 소관이다.

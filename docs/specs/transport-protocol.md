@@ -128,7 +128,7 @@
 
 3. **`pass` 위임 분기** — 핸드셰이크를 통과한 프레임의 위임처는 세션 상태로 갈린다. `ctx.state === command`면 라우터(`dispatch`)로, 그 이전(`characterSelect`·`create`)이면 FSM `handleInput`으로 보낸다. 이미 파싱된 객체를 재파싱 없이 넘긴다.
 
-**바인딩 신원 가드 (dispatch 직전)** — `ctx.state === command` 확인만으로는 부족하다. 서버 주도 종료(같은 캐릭터 재로그인 evict·grace 만료·shutdown 수렴)의 teardown은 transport만 정리하고(`cleanupConnection` + `socket.close`) 옛 `ctx`의 `state`·`boundCharacterId`는 되돌리지 않으며, `ctx.closed`도 소켓 `'close'` 이벤트(별개 리스너, 다음 tick)에서야 `true`가 된다. 그 창에서 이미 버퍼된 프레임의 `'message'`가 발화하면 승계된 옛 소켓이 `command` 상태·바인딩 키를 그대로 쥔 채 dispatch에 도달하고, 라이브 레지스트리는 `characterId` 키라 그 명령이 **새 세션의** 엔트리를 변이한다(이동·gold 소비 — 세션 신뢰 경계 침범). 따라서 이 `ctx`가 여전히 해당 캐릭터의 **현재 live 바인딩**일 때만 명령을 실행한다.
+**바인딩 신원 가드 (dispatch 직전)** — `ctx.state === command` 확인만으로는 부족하다. 서버 주도 종료(같은 캐릭터 재로그인 evict·grace 만료·shutdown 수렴)의 teardown은 transport만 정리하고(`cleanupConnection` + `socket.close`) 옛 `ctx`의 `state`·`boundCharacterId`는 되돌리지 않으며, `ctx.closed`도 소켓 `'close'` 이벤트(별개 리스너, 다음 tick)에서야 `true`가 된다. 그 창에서 이미 버퍼된 프레임의 `'message'`가 발화하면 밀려난 옛 소켓이 `command` 상태·바인딩 키를 그대로 쥔 채 dispatch에 도달하고, 라이브 레지스트리는 `characterId` 키라 그 명령이 **새 세션의** 엔트리를 변이한다(이동·gold 소비 — 세션 신뢰 경계 침범). 따라서 이 `ctx`가 여전히 해당 캐릭터의 **현재 live 바인딩**일 때만 명령을 실행한다.
 
 ```ts
 const binding = registry.get(actor.characterId)
@@ -137,7 +137,7 @@ const isCurrentBinding =
 if (!isCurrentBinding || ctx.closed) break   // 조용히 무시, idle 재-arm 없음
 ```
 
-응답을 보내지 않는다 — 이 소켓은 이미 종결 중이라 `safeSend`가 OPEN 가드로 no-op이 될 공산이 크고, 승계된 연결에 응답을 돌려줄 계약도 없다. **idle 재-arm도 하지 않는다**(무효 명령이 새 세션의 무입력 창을 연장하지 못하게 한다 — rejected-nonrearm·rate-limit drop과 같은 원리). `binding.link === 'live'` 절은 defense-in-depth다: `markLinkDead`는 `'close'` 핸들러에서만 실행되고 그 핸들러가 `ctx.closed = true`를 먼저 세우므로 link-dead 케이스는 `|| ctx.closed`가 이미 차단한다. 세션 바인딩 계약은 [`session-lifecycle.md`](session-lifecycle.md)가 정본이다.
+응답을 보내지 않는다 — 이 소켓은 이미 종결 중이라 `safeSend`가 OPEN 가드로 no-op이 될 공산이 크고, 밀려난 연결에 응답을 돌려줄 계약도 없다. **idle 재-arm도 하지 않는다**(무효 명령이 새 세션의 무입력 창을 연장하지 못하게 한다 — rejected-nonrearm·rate-limit drop과 같은 원리). `binding.link === 'live'` 절은 defense-in-depth다: `markLinkDead`는 `'close'` 핸들러에서만 실행되고 그 핸들러가 `ctx.closed = true`를 먼저 세우므로 link-dead 케이스는 `|| ctx.closed`가 이미 차단한다. 세션 바인딩 계약은 [`session-lifecycle.md`](session-lifecycle.md)가 정본이다.
 
 4. **idle 재-arm 정책** — `dispatch` 결과가 `handled`인 **유효 명령 처리 성공만** 무입력 타이머를 재-arm한다. 거부(`unknown_type`·`bad_payload`·`forbidden`·`internal`)는 flood로 타이머를 무한 연장하지 못한다.
 

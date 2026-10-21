@@ -167,7 +167,7 @@
 
 ### 6.5 CHECKFAMILY: as-compiled degraded 상태 (원작 구현 방식 / 결정 게이트)
 
-**결정적 as-shipped 사실**: CFLAGS에 `-DCHECKFAMILY`가 **없다**(서두 참조). `#ifdef CHECKFAMILY` footprint = `command11.c`(family/add_family/boss_family/exit_family/family_talk/family_who/fm_out), `command12.c`, `post.c`(family_news), `player.c:70`(로그인 훅). 이 블록들은 **컴파일 제외**된다.
+**핵심 as-shipped 사실**: CFLAGS에 `-DCHECKFAMILY`가 **없다**(서두 참조). `#ifdef CHECKFAMILY` footprint = `command11.c`(family/add_family/boss_family/exit_family/family_talk/family_who/fm_out), `command12.c`, `post.c`(family_news), `player.c:70`(로그인 훅). 이 블록들은 **컴파일 제외**된다.
 
 무엇이 빠지나: 대부분의 블록이 감싸는 것은 **`load_family()` 호출 + 두목 자동판정**(`if(name==fmboss_str[num]) F_SET(PFMBOS)`)이다. CHECKFAMILY-off이면:
 - 가입/두목/탈퇴/채널 경로에서 **로스터 배열(`family_str`/`fmboss_str`)이 로드되지 않는다**. `add_family` case 0의 목록·이름 매칭이 빈 배열(BSS)을 참조 → 가입 목록이 비고 매칭 실패.

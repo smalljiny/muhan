@@ -73,7 +73,7 @@ study·teach가 읽는 PBLIND·PSILNC의 **영속 입력원은 `characterSchema.
 
 ### G4 — 지속효과 타이머
 
-버프/디버프 만료는 `statusEffects.until`과 동일한 **절대-틱** 관례를 따른다. `isExpired(until, tick) = tick > until`(`spellDuration.ts`)이 `statusEffects.isActive(until>=now)`의 대우다 — 경계 `tick===until`은 아직 활성이다. `grantBuff(character, spellNo, until)`은 `character.buffs`에 `{ [spellNo]: { until } }`을 병합한 새 `Character`를 반환한다(재-grant는 덮어쓰기). `isBuffActive(character, spellNo, tick)`는 `combat/statusEffects.isActive`를 그대로 위임한다.
+버프/디버프 만료는 `statusEffects.until`과 동일한 **절대-틱** 관례를 따른다. `isExpired(until, tick) = tick > until`(`spellDuration.ts`)이 `statusEffects.isActive(until>=now)`의 부정이다 — 경계 `tick===until`은 아직 활성이다. `grantBuff(character, spellNo, until)`은 `character.buffs`에 `{ [spellNo]: { until } }`을 병합한 새 `Character`를 반환한다(재-grant는 덮어쓰기). `isBuffActive(character, spellNo, tick)`는 `combat/statusEffects.isActive`를 그대로 위임한다.
 
 `computeBuffDur(spellNo, input)`은 A6 §6 표준 공식 `MAX(300, 1200 + intBonus*600)`에 클래스 보너스(`classBonusClasses`면 `+60*trunc((level+3)/4)`)·RPMEXT 방 보너스(`+rpmext`, 표준 800/detect·fly 600)를 가산한다. `gated=false`(비-CAST)면 고정 1200(`NON_CAST_BUFF_DUR`)을 반환한다. `BUFF_DUR_META`에 등록된 표준 11주문(`SPROTE`·`SBLESS`·`SRFIRE`·`SRCOLD`·`SRMAGI`·`SBRWAT`·`SSSHLD`·`SKNOWA`·`SDINVI`·`SDMAGI`·`SFLYSP`) 밖의 spellNo는 throw한다. `computeSpecialBuffDur`은 표준 공식을 벗어나는 3주문을 별도 처리한다: `SINVIS`(`MAX(300,1200+B*600)`+MAGE 클래스보너스+rpmext 600, A6 §11-b MAX(300) 하한 복원)·`SLEVIT`(`MAX(300,2400+B*600)`+rpmext 800, 클래스보너스 없음)·`SLIGHT`(`300 + trunc((level+3)/4)*300 + (rpmext?600:0)`, A6 §11-a 연산자 우선순위 버그를 의도된 스케일 공식으로 복원, gated 무시).
 

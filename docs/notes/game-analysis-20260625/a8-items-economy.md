@@ -290,7 +290,7 @@ obj_ptr->pdice = MAX(obj_ptr->pdice, obj_ptr->adjustment);
 
 금화는 **`creature.gold`**(long, offset 348, `mstruct.h:189`)다. **상한·음수 가드가 없다** — 어디서도 clamp하지 않고, 가문 가입 시 `+= family_gold*10000`, 불태우기 대박 시 `+= 100000`까지 더한다.
 
-**금화 증감 지점**(`command grep`으로 전수):
+**금화 증감 지점**(`command grep`으로 전부 조사):
 
 - **몹 처치 드롭**(`creature.c:331`): `die()`가 몹의 `gold`가 있으면 `load_obj(0,…)`(objnum 0 = 머니 템플릿)로 MONEY object를 만들어 `obj->value = crt->gold`로 설정하고 방에 떨군다. 즉 **몹의 소지금이 그대로 바닥의 "N냥" 오브젝트로 변환**된다.
 - **몹 소지금 랜덤화**(`creature.c:879`): 스폰 시 `if(!MNRGLD && crt->gold) crt->gold = mrand(gold/10, gold)` — 고정금액 플래그(MNRGLD=25)가 없으면 소지금을 10~100% 사이로 랜덤. 몹 재고 아이템도 `value = mrand(value·9/10, value·11/10)`로 ±10% 변동(`creature.c:872`).

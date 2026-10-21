@@ -299,7 +299,7 @@
   <header>
     <p class="eyebrow">muhan · component diagram · 2026-07-30 · <strong>develop fd40682</strong></p>
     <h1>무한 컴포넌트 다이어그램 — 무엇이 실제로 이어져 있나</h1>
-    <p class="lede">C4 방식 3레벨입니다. 이 프로젝트는 배포 단위가 <strong>서버 프로세스 하나</strong>라 Context와 Container 레벨이 붕괴하므로, L1은 패키지 목록이 아니라 <strong>시스템 컨텍스트</strong>(외부 경계 + 빌드타임 입력)로 잡았습니다.</p>
+    <p class="lede">C4 방식 3레벨입니다. 이 프로젝트는 배포 단위가 <strong>서버 프로세스 하나</strong>라 Context와 Container 레벨이 하나로 합쳐지므로, L1은 패키지 목록이 아니라 <strong>시스템 컨텍스트</strong>(외부 경계 + 빌드타임 입력)로 잡았습니다.</p>
     <p class="lede" style="margin-top:8px">간선은 포함 관계가 아니라 <strong>배선 상태</strong>를 인코딩합니다 — 초록 실선은 프로덕션에서 실제로 흐르는 경로, 붉은 점선은 seam은 있으나 <code>noop</code>이거나 호출처가 없는 경로입니다. 포함 관계는 LSP 도구가 라이브로 더 정확히 답하고, 이 프로젝트를 두 번 놀라게 한 것은 <strong>"배선만 하면 된다"는 전제</strong>였습니다. <strong>간선에 커서를 올리면 계약·주입 지점·이슈 번호</strong>가 뜹니다.</p>
 
     <div class="levels">
@@ -863,7 +863,7 @@
     { id: "world", col: 2, ms: 1, t: "data/world/ JSON", s: "방 2341 · orphan 제외",
       kind: "정본 산출물", desc: "변환 결과이자 서버의 유일한 월드 입력. 방의 진짜 ID는 로드 경로의 번호이지 구조체 내부 <code>rom_num</code>이 아니다." },
     { id: "server", col: 3, ms: 2, t: "서버 프로세스", s: "Node 24 · ws · 1Hz 틱",
-      kind: "단일 배포 단위", desc: "인메모리 권위 객체 그래프 + 1Hz 중앙 틱. 프로세스가 하나라 C4의 Context와 Container 레벨이 붕괴한다 — 그래서 L1을 패키지 목록이 아니라 컨텍스트로 잡았다." },
+      kind: "단일 배포 단위", desc: "인메모리 권위 객체 그래프 + 1Hz 중앙 틱. 프로세스가 하나라 C4의 Context와 Container 레벨이 하나로 합쳐진다 — 그래서 L1을 패키지 목록이 아니라 컨텍스트로 잡았다." },
     { id: "mongo", col: 4, ms: 5, ext: true, t: "MongoDB", s: "write-behind · 트랜잭션",
       kind: "외부 저장소", desc: "부팅 시 월드 전량 로드, 이후 dirty-flag 주기 flush. 은행만 Mongo 트랜잭션을 직접 쓴다 — 두 경로에 공유 조정점이 없다(#43)." },
     { id: "fb", col: 4, ms: 4, ext: true, t: "Firebase Auth", s: "세션 쿠키 검증",
