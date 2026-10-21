@@ -4,9 +4,9 @@
 
 ## 개요
 
-E4-1a 런타임 뼈대(1Hz `WorldClock`·타이머 주입 seam·graceful shutdown) 위에 무한 월드의 이동·방 서브시스템을 얹는다. 콘텐츠 출처는 `docs/notes/game-analysis-20260625/a4-movement-rooms.md`(A4)이며, 무한 월드가 **좌표 없는 방향성 그래프**, 이동이 **순차 게이트 건틀릿 → 점유자 리스트 재배치**, 문이 별도 엔티티가 아니라 **출구 플래그 상태머신**, 방이 곧 **메시지 채널**이라는 오라클 규명을 충실히 이식한다. 구현 방식(원본 4중 이동 코드 복제·`load_rom` LRU 캐시·연결 리스트·`F_ISSET` 비트 배열)은 신규 스택으로 재설계한다.
+E4-1a 런타임 뼈대(1Hz `WorldClock`·타이머 주입 확장 지점(seam)·graceful shutdown) 위에 무한 월드의 이동·방 서브시스템을 얹는다. 콘텐츠 출처는 `docs/notes/game-analysis-20260625/a4-movement-rooms.md`(A4)이며, 무한 월드가 **좌표 없는 방향성 그래프**, 이동이 **순차 게이트 건틀릿 → 점유자 리스트 재배치**, 문이 별도 엔티티가 아니라 **출구 플래그 상태머신**, 방이 곧 **메시지 채널**이라는 오라클 분석을 충실히 이식한다. 구현 방식(원본 4중 이동 코드 복제·`load_rom` LRU 캐시·연결 리스트·`F_ISSET` 비트 배열)은 신규 스택으로 재설계한다.
 
-캐릭터 스탯·전투·진영·레벨 게이트의 *실 강제*, 인벤토리·플레이어 WS 명령 배선, 클라측 automap 렌더는 범위 밖이며 seam으로 남긴다. A4 §1 20단 게이트 순서는 콘텐츠로 보존하되 **입력이 존재하는 강제 게이트 6종만 실 거부**하고 나머지는 순서-유지 pass-through stub이다.
+캐릭터 스탯·전투·진영·레벨 게이트의 *실 강제*, 인벤토리·플레이어 WS 명령 연결, 클라측 automap 렌더는 범위 밖이며 seam으로 남긴다. A4 §1 20단 게이트 순서는 콘텐츠로 보존하되 **입력이 존재하는 강제 게이트 6종만 실 거부**하고 나머지는 순서-유지 pass-through stub이다.
 
 ## 구조 / 스키마
 
@@ -52,7 +52,7 @@ export function getDirectionHints(room: RoomNode): DirectionHints
 
 **가변성 경계** (프로젝트 CRITICAL immutability 규칙의 의도된 carve-out): 라이브 가변은 `RoomNode.occupants`(점유자 Set)와 `ExitEdge.flags`·`ExitEdge.ltime`(문 상태머신)뿐이다. 정적 로드 필드 전부와 `RoomNode.flags`(64비트 방 flags)는 불변이다. 방 flags(불변)와 출구 flags(가변 문 상태)를 혼동하지 않는다.
 
-`getDirectionHints`는 노드 필드로 물질화하지 않는 on-demand 파생 조회다. 출구를 기본 6방향(`동/서/남/북/위/밑`)과 그 외(명명·대각·밖)로 분류한다. 무한 월드에는 좌표(x/y/z)가 없어 좌표를 합성하지 않는다.
+`getDirectionHints`는 노드 필드로 인스턴스를 생성하지 않는 on-demand 파생 조회다. 출구를 기본 6방향(`동/서/남/북/위/밑`)과 그 외(명명·대각·밖)로 분류한다. 무한 월드에는 좌표(x/y/z)가 없어 좌표를 합성하지 않는다.
 
 ### 로드 (`server/worldGraph.ts`)
 
@@ -72,7 +72,7 @@ export function getDirectionHints(room: RoomNode): DirectionHints
 4. 공유 게이트 건틀릿 `evaluateMoveGates` 실행. 거부면 이동 취소(재배치·방송 없음).
 5. 통과 시 순서: `broadcastLeave`(actor가 아직 출발 방 점유자) → `occupants` 재배치(`source.delete`/`target.add`) → `broadcastJoin`(actor가 이미 도착 방 점유자).
 
-`flee` 확률 선택은 `FleeRng` seam에 위임한다. E4-1b 기본 `defaultFleeRng`는 첫 가시 출구를 고르는 결정적 stub이라 단위 테스트가 결정적으로 통과한다. 실 확률(65%+dex 굴림)·시드 규약은 E8-2 RNG 규약과 정합해 이 seam에 주입한다. `directional/named/sneak`는 출구 선택 단계에서 의도적으로 동일한 이름 탐색이다 — 은신 유지 판정은 게이트 14(stub) 소관이라 선택 단계에서 갈리지 않는다.
+`flee` 확률 선택은 `FleeRng` seam에 위임한다. E4-1b 기본 `defaultFleeRng`는 첫 가시 출구를 고르는 결정적 stub이라 단위 테스트가 결정적으로 통과한다. 실 확률(65%+dex 굴림)·시드 규약은 E8-2 RNG 규약과 일치하도록 맞춰 이 seam에 주입한다. `directional/named/sneak`는 출구 선택 단계에서 의도적으로 동일한 이름 탐색이다 — 은신 유지 판정은 게이트 14(stub) 담당이라 선택 단계에서 갈리지 않는다.
 
 ### 게이트 건틀릿 (`moveGates.ts`)
 
@@ -111,7 +111,7 @@ gate 1(출구 존재)과 `XNOSEE` 이름 탐색 제외는 `tryMove`가 담당한
 | `lock(exit, key)` | `XLOCKS` + `XCLOSD` + `keyMatch` | `XLOCKD` 설정 |
 | `unlock(exit, key, now)` | `XLOCKD` + `keyMatch` | `XLOCKD` 해제 + `key.shotscur -= 1` + `ltime=now` |
 
-거부 경로는 부수효과 없이 `false`만 반환한다. `keyMatch(obj, exit)`는 이름이 아니라 숫자 매칭이다 — `obj.type === KEY(11) && obj.ndice === exit.key`. 열쇠 0 소진 시 파괴 처리는 호출자 seam이다. WS 명령 배선·인벤토리 조회·picklock(도둑 전용)은 모두 호출자 seam으로 범위 밖이다.
+거부 경로는 부수효과 없이 `false`만 반환한다. `keyMatch(obj, exit)`는 이름이 아니라 숫자 매칭이다 — `obj.type === KEY(11) && obj.ndice === exit.key`. 열쇠 0 소진 시 파괴 처리는 호출자 seam이다. WS 명령 연결·인벤토리 조회·picklock(도둑 전용)은 모두 호출자 seam으로 범위 밖이다.
 
 ### 방 표시 가시성 필터 (`roomView.ts`)
 
@@ -122,58 +122,58 @@ gate 1(출구 존재)과 `XNOSEE` 이름 탐색 제외는 `tryMove`가 담당한
 | 출구 | `XSECRT`(0) · `XINVIS`(1) · `XNOSEE`(19) 중 하나 | 바이트당 한 원소인 `number[]` → `door.hasFlag` |
 | 바닥 아이템 | `OHIDDN`(1) · `OSCENE`(18) · `OINVIS`(2) 중 하나 | 16자 hex string → `hexFlags.F_ISSET` |
 | 크리처 | `MHIDDN`(1) · `MINVIS`(2) 중 하나, 또는 `hpcur ≤ 0` | 위와 동일 |
-| 점유자 | 이름 해소 실패(라이브 엔트리 없음·빈 문자열) | — |
+| 점유자 | 이름 해석 실패(라이브 엔트리 없음·빈 문자열) | — |
 
 `door.ts`의 `XSECRT`·`XINVIS` 상수는 이 필터 전용이다 — 문 상태머신 전이 함수는 읽지 않는다. `hexFlags.ts`의 `MHIDDN=1`·`MINVIS=2`는 같은 비트값의 `PHIDDN`·`PINVIS`와 공존한다(원작이 플레이어·몬스터·오브젝트를 같은 `char flags[8]`로 다루므로 네임스페이스별 동일 비트 공존은 이 파일의 기존 관례다 — `MPERMT`/`PBLESS`/`OPERMT`가 전부 0인 것과 같다).
 
-`name`·`longDesc`는 빈 문자열도 그대로 옮긴다(표시 fallback은 클라이언트 소유). `contains`(컨테이너 중첩 아이템)로 재귀하지 않는다 — 오라클 방 표시는 바닥 오브젝트만 나열한다. 점유자는 **본인을 제외하지 않는다**(제외는 클라이언트 책임).
+`name`·`longDesc`는 빈 문자열도 그대로 옮긴다(표시 fallback은 클라이언트 담당). `contains`(컨테이너 중첩 아이템)로 재귀하지 않는다 — 오라클 방 표시는 바닥 오브젝트만 나열한다. 점유자는 **본인을 제외하지 않는다**(제외는 클라이언트 책임).
 
 **표시 필터 ≠ 통행 게이트 (의도된 비대칭)**: `world:room.exits`는 `XSECRT`·`XINVIS`를 제외하지만, `tryMove`의 출구 해석(위 §게이트 건틀릿 — `XNOSEE`만 제외)은 그대로다. 비밀 출구는 버튼 목록에서 사라지되 방향 문자열을 직접 보내면 통행 가능하다 — 오라클과 일치하는 동작이다. `tryMove`를 "일관성 정정" 목적으로 고치면 이동 동작이 조용히 바뀐다.
 
 **관찰자 비의존 (봉인된 게이트 2개)**: `projectRoomView`는 관찰자를 인자로 받지 않아 오라클의 다음 두 게이트를 구현하지 않는다.
 
-1. **점유자 은신·투명** — 오라클은 `PHIDDN`·`PINVIS`(`PDINVI` 보유자는 예외 통과)·`PDMINV` 플레이어를 방 표시에서 뺀다. 현재 도달 불가: `PHIDDN`·`PDMINV`는 영속 경로가 없어 항상 0이고(`character/flags.ts` 파티션 표), `PINVIS`는 `buffs`에서 파생되나 `magic/`이 라이브 세션에 미배선이다.
-2. **광원·실명** — 오라클은 어두운 방에서 광원이 없거나 관찰자가 `PBLIND`면 방 표시 전체를 숨긴다. 이 포트는 `RDARK`·`has_light`를 모델링하지 않았고 `combat/`도 미배선이다.
+1. **점유자 은신·투명** — 오라클은 `PHIDDN`·`PINVIS`(`PDINVI` 보유자는 예외 통과)·`PDMINV` 플레이어를 방 표시에서 뺀다. 현재 도달 불가: `PHIDDN`·`PDMINV`는 영속 경로가 없어 항상 0이고(`character/flags.ts` 파티션 표), `PINVIS`는 `buffs`에서 파생되나 `magic/`이 라이브 세션에 미연결이다.
+2. **광원·실명** — 오라클은 어두운 방에서 광원이 없거나 관찰자가 `PBLIND`면 방 표시 전체를 숨긴다. 이 포트는 `RDARK`·`has_light`를 모델링하지 않았고 `combat/`도 미연결이다.
 
-두 게이트 모두 관찰자 캐릭터를 투영 인자로 요구하므로, 여는 순간 `world:room`이 방 단위 fan-out 캐시가 아니라 수신자별 페이로드가 된다. `magic/`·`combat/` 배선 토픽 또는 광원 이식 토픽이 이 반환 계약을 함께 재검토해야 한다.
+두 게이트 모두 관찰자 캐릭터를 변환 인자로 요구하므로, 여는 순간 `world:room`이 방 단위 fan-out 캐시가 아니라 수신자별 페이로드가 된다. `magic/`·`combat/` 연결 토픽 또는 광원 이식 토픽이 이 반환 계약을 함께 재검토해야 한다.
 
 ### 출구 자동 재잠금 (`checkExits.ts`)
 
 `createCheckExitsSlot(graph)`는 `intervalSec=1`(매 틱 평가) 월드클럭 슬롯을 반환한다. `run(tickSec)`은 `now=tickSec`으로 그래프 모든 방·출구를 순회하며 만료(`ltime + interval < now`, strict less-than)를 판정한다. 두 능력 비트는 원본 `room.c:469`대로 `if / else if`로 배타 평가한다:
 
-- 만료 `XLOCKS` → `XLOCKD`·`XCLOSD`를 **둘 다** 재설정(잠금은 닫힘을 함의). 이 분기가 잡히면 `XCLOSS`는 별도 평가하지 않는다.
+- 만료 `XLOCKS` → `XLOCKD`·`XCLOSD`를 **둘 다** 재설정(잠금은 닫힘을 포함). 이 분기가 잡히면 `XCLOSS`는 별도 평가하지 않는다.
 - 만료 `XCLOSS`(단, `XLOCKS` 아님) → `XCLOSD`만 재설정.
 
 즉 열고 들어간 문은 `interval`초 후 다시 닫히고 잠긴다. `ltime`은 재설정하지 않는다(재설정은 open/unlock만 담당). 라이브 문 상태를 in-place 변경하는 carve-out이며 그 외 입력은 변형하지 않는다.
 
 ### 게임시각 소스 (`gameTime.ts`)
 
-`createGameTime(options?)`는 게임시각 진행 슬롯과 `currentHour()` 조회 seam을 반환한다. 원본 `update.c:717` `update_time` 케이던스 미러 — `intervalSec=150`(150 실초마다 발화), 발화당 `Time += 1`, 초기 `Time`은 주입 가능(기본 0). `currentHour()`는 `((Time % 24) + 24) % 24`로 0~23 계약을 입력과 무관하게 고정한다. 게임시각 상태는 전역 변수가 아니라 팩토리 클로저에 캡슐화한 라이브 가변이며, `currentHour`는 스냅샷이 아니라 라이브 클로저를 읽어 발화 후 변화를 반영한다.
+`createGameTime(options?)`는 게임시각 진행 슬롯과 `currentHour()` 조회 seam을 반환한다. 원본 `update.c:717` `update_time` 케이던스 미러 — `intervalSec=150`(150 실초마다 실행), 실행당 `Time += 1`, 초기 `Time`은 주입 가능(기본 0). `currentHour()`는 `((Time % 24) + 24) % 24`로 0~23 계약을 입력과 무관하게 고정한다. 게임시각 상태는 전역 변수가 아니라 팩토리 클로저에 캡슐화한 라이브 가변이며, `currentHour`는 스냅샷이 아니라 라이브 클로저를 읽어 실행 후 변화를 반영한다.
 
 ### 방 채널 어댑터 (`roomChannelAdapter.ts`)
 
-`createRoomChannelAdapter(deps)`는 `ChannelPort` 실 구현을 반환한다(생성자 주입 — `resolveRoom`·`sendTo`). `deliver(ctx)`는 발화자의 현재 방을 조회해 `occupants` 전 멤버에게 동기 fan-out한다. 방 미해석 시 조용히 no-op한다(미배치 actor 방어). `occupants`는 읽기만 한다. 가시성 필터(어둠·투명)와 발화자 자신 제외는 송신 시점 seam(`sendTo`)의 소관이며, 어댑터는 방 멤버십에 따른 fan-out 대상 집합만 결정한다. `deliver`는 동기(`void`) 시그니처를 유지한다(`channelPort.ts` 계약).
+`createRoomChannelAdapter(deps)`는 `ChannelPort` 실 구현을 반환한다(생성자 주입 — `resolveRoom`·`sendTo`). `deliver(ctx)`는 발화자의 현재 방을 조회해 `occupants` 전 멤버에게 동기 fan-out한다. 방 미해석 시 조용히 no-op한다(미배치 actor 방어). `occupants`는 읽기만 한다. 가시성 필터(어둠·투명)와 발화자 자신 제외는 송신 시점 seam(`sendTo`)이 담당하며, 어댑터는 방 멤버십에 따른 fan-out 대상 집합만 결정한다. `deliver`는 동기(`void`) 시그니처를 유지한다(`channelPort.ts` 계약).
 
-### 월드클럭 배선
+### 월드클럭 연결
 
-`gameTime`·`checkExits`는 WS 명령 배선 없이 `WorldClock`만으로 동작하는 자족 슬롯이다. `index.ts` boot가 `createGameTime()`·`createCheckExitsSlot(worldGraph)`를 `WorldClock.register`한 뒤 `start`한다. 슬롯 실패 격리 logger는 `app.log.error`에 위임한다. `index.ts`는 커버리지 제외 배선 코드이므로 두 슬롯 동시 등록·발화는 별도 통합 테스트(`worldClockSlots.integration.test.ts`)가 검증한다.
+`gameTime`·`checkExits`는 WS 명령 연결 없이 `WorldClock`만으로 동작하는 자족 슬롯이다. `index.ts` boot가 `createGameTime()`·`createCheckExitsSlot(worldGraph)`를 `WorldClock.register`한 뒤 `start`한다. 슬롯 실패 격리 logger는 `app.log.error`에 위임한다. `index.ts`는 커버리지 제외 연결 코드이므로 두 슬롯 동시 등록·실행은 별도 통합 테스트(`worldClockSlots.integration.test.ts`)가 검증한다.
 
 ## 제약사항
 
 - **강제 게이트 6종만 실 거부** — 출구 존재+`XNOSEE`·dangling·`XLOCKD`·`XCLOSD`·시간·정원. 나머지 15종(진영·레벨·전투·경비 등)은 순서-유지 pass-through stub이며 입력 에픽(E4-2/E5/E6/E7) 대기다.
 - **정원 게이트 근사** — 전 점유자 카운트로 판정한다(가시 플레이어 필터 `PINVIS`는 E5 입력). 투명 플레이어가 있으면 원본보다 빨리 만원 판정될 수 있다.
-- **문 명령·인벤토리·picklock 미배선** — 전이 함수·`keyMatch` predicate만 제공한다. 플레이어 WS 명령(openexit/lock 등)·열쇠 오브젝트 실 조회·picklock(도둑 클래스·쿨다운·dex)은 호출자 seam(명령/인벤토리 에픽·E5).
-- **이동 leave/join 방송 미결선** — `broadcastLeave`/`broadcastJoin`은 프로덕션 배선에서 no-op이다. 방 채팅 전파는 채널 포트가 소유하고, 이동 통지(누가 들어왔다/나갔다)는 후속 토픽 몫이다.
+- **문 명령·인벤토리·picklock 미연결** — 전이 함수·`keyMatch` predicate만 제공한다. 플레이어 WS 명령(openexit/lock 등)·열쇠 오브젝트 실 조회·picklock(도둑 클래스·쿨다운·dex)은 호출자 seam(명령/인벤토리 에픽·E5).
+- **이동 leave/join 방송 미연결** — `broadcastLeave`/`broadcastJoin`은 프로덕션 연결에서 no-op이다. 방 채팅 전파는 채널 포트가 담당하고, 이동 통지(누가 들어왔다/나갔다)는 후속 토픽 몫이다.
 - **라이브 상태만 — write-back 없음** — 방 점유자·문 상태는 인메모리 라이브 상태다. 영속화(write-back)는 seam이며 재부팅 시 문 상태는 기본값(`ltime=0`·`interval=60`)으로 복귀한다.
 - **좌표 없음** — 서버는 그래프+방향 힌트만 권위다. automap 좌표 합성·렌더는 클라 파생(E11에서도 미구현 — 현재 방만 렌더한다).
-- **방 표시 가시성 필터가 관찰자 비의존** — 점유자 은신(`PHIDDN`/`PINVIS`/`PDMINV`)·광원/실명 게이트를 구현하지 않는다. 지금은 해당 상태를 세울 라이브 경로가 없어 누출이 없으나, `magic/`·`combat/` 배선 또는 광원 이식이 이 전제를 깬다(위 §방 표시 가시성 필터).
+- **방 표시 가시성 필터가 관찰자 비의존** — 점유자 은신(`PHIDDN`/`PINVIS`/`PDMINV`)·광원/실명 게이트를 구현하지 않는다. 지금은 해당 상태를 세울 라이브 경로가 없어 누출이 없으나, `magic/`·`combat/` 연결 또는 광원 이식이 이 전제를 깬다(위 §방 표시 가시성 필터).
 - **flag 52 latent bug 미재현** — A4 §8이 경고한 `F_ISSET(ext, 52)` 경계 밖 접근(비트 52는 4바이트 출구 flags 범위 밖 → ltime 침범)은 어떤 게이트·flee 로직도 읽지 않는다.
 
 ## 관련 문서
 
-- 선행: [`runtime-foundation.md`](./runtime-foundation.md) (E4-1a — `WorldClock`·타이머 seam·shutdown 수렴)
+- 선행: [`runtime-foundation.md`](./runtime-foundation.md) (E4-1a — `WorldClock`·타이머 seam·shutdown 정리)
 - ADR: [`architecture.md`](./architecture.md) (D1 런타임·틱, D2 월드 상태 영속화, D3 방=채널)
 - 콘텐츠 출처: `docs/notes/game-analysis-20260625/a4-movement-rooms.md` (A4 — 이동·방·출구 의미론)
 - 기존 seam: `packages/server/src/ws/channelPort.ts`(`ChannelPort`), `packages/shared/src/schema/roomState.ts`(영속 스키마)
-- 라이브 결선: [`live-world-foundation.md`](./live-world-foundation.md) — `tryMove`·`occupants`·방 채널 어댑터의 프로덕션 caller(방 배치·`world:move`·실 `ChannelPort`)
+- 라이브 연결: [`live-world-foundation.md`](./live-world-foundation.md) — `tryMove`·`occupants`·방 채널 어댑터의 프로덕션 caller(방 배치·`world:move`·실 `ChannelPort`)
 - 이슈: #69 (E4-1b 이동·방), 부모 #34 (E4 월드 상태 엔진). 후속: #68 (E4-2 스폰·AI — 방 채널·점유자 소비), #71 (E8-2 property 테스트 — RNG 시드 규약)

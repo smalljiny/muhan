@@ -9,7 +9,7 @@
 이 프레임워크는 세 조각으로 이뤄진다:
 1. **시드 결정적 PRNG** — 같은 시드가 항상 같은 굴림 시퀀스를 내는 의존 0 순수 PRNG.
 2. **불변식 헬퍼 + 범위 생성기** — property 공통 assert(순수, fast-check 무의존)와 fast-check arbitrary 범위 생성기(test-only).
-3. **시연 property 테스트** — 지금 존재하는 결정적 규칙(E4 스폰 seam·문 FSM·`checkExits` + oracle `compute_ac`)에 프레임워크를 적용해 실제 회귀를 잡음을 증명한다(vacuous 아님).
+3. **시연 property 테스트** — 지금 존재하는 결정적 규칙(E4 스폰 확장 지점(seam)·문 FSM·`checkExits` + oracle `compute_ac`)에 프레임워크를 적용해 실제 회귀를 잡음을 증명한다(vacuous 아님).
 
 실 전투·마법·exp 공식의 불변식(E6)은 본 프레임워크 범위 밖이며, 그 규칙이 구현되는 E6에서 이 위에 얹는다.
 
@@ -79,12 +79,12 @@ shared·server 양쪽 테스트가 arbitrary를 **단일 shared 위치**에서 �
 
 시연 대상은 스폰(그룹 크기·`pickIndex`) + 문 FSM totality + `checkExits` 불변식 + `compute_ac` 범위·단조성이다. `tryMove`는 방 그래프·게이트·flee seam 등 무거운 DI 조립이 필요해 제외한다.
 
-각 시연은 tautology가 아닌 실제 SUT를 구동한다. 성공 경로 사후조건은 성공-적격 fixture에서 `result === true`를 무조건 단정해 성공 분기를 구조적으로 관측한다(vacuous 방지). 비-vacuity는 각 시연에서 불변식 경계를 일부러 뒤집어 fast-check가 shrink된 반례 + `seed`/`path`를 보고함을 확인하는 개발 시점 수동 단계로 증명한다(CI 재실행 게이트 아님). 재현은 `fc.assert(prop, { seed, path })`로 고정한다.
+각 시연은 tautology가 아닌 실제 SUT를 실행한다. 성공 경로 사후조건은 성공-적격 fixture에서 `result === true`를 무조건 단정해 성공 분기를 구조적으로 관측한다(vacuous 방지). 비-vacuity는 각 시연에서 불변식 경계를 일부러 뒤집어 fast-check가 shrink된 반례 + `seed`/`path`를 보고함을 확인하는 개발 시점 수동 단계로 증명한다(CI 재실행 게이트 아님). 재현은 `fc.assert(prop, { seed, path })`로 고정한다.
 
 ## 제약사항
 
-- **fast-check는 테스트 표면에만.** devDependency(pnpm catalog `^3.23.0`)로 도입하며 `*.test.ts`·`*.testutil.ts`에서만 import한다. shared 런타임 public API·dist 산출물에 노출하지 않는다.
+- **fast-check는 테스트 범위에만.** devDependency(pnpm catalog `^3.23.0`)로 도입하며 `*.test.ts`·`*.testutil.ts`에서만 import한다. shared 런타임 public API·dist 산출물에 노출하지 않는다.
 - **seededRng는 비암호 PRNG.** dist public API로 노출되나 보안 컨텍스트 사용은 JSDoc 경고로 금지한다. 하드 런타임/API 경계 강제는 후속 과제로 남는다.
-- **RNG seam 신설·이동 없음.** e4-2 server 소유 `SpawnRng`·`CreatureRng`를 재사용한다. 프로덕션 randomSpawn에 실 rng를 배선하지 않는다(테스트 어댑터만). 실 배선은 E6/해당 규칙 토픽에서, 그 시점에 RPLWAN 그룹 굴림 전 `occupants.size === 0` 가드가 필요하다.
+- **RNG seam 신설·이동 없음.** e4-2 server 소유 `SpawnRng`·`CreatureRng`를 재사용한다. 프로덕션 randomSpawn에 실 rng를 연결하지 않는다(테스트 어댑터만). 실 연결은 E6/해당 규칙 토픽에서, 그 시점에 RPLWAN 그룹 굴림 전 `occupants.size === 0` 가드가 필요하다.
 - **커스텀 shrinking 엔진 없음.** fast-check 내장 shrinking을 사용한다.
 - **실 게임 공식 불변식은 범위 밖.** 전투 데미지·명중률·exp 곡선 등은 E6에서 이 프레임워크 위에 얹는다.

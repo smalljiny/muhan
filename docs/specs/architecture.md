@@ -4,7 +4,7 @@
 **작성일**: 2026-07-01
 **작성자**: @smalljiny
 
-> **문서 범위**: 무한 MUD 포팅의 서버·클라이언트 기술 스택과 아키텍처를 확정하는 **정본 결정 기록(ADR)**이다. 게임 분석 A1~A13 노트와 이슈 #14 결정 대화를 입력으로, 런타임·영속화·전송·프로토콜·i18n·인증·테스트·프로젝트 구성 8개 축을 확정한다. 개별 서브시스템의 상세 구현 스펙은 이 문서에서 파생되는 후속 토픽이 다룬다(§1.3, §6). 게임 규칙 공식(전투·마법·경제 수치)은 A5~A9 노트가 정본이며 여기서 재기술하지 않는다.
+> **문서 범위**: 무한 MUD 포팅의 서버·클라이언트 기술 스택과 아키텍처를 확정하는 **기준 결정 기록(ADR)**이다. 게임 분석 A1~A13 노트와 이슈 #14 결정 대화를 입력으로, 런타임·영속화·전송·프로토콜·i18n·인증·테스트·프로젝트 구성 8개 축을 확정한다. 개별 서브시스템의 상세 구현 스펙은 이 문서에서 파생되는 후속 토픽이 다룬다(§1.3, §6). 게임 규칙 공식(전투·마법·경제 수치)은 A5~A9 노트가 기준이며 여기서 재기술하지 않는다.
 
 ## 1. 개요
 
@@ -30,7 +30,7 @@
 
 1. **런타임 모델 확정** — 단일 프로세스 이벤트 루프 + 중앙 heartbeat + 엔티티별 next-action 스케줄.
 2. **영속화 경계 확정** — 인메모리 권위 상태 그래프 + MongoDB DB-네이티브 세이브 정책.
-3. **전송 계층 확정** — 손수 `ws` + in-process EventEmitter 채널(Colyseus 반려).
+3. **전송 계층 확정** — 손수 `ws` + in-process EventEmitter 채널(Colyseus 기각).
 4. **프로토콜 확정** — 구조화 JSON command/event 계약 + Zod 단일 출처 + 공유 타입.
 5. **입력·i18n 확정** — 구조화 UI + 자유 텍스트 병행, UTF-8 전용, 조사 규칙 클라 렌더.
 6. **인증·권한 확정** — account/character 분리, ~~argon2id~~ **Firebase Auth(세션 쿠키)**(§3.7 보정), RBAC, WS 핸드셰이크.
@@ -67,9 +67,9 @@
 
 ### 3.5 전송·브로드캐스트 (D0·D3)
 
-**손수 `ws` + in-process EventEmitter 채널.** Colyseus 반려(성능 아님 — 장르 부적합·A10 소셜 밀도로 채널 레이어 재구현·상태 커플링·목표 소규모는 단일 프로세스로 충분; 단일 Node 프로세스가 WS 3만~10만 연결 처리로 수십~수백 CCU 목표를 압도). 채널 = EventEmitter 토픽 + 구독 필터: 방=채널(이동=leave+join), 전역(잡담·환호)·패거리·결혼·wiz·eaves 토픽. 수신자 플래그(PNOBRD·PEAVES·class)=구독 술어, 가시성(어둠·투명) 필터=송신 시점. 비용·게이트 곡선(잡담 HP·레벨20·일일한도·외침 1홉)은 수치까지 이식. Redis pub/sub은 수평 확장 시점 후순위(도입 시 wildcard 금지·방별 on-demand 구독).
+**손수 `ws` + in-process EventEmitter 채널.** Colyseus 기각(성능 아님 — 장르 부적합·A10 소셜 밀도로 채널 레이어 재구현·상태 커플링·목표 소규모는 단일 프로세스로 충분; 단일 Node 프로세스가 WS 3만~10만 연결 처리로 수십~수백 CCU 목표를 압도). 채널 = EventEmitter 토픽 + 구독 필터: 방=채널(이동=leave+join), 전역(잡담·환호)·패거리·결혼·wiz·eaves 토픽. 수신자 플래그(PNOBRD·PEAVES·class)=구독 술어, 가시성(어둠·투명) 필터=송신 시점. 비용·게이트 곡선(잡담 HP·레벨20·일일한도·외침 1홉)은 수치까지 이식. Redis pub/sub은 수평 확장 시점 후순위(도입 시 wildcard 금지·방별 on-demand 구독).
 
-> **HTTP 호스트 보정 (E1, 2026-07-02).** 원래 "손수 `ws`"는 **HTTP 호스트 프레임워크를 배제하지 않는다**. E1 스캐폴딩은 **Fastify를 HTTP 호스트 계층**으로 채택한다 — 정적 클라이언트 서빙·`/health`·후속 인증 REST 엔드포인트(D6)를 담당한다. **게임 소켓은 `@fastify/websocket`**(내부적으로 `ws`를 래핑)으로 얹어, D0의 "손수 `ws`" 원칙(프레임워크가 게임 상태·채널을 소유하지 않음)을 그대로 보존한다. **Colyseus 반려 근거는 불변** — Colyseus는 게임 상태·룸·StateView를 소유하는 게임 프레임워크라 반려됐고, Fastify는 그 계층을 건드리지 않는 순수 HTTP 프레임워크이므로 반려 결정과 직교한다. 채널·브로드캐스트(D3)는 여전히 in-process EventEmitter이며 이 보정으로 바뀌지 않는다.
+> **HTTP 호스트 보정 (E1, 2026-07-02).** 원래 "손수 `ws`"는 **HTTP 호스트 프레임워크를 배제하지 않는다**. E1 스캐폴딩은 **Fastify를 HTTP 호스트 계층**으로 채택한다 — 정적 클라이언트 서빙·`/health`·후속 인증 REST 엔드포인트(D6)를 담당한다. **게임 소켓은 `@fastify/websocket`**(내부적으로 `ws`를 래핑)으로 얹어, D0의 "손수 `ws`" 원칙(프레임워크가 게임 상태·채널을 소유하지 않음)을 그대로 보존한다. **Colyseus 기각 근거는 불변** — Colyseus는 게임 상태·룸·StateView를 소유하는 게임 프레임워크라 기각됐고, Fastify는 그 계층을 건드리지 않는 순수 HTTP 프레임워크이므로 기각 결정과 직교한다. 채널·브로드캐스트(D3)는 여전히 in-process EventEmitter이며 이 보정으로 바뀌지 않는다.
 
 ### 3.6 프로토콜·입력·i18n (D4·D4-b·D5)
 
@@ -77,19 +77,19 @@ command(클라→서버)·event(서버→클라) 계약을 명시 분리. 메시
 
 ### 3.7 인증·권한 (D6)
 
-account 1급 + `account 1:N character`. argon2id 해시 + 상수시간 비교(평문 교체). 세션 FSM 명시(상태 enum + 핸들러 맵, `io->fn` 함수 포인터 대체). WS 핸드셰이크 + TLS, identd·telnet 협상 폐기. 로그인 실패 잠금 → rate-limit. authz=RBAC 역할(builder/moderator/admin, 원본 클래스 계급 이상현상 재현 안 함, P2), 빌더/운영 권한 분리·감사 로그 유지. `system()` 셸 호출 제거(DB soft-delete). DM/빌더 표면은 post-MVP defer(별도 토픽).
+account 독립 + `account 1:N character`. argon2id 해시 + 상수시간 비교(평문 교체). 세션 FSM 명시(상태 enum + 핸들러 맵, `io->fn` 함수 포인터 대체). WS 핸드셰이크 + TLS, identd·telnet 협상 폐기. 로그인 실패 잠금 → rate-limit. authz=RBAC 역할(builder/moderator/admin, 원본 클래스 계급 이상현상 재현 안 함, P2), 빌더/운영 권한 분리·감사 로그 유지. `system()` 셸 호출 제거(DB soft-delete). DM/빌더 인터페이스는 post-MVP defer(별도 토픽).
 
-> **인증 방식 보정 (E3, 2026-07-06, 이슈 #32).** 위 "argon2id 해시 + 상수시간 비교(평문 교체)"는 **Firebase Auth(Google OAuth) 위임으로 대체**한다. account = Firebase uid이며 서버는 비밀번호 해시를 보관하지 않는다. 인증 토폴로지: 브라우저가 Firebase 로그인 → HTTP 엔드포인트(`/session/login`)가 `createSessionCookie`로 HttpOnly·Secure·SameSite 세션 쿠키 발급 → WS 핸드셰이크의 `@fastify/websocket` **preValidation 훅**에서 `verifySessionCookie` + Origin allowlist(CSWSH 방어)로 검증. **세션 FSM·RBAC·감사 로그·soft-delete 결정은 불변** — 인증 크리덴셜 저장·검증 메커니즘만 바뀐다. 원작 "이름=크리덴셜, 평문 비번"(A12)은 여전히 폐기 대상이며, 이 보정은 그 대체 설계를 argon2id 자체 해싱에서 Firebase 위임으로 변경한 것이다. 세부·근거는 이슈 #32 인증 seam 코멘트, 파급 스코프는 E5(#35). **P2 구현 방식 정책(§5) 및 D6 요약표의 argon2id 표기도 이 보정으로 갱신됨.**
+> **인증 방식 보정 (E3, 2026-07-06, 이슈 #32).** 위 "argon2id 해시 + 상수시간 비교(평문 교체)"는 **Firebase Auth(Google OAuth) 위임으로 대체**한다. account = Firebase uid이며 서버는 비밀번호 해시를 보관하지 않는다. 인증 토폴로지: 브라우저가 Firebase 로그인 → HTTP 엔드포인트(`/session/login`)가 `createSessionCookie`로 HttpOnly·Secure·SameSite 세션 쿠키 발급 → WS 핸드셰이크의 `@fastify/websocket` **preValidation 훅**에서 `verifySessionCookie` + Origin allowlist(CSWSH 방어)로 검증. **세션 FSM·RBAC·감사 로그·soft-delete 결정은 불변** — 인증 크리덴셜 저장·검증 메커니즘만 바뀐다. 원작 "이름=크리덴셜, 평문 비번"(A12)은 여전히 폐기 대상이며, 이 보정은 그 대체 설계를 argon2id 자체 해싱에서 Firebase 위임으로 변경한 것이다. 세부·근거는 이슈 #32 인증 확장 지점(seam) 코멘트, 파급 스코프는 E5(#35). **P2 구현 방식 정책(§5) 및 D6 요약표의 argon2id 표기도 이 보정으로 갱신됨.**
 
 ### 3.8 프로젝트 구성 (D8)
 
 pnpm workspaces monorepo. 패키지: `shared`(프로토콜 Zod 스키마·조사 유틸·게임 데이터 스키마) / `server`(게임 엔진·`ws`·영속화) / `client`(웹 UI) / `port`(기존 변환기 유지, 순수 JS). 빌드: 클라 Vite, **서버 tsc(번들러 없음, dev=tsx)**. TypeScript. 공유 타입은 `shared` 단일 출처로 서버·클라가 import(빌드 시 타입 소거).
 
-> **서버 번들러 보정 (E1, 2026-07-02).** 원래 "서버 tsup"은 채택하지 않는다. 착수 리서치에서 tsup 유지보수 정체(공식 README가 후속작 tsdown 권장)·tsdown 미성숙이 드러났고, 서버는 실행 앱이라 번들이 불필요하며 Fastify의 플러그인 오토로드·pino 워커 등 동적 require가 번들러와 충돌한다. E1은 **서버=tsc(`dist/` 산출)·dev=tsx·start=`node dist/index.js`**로 확정했다. 번들 필요 시점에 tsdown을 재평가한다. 태스크 오케스트레이션·캐시는 **Turborepo 2.x**(`turbo run`, build/type-check/lint/test)가 담당한다. 구현·툴체인 정본은 [`monorepo.md`](monorepo.md) 참조.
+> **서버 번들러 보정 (E1, 2026-07-02).** 원래 "서버 tsup"은 채택하지 않는다. 착수 리서치에서 tsup 유지보수 정체(공식 README가 후속작 tsdown 권장)·tsdown 미성숙이 드러났고, 서버는 실행 앱이라 번들이 불필요하며 Fastify의 플러그인 오토로드·pino 워커 등 동적 require가 번들러와 충돌한다. E1은 **서버=tsc(`dist/` 산출)·dev=tsx·start=`node dist/index.js`**로 확정했다. 번들 필요 시점에 tsdown을 재평가한다. 태스크 오케스트레이션·캐시는 **Turborepo 2.x**(`turbo run`, build/type-check/lint/test)가 담당한다. 구현·툴체인 기준은 [`monorepo.md`](monorepo.md) 참조.
 
 ### 3.9 테스트 전략 (D7)
 
-C oracle을 behavioral oracle로 삼는 **frozen 골든 fixture**(characterization=golden master=approval 동일 기법). oracle은 fixture *생성기*로만 쓰고 체크인, CI는 순수 TS(32비트 툴체인 불요). 대상: 순수 공식 함수(전투 데미지·thaco·명중, 마법 지속·데미지, exp 곡선·레벨업, 가격 배수). 다중 파라미터 테이블은 combination approval. property 테스트는 RNG 시드 고정 전제로 불변식(데미지≥0·명중률 범위) 범위 검증. fixture는 함수별·입력 범위별로 좁게 유지(큰 공유 fixture 회피). 버그는 P1대로 bug-for-bug 재현/수정을 항목별 태깅. testing.md 정합(TDD·80% 커버리지·vitest).
+C oracle을 behavioral oracle로 삼는 **frozen 골든 fixture**(characterization=golden master=approval 동일 기법). oracle은 fixture *생성기*로만 쓰고 체크인, CI는 순수 TS(32비트 툴체인 불요). 대상: 순수 공식 함수(전투 데미지·thaco·명중, 마법 지속·데미지, exp 곡선·레벨업, 가격 배수). 다중 파라미터 테이블은 combination approval. property 테스트는 RNG 시드 고정 전제로 불변식(데미지≥0·명중률 범위) 범위 검증. fixture는 함수별·입력 범위별로 좁게 유지(큰 공유 fixture 회피). 버그는 P1대로 bug-for-bug 재현/수정을 항목별 태깅. testing.md와 일치(TDD·80% 커버리지·vitest).
 
 > **테스트 인프라 주의**: 기존 oracle은 `mstruct.h` 헤더-only struct 바이트 대조다. 공식 oracle은 `command5.c`/`magic*.c` 함수를 struct·전역 의존성까지 컴파일해야 하므로 실 작업량이 크다 — frozen fixture 채택 근거다. E8-1(#70)이 이 하네스를 실체화했다 — fixture 포맷·zod 스키마·approval 러너·manual 생성기를 `packages/shared/src/oracle/`에 두고 대표 공식 `compute_ac`로 end-to-end 증명했다. 상세는 `docs/specs/golden-fixture-harness.md`. oracle 함수 컴파일 범위는 아래 Open Q 6에서 확정했다.
 
@@ -99,33 +99,33 @@ C oracle을 behavioral oracle로 삼는 **frozen 골든 fixture**(characterizati
 |------|------|------|
 | P1 재현 정책 | as-shipped 기본 + 항목별 결정 | 포팅 원칙 "동작 충실 재현"; A5·A6·A7·A9·A10 버그 목록. 확정 2026-07-01 |
 | P2 구현 방식 정책 | 구현 방식은 신규 스택으로 개선 | 구현 방식 개선 원칙 2026-07-01; 노트 전반(telnet→WS·평문→Firebase Auth 세션 쿠키(§3.7 E3 보정)·파일→Mongo) |
-| D0 전송 | 손수 `ws` + EventEmitter (Colyseus 반려); **Fastify HTTP 호스트 + `@fastify/websocket` 보정(E1)** | 장르 부적합·A10 소셜 밀도·상태 커플링·소규모는 단일 프로세스 충분; StateView 대규모 필터 비권장(Colyseus 문서); 단일 프로세스 3만~10만 WS 연결(Stack Harbor). **Fastify=HTTP 호스트(정적·`/health`·인증 REST), 게임 소켓=`@fastify/websocket`(내부 `ws`) → "손수 `ws`"·EventEmitter·Colyseus 반려 모두 불변; §3.5 보정 참조** |
-| D1 런타임 | 단일 프로세스, 1Hz heartbeat, next-action 큐 | A1(update_game 1Hz), A9(활성 집합 이벤트 구동), A11(스크립팅 불요); LuminariMUD·Evennia·LPMud 선례 |
+| D0 전송 | 손수 `ws` + EventEmitter (Colyseus 기각); **Fastify HTTP 호스트 + `@fastify/websocket` 보정(E1)** | 장르 부적합·A10 소셜 밀도·상태 커플링·소규모는 단일 프로세스 충분; StateView 대규모 필터 비권장(Colyseus 문서); 단일 프로세스 3만~10만 WS 연결(Stack Harbor). **Fastify=HTTP 호스트(정적·`/health`·인증 REST), 게임 소켓=`@fastify/websocket`(내부 `ws`) → "손수 `ws`"·EventEmitter·Colyseus 기각 모두 불변; §3.5 보정 참조** |
+| D1 런타임 | 단일 프로세스, 1Hz heartbeat, next-action 큐 | A1(update_game 1Hz), A9(활성 집합 이벤트 기반), A11(스크립팅 불요); LuminariMUD·Evennia·LPMud 선례 |
 | D2 영속화 | 메모리 그래프 권위 + MongoDB, DB-네이티브 세이브 신규 설계 | A4(load_rom 폐기·전량 로드), A12(원본 세이브 타이밍=구현 방식 재분류), A8(은행·금화); AlgoDaily 스냅샷 경계·dirty-flag autosave |
 | D3 브로드캐스트 | in-process EventEmitter 채널, Redis 후순위 | A10(채널=토픽+필터), A4(방=채널); 단일 프로세스 여유·wildcard fan-out 함정(AhsanLab) |
 | D4 프로토콜 | 구조화 JSON command/event, Zod 단일 출처, 공유 타입 | A2(명령=구조화 이벤트·5 패턴), A3·A11; zod-sockets·OpenFrontIO·tRPC 선례 |
 | D4-b 입력 | 구조화 UI + 자유 텍스트 병행 | A2 §arch(자유 모드 한정 동사-후치); 확정 |
 | D5 i18n | UTF-8 전용, 클라 조사 렌더 + ㄹ 예외 수정 | A3(변환 1지점·조사 콘텐츠·ㄹ 버그); 확정 |
-| D6 인증 | account/character, ~~argon2id~~ **Firebase Auth 세션 쿠키**(§3.7 보정·E3), RBAC, WS 핸드셰이크 | A12(account 승격·평문 교체·FSM), A13(RBAC·DM defer); Firebase 위임 보정 이슈 #32 |
+| D6 인증 | account/character, ~~argon2id~~ **Firebase Auth 세션 쿠키**(§3.7 보정·E3), RBAC, WS 핸드셰이크 | A12(account 독립·평문 교체·FSM), A13(RBAC·DM defer); Firebase 위임 보정 이슈 #32 |
 | D7 테스트 | frozen 골든 fixture(oracle=생성기) + property | A5~A8 공식·버그 목록; characterization/approval/oracle 대조(Feathers·ApprovalTests·Fallout2-RE) |
 | D8 구성 | pnpm monorepo(shared/server/client/port) + Turborepo; 클라 Vite, **서버 tsc(번들러 없음, dev=tsx) — tsup 미채택 보정(E1)** | D4 공유 타입; MongoDB 문서 스키마; monorepo 타입 공유 선례. **tsup 유지보수 정체·서버=실행앱 번들 불필요·Fastify 동적 require 충돌 → tsc; §3.8 보정 참조** |
 | 동시 접속 규모 | 소규모(~수십~수백 CCU) | 원본 fd 제한 256; 확정 → D0·D1·D3 단일 프로세스 근거 |
 
 ## 5. 범위 밖 (Non-goals)
 
-- **게임 규칙 공식 재기술** — 전투·마법·경제 수치는 A5~A9 노트가 정본. 이 스펙은 그 공식을 *어떻게 테스트·저장·재계산하는가*만 규정.
+- **게임 규칙 공식 재기술** — 전투·마법·경제 수치는 A5~A9 노트가 기준. 이 스펙은 그 공식을 *어떻게 테스트·저장·재계산하는가*만 규정.
 - **개별 서브시스템 구현 스펙** — 전송 계층·월드 엔진·전투 엔진·인증 등의 상세 설계·구현은 후속 에픽(§6.7).
-- **DM/빌더 도구 표면** — post-MVP defer(A13 §7.1). 초기 운영=JSON 직접 수정 + DB 직접 접근.
+- **DM/빌더 도구 범위** — post-MVP defer(A13 §7.1). 초기 운영=JSON 직접 수정 + DB 직접 접근.
 - **수평 확장·멀티노드·Redis pub/sub** — 목표 소규모에선 단일 프로세스로 충분. 확장 필요 시점에 별도 결정.
 - **Redis 세션·캐시** — 후순위.
-- **네트워크 프레임워크(Colyseus 등) 재검토** — 반려 확정. 수평 확장이 실제 필요해지면 재평가.
+- **네트워크 프레임워크(Colyseus 등) 재검토** — 기각 확정. 수평 확장이 실제 필요해지면 재평가.
 - **클라이언트 UI 상세 디자인** — 별도 프론트엔드 토픽.
 - **버그별 재현/수정 개별 태깅** — P1 정책만 확정. ~40건 개별 판정은 각 서브시스템 구현 토픽에서.
 
 ## 6. Open Questions
 
 1. **autosave/flush 주기 값** — 60~300초 범위 제시, 정확값은 부하 테스트로 결정(신규 값, 원본 참조 없음).
-2. **은행 문서 위치** — character 인라인 vs 별도 컬렉션(A8: 둘 다 정합). 영속화 구현 토픽에서.
+2. **은행 문서 위치** — character 인라인 vs 별도 컬렉션(A8: 둘 다 들어맞음). 영속화 구현 토픽에서.
 3. **은행 이자** — 원작 무이자(as-shipped) vs 경제 확장. 기본 무이자(P1).
 4. **계정 email 필수/선택** — 인증 구현 토픽에서.
 5. **PFMBOS(패거리 두목) 임명 규칙** — oracle상 불명(A10 §6.5). 신규 설계 필요(소셜 구현 토픽).

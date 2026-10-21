@@ -1,4 +1,4 @@
-# 연결 수명주기 (세션 레지스트리·재연결·수렴 seam)
+# 연결 수명주기 (세션 레지스트리·재연결·수렴 확장 지점(seam))
 
 > E3-2 세션 FSM 위에 연결 수명주기를 얹는다 — characterId 색인 세션 레지스트리(1캐릭터 1세션), link-dead grace 재연결, idle timeout, 그리고 이 셋과 중복 로그인 evict가 모두 수렴하는 단일 disconnect 수렴 seam.
 
@@ -38,7 +38,7 @@ E3-1([`transport-protocol.md`](./transport-protocol.md))은 transport-only WS(�
 | `link` | `LinkState = 'live' \| 'link-dead'` |
 | `graceTimer` | link-dead 진입 시 건 grace 타이머 핸들(live면 null) |
 
-`DisconnectReason = 'evictedByNewLogin' | 'graceExpired' | 'idleTimeout' | 'shutdown'` — 종결 사유의 단일 출처(`sessionRegistry.ts`). `SessionLifecyclePort`·`resolveDisconnect`가 이를 import한다. `'shutdown'`은 서버 주도 종료 시 전체 live 바인딩을 일괄 수렴할 때 쓴다([`runtime-foundation.md`](./runtime-foundation.md) shutdown 수렴).
+`DisconnectReason = 'evictedByNewLogin' | 'graceExpired' | 'idleTimeout' | 'shutdown'` — 종결 사유의 단일 출처(`sessionRegistry.ts`). `SessionLifecyclePort`·`resolveDisconnect`가 이를 import한다. `'shutdown'`은 서버 주도 종료 시 전체 live 바인딩을 일괄 종료할 때 쓴다([`runtime-foundation.md`](./runtime-foundation.md) shutdown 정리).
 
 ### `ConnectionContext` 확장 (E3-2 슬롯에 2개 추가)
 
@@ -55,7 +55,7 @@ get(characterId): SessionBinding | undefined
 listBindings(): readonly SessionBinding[]   // 등록 바인딩 스냅샷(shutdown 일괄 수렴 소스)
 ```
 
-`listBindings`는 라이브 뷰가 아닌 **복사 스냅샷**을 반환한다 — 순회 중 `resolveDisconnect`가 레지스트리에서 엔트리를 제거해도 안전하도록. live·link-dead를 필터하지 않고 전부 반환한다(link-dead도 armed grace 타이머 + 미저장 세션을 쥐고 있어 shutdown 수렴 대상이므로). 서버 주도 종료 일괄 수렴([`runtime-foundation.md`](./runtime-foundation.md))의 바인딩 소스다.
+`listBindings`는 라이브 뷰가 아닌 **복사 스냅샷**을 반환한다 — 순회 중 `resolveDisconnect`가 레지스트리에서 엔트리를 제거해도 안전하도록. live·link-dead를 필터하지 않고 전부 반환한다(link-dead도 armed grace 타이머 + 미저장 세션을 쥐고 있어 shutdown 정리 대상이므로). 서버 주도 종료 일괄 종료([`runtime-foundation.md`](./runtime-foundation.md))의 바인딩 소스다.
 
 `createSessionRegistry(opts)` 팩토리로 만들고, 타이머·포트 호출·소켓 close 같은 부수효과는 셸(plugin)이 주입 콜백으로 넣는다(functional-core/imperative-shell 경계). `clearTimeoutFn`은 주입 가능하며 미주입 시 전역 `clearTimeout`을 쓴다(fake clock 단위 테스트).
 
@@ -75,11 +75,11 @@ interface SessionLifecyclePort {
 | 항목 | 결정 |
 |------|------|
 | 입력 | 최소 3필드(accountId·characterId·reason). world snapshot 핸들 미노출 |
-| 동기/비동기 | 동기 `void` — 어댑터는 인메모리 변이·`markDirty`(동기 side registry 기록)만 하고 실 DB write는 저장 스케줄러의 비동기 flush가 소유한다 |
+| 동기/비동기 | 동기 `void` — 어댑터는 인메모리 변이·`markDirty`(동기 side registry 기록)만 하고 실 DB write는 저장 스케줄러의 비동기 flush가 담당한다 |
 | 실패 정책 | 포트 throw는 `resolveDisconnect`가 catch·로깅·**삼킴** — teardown은 저장 실패와 무관하게 진행 |
 | 순서 | 레지스트리 제거(선) → 포트 호출 → transport 정리·소켓 close |
 
-기본 어댑터는 `createNoopSessionLifecycleAdapter(logger)` — 종결 사실만 구조 로깅하고 즉시 반환한다. 프로덕션 부트는 라이브 월드 의존 묶음이 주입될 때 실 어댑터(`liveSessionLifecycleAdapter.ts`)를 파생해 이 자리를 대체한다: 종료 시점 방을 `markDirty`한 뒤(dirty-before-release) 라이브 엔트리·방 점유를 해제한다. 정본 [`live-world-foundation.md`](live-world-foundation.md).
+기본 어댑터는 `createNoopSessionLifecycleAdapter(logger)` — 종결 사실만 구조 로깅하고 즉시 반환한다. 프로덕션 부트는 라이브 월드 의존 묶음이 주입될 때 실 어댑터(`liveSessionLifecycleAdapter.ts`)를 파생해 이 자리를 대체한다: 종료 시점 방을 `markDirty`한 뒤(dirty-before-release) 라이브 엔트리·방 점유를 해제한다. 기준 [`live-world-foundation.md`](live-world-foundation.md).
 
 ## 동작
 
@@ -101,7 +101,7 @@ resolveDisconnect(binding, reason):
 
 ### ABA-safe 종결 가드 (객체 identity)
 
-stale 판별의 불변식은 **객체 identity** `registry.get(characterId) === binding`이다. generation 카운터는 쓰지 않는다 — fresh 등록마다 0으로 재시작하면 같은 characterId의 새 바인딩이 옛 세대값을 재사용해 ABA가 생긴다. 대신 grace/idle 타이머·close 리스너는 **자신을 스케줄한 시점의 바인딩 객체 참조를 캡처**하고, 발화 시 identity 일치를 확인한다. rebind·markLinkDead가 바인딩을 새 객체로 교체하므로 옛 객체를 캡처한 트리거는 identity 불일치로 no-op이 된다.
+stale 판별의 불변식은 **객체 identity** `registry.get(characterId) === binding`이다. generation 카운터는 쓰지 않는다 — fresh 등록마다 0으로 재시작하면 같은 characterId의 새 바인딩이 옛 세대값을 재사용해 ABA가 생긴다. 대신 grace/idle 타이머·close 리스너는 **자신을 스케줄한 시점의 바인딩 객체 참조를 캡처**하고, 실행 시 identity 일치를 확인한다. rebind·markLinkDead가 바인딩을 새 객체로 교체하므로 옛 객체를 캡처한 트리거는 identity 불일치로 no-op이 된다.
 
 ### 조작 함수별 전이
 
@@ -126,9 +126,9 @@ stale 판별의 불변식은 **객체 identity** `registry.get(characterId) === 
 
 ### 밀려난 소켓의 잔여 프레임 (명령 디스패치 경계)
 
-서버 주도 종료의 teardown은 **transport만** 정리한다(`cleanupConnection` + `socket.close`). 옛 `ConnectionContext`의 `state`·`boundCharacterId`는 되돌리지 않고, `ctx.closed`도 소켓 `'close'` 이벤트(별개 리스너, 다음 tick)에서야 `true`가 된다. 그 창에서 이미 버퍼된 프레임의 `'message'`가 발화하면 밀려난 옛 소켓이 `command` 상태·바인딩 키를 그대로 쥔 채 명령 디스패치에 도달한다. 라이브 캐릭터 레지스트리는 `characterId` 키이므로, 그 명령은 **새 세션의** 엔트리를 변이한다(이동·gold 소비 — 세션 신뢰 경계 침범).
+서버 주도 종료의 teardown은 **transport만** 정리한다(`cleanupConnection` + `socket.close`). 옛 `ConnectionContext`의 `state`·`boundCharacterId`는 되돌리지 않고, `ctx.closed`도 소켓 `'close'` 이벤트(별개 리스너, 다음 tick)에서야 `true`가 된다. 그 창에서 이미 버퍼된 프레임의 `'message'`가 발생하면 밀려난 옛 소켓이 `command` 상태·바인딩 키를 그대로 쥔 채 명령 디스패치에 도달한다. 라이브 캐릭터 레지스트리는 `characterId` 키이므로, 그 명령은 **새 세션의** 엔트리를 변이한다(이동·gold 소비 — 세션 신뢰 경계 침범).
 
-따라서 dispatch 직전에 **바인딩 신원 가드**를 둔다 — `registry.get(actor.characterId)`가 이 `ctx`를 `connection`으로 갖고 `link === 'live'`이며 `!ctx.closed`일 때만 명령을 실행하고, 아니면 조용히 무시한다(응답 없음, idle 재-arm 없음). close 판정표의 `binding.connection === ctx` 가드와 같은 identity 불변식을 **명령 경로에도** 적용하는 것이다: close 가드는 뒤늦은 종결이 새 세션을 markLinkDead하는 것을 막고, 이 가드는 뒤늦은 **명령**이 새 세션의 상태를 변이하는 것을 막는다. 배치·코드 형태는 [`transport-protocol.md`](transport-protocol.md) §메시지 처리 파이프라인이 정본이다.
+따라서 dispatch 직전에 **바인딩 신원 가드**를 둔다 — `registry.get(actor.characterId)`가 이 `ctx`를 `connection`으로 갖고 `link === 'live'`이며 `!ctx.closed`일 때만 명령을 실행하고, 아니면 조용히 무시한다(응답 없음, idle 재-arm 없음). close 판정표의 `binding.connection === ctx` 가드와 같은 identity 불변식을 **명령 경로에도** 적용하는 것이다: close 가드는 뒤늦은 종결이 새 세션을 markLinkDead하는 것을 막고, 이 가드는 뒤늦은 **명령**이 새 세션의 상태를 변이하는 것을 막는다. 배치·코드 형태는 [`transport-protocol.md`](transport-protocol.md) §메시지 처리 파이프라인이 기준이다.
 
 ### 재연결 흐름
 
@@ -151,7 +151,7 @@ stale 판별의 불변식은 **객체 identity** `registry.get(characterId) === 
 
 ### 제어 흐름 확장 seam
 
-**(1) command 진입 등록 seam** — `SessionContext`에 주입 콜백 `enterWorld(characterId) => 'entered' | 'resumed'`를 더한다. FSM `enterCommand`는 emit 대신 이 seam으로 등록 결과를 받아 `session:resumed`/`session:entered`를 고른다(FSM 순수성 유지). 셸이 `sessionLifecycle.enterWorld(ctx, accountId, characterId)`를 registry 조작으로 배선한다. `register`/`rebind`는 순수 Map 조작이라 throw하지 않으므로 이벤트 순서는 항상 등록→emit→command 확정이다.
+**(1) command 진입 등록 seam** — `SessionContext`에 주입 콜백 `enterWorld(characterId) => 'entered' | 'resumed'`를 더한다. FSM `enterCommand`는 emit 대신 이 seam으로 등록 결과를 받아 `session:resumed`/`session:entered`를 고른다(FSM 순수성 유지). 셸이 `sessionLifecycle.enterWorld(ctx, accountId, characterId)`를 registry 조작으로 연결한다. `register`/`rebind`는 순수 Map 조작이라 throw하지 않으므로 이벤트 순서는 항상 등록→emit→command 확정이다.
 
 **(2) `session:resumed` shared 프로토콜** — `serverEventSchema` 판별 유니온에 variant를 추가한다(`session:entered` 미러): `z.strictObject({ type: z.literal('session:resumed'), characterId: z.string().min(1) })`.
 
@@ -176,7 +176,7 @@ per-connection 타이머는 총 4종이다:
 | idle timeout | 무활동 | `command`(live) | `resolveDisconnect(idleTimeout)` | `dispatch` 결과 `handled` |
 | grace | 재연결 창 | link-dead 구간 | `resolveDisconnect(graceExpired)` | (단발) |
 
-idle 타이머는 `ctx.idle` 슬롯이 단독 소유한다(`createIdleTimer` / `IdleTimer.arm`·`clear`). 진행 데드라인은 `command` 진입 시 clear되고 idle이 그 자리를 이어받는다(시간축 미중첩). idle의 종결은 3층 경계상 셸이 소유하므로, 만료 시 socket.close가 아니라 주입 `onExpire`(캡처한 바인딩으로 `resolveDisconnect(idleTimeout)` 호출)로 종결을 위임한다.
+idle 타이머는 `ctx.idle` 슬롯이 단독 소유한다(`createIdleTimer` / `IdleTimer.arm`·`clear`). 진행 데드라인은 `command` 진입 시 clear되고 idle이 그 자리를 이어받는다(시간축 미중첩). idle의 종결은 3층 경계상 셸이 담당하므로, 만료 시 socket.close가 아니라 주입 `onExpire`(캡처한 바인딩으로 `resolveDisconnect(idleTimeout)` 호출)로 종결을 위임한다.
 
 ### 환경 변수
 
@@ -189,16 +189,16 @@ grace·idle 창은 env로 튜닝하며 스키마는 `z.coerce.number().int().min
 
 ## 제약사항
 
-- **저장 범위는 방 위치까지** — 실 어댑터가 종료 시 영속화하는 것은 `currentRoom`이며, HP/MP/인벤 등 나머지 라이브 필드의 저장은 그 필드를 실제로 변이하는 후속 규칙 배선 토픽이 함께 얹는다. 포트 시그니처(async 반환·world snapshot 핸들·write-ahead) 확장도 필요 시점에 한다.
+- **저장 범위는 방 위치까지** — 실 어댑터가 종료 시 영속화하는 것은 `currentRoom`이며, HP/MP/인벤 등 나머지 라이브 필드의 저장은 그 필드를 실제로 변이하는 후속 규칙 연결 토픽이 함께 얹는다. 포트 시그니처(async 반환·world snapshot 핸들·write-ahead) 확장도 필요 시점에 한다.
 - **월드측 link-dead 동작은 범위 밖** — 세션 계층 rebind만 한다. link-dead 캐릭터는 grace 동안 라이브 레지스트리와 방 점유에 그대로 남으며(종결 시점에만 해제), 피격 가능한지·전투가 지속되는지는 후속 규칙 토픽이 결정한다.
 - **놓친 이벤트 리플레이 없음** — rebind는 `command` 복원 + `session:resumed` + 현재 위치 `world:room`까지다. 단절 중 놓친 이벤트(채팅·전투 로그) 재전송은 없다.
 - **명시적 logout 없음** — 원작 무한에 quit 명령이 없어 이 계층에도 없다. 향후 추가 시 별도 reason으로 `resolveDisconnect`에 매핑한다.
-- **연결 정원·상한·backpressure 없음** — 레지스트리는 중복/정원 정책이 소비할 seam을 제공할 뿐, 동시 접속 상한·계정별 연결 상한·rate limiting·아웃바운드 backpressure는 별도 하드닝 토픽(#54) 소관이다.
-- **서버 graceful shutdown 수렴은 런타임 기반 토픽 소관** — 서버 주도 종료 시 전체 live 바인딩을 `resolveDisconnect(reason:'shutdown')`로 즉시 수렴하는 오케스트레이션은 [`runtime-foundation.md`](./runtime-foundation.md)(shutdown 수렴, #56 해소)이 소유한다. 본 계층은 그 수렴이 소비하는 seam만 제공한다 — `DisconnectReason`의 `'shutdown'` 값, `SessionRegistry.listBindings` 스냅샷, 그리고 서버 주도 종료 플래그가 set이면 close 핸들러가 `markLinkDead`(grace)를 건너뛰는 판정. close 핸들러의 서버 주도 종료 구분은 §동작 "close 판정" 표의 "서버 주도 종료" 행과 동일 원리다(플래그 가드로 link-dead 진입 차단).
+- **연결 정원·상한·backpressure 없음** — 레지스트리는 중복/정원 정책이 소비할 seam을 제공할 뿐, 동시 접속 상한·계정별 연결 상한·rate limiting·아웃바운드 backpressure는 별도 하드닝 토픽(#54) 담당이다.
+- **서버 graceful shutdown 정리는 런타임 기반 토픽 담당** — 서버 주도 종료 시 전체 live 바인딩을 `resolveDisconnect(reason:'shutdown')`로 즉시 일괄 종료하는 오케스트레이션은 [`runtime-foundation.md`](./runtime-foundation.md)(shutdown 정리, #56 해소)이 담당한다. 본 계층은 그 정리가 소비하는 seam만 제공한다 — `DisconnectReason`의 `'shutdown'` 값, `SessionRegistry.listBindings` 스냅샷, 그리고 서버 주도 종료 플래그가 set이면 close 핸들러가 `markLinkDead`(grace)를 건너뛰는 판정. close 핸들러의 서버 주도 종료 구분은 §동작 "close 판정" 표의 "서버 주도 종료" 행과 동일 원리다(플래그 가드로 link-dead 진입 차단).
 
 ## 관련 문서
 
 - 에픽 [#32 E3 전송·세션 계층](https://github.com/smalljiny/muhan/issues/32)
 - 선행 스펙: [`transport-protocol.md`](./transport-protocol.md)(E3-1) · [`auth-session.md`](./auth-session.md)(E3-2)
 - ADR: [`architecture.md`](./architecture.md)(D6 세션·D5 프로토콜 슬롯)
-- 후속·조정: [#54 WS 자원 고갈 하드닝](https://github.com/smalljiny/muhan/issues/54) · [#56 서버 shutdown 세션 수렴](https://github.com/smalljiny/muhan/issues/56)(해소 → [`runtime-foundation.md`](./runtime-foundation.md))
+- 후속·조정: [#54 WS 자원 고갈 하드닝](https://github.com/smalljiny/muhan/issues/54) · [#56 서버 shutdown 세션 일괄 종료](https://github.com/smalljiny/muhan/issues/56)(해소 → [`runtime-foundation.md`](./runtime-foundation.md))

@@ -19,7 +19,7 @@ async 전환 비용에 관해서는 두 갈래 조언이 대립하지 않고 층
 
 동기화 프로세스의 표준 형태도 명시돼 있다 — dirty 플래그나 타임스탬프로 변경된 키를 스캔하고, DB에 쓰고, 동기화됨으로 표시한다. 그리고 **실패를 우아하게 처리해야 한다: DB 쓰기가 실패하면 해당 키는 재시도 대상으로 표시된 채 남아야 한다** ([Redis Patterns](https://redis.antirez.com/fundamental/write-behind.html)).
 
-Oracle Coherence와 Red Hat Data Grid도 read-through/write-through/write-behind를 1급 영속화 모드로 문서화하며, write-behind를 지연 쓰기 큐로 규정한다 ([Oracle Coherence](https://docs.oracle.com/cd/E13924_01/coh.340/e13819/readthrough.htm), [Red Hat Data Grid](https://docs.redhat.com/en/documentation/red_hat_data_grid/7.3/html/red_hat_data_grid_user_guide/persistence)).
+Oracle Coherence와 Red Hat Data Grid도 read-through/write-through/write-behind를 핵심 영속화 모드로 문서화하며, write-behind를 지연 쓰기 큐로 규정한다 ([Oracle Coherence](https://docs.oracle.com/cd/E13924_01/coh.340/e13819/readthrough.htm), [Red Hat Data Grid](https://docs.redhat.com/en/documentation/red_hat_data_grid/7.3/html/red_hat_data_grid_user_guide/persistence)).
 
 ## 2. 템플릿/인스턴스 분리 — 관행과 필드 분할 기준
 
@@ -27,7 +27,7 @@ Oracle Coherence와 Red Hat Data Grid도 read-through/write-through/write-behind
 
 **필드 분할의 판정 기준도 같은 글이 제시한다.** "변하지 않는 필드는 인스턴스에 있을 필요가 아예 없다 — 모든 오크마다 '오크'라는 이름을 저장할 필요 없이 템플릿의 이름을 쓰면 된다. 반면 데이터가 변할 수 있다면 인스턴스에 저장해야 한다. 템플릿의 데이터는 플레이어가 변경할 수 없고(immutable), 인스턴스의 데이터는 변경 가능하다(modifiable)" ([Raph Koster](https://www.raphkoster.com/2021/10/07/digital-objects-how-virtual-worlds-work-part-3/)).
 
-같은 글은 텍스트 MUD가 수십 년간 템플릿 데이터를 공유해 왔다고 언급하며, 공유가 지나쳐 게임 구분이 어려워진 현상을 "stock mud syndrome"이라 부른다 — 본 프로젝트처럼 MUD 계보를 잇는 경우 템플릿 저장소가 정본 콘텐츠 자산임을 시사한다.
+같은 글은 텍스트 MUD가 수십 년간 템플릿 데이터를 공유해 왔다고 언급하며, 공유가 지나쳐 게임 구분이 어려워진 현상을 "stock mud syndrome"이라 부른다 — 본 프로젝트처럼 MUD 계보를 잇는 경우 템플릿 저장소가 기준 콘텐츠 자산임을 시사한다.
 
 **패턴 이름의 구분.** Game Programming Patterns는 Flyweight와 Type Object를 갈라 놓는다. 둘 다 객체 상태 일부를 여러 인스턴스가 공유하는 다른 객체에 위임하지만 **의도가 다르다** — Type Object는 "타입"을 자체 객체 모델로 끌어올려 정의해야 할 클래스 수를 줄이는 것이 목적이고 메모리 공유는 부산물인 반면, **Flyweight는 순수하게 효율이 목적**이다 ([Game Programming Patterns](https://gameprogrammingpatterns.com/flyweight.html)).
 
@@ -70,7 +70,7 @@ async 전환은 찾아 바꾸기가 아니다. "**깨지는 것은 대부분 시
 
 후속 PR #1952의 제목이 "commit swapItems atomically so a yielding hook cannot dupe"인 점도 같은 방향을 가리킨다 ([ox_inventory#1950](https://github.com/overextended/ox_inventory/pull/1950)).
 
-> **본 토픽에의 함의(추론)**: 명령 핸들러를 async로 만드는 것 자체는 위험하지 않다. 위험한 것은 **상태 변형과 `markDirty` 사이에 `await`가 끼는 것**이다. 인벤토리 조회 I/O를 명령 시점에 수행한다면, 그 `await`는 변형 **이전**에 완료돼야 하고 변형→`markDirty`는 동기 블록 하나로 묶여야 한다. 아울러 세션 종료 경로가 dirty 플래그와 무관하게 캐릭터 상태를 저장하는지도 별도로 점검할 항목이다.
+> **본 토픽에의 시사점(추론)**: 명령 핸들러를 async로 만드는 것 자체는 위험하지 않다. 위험한 것은 **상태 변형과 `markDirty` 사이에 `await`가 끼는 것**이다. 인벤토리 조회 I/O를 명령 시점에 수행한다면, 그 `await`는 변형 **이전**에 완료돼야 하고 변형→`markDirty`는 동기 블록 하나로 묶여야 한다. 아울러 세션 종료 경로가 dirty 플래그와 무관하게 캐릭터 상태를 저장하는지도 별도로 점검할 항목이다.
 
 ## 4. 인벤토리 eager hydrate vs lazy 조회
 
@@ -82,7 +82,7 @@ async 전환은 찾아 바꾸기가 아니다. "**깨지는 것은 대부분 시
 - **컨테이너 아이템 수가 많아지면 지연이 발생한다**는 서버 측 이슈가 오픈소스 MUD 계열(Forgotten Server)에 보고돼 있다 ([otland/forgottenserver#1150](https://github.com/otland/forgottenserver/issues/1150)).
 - **인메모리 상주 접근이 표준**이라는 §1의 명제는 eager 쪽에 무게를 싣는다 — 진실의 원천이 메모리라면 명령 시점마다 DB를 조회하는 것은 그 전제와 상충한다 ([PRDeving](https://prdeving.wordpress.com/2023/09/29/mmo-architecture-source-of-truth-dataflows-i-o-bottlenecks-and-how-to-solve-them/)).
 
-> **추론(출처 없음, 낮은 확신)**: 위 세 갈래를 종합하면 세션 진입 시 hydrate해 라이브 상주시키는 쪽이 인메모리 권위 모델과 정합하고 §3.3의 yield 위험도 회피한다. 다만 "로그인 지연"이라는 단점이 실재하므로, 인벤토리 규모가 큰 캐릭터에 대한 측정 없이 단정할 수는 없다.
+> **추론(출처 없음, 낮은 확신)**: 위 세 갈래를 종합하면 세션 진입 시 hydrate해 라이브 상주시키는 쪽이 인메모리 권위 모델과 일치하고 §3.3의 yield 위험도 회피한다. 다만 "로그인 지연"이라는 단점이 실재하므로, 인벤토리 규모가 큰 캐릭터에 대한 측정 없이 단정할 수는 없다.
 
 ## Key Takeaways
 

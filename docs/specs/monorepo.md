@@ -1,6 +1,6 @@
 # Monorepo 스캐폴딩·툴체인
 
-> pnpm workspaces + Turborepo 기반 4패키지 monorepo와 빌드·타입체크·lint·test·CI 툴체인의 정본.
+> pnpm workspaces + Turborepo 기반 4패키지 monorepo와 빌드·타입체크·lint·test·CI 툴체인의 기준 문서.
 
 ## 개요
 
@@ -26,7 +26,7 @@ muhan/
 ├── .github/workflows/ci.yml
 ├── scripts/
 │   └── verify-turbo-hash.mjs   # 해시 계약 회귀 검증(CI blocking 스텝)
-├── data/world/             # 기존 산출물(정본, 이동 없음)
+├── data/world/             # 기존 산출물(기준, 이동 없음)
 └── packages/
     ├── shared/   # 공유 단일 출처 타입 + world 로더
     ├── server/   # 최소 Fastify 부팅 엔트리 + /health
@@ -86,7 +86,7 @@ pnpm 버전은 루트 `package.json`의 `packageManager: "pnpm@10.33.0"`가 단�
 - **LHS 대역 한정**: 취약 대역에 해당하는 노드만 재해석하고 다른 소비자는 건드리지 않아 blast radius를 최소화한다. 무범위 override(`"uuid": ">=11.1.1"`)는 전 트리를 강제해 부작용 위험이 크므로 금지한다.
 - **RHS "다음 메이저 미만" 상한**: 각 RHS를 취약 대역과 같은 메이저 라인에 고정한다(`<2.0.0`/`<3.0.0`/`<12.0.0`/`<4.0.0`/`<10.0.0`). 상한 없는 `>=`는 최고 만족 버전을 끌어와 cross-major breaking을 유발한다 — 실제로 상한 없는 `>=2.1.2`는 minimatch@9.0.9(brace-expansion `^2.0.2` 소비)에 brace-expansion 5.0.7(ESM named-export)을 강제해 CJS `.default` interop을 깨뜨렸고, 상한 없는 `>=11.1.1`은 uuid를 14.x로 점프시켰다. fast-uri도 4.x 라인이 존재해 상한 없는 `>=3.1.4`는 미검증 메이저를 끌어올 수 있으므로 `<4.0.0`으로 고정한다.
 
-override는 transitive 버전만 바꾸므로 애플리케이션 소스는 무변경이며, 검증은 audit 0건 + build·type-check·test 회귀 부재로 갈음한다. 시점 반응 패치이므로 향후 dependency bump가 취약 대역을 재도입할 수 있고, CI에는 아직 `pnpm audit` 게이트가 없어(향후 별도 토픽) 재검출은 로컬 `pnpm audit`에 의존한다.
+override는 transitive 버전만 바꾸므로 애플리케이션 소스는 무변경이며, 검증은 audit 0건 + build·type-check·test 회귀 없음으로 갈음한다. 시점 반응 패치이므로 향후 dependency bump가 취약 대역을 재도입할 수 있고, CI에는 아직 `pnpm audit` 게이트가 없어(향후 별도 토픽) 재검출은 로컬 `pnpm audit`에 의존한다.
 
 ## 동작
 
@@ -98,7 +98,7 @@ override는 transitive 버전만 바꾸므로 애플리케이션 소스는 무�
 - `transit`: `dependsOn: ["^transit"]`. 어느 `package.json`에도 없는 이름이라 **실행되는 스크립트가 없는 해시 전용 노드**다(Transit Node).
 - `build`: `dependsOn: ["^build"]`(의존 패키지 먼저), `outputs: ["dist/**"]`.
 - `type-check`·`lint`: `dependsOn: ["transit"]`.
-- `test`: `dependsOn: ["^build"]`, `outputs: ["coverage/**"]`. vitest는 워크스페이스 패키지(`shared`)를 `exports`로 `dist/`에서 해석하므로, `test` 전에 의존 패키지를 빌드해야 stale/부재 `dist`로 인한 clean-CI 실패를 막는다(E2-1이 `[]`→`["^build"]`로 정정). `type-check`는 tsconfig `paths`로 `shared/src`를 직접 읽어 이 의존이 불필요하다.
+- `test`: `dependsOn: ["^build"]`, `outputs: ["coverage/**"]`. vitest는 워크스페이스 패키지(`shared`)를 `exports`로 `dist/`에서 해석하므로, `test` 전에 의존 패키지를 빌드해야 stale하거나 없는 `dist`로 인한 clean-CI 실패를 막는다(E2-1이 `[]`→`["^build"]`로 정정). `type-check`는 tsconfig `paths`로 `shared/src`를 직접 읽어 이 의존이 불필요하다.
 
 turbo는 태스크마다 **global hash**(turbo.json 정의·lockfile·`globalDependencies`)와 **package hash**(패키지 디렉터리 내 추적 파일 + `dependsOn` 상위 태스크 해시)를 합성하고, 둘 중 하나만 달라도 cache miss가 난다. `globalDependencies`는 앞쪽에, `transit`은 뒤쪽에 간선을 하나씩 추가한다.
 
@@ -139,7 +139,7 @@ shared#transit ──▶ server#transit ──▶ server#type-check
 - **server**: 번들러 없음. `build`=`tsc -p tsconfig.build.json` → `dist/`, `dev`=`tsx watch src/index.ts`, `start`=`node dist/index.js`. 서버는 실행 앱이라 번들이 불필요하고, Fastify 동적 require가 번들러와 충돌하므로 tsc를 쓴다.
 - **port**: 무빌드. Node로 스크립트 직접 실행.
 
-서버 엔트리(`server/src/index.ts`)는 부팅 시퀀스를 오케스트레이션한다: `getConfig()`(env fail-fast) → `connectMongo`(DB fail-fast) → repository 인덱스 `init()` → `loadWorldGraph`(방 2341 인메모리) → `buildApp({ pingDb })` → `PORT`(`getConfig().PORT`, 0–65535) `0.0.0.0` 리슨(E2-1이 확장; 상세는 `docs/specs/persistence.md`). `/health`는 DB ping 기반으로 `shared`의 `HealthStatus`(`{ status: 'ok'|'degraded', db: 'up'|'down' }`)를 반환한다. 배선 엔트리(`index.ts`)는 커버리지에서 제외하고, 앱 팩토리(`app.ts`)를 `inject`로 스모크 테스트한다.
+서버 엔트리(`server/src/index.ts`)는 부팅 시퀀스를 오케스트레이션한다: `getConfig()`(env fail-fast) → `connectMongo`(DB fail-fast) → repository 인덱스 `init()` → `loadWorldGraph`(방 2341 인메모리) → `buildApp({ pingDb })` → `PORT`(`getConfig().PORT`, 0–65535) `0.0.0.0` 리슨(E2-1이 확장; 상세는 `docs/specs/persistence.md`). `/health`는 DB ping 기반으로 `shared`의 `HealthStatus`(`{ status: 'ok'|'degraded', db: 'up'|'down' }`)를 반환한다. 연결 엔트리(`index.ts`)는 커버리지에서 제외하고, 앱 팩토리(`app.ts`)를 `inject`로 스모크 테스트한다.
 
 ### 테스트·커버리지
 
@@ -168,7 +168,7 @@ prettier는 포맷 전용으로 분리(`.prettierrc.json` + `.prettierignore`).
 ## 제약사항
 
 - E1은 스캐폴딩 토대만 다룬다. 상세 전송·세션(WS 핸드셰이크·프로토콜·라우팅)은 E3, 영속화(MongoDB)는 E2, 게임 로직·규칙은 후속 에픽 범위 밖이다.
-- 서버는 `/health` 최소 엔드포인트 + 부팅만 제공한다. 실제 Fastify 라우트·플러그인·`@fastify/websocket` 배선은 E3.
+- 서버는 `/health` 최소 엔드포인트 + 부팅만 제공한다. 실제 Fastify 라우트·플러그인·`@fastify/websocket` 연결은 E3.
 - `client`는 빈 앱 스켈레톤이며 UI·상태관리는 별도 프론트엔드 토픽이다.
 - `port`는 순수 JS를 유지한다(TS 전환 안 함).
 - Turborepo 원격 캐시·Redis·배포/Docker/prod 인프라는 범위 밖이다. CI에 turbo 캐시를 도입하지 않는다 — fresh 체크아웃 전량 실행을 유지한다.

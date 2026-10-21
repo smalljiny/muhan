@@ -532,8 +532,8 @@
   <header>
     <p class="eyebrow">muhan · github issues → roadmap · 2026-08-19 · <strong>develop 6920540</strong></p>
     <h1>지금 어디에 있나 — 무한 포팅 진행 궤도</h1>
-    <p class="lede">1991–93년 Mordor 파생 한국어 MUD "무한"을 Node.js + 웹으로 재구현하는 프로젝트입니다. 에픽 E1~E13과 토픽·부채 이슈에서 파생한 현황입니다. <strong>규칙 엔진의 순수 레이어(전투·마법·진행·스탯·아이템·경제)는 전부 닫혔고, 지금 남은 것은 그 규칙을 살아 있는 세션에 잇는 "배선"입니다.</strong> 크리티컬 패스는 여전히 라이브 명령 배선 체인이지만, <strong>그 헤드였던 <a href="https://github.com/smalljiny/muhan/issues/118">#118</a>이 08-10에 닫히면서 체인 전체가 열렸습니다</strong> — 이제 병목은 선행 이슈가 아니라 각 토픽 내부의 설계 결정입니다.</p>
-    <p class="lede" style="margin-top:8px"><strong>08-20 기준</strong> — 08-19 이후 <a href="https://github.com/smalljiny/muhan/issues/121">#121</a>이 닫혔습니다(PR #148). <strong>플레이어가 몬스터를 때릴 수 있게 됐습니다</strong> — 대상 지목 → 전투 판정 → 사망 → 경험치까지 한 바퀴가 라이브 세션에서 돕니다. <code>initiateAttack</code>의 non-test 호출자 0건이 해소됐고, <code>combatRegistry</code>·장비 해소 파이프·크리처별 데미지 원장·사망 seam이 함께 섰습니다. <strong>프로토콜이 바뀝니다</strong>(<code>PROTOCOL_VERSION</code> 5→<strong>6</strong> · <code>ClientCommand</code> <strong>10종</strong> · <code>ServerEvent</code> <strong>14종</strong> — <code>combat:attack</code> 명령과 <code>combat:attacked</code>·<code>character:stats</code> 이벤트 신설). <strong>이로써 <a href="https://github.com/smalljiny/muhan/issues/61">#61</a>(E12)의 게이트가 열렸고 <a href="https://github.com/smalljiny/muhan/issues/122">#122</a>(cast)의 유일한 선행이 사라졌습니다.</strong> CP1 잔여는 <a href="https://github.com/smalljiny/muhan/issues/116">#116</a>·<a href="https://github.com/smalljiny/muhan/issues/138">#138</a> 둘 그대로입니다. 새 부채 <a href="https://github.com/smalljiny/muhan/issues/147">#147</a>(비사망 크리처 원장 미회수)이 발행됐습니다.</p>
+    <p class="lede">1991–93년 Mordor 파생 한국어 MUD "무한"을 Node.js + 웹으로 재구현하는 프로젝트입니다. 에픽 E1~E13과 토픽·부채 이슈에서 파생한 현황입니다. <strong>규칙 엔진의 순수 레이어(전투·마법·진행·스탯·아이템·경제)는 전부 닫혔고, 지금 남은 것은 그 규칙을 살아 있는 세션에 잇는 "연결"입니다.</strong> 크리티컬 패스는 여전히 라이브 명령 연결 체인이지만, <strong>그 헤드였던 <a href="https://github.com/smalljiny/muhan/issues/118">#118</a>이 08-10에 닫히면서 체인 전체가 열렸습니다</strong> — 이제 병목은 선행 이슈가 아니라 각 토픽 내부의 설계 결정입니다.</p>
+    <p class="lede" style="margin-top:8px"><strong>08-20 기준</strong> — 08-19 이후 <a href="https://github.com/smalljiny/muhan/issues/121">#121</a>이 닫혔습니다(PR #148). <strong>플레이어가 몬스터를 때릴 수 있게 됐습니다</strong> — 대상 지목 → 전투 판정 → 사망 → 경험치까지 한 바퀴가 라이브 세션에서 돕니다. <code>initiateAttack</code>의 non-test 호출자 0건이 해소됐고, <code>combatRegistry</code>·장비 해석 파이프·크리처별 데미지 원장·사망 확장 지점(seam)이 함께 섰습니다. <strong>프로토콜이 바뀝니다</strong>(<code>PROTOCOL_VERSION</code> 5→<strong>6</strong> · <code>ClientCommand</code> <strong>10종</strong> · <code>ServerEvent</code> <strong>14종</strong> — <code>combat:attack</code> 명령과 <code>combat:attacked</code>·<code>character:stats</code> 이벤트 신설). <strong>이로써 <a href="https://github.com/smalljiny/muhan/issues/61">#61</a>(E12)의 게이트가 열렸고 <a href="https://github.com/smalljiny/muhan/issues/122">#122</a>(cast)의 유일한 선행이 사라졌습니다.</strong> CP1 잔여는 <a href="https://github.com/smalljiny/muhan/issues/116">#116</a>·<a href="https://github.com/smalljiny/muhan/issues/138">#138</a> 둘 그대로입니다. 새 부채 <a href="https://github.com/smalljiny/muhan/issues/147">#147</a>(비사망 크리처 원장 미회수)이 발행됐습니다.</p>
     <p class="lede" style="margin-top:8px"><strong>릴리스 계획</strong> — <strong>CP1이 첫 릴리스 지점</strong>입니다. 통과 시 릴리스를 내고 <code>develop</code>을 <code>main</code>에 병합합니다. 그때까지 원격에는 <code>develop</code> 하나만 존재하는 것이 정상입니다.</p>
 
     <!-- ══ HERO 다이어그램 ══ -->
@@ -646,7 +646,7 @@
       <div class="s-card past">
         <div class="s-k">방금 끝낸 것</div>
         <div class="s-t">attack 명령 라이브 연결</div>
-        <p class="s-d"><a href="https://github.com/smalljiny/muhan/issues/121">#121</a> <code>combat:attack</code> 배선(PR #148) — <strong>플레이어가 처음으로 몬스터를 때릴 수 있게 됐습니다</strong>. 규모 판단이 뒤집힌 항목입니다: 로드맵은 "장비 해소 파이프 신규 구축"으로 봤으나, 코드 확인 결과 이 게임엔 능력치 수정 항이 0개라 <strong>유효 능력치 = 기본 능력치</strong>였습니다. 진짜 관문은 HP 출처 이원화 · 사망 seam 부재 · <code>DamageLedger</code>가 방어자를 구분하지 못하는 것 셋이었고 전부 닫혔습니다.</p>
+        <p class="s-d"><a href="https://github.com/smalljiny/muhan/issues/121">#121</a> <code>combat:attack</code> 연결(PR #148) — <strong>플레이어가 처음으로 몬스터를 때릴 수 있게 됐습니다</strong>. 규모 판단이 뒤집힌 항목입니다: 로드맵은 "장비 해석 파이프 신규 구축"으로 봤으나, 코드 확인 결과 이 게임엔 능력치 수정 항이 0개라 <strong>유효 능력치 = 기본 능력치</strong>였습니다. 진짜 관문은 HP 출처 이원화 · 사망 seam 없음 · <code>DamageLedger</code>가 방어자를 구분하지 못하는 것 셋이었고 전부 닫혔습니다.</p>
       </div>
       <div class="s-card here">
         <div class="s-k">지금 해야 할 것 — CP1 잔여</div>
@@ -679,7 +679,7 @@
     <div class="graph-box">
       <div class="graph-scroll">
         <svg id="dep-graph" viewBox="0 0 800 500" role="img"
-             aria-label="이슈 의존 관계 그래프 — 결정 게이트 #14에서 시작해 E1(#30)·E2·E3·E8이 기반을 만들고, E6(#36)를 허브로 라이브 배선 체인(#118 → #119·#120·#121 → #122)이 갈라지며, 웹 클라이언트 라인(#58 → #59 → #60 → #61)이 아래로 흐릅니다."></svg>
+             aria-label="이슈 의존 관계 그래프 — 결정 게이트 #14에서 시작해 E1(#30)·E2·E3·E8이 기반을 만들고, E6(#36)를 허브로 라이브 연결 체인(#118 → #119·#120·#121 → #122)이 갈라지며, 웹 클라이언트 라인(#58 → #59 → #60 → #61)이 아래로 흐릅니다."></svg>
       </div>
       <div class="g-legend">
         <span><i class="ms-sw g0"></i> M0 역설계·분석</span>
@@ -705,7 +705,7 @@
       <h2>마일스톤 상세</h2>
       <span class="sec-tag">epics · topics · gates</span>
     </div>
-    <p class="sec-note"><strong>M0~M7과 CP1~CP3은 GitHub 마일스톤 필드가 아니라 이 페이지가 이슈 의존 관계에서 도출한 그룹핑입니다</strong> — GitHub에는 <code>게임 분석</code>·<code>스택·아키텍처 결정</code>·<code>구현</code> 3개만 있고 E9~E13(<code>#58</code>~<code>#62</code>)에는 마일스톤이 지정돼 있지 않습니다. 또한 에픽 이슈의 열림/닫힘만으로는 판단할 수 없습니다 — E6(<code>#36</code>)는 열려 있지만 하위 규칙 토픽 8개가 전부 닫혔고, E4(<code>#34</code>)는 실질 완료 상태인데 유예 항목 <code>#116</code> 하나 때문에 열려 있습니다. 아래는 실제 완료 토픽 기준입니다.</p>
+    <p class="sec-note"><strong>M0~M7과 CP1~CP3은 GitHub 마일스톤 필드가 아니라 이 페이지가 이슈 의존 관계에서 도출한 그룹핑입니다</strong> — GitHub에는 <code>게임 분석</code>·<code>스택·아키텍처 결정</code>·<code>구현</code> 3개만 있고 E9~E13(<code>#58</code>~<code>#62</code>)에는 마일스톤이 지정돼 있지 않습니다. 또한 에픽 이슈의 열림/닫힘만으로는 판단할 수 없습니다 — E6(<code>#36</code>)는 열려 있지만 하위 규칙 토픽 8개가 전부 닫혔고, E4(<code>#34</code>)는 실질 완료 상태인데 보류 항목 <code>#116</code> 하나 때문에 열려 있습니다. 아래는 실제 완료 토픽 기준입니다.</p>
 
     <div class="track">
 
@@ -720,7 +720,7 @@
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">디스크 포맷 역설계 → JSON</span>
               <span class="card-num">이슈 밖</span></div>
             <div class="kv"><span class="k">확정</span><span class="v">32비트 ABI · EUC-KR · <code>room</code>=480 · <code>exit_</code>=44 · <code>object</code>=352 · <code>creature</code>=1184. C oracle 대조로 object 907 + creature 1049 전 필드 일치</span></div>
-            <div class="kv"><span class="k">산출</span><span class="v"><code>port/</code> 파서·변환기 → <code>data/world/</code>(rooms·creatures·objects·events). 방 3216개 중 정본 <strong>2341</strong> · orphan 875 제외</span></div>
+            <div class="kv"><span class="k">산출</span><span class="v"><code>port/</code> 파서·변환기 → <code>data/world/</code>(rooms·creatures·objects·events). 방 3216개 중 유효 <strong>2341</strong> · orphan 875 제외</span></div>
           </div>
           <div class="card d">
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">게임 분석 A1~A13</span>
@@ -731,8 +731,8 @@
           <div class="card d">
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">스택·아키텍처 결정 게이트 ★</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/14">#14</a></div>
-            <div class="kv"><span class="k">확정</span><span class="v">손수 <code>ws</code>+EventEmitter(Colyseus 반려) · 단일 프로세스 1Hz 틱 · MongoDB 네이티브 세이브 · pnpm monorepo · as-shipped + 구현 방식 개선 정책</span></div>
-            <div class="kv"><span class="k">정본</span><span class="v"><code>docs/specs/architecture.md</code> — 전역 불변식 6개 · 결정 D0~D8</span></div>
+            <div class="kv"><span class="k">확정</span><span class="v">손수 <code>ws</code>+EventEmitter(Colyseus 기각) · 단일 프로세스 1Hz 틱 · MongoDB 네이티브 세이브 · pnpm monorepo · as-shipped + 구현 방식 개선 정책</span></div>
+            <div class="kv"><span class="k">기준</span><span class="v"><code>docs/specs/architecture.md</code> — 전역 불변식 6개 · 결정 D0~D8</span></div>
           </div>
         </div>
       </div>
@@ -753,7 +753,7 @@
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">E2 영속화 기반 ★</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/31">#31</a></div>
             <div class="kv"><span class="k">토픽</span><span class="v"><code>persistence</code>(#39) · <code>save-policy</code>(#40) — 부팅 전량 로드 · dirty-flag write-behind · 금화 가드</span></div>
-            <div class="kv rest"><span class="k">부채</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/43">#43</a> 은행 트랜잭션 ↔ write-behind 조정 · <a href="https://github.com/smalljiny/muhan/issues/124">#124</a> 재접속 re-hydrate 무성 revert</span></div>
+            <div class="kv rest"><span class="k">부채</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/43">#43</a> 은행 트랜잭션 ↔ write-behind 조정 · <a href="https://github.com/smalljiny/muhan/issues/124">#124</a> 재접속 re-hydrate 조용한 revert</span></div>
           </div>
           <div class="card d">
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">E3 전송·세션 계층</span>
@@ -781,8 +781,8 @@
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">E4 월드 상태 엔진 ★</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/34">#34</a></div>
             <div class="kv"><span class="k">토픽</span><span class="v"><code>runtime-foundation</code>(#67, 1Hz 틱·shutdown) · <code>movement-rooms</code>(#69, <code>tryMove</code>·문·방 채널) · <code>creature-spawn</code>(#68, 스폰 3트리거·AI 큐)</span></div>
-            <div class="kv"><span class="k">추가</span><span class="v"><code>live-world-foundation</code>(<a href="https://github.com/smalljiny/muhan/issues/114">#114</a>, PR #115) — 세션↔캐릭터 <strong>라이브 상태원</strong>·방 배치·<code>tryMove</code> 프로덕션 결선. E4가 유예했던 고아 갭</span></div>
-            <div class="kv rest"><span class="k">유예</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/116">#116</a> 이동 leave/join 방송이 <code>noopBroadcast</code> — 같은 방 점유자가 입·퇴장을 볼 수 없음</span></div>
+            <div class="kv"><span class="k">추가</span><span class="v"><code>live-world-foundation</code>(<a href="https://github.com/smalljiny/muhan/issues/114">#114</a>, PR #115) — 세션↔캐릭터 <strong>라이브 상태원</strong>·방 배치·<code>tryMove</code> 프로덕션 연결. E4가 보류했던 고아 갭</span></div>
+            <div class="kv rest"><span class="k">보류</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/116">#116</a> 이동 leave/join 방송이 <code>noopBroadcast</code> — 같은 방 점유자가 입·퇴장을 볼 수 없음</span></div>
           </div>
           <div class="card d">
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">E5 인증·계정</span>
@@ -797,7 +797,7 @@
         <div class="ms-head">
           <span class="ms-id">M3</span>
           <span class="ms-name">규칙 코어 — E6 순수 레이어</span>
-          <span class="ms-meta">토픽 8/8 완료 · 에픽 #36은 배선 잔여로 열림</span>
+          <span class="ms-meta">토픽 8/8 완료 · 에픽 #36은 연결 잔여로 열림</span>
         </div>
         <div class="cards">
           <div class="card d">
@@ -809,7 +809,7 @@
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">E6b 마법</span>
               <span class="card-num">#84 · #85</span></div>
             <div class="kv"><span class="k">토픽</span><span class="v"><code>magic</code> — 주문 카탈로그·시전 게이트·공격 데미지 · <code>magic-progression</code> — 버프 타이머·저항·숙련·마나·학습</span></div>
-            <div class="kv rest"><span class="k">파생</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/108">#108</a> 몬스터 self-heal healer 게이트(divergence 32%) · <a href="https://github.com/smalljiny/muhan/issues/100">#100</a> <code>spell_fail</code> 미배선</span></div>
+            <div class="kv rest"><span class="k">파생</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/108">#108</a> 몬스터 self-heal healer 게이트(divergence 32%) · <a href="https://github.com/smalljiny/muhan/issues/100">#100</a> <code>spell_fail</code> 미연결</span></div>
           </div>
           <div class="card d">
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">E6c 진행 · 스탯</span>
@@ -856,30 +856,30 @@
           <div class="card d">
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">게임 command 디스패처 + 연마(train)</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/106">#106</a></div>
-            <div class="kv"><span class="k">랜딩</span><span class="v">PR #125 — <code>GameCommandDeps</code> 번들 · <code>progress:train</code>/<code>progress:trained</code> variant · <code>markCharacterDirty</code> 헬퍼(write-loss 봉쇄) · <code>PROTOCOL_VERSION</code> 2→3</span></div>
+            <div class="kv"><span class="k">머지</span><span class="v">PR #125 — <code>GameCommandDeps</code> 번들 · <code>progress:train</code>/<code>progress:trained</code> variant · <code>markCharacterDirty</code> 헬퍼(write-loss 봉쇄) · <code>PROTOCOL_VERSION</code> 2→3</span></div>
             <div class="kv rest"><span class="k">함정</span><span class="v">레지스트리에만 등록하고 <code>clientCommandSchema</code>에 variant를 추가하지 않으면 그 명령은 <strong>영구히 <code>bad_payload</code></strong>로 떨어집니다 — 후속 5건이 복제할 계약</span></div>
           </div>
           <div class="card d">
             <div class="card-top"><span class="chip d">완료</span><span class="card-title"><code>character.flags</code> 스키마</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/117">#117</a></div>
-            <div class="kv"><span class="k">랜딩</span><span class="v">PR #127 — P-flag 영속 입력원 + 합성 계층. 실명·침묵 게이트(<code>study</code>·<code>teach</code>·전투)의 입력원 확립. <code>alignment</code> 값 계약 단일 소유</span></div>
+            <div class="kv"><span class="k">머지</span><span class="v">PR #127 — P-flag 영속 입력원 + 합성 계층. 실명·침묵 게이트(<code>study</code>·<code>teach</code>·전투)의 입력원 확립. <code>alignment</code> 값 계약 단일 소유</span></div>
             <div class="kv rest"><span class="k">해제</span><span class="v">#119 · #120 · #121 · <a href="https://github.com/smalljiny/muhan/issues/123">#123</a>의 blocking 해소. ⚠️ <strong>합성값은 타이머 보유 효과 전용</strong>이라 <code>PHIDDN</code>·<code>PDMINV</code>·<code>PWIMPY</code>·<code>PCHAOS</code>·<code>PFAMIL</code>·<code>PUPDMG</code> 6종은 영속 경로가 없어 영원히 0 — 소비 토픽이 유일 출처로 쓰면 안 됨</span></div>
           </div>
           <div class="card d">
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">오라클 이름 매처 이식 ★</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/118">#118</a></div>
-            <div class="kv"><span class="k">랜딩</span><span class="v">PR #140 (08-10) — <code>shared/naming/matchTarget.ts</code>(4필드 순수 접두 + 서수) · <code>matchSpellName.ts</code> · <code>magic/catalog.ts</code>의 <code>spellByName</code> · <code>server/world/roomTargetResolvers.ts</code>(방 스코프 해소자) + 별칭 파이프라인(<code>data/world</code> 재생성)</span></div>
+            <div class="kv"><span class="k">머지</span><span class="v">PR #140 (08-10) — <code>shared/naming/matchTarget.ts</code>(4필드 순수 접두 + 서수) · <code>matchSpellName.ts</code> · <code>magic/catalog.ts</code>의 <code>spellByName</code> · <code>server/world/roomTargetResolvers.ts</code>(방 스코프 리졸버) + 별칭 파이프라인(<code>data/world</code> 재생성)</span></div>
             <div class="kv"><span class="k">해제</span><span class="v"><strong>#119 · #120 · #121 · #122 4건의 blocking이 전부 사라졌습니다.</strong> 체인 헤드가 없어졌고, 이제 각 토픽의 관문은 내부 설계 결정입니다</span></div>
             <div class="kv rest"><span class="k">인계</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/137">#137</a> — 방 대상 <strong>서수 기준이 도착 순서</strong>(오라클은 EUC-KR <code>strcmp</code> 이름 정렬). 소비 토픽이 오라클 순서를 전제하고 짜면 안 됨</span></div>
           </div>
           <div class="card t">
-            <div class="card-top"><span class="chip t">착수 가능</span><span class="card-title">teach 명령 배선</span>
+            <div class="card-top"><span class="chip t">착수 가능</span><span class="card-title">teach 명령 연결</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/119">#119</a></div>
-            <div class="kv"><span class="k">범위</span><span class="v"><code>progress:teach</code> variant + 방 스코프 대상 해소 + <code>setKnown</code> write-back·<code>markDirty</code> + 양측 broadcast. 실패 6종은 <code>rule_rejected</code>로 접음</span></div>
+            <div class="kv"><span class="k">범위</span><span class="v"><code>progress:teach</code> variant + 방 스코프 대상 해석 + <code>setKnown</code> write-back·<code>markDirty</code> + 양측 broadcast. 실패 6종은 <code>rule_rejected</code>로 접음</span></div>
             <div class="kv"><span class="k">선행</span><span class="v"><strong>없음</strong> — #117 ✅ · #118 ✅ 모두 해소. 체인에서 가장 작은 항목이라 deps 번들 패턴 복제 시연으로 적합</span></div>
           </div>
           <div class="card t">
-            <div class="card-top"><span class="chip t">미착수</span><span class="card-title">이동 leave/join 방송 결선</span>
+            <div class="card-top"><span class="chip t">미착수</span><span class="card-title">이동 leave/join 방송 연결</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/116">#116</a></div>
             <div class="kv"><span class="k">범위</span><span class="v"><code>broadcastLeave</code>/<code>broadcastJoin</code> 실 구현 주입 · 아웃바운드 이벤트 계약 확정 · sneak/flee 억제 오라클 대조</span></div>
             <div class="kv"><span class="k">상태</span><span class="v"><strong>완전 독립</strong> — <code>occupants</code>·채널 포트는 이미 살아 있고 이동 이벤트만 통지되지 않음</span></div>
@@ -887,17 +887,17 @@
           <div class="card d">
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">E11 월드 뷰 (방·이동·주변)</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/60">#60</a></div>
-            <div class="kv"><span class="k">랜딩</span><span class="v">PR #128 (08-02) — <code>world:room</code>이 <code>roomId</code>+<code>exits</code> 2필드에서 <strong>방 전체 스냅샷 7필드</strong>(이름·설명·점유자·아이템·크리처)로 확장. <code>PROTOCOL_VERSION</code> 3→<strong>4</strong> · <code>projectRoomView</code> 표시 가시성 필터 · 클라 <code>RoomPanel</code> + 출구 버튼 이동</span></div>
+            <div class="kv"><span class="k">머지</span><span class="v">PR #128 (08-02) — <code>world:room</code>이 <code>roomId</code>+<code>exits</code> 2필드에서 <strong>방 전체 스냅샷 7필드</strong>(이름·설명·점유자·아이템·크리처)로 확장. <code>PROTOCOL_VERSION</code> 3→<strong>4</strong> · <code>projectRoomView</code> 표시 가시성 필터 · 클라 <code>RoomPanel</code> + 출구 버튼 이동</span></div>
             <div class="kv rest"><span class="k">파생 부채 6건</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/129">#129</a> 수신자 인지 가시성 · <a href="https://github.com/smalljiny/muhan/issues/130">#130</a> <code>lastError</code> 미해제 · <a href="https://github.com/smalljiny/muhan/issues/131">#131</a> EventLog 비용 · <a href="https://github.com/smalljiny/muhan/issues/132">#132</a> <code>ServerEventPayload</code> 별칭 · <a href="https://github.com/smalljiny/muhan/issues/133">#133</a> seam 비대칭 · <a href="https://github.com/smalljiny/muhan/issues/134">#134</a> 표시/통행 비대칭 근거 주석. 점유자 실시간 갱신은 여전히 #116 대기</span></div>
           </div>
           <div class="card t">
             <div class="card-top"><span class="chip t">HIGH</span><span class="card-title">깨끗한 DB에서 e2e 통과 불가</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/138">#138</a></div>
             <div class="kv"><span class="k">증상</span><span class="v">README 절차(<code>docker compose up</code> → <code>pnpm --filter client e2e</code>)를 깨끗한 환경에서 그대로 따르면 G1에서 <code>hydrate: character not found: dev-char-1</code>로 실패. <strong>문서화된 진입 경로가 지금 막혀 있습니다</strong></span></div>
-            <div class="kv rest"><span class="k">원인</span><span class="v">dev 시드 캐릭터가 <code>InMemorySessionAuthAdapter</code> 목록에만 있고 Mongo <code>characters</code>에 없음. compose mongo는 볼륨이 없어 매 기동 빈 DB. <code>e2e</code>가 turbo·CI 어디에도 없어 회귀가 무보호</span></div>
+            <div class="kv rest"><span class="k">원인</span><span class="v">dev 시드 캐릭터가 <code>InMemorySessionAuthAdapter</code> 목록에만 있고 Mongo <code>characters</code>에 없음. compose mongo는 볼륨이 없어 매 시작마다 빈 DB. <code>e2e</code>가 turbo·CI 어디에도 없어 회귀가 무보호</span></div>
           </div>
           <div class="card t">
-            <div class="card-top"><span class="chip t">HIGH</span><span class="card-title">재접속 진행도 무성 revert</span>
+            <div class="card-top"><span class="chip t">HIGH</span><span class="card-title">재접속 진행도 조용한 revert</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/124">#124</a></div>
             <div class="kv"><span class="k">경로</span><span class="v">grace(30초) &lt; flush 주기(120초) → 재접속 <code>hydrate</code>가 DirtyTracker pending을 안 보고 저장소 재읽기 → stale 스냅샷이 LWW 승자</span></div>
             <div class="kv rest"><span class="k">긴급</span><span class="v"><code>train</code>이 이미 라이브라 <strong>실사용 데이터가 지금 노출됨</strong>. level·gold·experience·vitals·stats 전체 소실</span></div>
@@ -921,30 +921,30 @@
           <span class="gate ok">✓ E11 월드 뷰 (#60 · PR #128)</span>
           <span class="gate ok">✓ 검증 게이트 신뢰성 (#126 · PR #136)</span>
           <span class="gate open">#116 이동 leave/join 방송</span>
-          <span class="gate open">HIGH #124 진행도 무성 revert</span>
+          <span class="gate open">HIGH #124 진행도 조용한 revert</span>
           <span class="gate open">HIGH #138 깨끗한 DB e2e 통과 불가</span>
           <span class="gate open">릴리스 + <code>develop</code> → <code>main</code> 병합</span>
         </div>
-        <p class="cp-foot"><b>게이트 9개 중 6개가 닫혔고, 남은 셋은 서로 독립입니다.</b> #60이 랜딩하면서 방을 읽고 출구 버튼으로 이동하는 경로가 실제로 열렸습니다 — CP1의 "걸어 다니는 것"은 이제 관측 가능합니다. <strong>08-11 이후 CP1 게이트에는 변화가 없습니다</strong> — #120은 M6 항목이라 이 관문을 움직이지 않습니다. 남은 것은 <strong>같은 방 사람의 입·퇴장이 보이지 않는 것</strong>(#116)과 두 개의 조용한 결함입니다. <strong>#124를 닫지 않고 이 관문을 통과하면 안 됩니다</strong> — 진행도를 먹는 세계에 사람을 초대할 수는 없고, <code>train</code>이 이미 라이브라 노출 창이 열려 있습니다. <strong>#138은 성격이 다릅니다</strong> — 코드 결함이 아니라 시드 데이터 결손이지만, 첫 릴리스에서 남이 README를 따라 띄우는 순간 바로 부딪히는 지점이라 CP1 안에 둡니다.<br><br><b>브랜치 상태 —</b> 원격에는 현재 <code>develop</code> 하나만 있고 기본 브랜치도 <code>develop</code>입니다. <code>main</code>은 <strong>이 관문에서 처음 생깁니다</strong>. <code>.harness/rules/git-workflow.md</code>의 <code>main</code>=production 전략은 문서가 맞고 원격이 아직 따라오지 않은 상태입니다.</p>
+        <p class="cp-foot"><b>게이트 9개 중 6개가 닫혔고, 남은 셋은 서로 독립입니다.</b> #60이 머지되면서 방을 읽고 출구 버튼으로 이동하는 경로가 실제로 열렸습니다 — CP1의 "걸어 다니는 것"은 이제 관측 가능합니다. <strong>08-11 이후 CP1 게이트에는 변화가 없습니다</strong> — #120은 M6 항목이라 이 관문을 움직이지 않습니다. 남은 것은 <strong>같은 방 사람의 입·퇴장이 보이지 않는 것</strong>(#116)과 두 개의 조용한 결함입니다. <strong>#124를 닫지 않고 이 관문을 통과하면 안 됩니다</strong> — 진행도를 먹는 세계에 사람을 초대할 수는 없고, <code>train</code>이 이미 라이브라 노출 창이 열려 있습니다. <strong>#138은 성격이 다릅니다</strong> — 코드 결함이 아니라 시드 데이터 결손이지만, 첫 릴리스에서 남이 README를 따라 띄우는 순간 바로 부딪히는 지점이라 CP1 안에 둡니다.<br><br><b>브랜치 상태 —</b> 원격에는 현재 <code>develop</code> 하나만 있고 기본 브랜치도 <code>develop</code>입니다. <code>main</code>은 <strong>이 관문에서 처음 생깁니다</strong>. <code>.harness/rules/git-workflow.md</code>의 <code>main</code>=production 전략은 문서가 맞고 원격이 아직 따라오지 않은 상태입니다.</p>
       </div>
 
       <div class="ms">
         <div class="ms-head">
           <span class="ms-id">M6</span>
           <span class="ms-name">싸우기 — 전투 · 마법 · 아이템 라이브화</span>
-          <span class="ms-meta">2/8 · <strong>#121 랜딩(PR #148)</strong> · 선행 대기 0건</span>
+          <span class="ms-meta">2/8 · <strong>#121 머지(PR #148)</strong> · 선행 대기 0건</span>
         </div>
         <div class="cards">
           <div class="card d">
             <div class="card-top"><span class="chip d">완료 ★</span><span class="card-title">attack 명령 라이브 연결</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/121">#121</a></div>
-            <div class="kv"><span class="k">랜딩</span><span class="v">PR #148 (08-20) — <code>combat:attack</code> 배선. <code>assemblePlayerCombatState</code>(장비 페어링→유효 스탯 투영) · <code>creatureLedgers</code>(크리처별 원장 라우팅) · <code>applyVitals</code>(하한 0 클램프) · <code>defaultCombatRng</code> 신설 + 사망 seam 조립(exp 분배). <code>PROTOCOL_VERSION</code> 5→<strong>6</strong></span></div>
-            <div class="kv"><span class="k">규모 정정</span><span class="v">이 카드는 "파이프 신규 구축"으로 예상했으나 <strong>전제가 틀렸습니다</strong>. <code>effectiveStat()</code> 호출자가 0건이고 능력치를 수정하는 항이 저장소에 0개라 <strong>유효 능력치 = 기본 능력치</strong>였습니다. 진짜 관문은 HP 출처 이원화 · 사망 seam 부재 · <code>DamageLedger</code>의 방어자 미구분 셋이었습니다</span></div>
+            <div class="kv"><span class="k">머지</span><span class="v">PR #148 (08-20) — <code>combat:attack</code> 연결. <code>assemblePlayerCombatState</code>(장비 페어링→유효 스탯 변환) · <code>creatureLedgers</code>(크리처별 원장 라우팅) · <code>applyVitals</code>(하한 0 클램프) · <code>defaultCombatRng</code> 신설 + 사망 seam 조립(exp 분배). <code>PROTOCOL_VERSION</code> 5→<strong>6</strong></span></div>
+            <div class="kv"><span class="k">규모 정정</span><span class="v">이 카드는 "파이프 신규 구축"으로 예상했으나 <strong>전제가 틀렸습니다</strong>. <code>effectiveStat()</code> 호출자가 0건이고 능력치를 수정하는 항이 저장소에 0개라 <strong>유효 능력치 = 기본 능력치</strong>였습니다. 진짜 관문은 HP 출처 이원화 · 사망 seam 없음 · <code>DamageLedger</code>의 방어자 미구분 셋이었습니다</span></div>
             <div class="kv"><span class="k">해제</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/122">#122</a>(cast)의 유일 선행과 <a href="https://github.com/smalljiny/muhan/issues/61">#61</a>(E12)의 이벤트 게이트가 <strong>함께 열렸습니다</strong>. <code>combat.md</code>가 <code>BLOCKING</code>으로 표시했던 ledger per-creature 스코핑도 닫혔습니다</span></div>
             <div class="kv rest"><span class="k">인계</span><span class="v">⚠️ <code>composeCharacterFlags</code> 함정은 <strong>동작을 바꾸지 않고 우회</strong>했습니다 — PvP는 <code>checkPvpGate</code>에 닿기 전 사람 대상을 거부하는 fail-closed, <code>PUPDMG</code> 다중공격은 항상 1타임을 소비 지점에 기록만. 전투 이벤트는 <strong>공격자 소켓에만</strong> 갑니다(방 전파는 <a href="https://github.com/smalljiny/muhan/issues/116">#116</a>). 신규 부채 <a href="https://github.com/smalljiny/muhan/issues/147">#147</a></span></div>
           </div>
           <div class="card t">
-            <div class="card-top"><span class="chip t">착수 가능 ★</span><span class="card-title">cast 배선 — 플레이어 시전 진입점</span>
+            <div class="card-top"><span class="chip t">착수 가능 ★</span><span class="card-title">cast 연결 — 플레이어 시전 진입점</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/122">#122</a></div>
             <div class="kv"><span class="k">실체</span><span class="v"><code>magic/index.ts</code>에 플레이어 시전 진입 함수가 export되지 않음. <code>crtSpell</code>(몬스터용)이 유일한 worked example — 게이트→디스패치→핸들러를 플레이어용으로 복제</span></div>
             <div class="kv"><span class="k">설계</span><span class="v">offensive/instant/buff/debuff 4종 request 형태 분기(<code>pietyBonus</code> 사전계산·target 타입 불일치) + <code>realmGrowth</code> write-back</span></div>
@@ -953,20 +953,20 @@
           <div class="card d">
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">아이템 인스턴스 라이브화 + study</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/120">#120</a></div>
-            <div class="kv"><span class="k">랜딩</span><span class="v">PR #145 (08-18) — 4중 결손 전부 해소. 템플릿 인덱스 boot 조립(별칭 <code>keys</code> 포함) · <code>LiveCharacter.inventory</code> 세션 진입 시 적재 · 인스턴스↔템플릿 결합 함수 · <code>objects</code> 삭제 write-behind 어댑터 · <code>progress:study</code> 배선. <code>PROTOCOL_VERSION</code> 4→<strong>5</strong></span></div>
+            <div class="kv"><span class="k">머지</span><span class="v">PR #145 (08-18) — 4중 결손 전부 해소. 템플릿 인덱스 boot 조립(별칭 <code>keys</code> 포함) · <code>LiveCharacter.inventory</code> 세션 진입 시 로드 · 인스턴스↔템플릿 결합 함수 · <code>objects</code> 삭제 write-behind 어댑터 · <code>progress:study</code> 연결. <code>PROTOCOL_VERSION</code> 4→<strong>5</strong></span></div>
             <div class="kv"><span class="k">결정</span><span class="v"><strong>입장 시 hydrate</strong>를 택해 <code>CommandHandler</code>는 동기로 유지했습니다 — 전 핸들러 async 파급을 피했습니다. 두 write는 <code>markCharacterDirty</code>→<code>markObjectDeleted</code> 순서를 고정하고 보상 트랜잭션 대신 <strong>재연마 멱등성의 자가 치유</strong>에 맡깁니다</span></div>
-            <div class="kv rest"><span class="k">파생 부채</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/142">#142</a> 인벤 서수 divergence(<a href="https://github.com/smalljiny/muhan/issues/137">#137</a>의 자매 — EUC-KR collation 공유) · <a href="https://github.com/smalljiny/muhan/issues/143">#143</a> 템플릿 미해소·slot 무효 드롭이 무로그로 삼켜짐. <code>read</code>/<code>drink</code>/<code>zap</code>의 선행 계층이 이제 서 있습니다</span></div>
+            <div class="kv rest"><span class="k">파생 부채</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/142">#142</a> 인벤 서수 divergence(<a href="https://github.com/smalljiny/muhan/issues/137">#137</a>의 자매 — EUC-KR collation 공유) · <a href="https://github.com/smalljiny/muhan/issues/143">#143</a> 템플릿 미해석·slot 무효 드롭이 무로그로 삼켜짐. <code>read</code>/<code>drink</code>/<code>zap</code>의 선행 계층이 이제 서 있습니다</span></div>
           </div>
           <div class="card t">
-            <div class="card-top"><span class="chip t">미착수</span><span class="card-title">몬스터 전투/마법 tick boot 배선</span>
+            <div class="card-top"><span class="chip t">미착수</span><span class="card-title">몬스터 전투/마법 tick boot 연결</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/99">#99</a></div>
             <div class="kv"><span class="k">현황</span><span class="v"><code>createWorldRuntime</code>에 <code>onCombatTick</code> 미전달(<code>index.ts:87</code>). <code>createCombatTick</code>·<code>crtSpell</code> non-test 호출 0건 → 실행 중 서버에서 <strong>몬스터가 근접·시전을 하지 않음</strong></span></div>
-            <div class="kv rest"><span class="k">동반</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/100">#100</a> <code>spell_fail</code>(전사계 fizzle) 배선 + 몬스터 마나 재생 tick 미구현. <code>spawnRng</code>·<code>invasionRng</code>·<code>broadcast</code>·<code>templates</code>도 함께 미주입</span></div>
+            <div class="kv rest"><span class="k">동반</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/100">#100</a> <code>spell_fail</code>(전사계 fizzle) 연결 + 몬스터 마나 재생 tick 미구현. <code>spawnRng</code>·<code>invasionRng</code>·<code>broadcast</code>·<code>templates</code>도 함께 미주입</span></div>
           </div>
           <div class="card t">
             <div class="card-top"><span class="chip t">미착수</span><span class="card-title">성향(alignment) 스칼라 확장</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/123">#123</a></div>
-            <div class="kv"><span class="k">범위</span><span class="v">현 1=선/2=악 → 원작 <code>-1000..+1000</code> 연속 스칼라. 증감 규칙 오라클 역설계 · OGOODO/OEVILO <code>study</code> 게이트 <strong>실발화 회귀 검증</strong> · PALADIN 보정 재확인</span></div>
+            <div class="kv"><span class="k">범위</span><span class="v">현 1=선/2=악 → 원작 <code>-1000..+1000</code> 연속 스칼라. 증감 규칙 오라클 역설계 · OGOODO/OEVILO <code>study</code> 게이트 <strong>실제 동작 회귀 검증</strong> · PALADIN 보정 재확인</span></div>
             <div class="kv rest"><span class="k">해제</span><span class="v">#117 종료로 값 계약 확정 — 착수 가능</span></div>
           </div>
           <div class="card t">
@@ -979,7 +979,7 @@
             <div class="card-top"><span class="chip t">착수 가능 ★</span><span class="card-title">E12 캐릭터·전투·인벤 패널</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/61">#61</a></div>
             <div class="kv"><span class="k">범위</span><span class="v">스탯 패널(HP·MP·레벨·경험치·능력치) · 전투 로그(라운드·데미지·명중) · 인벤토리·장비 뷰</span></div>
-            <div class="kv"><span class="k">게이트</span><span class="v"><strong>열렸습니다</strong> — 08-20 #121이 <code>character:stats</code>(HP·MP·경험치·레벨 스냅샷)와 <code>combat:attacked</code>(명중·피해·크리티컬·사망 + 타격별 배열)를 계약에 넣었습니다. <code>character:stats</code>는 <code>combat:attack</code>·<code>progress:train</code>·<code>progress:study</code> <strong>셋 모두</strong>가 발화하므로 패널은 이벤트 한 종만 보면 됩니다</span></div>
+            <div class="kv"><span class="k">게이트</span><span class="v"><strong>열렸습니다</strong> — 08-20 #121이 <code>character:stats</code>(HP·MP·경험치·레벨 스냅샷)와 <code>combat:attacked</code>(명중·피해·크리티컬·사망 + 타격별 배열)를 계약에 넣었습니다. <code>character:stats</code>는 <code>combat:attack</code>·<code>progress:train</code>·<code>progress:study</code> <strong>셋 모두</strong>가 발생하므로 패널은 이벤트 한 종만 보면 됩니다</span></div>
             <div class="kv rest"><span class="k">주의</span><span class="v"><strong>인벤 이벤트는 아직 계약에 없습니다</strong> — 스탯·전투 패널이 먼저 열리고 인벤·장비 뷰는 후속입니다. 전투 로그는 <strong>본인 공격만</strong> 보입니다(방 전파는 <a href="https://github.com/smalljiny/muhan/issues/116">#116</a>) · 다중공격 배열은 현재 항상 원소 1개(<code>PUPDMG</code> 미영속)</span></div>
           </div>
         </div>
@@ -1002,9 +1002,9 @@
           <span class="gate open">#99 · #100 몬스터 tick · fizzle</span>
           <span class="gate open">#61 E12 전투·인벤 패널 — 게이트 열림</span>
           <span class="gate open">#43 은행 write-path 조정</span>
-          <span class="gate held">⏸ #123 성향 스칼라 — 게이트 발화 회귀</span>
+          <span class="gate held">⏸ #123 성향 스칼라 — 게이트 동작 회귀</span>
         </div>
-        <p class="cp-foot"><b>08-20 기준 이 관문의 병목은 <a href="https://github.com/smalljiny/muhan/issues/99">#99</a>입니다</b> — #121이 플레이어 오프너를 열었지만 <strong>몬스터는 반격하지 않습니다</strong>. 무한의 전투는 몬스터 틱 구동 라운드라, <code>attack</code>은 전투를 <em>개시</em>할 뿐이고 라운드를 전진시키는 것은 1Hz 틱입니다. 지금은 플레이어가 일방적으로 때리는 상태라 <strong>전투처럼 보이지만 전투가 아닙니다</strong>. <b><a href="https://github.com/smalljiny/muhan/issues/43">#43</a>은 카드가 아니라 계약입니다</b> — 이슈 본문이 "#43 해소 전 은행 명령 배선 금지"를 blocking으로 고정했습니다. 상점·은행 명령을 배선하는 순간 gold가 write-behind와 Mongo 트랜잭션 두 경로로 흐르고, 커밋 이후 도착한 stale flush가 결과를 무성 revert합니다.</p>
+        <p class="cp-foot"><b>08-20 기준 이 관문의 병목은 <a href="https://github.com/smalljiny/muhan/issues/99">#99</a>입니다</b> — #121이 플레이어 오프너를 열었지만 <strong>몬스터는 반격하지 않습니다</strong>. 무한의 전투는 몬스터 틱 기반 라운드라, <code>attack</code>은 전투를 <em>개시</em>할 뿐이고 라운드를 전진시키는 것은 1Hz 틱입니다. 지금은 플레이어가 일방적으로 때리는 상태라 <strong>전투처럼 보이지만 전투가 아닙니다</strong>. <b><a href="https://github.com/smalljiny/muhan/issues/43">#43</a>은 카드가 아니라 계약입니다</b> — 이슈 본문이 "#43 해소 전 은행 명령 연결 금지"를 blocking으로 고정했습니다. 상점·은행 명령을 연결하는 순간 gold가 write-behind와 Mongo 트랜잭션 두 경로로 흐르고, 커밋 이후 도착한 stale flush가 결과를 조용히 revert합니다.</p>
       </div>
 
       <div class="ms">
@@ -1046,7 +1046,7 @@
           <span class="gate open">#113 전이 취약점 · #51 타이머 소유권</span>
           <span class="gate held">⏸ FE-6 디자인 시스템 — 기능 freeze 후</span>
         </div>
-        <p class="cp-foot">프론트엔드 정책은 <b>"기능-우선 → 디자인-후"</b>입니다 — 디자인 시스템(FE-6)은 E11·E12·E13이 닫힌 뒤에 착수하며 체크포인트 체인 밖입니다. A13 DM/빌더 명령 배선도 이 지점 이후의 별도 트랙입니다.</p>
+        <p class="cp-foot">프론트엔드 정책은 <b>"기능-우선 → 디자인-후"</b>입니다 — 디자인 시스템(FE-6)은 E11·E12·E13이 닫힌 뒤에 착수하며 체크포인트 체인 밖입니다. A13 DM/빌더 명령 연결도 이 지점 이후의 별도 트랙입니다.</p>
       </div>
 
     </div>
@@ -1062,31 +1062,31 @@
 
     <div class="debt-grid">
       <div class="debt-card">
-        <div class="debt-top"><span class="sev">해소 08-19</span><span class="debt-title">재접속 re-hydrate 무성 revert — 닫힘</span>
+        <div class="debt-top"><span class="sev">해소 08-19</span><span class="debt-title">재접속 re-hydrate 조용한 revert — 닫힘</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/124">#124</a></div>
         <div class="debt-body">PR #146으로 닫혔습니다. <code>hydrate</code>가 <code>peekPending('characters', id)</code>를 DB 문서 위에 overlay하고, 조회를 <code>findById</code>보다 <strong>먼저 동기로</strong> 끝내 선형화 지점을 고정합니다(역순이면 <code>await</code> 중 write가 ack되며 스냅샷이 사라지는 TOCTOU). 전제로 <code>DirtyTracker</code>를 <code>registry</code>+<code>inProgress</code> 2단 소유로 바꿔 <strong>파괴적 <code>drain()</code>이 만들던 3개 사각</strong>(반출~enqueue 전 · 큐 대기 · write 진행 중)을 덮었습니다. <strong>남은 범위</strong> — <code>objectDeletions</code>는 합성하지 않아 삭제 예정 비법서가 인벤에 유령으로 남고(현재 무해 · #119·#121이 건네주기 경로를 열면 재평가), <code>saveNow</code> evict는 backpressure 창의 엔트리를 못 막습니다(프로덕션 호출자 0건).</div>
-        <div class="debt-gate">▸ CP1 게이트 해제 · <code>save-policy.md</code>가 수명 계약을 소유</div>
+        <div class="debt-gate">▸ CP1 게이트 해제 · <code>save-policy.md</code>가 수명 계약을 담당</div>
       </div>
       <div class="debt-card high">
         <div class="debt-top"><span class="sev high">HIGH</span><span class="debt-title">깨끗한 DB에서 전송 왕복 e2e 통과 불가</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/138">#138</a></div>
-        <div class="debt-body">dev 시드 캐릭터 <code>dev-char-1</code>이 <code>InMemorySessionAuthAdapter</code> 목록에만 있고 Mongo <code>characters</code> 컬렉션에 없습니다. 인증 목록과 <code>hydrate</code> 소스가 서로 다른 저장소를 봅니다. compose mongo에는 볼륨이 없어 매 기동 빈 DB로 뜨고, 문서를 심는 경로가 부팅·compose·e2e 어디에도 없습니다. <strong>전송·인증 구현 자체는 정상</strong>이며(문서 수동 삽입 시 G1~G3 전부 통과) 결손은 시드 데이터뿐입니다. <code>e2e</code>가 <code>turbo.json</code>·CI에 없어 수동 실행 경로에서만 드러납니다.</div>
+        <div class="debt-body">dev 시드 캐릭터 <code>dev-char-1</code>이 <code>InMemorySessionAuthAdapter</code> 목록에만 있고 Mongo <code>characters</code> 컬렉션에 없습니다. 인증 목록과 <code>hydrate</code> 소스가 서로 다른 저장소를 봅니다. compose mongo에는 볼륨이 없어 매 시작마다 빈 DB로 뜨고, 문서를 심는 경로가 부팅·compose·e2e 어디에도 없습니다. <strong>전송·인증 구현 자체는 정상</strong>이며(문서 수동 삽입 시 G1~G3 전부 통과) 결손은 시드 데이터뿐입니다. <code>e2e</code>가 <code>turbo.json</code>·CI에 없어 수동 실행 경로에서만 드러납니다.</div>
         <div class="debt-gate">▸ CP1 게이트 · 문서화된 진입 경로가 막힘</div>
       </div>
       <div class="debt-card">
         <div class="debt-top"><span class="sev">divergence</span><span class="debt-title">이름 서수 기준 — 방·인벤 3집합 (#142 통합)</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/137">#137</a></div>
-        <div class="debt-body">오라클은 방 플레이어·방 크리처·캐릭터 인벤 <strong>세 리스트 모두</strong>를 <code>strcmp</code> 이름 정렬로 삽입하므로 <code>고블린 2</code>·<code>비법서 2</code>의 "2"는 사전순 서수입니다. 포트는 방=도착 순서(<code>occupants</code> Set 삽입 순 · <code>creatures</code> push 순), 인벤=<code>findByOwner</code>의 <code>_id</code> 오름차순을 씁니다 — 후자는 #120이 <strong>결정성 확보용</strong>으로 넣은 것이지 오라클 재현이 아닙니다. 원인은 KS X 1001 배열 ≠ Unicode 배열 하나이고 <strong>비교 함수 1개로 3집합이 함께 해소</strong>되므로 08-19에 <a href="https://github.com/smalljiny/muhan/issues/142">#142</a>를 여기로 통합했습니다. 인벤에만 2차 정렬 키(동명 시 <code>adjustment</code> 순)가 더 있습니다. <strong>소비 토픽 #119·#122가 오라클 순서를 전제하고 짜면 안 됩니다.</strong> #121(attack)은 08-20에 <strong>해소자를 그대로 소비하고 규칙을 재구현하지 않는</strong> 방식으로 지나갔습니다 — 비교 함수가 들어오는 날 지목 순서가 함께 교정되도록 남겨 뒀습니다.</div>
-        <div class="debt-gate">▸ 게이트 없음 · 명령 배선 체인이 인계받음 · <a href="https://github.com/smalljiny/muhan/issues/142">#142</a> 통합·close</div>
+        <div class="debt-body">오라클은 방 플레이어·방 크리처·캐릭터 인벤 <strong>세 리스트 모두</strong>를 <code>strcmp</code> 이름 정렬로 삽입하므로 <code>고블린 2</code>·<code>비법서 2</code>의 "2"는 사전순 서수입니다. 포트는 방=도착 순서(<code>occupants</code> Set 삽입 순 · <code>creatures</code> push 순), 인벤=<code>findByOwner</code>의 <code>_id</code> 오름차순을 씁니다 — 후자는 #120이 <strong>결정성 확보용</strong>으로 넣은 것이지 오라클 재현이 아닙니다. 원인은 KS X 1001 배열 ≠ Unicode 배열 하나이고 <strong>비교 함수 1개로 3집합이 함께 해소</strong>되므로 08-19에 <a href="https://github.com/smalljiny/muhan/issues/142">#142</a>를 여기로 통합했습니다. 인벤에만 2차 정렬 키(동명 시 <code>adjustment</code> 순)가 더 있습니다. <strong>소비 토픽 #119·#122가 오라클 순서를 전제하고 짜면 안 됩니다.</strong> #121(attack)은 08-20에 <strong>리졸버를 그대로 소비하고 규칙을 재구현하지 않는</strong> 방식으로 지나갔습니다 — 비교 함수가 들어오는 날 지목 순서가 함께 교정되도록 남겨 뒀습니다.</div>
+        <div class="debt-gate">▸ 게이트 없음 · 명령 연결 체인이 인계받음 · <a href="https://github.com/smalljiny/muhan/issues/142">#142</a> 통합·close</div>
       </div>
       <div class="debt-card">
-        <div class="debt-top"><span class="sev high">열림</span><span class="debt-title">world:room 수신자 인지 가시성 필터 부재</span>
+        <div class="debt-top"><span class="sev high">열림</span><span class="debt-title">world:room 수신자 인지 가시성 필터 없음</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/129">#129</a></div>
-        <div class="debt-body"><code>projectRoomView</code>가 <strong>관찰자를 인자로 받지 않아</strong> 오라클 <code>room.c</code>의 두 게이트(점유자 은신·투명 필터 / 광원·실명 게이트)를 구현하지 않습니다. 위험은 누락이 <strong>테스트 실패가 아니라 과다 노출로 나타나</strong> 회귀 테스트가 잡지 못한다는 점입니다. <strong>08-20 #121 배선으로 예고했던 위험이 현실이 됐습니다</strong> — 보안 리뷰가 두 번째 누출 지점을 특정했습니다: <code>combat:attack</code>의 대상 지목 2단계가 크리처 실패 시 플레이어로 폴백해 <code>player-target</code>/<code>not-found</code>로 <strong>다른 오류를 반환</strong>하므로, 이름을 추측하면 방 목록에 안 뜨는 캐릭터의 존재를 검출할 수 있습니다. 아직 <code>PHIDDN</code>·<code>PINVIS</code>의 라이브 쓰기 경로가 없어 실입력은 도달 불가하나, <strong>#129가 <code>roomView</code>만 고치고 <code>resolveRoomPlayer</code>를 함께 고치지 않으면 "표시는 숨겼는데 공격 오류로는 새는" 회귀가 조용히 생깁니다</strong>.</div>
+        <div class="debt-body"><code>projectRoomView</code>가 <strong>관찰자를 인자로 받지 않아</strong> 오라클 <code>room.c</code>의 두 게이트(점유자 은신·투명 필터 / 광원·실명 게이트)를 구현하지 않습니다. 위험은 누락이 <strong>테스트 실패가 아니라 과다 노출로 나타나</strong> 회귀 테스트가 잡지 못한다는 점입니다. <strong>08-20 #121 연결로 예고했던 위험이 현실이 됐습니다</strong> — 보안 리뷰가 두 번째 누출 지점을 특정했습니다: <code>combat:attack</code>의 대상 지목 2단계가 크리처 실패 시 플레이어로 폴백해 <code>player-target</code>/<code>not-found</code>로 <strong>다른 오류를 반환</strong>하므로, 이름을 추측하면 방 목록에 안 뜨는 캐릭터의 존재를 검출할 수 있습니다. 아직 <code>PHIDDN</code>·<code>PINVIS</code>의 라이브 쓰기 경로가 없어 실입력은 도달 불가하나, <strong>#129가 <code>roomView</code>만 고치고 <code>resolveRoomPlayer</code>를 함께 고치지 않으면 "표시는 숨겼는데 공격 오류로는 새는" 회귀가 조용히 생깁니다</strong>.</div>
         <div class="debt-gate">▸ #121로 현실화 · <code>roomView</code>와 <code>resolveRoomPlayer</code>를 <strong>함께</strong> 고칠 것 · CP2</div>
       </div>
       <div class="debt-card">
-        <div class="debt-top"><span class="sev">신규</span><span class="debt-title">비사망 크리처 소멸 seam 부재 — 원장 미회수</span>
+        <div class="debt-top"><span class="sev">신규</span><span class="debt-title">비사망 크리처 소멸 seam 없음 — 원장 미회수</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/147">#147</a></div>
         <div class="debt-body"><code>creatureLedgers.discard</code>를 부르는 곳이 <strong>사망 경로 하나뿐</strong>이라, 공격받다 배회(<code>creatureTick</code>의 <code>wanderOut</code> splice)로 방을 떠난 크리처의 데미지 원장이 회수되지 않습니다. <code>instanceId</code>가 방별 monotonic이라 키 재사용도 없어 <strong>Map이 가동 시간에 비례해 단조 증가</strong>합니다. 엔트리당 비용은 작지만 상한이 없어 장기 가동 프로세스에서 관측 지점이 필요합니다. 지금 닫지 못하는 이유는 <code>world/</code>가 <code>combat/</code>을 import하지 않는 레이어 규약이고 비사망 소멸을 알리는 seam이 없어서입니다 — 사망 seam과 대칭인 수명 seam이 필요합니다.</div>
         <div class="debt-gate">▸ 게이트 없음 · <a href="https://github.com/smalljiny/muhan/issues/99">#99</a>와 같은 수명 seam 영역 · 08-20 #121에서 발행</div>
@@ -1094,20 +1094,20 @@
       <div class="debt-card">
         <div class="debt-top"><span class="sev">정리 ×5</span><span class="debt-title">E11 파생 클라이언트·계약 정리</span>
           <span class="debt-num"><a href="https://github.com/smalljiny/muhan/issues/130">#130</a>·<a href="https://github.com/smalljiny/muhan/issues/131">#131</a>·<a href="https://github.com/smalljiny/muhan/issues/132">#132</a>·<a href="https://github.com/smalljiny/muhan/issues/133">#133</a>·<a href="https://github.com/smalljiny/muhan/issues/134">#134</a></span></div>
-        <div class="debt-body">PR #128이 완료 기준으로 <code>tryMove.ts</code>·<code>EventLog.tsx</code> 미변경을 못박아 범위 밖으로 밀린 항목들입니다. <strong>#130</strong> <code>lastError</code> 해제 경로가 없어 이동 거부 배너가 성공 후에도 잔존 · <strong>#131</strong> EventLog 상한 없는 누적 + 렌더당 전량 <code>JSON.stringify</code>(방 스냅샷이 최대·최빈 페이로드가 됨) · <strong>#132</strong> <code>Omit&lt;Extract&lt;…&gt;&gt;</code> 수기 표현 3곳 → <code>ServerEventPayload&lt;T&gt;</code> 승격 · <strong>#133</strong> <code>plugin.ts</code> seam 비대칭 · <strong>#134</strong> 표시/통행 비대칭 근거 주석 부재(<code>isVisible</code>이 자기 범위를 과대 표현 — <strong>고치면 오라클 동작이 조용히 깨짐</strong>).</div>
+        <div class="debt-body">PR #128이 완료 기준으로 <code>tryMove.ts</code>·<code>EventLog.tsx</code> 미변경을 못박아 범위 밖으로 밀린 항목들입니다. <strong>#130</strong> <code>lastError</code> 해제 경로가 없어 이동 거부 배너가 성공 후에도 잔존 · <strong>#131</strong> EventLog 상한 없는 누적 + 렌더당 전량 <code>JSON.stringify</code>(방 스냅샷이 최대·최빈 페이로드가 됨) · <strong>#132</strong> <code>Omit&lt;Extract&lt;…&gt;&gt;</code> 수기 표현 3곳 → <code>ServerEventPayload&lt;T&gt;</code> 타입으로 올림 · <strong>#133</strong> <code>plugin.ts</code> seam 비대칭 · <strong>#134</strong> 표시/통행 비대칭 근거 주석 없음(<code>isVisible</code>이 자기 범위를 과대 표현 — <strong>고치면 오라클 동작이 조용히 깨짐</strong>).</div>
         <div class="debt-gate">▸ 게이트 없음 · #130·#131은 CP1 UX에 직접 노출</div>
       </div>
       <div class="debt-card high">
         <div class="debt-top"><span class="sev high">계약</span><span class="debt-title">은행 트랜잭션 ↔ SaveEngine write-behind</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/43">#43</a></div>
-        <div class="debt-body"><code>BankTransactionService</code>는 gold를 Mongo 트랜잭션으로 직접 쓰고 <code>SaveEngine</code>은 같은 컬렉션을 write-behind로 씁니다. 공유 per-key 조정점이 없어 커밋 이후 도착한 stale flush가 <code>$set</code>으로 트랜잭션 결과를 덮습니다. <strong>현재는 도달 불가</strong>(gold를 dirty로 흘리는 은행 caller 0건)이나 <code>train</code> 배선으로 한쪽 경로가 이미 활성화됐습니다.</div>
-        <div class="debt-gate">▸ blocking: 해소 전 은행 명령 배선 금지 · CP2</div>
+        <div class="debt-body"><code>BankTransactionService</code>는 gold를 Mongo 트랜잭션으로 직접 쓰고 <code>SaveEngine</code>은 같은 컬렉션을 write-behind로 씁니다. 공유 per-key 조정점이 없어 커밋 이후 도착한 stale flush가 <code>$set</code>으로 트랜잭션 결과를 덮습니다. <strong>현재는 도달 불가</strong>(gold를 dirty로 흘리는 은행 caller 0건)이나 <code>train</code> 연결로 한쪽 경로가 이미 활성화됐습니다.</div>
+        <div class="debt-gate">▸ blocking: 해소 전 은행 명령 연결 금지 · CP2</div>
       </div>
       <div class="debt-card">
-        <div class="debt-top"><span class="sev">divergence</span><span class="debt-title">몬스터 시전 경로 2건 미배선</span>
+        <div class="debt-top"><span class="sev">divergence</span><span class="debt-title">몬스터 시전 경로 2건 미연결</span>
           <span class="debt-num"><a href="https://github.com/smalljiny/muhan/issues/100">#100</a> · <a href="https://github.com/smalljiny/muhan/issues/108">#108</a></span></div>
         <div class="debt-body">#100 — 전사계 MMAGIC 캐스터 12종이 <code>spell_fail</code> fizzle 없이 항상 명중합니다. 마나 소비를 <code>spell_fail</code> 前으로 재배치해야 하는데 현 포트는 gate가 pre-consume이라 gate-timing 모델 재검토가 필요합니다. #108 — 비-healer 몬스터 62/195(32%)가 self-heal을 시전합니다.</div>
-        <div class="debt-gate">▸ #99 몬스터 tick 배선과 동일 토픽 권장 · CP2~CP3</div>
+        <div class="debt-gate">▸ #99 몬스터 tick 연결과 동일 토픽 권장 · CP2~CP3</div>
       </div>
       <div class="debt-card high">
         <div class="debt-top"><span class="sev high">HIGH×12</span><span class="debt-title">의존성 갱신 — pnpm audit HIGH 12건</span>
@@ -1118,8 +1118,8 @@
       <div class="debt-card">
         <div class="debt-top"><span class="sev">잠복</span><span class="debt-title">세션 revocation + banned 비강제</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/89">#89</a></div>
-        <div class="debt-body">revoke된 세션 쿠키가 자연 만료(~2주)까지 통과하고, <code>account.status='banned'</code>가 연결 게이트에서 검사되지 않습니다. <code>checkRevoked</code>가 서비스 계정 자격증명을 요구해 <strong>프로덕션 Firebase credential 프로비저닝과 함께</strong> 랜딩합니다. 함정 — <code>ensureAccountUpserted</code>의 dedup 캐시 경로에 status 검사를 얹으면 캐시 hit에서 검사가 함께 건너뛰어집니다.</div>
-        <div class="debt-gate">▸ CP3 게이트 · A13 RBAC 명령 배선과 함께</div>
+        <div class="debt-body">revoke된 세션 쿠키가 자연 만료(~2주)까지 통과하고, <code>account.status='banned'</code>가 연결 게이트에서 검사되지 않습니다. <code>checkRevoked</code>가 서비스 계정 자격증명을 요구해 <strong>프로덕션 Firebase credential 프로비저닝과 함께</strong> 머지됩니다. 함정 — <code>ensureAccountUpserted</code>의 dedup 캐시 경로에 status 검사를 얹으면 캐시 hit에서 검사가 함께 건너뛰어집니다.</div>
+        <div class="debt-gate">▸ CP3 게이트 · A13 RBAC 명령 연결과 함께</div>
       </div>
       <div class="debt-card">
         <div class="debt-top"><span class="sev">정리</span><span class="debt-title">ctx.heartbeat 타이머 이중 소유권</span>
@@ -1136,7 +1136,7 @@
       <h2>다음 한 수</h2>
       <span class="sec-tag">recommended order</span>
     </div>
-    <p class="sec-note">순서는 의존성 해제 폭과 되돌리기 비용 기준입니다. 08-20 #121 랜딩으로 <strong>백로그에 선행으로 막힌 항목이 하나도 없습니다</strong> — #122의 마지막 선행이 풀렸고 #61(E12)의 이벤트 게이트가 열렸습니다. CP1 잔여는 <strong>#138·#116 둘</strong>이며 서로 독립이라 병렬로 띄울 수 있습니다. 다만 <strong>#116의 성격이 바뀌었습니다</strong> — 이제 "어울리기"가 아니라 전투 상태 동기화 문제입니다.</p>
+    <p class="sec-note">순서는 의존성 해제 폭과 되돌리기 비용 기준입니다. 08-20 #121 머지로 <strong>백로그에 선행으로 막힌 항목이 하나도 없습니다</strong> — #122의 마지막 선행이 풀렸고 #61(E12)의 이벤트 게이트가 열렸습니다. CP1 잔여는 <strong>#138·#116 둘</strong>이며 서로 독립이라 병렬로 띄울 수 있습니다. 다만 <strong>#116의 성격이 바뀌었습니다</strong> — 이제 "어울리기"가 아니라 전투 상태 동기화 문제입니다.</p>
     <div class="next">
       <div class="next-card">
         <div class="next-n">01</div>
@@ -1158,7 +1158,7 @@
 
   <footer>
     <span>출처: GitHub 이슈 #1~#148 · PR ~#148 (2026-08-20)</span>
-    <span>설계 정본: docs/specs/architecture.md (ADR #14)</span>
+    <span>설계 기준: docs/specs/architecture.md (ADR #14)</span>
     <span>구현 명세: docs/specs/ 30개 문서</span>
     <span>SoT는 GitHub 이슈·PR·docs/specs/ — 이 페이지는 파생 조감도이고, M0~M7·CP1~CP3은 이슈 의존 관계에서 도출한 그룹핑입니다</span>
   </footer>
@@ -1185,29 +1185,29 @@
     [34,  2, "done", 312, 160, "E4 월드 상태 엔진 ★", "방 그래프·tryMove·1Hz 틱·스폰 + 라이브 상태원(#114)"],
     [35,  2, "done", 312, 248, "E5 인증·계정", "account 1:N character · 생성 FSM · RBAC seam"],
     [58,  4, "done", 312, 342, "E9 웹 클라 전송 셸", "React + WS 레이어 · 버전 협상 · dev 인증"],
-    [116, 5, "todo", 410, 64,  "이동 leave/join 방송 결선", "broadcast seam이 no-op — 완전 독립"],
-    [36,  3, "wip",  410, 150, "E6 게임 규칙 엔진 ★", "규칙 토픽 8/8 완료 · 라이브 배선 잔여"],
+    [116, 5, "todo", 410, 64,  "이동 leave/join 방송 연결", "broadcast seam이 no-op — 완전 독립"],
+    [36,  3, "wip",  410, 150, "E6 게임 규칙 엔진 ★", "규칙 토픽 8/8 완료 · 라이브 연결 잔여"],
     [37,  7, "todo", 410, 250, "E7 소셜·채널", "채널·우편·게시판·패거리·결혼·추종"],
     [59,  4, "done", 410, 342, "E10 세션 진입 플로우", "캐릭터 목록·선택·생성·진입/재개"],
     [118, 5, "done", 510, 68,  "오라클 이름 매처 이식 ★ (완료)", "PR #140 — 체인 헤드 해소, #119~#122 전부 개방"],
-    [123, 6, "todo", 510, 140, "성향(alignment) 스칼라 확장", "-1000..+1000 · study 게이트 실발화"],
-    [99,  6, "todo", 510, 206, "몬스터 전투/마법 tick boot 배선", "프로덕션에서 몬스터가 움직이지 않음"],
+    [123, 6, "todo", 510, 140, "성향(alignment) 스칼라 확장", "-1000..+1000 · study 게이트 실제 동작"],
+    [99,  6, "todo", 510, 206, "몬스터 전투/마법 tick boot 연결", "프로덕션에서 몬스터가 움직이지 않음"],
     [60,  5, "done", 510, 342, "E11 월드 뷰 (방·이동·주변) (완료)", "PR #128 — world:room 7필드 확장 · PROTOCOL_VERSION 4"],
-    [119, 5, "todo", 610, 42,  "teach 명령 배선", "방 내 대상 플레이어 전수"],
+    [119, 5, "todo", 610, 42,  "teach 명령 연결", "방 내 대상 플레이어 전수"],
     [120, 6, "done", 610, 100, "아이템 라이브화 + study (완료)", "PR #145 — 인벤 라이브화 · PROTOCOL_VERSION 5"],
-    [121, 6, "done", 610, 158, "attack 명령 라이브 연결", "PR #148 랜딩 — 전투·스탯 이벤트 계약 신설"],
+    [121, 6, "done", 610, 158, "attack 명령 라이브 연결", "PR #148 머지 — 전투·스탯 이벤트 계약 신설"],
     [61,  6, "todo", 610, 342, "E12 캐릭터·전투·인벤 패널", "게이트 열림 — #121이 전투·스탯 이벤트를 넣음"],
-    [122, 6, "todo", 710, 158, "cast 배선 — 플레이어 시전 진입점", "선행 해제(#121 랜딩) · 체인 종단"],
+    [122, 6, "todo", 710, 158, "cast 연결 — 플레이어 시전 진입점", "선행 해제(#121 머지) · 체인 종단"],
     [62,  7, "todo", 710, 262, "E13 소셜·채팅 UI", "방 채팅 절반 충족 · 채널·귓속말은 E7 게이트"],
     [144, -1, "dbt", 58,  296, "의존성 갱신 — pnpm audit 6패키지 17건", "HIGH 12·moderate 5 · 프로덕션 3건은 도달 불가 · #113 통합"],
     [51,  -1, "dbt", 128, 320, "ctx.heartbeat 타이머 이중 소유권", "유지보수 · 게이트 없음"],
     [138, -1, "dbt", 130, 400, "깨끗한 DB에서 e2e 통과 불가", "HIGH · dev 시드가 DB에 없음 · CP1"],
-    [43,  -1, "dbt", 128, 96,  "은행 트랜잭션 ↔ write-behind 조정", "계약: 해소 전 은행 명령 배선 금지 · CP2"],
-    [124, -1, "done", 300, 448, "재접속 re-hydrate 무성 revert (완료)", "PR #146 — pending overlay · 스냅샷 수명 계약 · CP1 해제"],
+    [43,  -1, "dbt", 128, 96,  "은행 트랜잭션 ↔ write-behind 조정", "계약: 해소 전 은행 명령 연결 금지 · CP2"],
+    [124, -1, "done", 300, 448, "재접속 re-hydrate 조용한 revert (완료)", "PR #146 — pending overlay · 스냅샷 수명 계약 · CP1 해제"],
     [89,  -1, "dbt", 390, 440, "세션 revocation + banned 비강제", "잠복 · Firebase credential 필요 · CP3"],
-    [100, -1, "dbt", 452, 300, "몬스터 spell_fail(전사계 fizzle) 미배선", "전사계 MMAGIC 12종 항상 명중"],
+    [100, -1, "dbt", 452, 300, "몬스터 spell_fail(전사계 fizzle) 미연결", "전사계 MMAGIC 12종 항상 명중"],
     [108, -1, "dbt", 452, 372, "몬스터 self-heal healer 게이트 미이식", "divergence 62/195 = 32%"],
-    [137, -1, "dbt", 560, 424, "이름 서수 기준 divergence (방·인벤)", "KS X 1001 collation 부재 · #142 통합 · 게이트 없음"]
+    [137, -1, "dbt", 560, 424, "이름 서수 기준 divergence (방·인벤)", "KS X 1001 collation 없음 · #142 통합 · 게이트 없음"]
   ];
 
   var E = [[14,30],[30,31],[30,32],[30,33],[31,34],[32,34],[32,35],[34,36],[33,36],

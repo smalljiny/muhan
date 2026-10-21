@@ -1,12 +1,12 @@
 # magic-progression — 마법 지속·성장 (spell store·학습·성장·타이머·비-offensive effect)
 
-> #84가 유예한 마법 계층의 나머지 절반 — 플레이어 spell store·학습/전수·realm 숙련 성장·버프/디버프 타이머·비-offensive effect 36종·몬스터 self-heal(E6b-2, 이슈 #85)
+> #84가 보류한 마법 계층의 나머지 절반 — 플레이어 spell store·학습/전수·realm 숙련 성장·버프/디버프 타이머·비-offensive effect 36종·몬스터 self-heal(E6b-2, 이슈 #85)
 
 ## 개요
 
-#84(`docs/specs/magic.md`)는 CAST delivery·공격 effect 20종·시전 게이트·몬스터 시전 seam을 이식했지만, 플레이어에 spell store가 없어 `Caster.realm=[0,0,0,0]`·`knows=false`를 forward-compat stub으로 반환했다. 이 계층은 그 stub을 **실 플레이어 spell store**(characterSchema v5)로 대체하고, 카탈로그에 메타데이터만 있던 비-offensive 주문 36종에 실 effect 본체를 부여해 마법 계층을 완결한다.
+#84(`docs/specs/magic.md`)는 CAST delivery·공격 effect 20종·시전 게이트·몬스터 시전 확장 지점(seam)을 이식했지만, 플레이어에 spell store가 없어 `Caster.realm=[0,0,0,0]`·`knows=false`를 forward-compat stub으로 반환했다. 이 계층은 그 stub을 **실 플레이어 spell store**(characterSchema v5)로 대체하고, 카탈로그에 메타데이터만 있던 비-offensive 주문 36종에 실 effect 본체를 부여해 마법 계층을 완결한다.
 
-범위는 **순수 로직 + seam**이다. 지식 비트마스크 read/write, realm 성장 산식, 버프/디버프 dur 산식, effect 핸들러는 전부 순수 함수로 이식하고, 라이브 command 라우팅(`cast`/`study`/`teach`)·production boot 배선·아이템 delivery는 후속 토픽(#106·#99·#86)에 넘긴다.
+범위는 **순수 로직 + seam**이다. 지식 비트마스크 read/write, realm 성장 산식, 버프/디버프 dur 산식, effect 핸들러는 전부 순수 함수로 이식하고, 라이브 command 라우팅(`cast`/`study`/`teach`)·production boot 연결·아이템 delivery는 후속 토픽(#106·#99·#86)에 넘긴다.
 
 ## 구조
 
@@ -26,7 +26,7 @@
 | `packages/server/src/magic/buffEffects.ts` | — | 저항 버프(G5) + 타이머 보유 버프/감지/비행/발광(G7) effect |
 | `packages/server/src/magic/debuffEffects.ts` | — | 디버프 6종(G6) pure-report effect |
 | `packages/server/src/magic/instantEffects.ts` | — | 즉발 회복/해제/seam(G7) effect |
-| `packages/server/src/combat/statusEffects.ts` | (기존 확장) | `clearPoison`/`clearDisease`/`clearBlind` — cure effect 소비 대상. 이후 `grantSilence`/`grantFear`/`clearSilence`/`clearFear`/`isSilenceActive`/`isFearActive`가 blind 대칭으로 추가됐다(판독만 배선, 시전 경로 미배선 — [character-flags.md](character-flags.md)) |
+| `packages/server/src/combat/statusEffects.ts` | (기존 확장) | `clearPoison`/`clearDisease`/`clearBlind` — cure effect 소비 대상. 이후 `grantSilence`/`grantFear`/`clearSilence`/`clearFear`/`isSilenceActive`/`isFearActive`가 blind 대칭으로 추가됐다(읽기만 연결, 시전 경로 미연결 — [character-flags.md](character-flags.md)) |
 | `packages/server/src/magic/crtSpell.ts` | (기존 확장) | `isSelfTargetSpell`·`castSelfHeal` — 몬스터 self-target 치유(G8) |
 | `packages/shared/src/oracle/` | `generators/*Fixture.ts`+`fixtures/*.json` | 골든 fixture — spell store·spllv·addrealm·buff/debuff dur |
 
@@ -38,9 +38,9 @@
 - **`realm`**: `z.tuple([int,int,int,int])`(각 `min(0)`), required — 흙/바람/불/물 계열 누적경험치(mstruct.h:195).
 - **`buffs`**: `z.strictObject(...).partial().optional()` — 키는 `SPELL_CATALOG` 전체(0-55)에서 파생한 문자열 주문번호, 값은 `{ until: z.int().min(0) }`(strictObject, `interval` 없음 — 버프는 주기 효과가 아니다). `statusEffects`와 병렬 필드로 두되(D2) `until` 관례는 동일하다. optional이며 backfill이 시딩하지 않는다.
 
-`backfillCharacterV5`는 v4 이하 문서를 승격할 때 `spells`=16바이트 0, `realm`=`[0,0,0,0]`으로 시딩하고(`seedSpellStore()`), `buffs`는 시딩하지 않는다(`statusEffects` v4 무시딩 선례). `schemaVersion>=5` 문서는 재시딩 없이 통과한다. `createCharacter` 생성 경로는 동일 `seedSpellStore()`를 공유해 버전 드리프트를 막는다.
+`backfillCharacterV5`는 v4 이하 문서를 v5로 올릴 때 `spells`=16바이트 0, `realm`=`[0,0,0,0]`으로 시딩하고(`seedSpellStore()`), `buffs`는 시딩하지 않는다(`statusEffects` v4 무시딩 선례). `schemaVersion>=5` 문서는 재시딩 없이 통과한다. `createCharacter` 생성 경로는 동일 `seedSpellStore()`를 공유해 버전 드리프트를 막는다.
 
-`isKnown(store, spellNo)`/`setKnown(store, spellNo)`(`spellStore.ts`)가 C 매크로 `S_ISSET`/`S_SET`을 대응 이식한다 — 바이트 오프셋 `spellNo>>3`, 비트 위치 `spellNo&7`. `setKnown`은 입력을 변형하지 않고 새 `number[]`를 반환한다. `toCaster(player)`는 이제 이 헬퍼를 실 store에 적용해 `knows(spellNo)`를 판독하고, `realm`은 `state.realm`을 그대로 반환한다 — 더 이상 `[0,0,0,0]`/`false` stub이 아니다. `Caster` 계약 필드 수(6개)는 변경되지 않는다.
+`isKnown(store, spellNo)`/`setKnown(store, spellNo)`(`spellStore.ts`)가 C 매크로 `S_ISSET`/`S_SET`을 대응 이식한다 — 바이트 오프셋 `spellNo>>3`, 비트 위치 `spellNo&7`. `setKnown`은 입력을 변형하지 않고 새 `number[]`를 반환한다. `toCaster(player)`는 이제 이 헬퍼를 실 store에 적용해 `knows(spellNo)`를 읽고, `realm`은 `state.realm`을 그대로 반환한다 — 더 이상 `[0,0,0,0]`/`false` stub이 아니다. `Caster` 계약 필드 수(6개)는 변경되지 않는다.
 
 ## 동작
 
@@ -48,24 +48,24 @@
 
 `study(char, book)`(`learning.ts`)는 비법서(SCROLL) 연마를 게이트 순서대로 평가한다: PBLIND(실명) → 오브젝트 타입(SCROLL 아님) → 레벨(`book.ndice > level`) → 성향(`OGOODO`이고 `alignment<-100` 또는 `OEVILO`이고 `alignment>100`) → 클래스(`OCLSEL` 켜져 있고 해당 클래스 비트 없고 `class<CARETAKER`) → `magicpower` 유효성(카탈로그 밖이면 `no-spell`). 통과 시 `setKnown(char.spells, book.magicpower-1)`한 새 store를 반환하고, 실패 시 원본 store를 그대로 반환한다.
 
-study의 **성향 게이트는 known-divergence로 미발화**다 — `alignment` 실 값역이 `[0,2]`(생성 인터뷰 1|2 + backfill 중립 sentinel 0)라 `<-100`·`>100` 두 분기가 모두 거짓이고, 현재 어떤 캐릭터도 성향으로 연마를 거부당하지 않는다. 오라클 임계값을 **재조정하지 않는다** — 보존해야 E6 성향 시스템([#123](https://github.com/smalljiny/muhan/issues/123))이 `-1000..+1000`을 도입할 때 코드 변경 없이 발화한다. 같은 성격의 미발화 게이트가 `combat/aggro.ts`·`combat/attackStats.ts`·`items/flags.ts`에도 있다([character-flags.md](character-flags.md)).
+study의 **성향 게이트는 known-divergence로 동작하지 않는다** — `alignment` 실 값 범위가 `[0,2]`(생성 인터뷰 1|2 + backfill 중립 sentinel 0)라 `<-100`·`>100` 두 분기가 모두 거짓이고, 현재 어떤 캐릭터도 성향으로 연마를 거부당하지 않는다. 오라클 임계값을 **재조정하지 않는다** — 보존해야 E6 성향 시스템([#123](https://github.com/smalljiny/muhan/issues/123))이 `-1000..+1000`을 도입할 때 코드 변경 없이 동작한다. 같은 성격의 동작하지 않는 게이트가 `combat/aggro.ts`·`combat/attackStats.ts`·`items/flags.ts`에도 있다([character-flags.md](character-flags.md)).
 
-study·teach가 읽는 PBLIND·PSILNC의 **영속 입력원은 `characterSchema.statusEffects`**이며, `composeCharacterFlags`가 세 투영을 OR해 소비측이 `F_ISSET`으로 읽는 16자 hex를 만든다([character-flags.md](character-flags.md)). `study` 배선(#120)이 그 합성값을 게이트에 주입한다(`teach`는 #119 대기).
+study·teach가 읽는 PBLIND·PSILNC의 **영속 입력원은 `characterSchema.statusEffects`**이며, `composeCharacterFlags`가 세 변환을 OR해 소비측이 `F_ISSET`으로 읽는 16자 hex를 만든다([character-flags.md](character-flags.md)). `study` 연결(#120)이 그 합성값을 게이트에 주입한다(`teach`는 #119 대기).
 
-### `progress:study` 라이브 배선 (#120)
+### `progress:study` 라이브 연결 (#120)
 
 `ws/handlers/study.ts`가 순수 `study()`를 명령 경로에 얹는다. 핸들러는 게임 규칙을 재구현하지 않고 **조회·합성·사상·마킹**만 한다.
 
 1. 행위자의 라이브 엔트리를 레지스트리에서 꺼낸다(대상 스코프가 행위자 소지품으로 닫힌다 — 오브젝트 id를 와이어로 받지 않으므로 타 캐릭터 오브젝트 접근 경로가 없다).
-2. `resolveCarriedObject`로 `target`·`ordinal`을 인벤 스코프에서 해소한다([`items-equipment.md`](items-equipment.md)). 관찰자 flags는 `composeCharacterFlags(character, now)`로 합성해 넘긴다.
-3. 해소된 쌍의 템플릿을 `study()`에 넘겨 게이트를 평가하고, 실패 갈래를 `Record<Failure, string>`으로 한국어 거부 메시지에 사상해 `error{rule_rejected}`로 답한다.
-4. 성공 시 라이브 엔트리를 `{ ...live, character }`로 교체하고, `markCharacterDirty` → `markObjectDeleted` 순서로 두 write를 마킹한 뒤(순서 계약은 [`save-policy.md`](save-policy.md)) `progress:studied`를 본인에게 1회 발화한다.
+2. `resolveCarriedObject`로 `target`·`ordinal`을 인벤 스코프에서 해석한다([`items-equipment.md`](items-equipment.md)). 관찰자 flags는 `composeCharacterFlags(character, now)`로 합성해 넘긴다.
+3. 해석된 쌍의 템플릿을 `study()`에 넘겨 게이트를 평가하고, 실패 갈래를 `Record<Failure, string>`으로 한국어 거부 메시지에 사상해 `error{rule_rejected}`로 답한다.
+4. 성공 시 라이브 엔트리를 `{ ...live, character }`로 교체하고, `markCharacterDirty` → `markObjectDeleted` 순서로 두 write를 마킹한 뒤(순서 계약은 [`save-policy.md`](save-policy.md)) `progress:studied`를 본인에게 1회 발생시킨다.
 
-성향 게이트가 미발화이므로(위 divergence) 현재 라이브 경로에서 성향으로 연마가 거부되는 일은 없다.
+성향 게이트가 동작하지 않으므로(위 divergence) 현재 라이브 경로에서 성향으로 연마가 거부되는 일은 없다.
 
 `teach(caster, target, spellNo)`는 PBLIND → PSILNC → base-class(`CARETAKER`/`MAGE`/`CLERIC`만 통과, `INVINCIBLE`·`SUB_DM`·`DM`은 불가) → 주문 존재(`spellByNo`) → 시전자 지식(`isKnown`) → `spllv` 전수등급 순서로 평가한다. `canTeachSpllv(casterClass, spllv)`는 등급별 최소 클래스를 판정한다: spllv 1(`CLERIC`↑)·2(`MAGE`↑)·3(`INVINCIBLE`↑)·4(`CARETAKER`↑)·5(`SUB_DM`↑). base-class 게이트가 `INVINCIBLE`·`SUB_DM`을 막으므로 spllv 5 주문은 실질 전수 불가한 quirk가 남는다(원작 충실). 통과 시 `setKnown(target.spells, spellNo)`한 새 store를 반환한다.
 
-두 함수 모두 순수 함수다 — 비법서 소멸·낙하·전수 broadcast 같은 부수효과는 라이브 라우팅(#106) 소관이다.
+두 함수 모두 순수 함수다 — 비법서 소멸·낙하·전수 broadcast 같은 부수효과는 라이브 라우팅(#106)이 담당한다.
 
 ### G3 — realm 숙련 성장
 
@@ -79,15 +79,15 @@ study·teach가 읽는 PBLIND·PSILNC의 **영속 입력원은 `characterSchema.
 
 `computeDebuffDur(spellNo, input, rng)`은 `DEBUFF_DUR_META`에 등록된 fear/silence/charm 3주문만 처리한다: `dur = constant + (rollDie>0 ? rng(1,rollDie)*rollMult : 0) + intBonus*intMult`, 이어 `targetHasPrmagi`면 `trunc(dur/2)`(무효화 아닌 절반 단축). fear `600 + rng(1,30)*10 + B*150`, silence `3600` 고정(굴림 없음), charm `300 + rng(1,30)*10 + B*30`. 미등록 주문(befuddle·blind·drain_exp)은 throw한다 — 이들은 `debuffEffects.ts`가 별도 모델로 처리한다.
 
-`SpellDispatch.register`/`resolve`(`dispatch.ts`)는 이제 family-agnostic이다 — 카탈로그 밖 주문번호만 `register`에서 throw하고, offensive·비-offensive를 가리지 않고 등록·해소한다. 각 effect 모듈(`buffEffects`·`debuffEffects`·`instantEffects`)은 핸들러 타입이 서로 달라 각자 독립 `SpellDispatch<H>` 인스턴스를 소유한다.
+`SpellDispatch.register`/`resolve`(`dispatch.ts`)는 이제 family-agnostic이다 — 카탈로그 밖 주문번호만 `register`에서 throw하고, offensive·비-offensive를 가리지 않고 등록·해석한다. 각 effect 모듈(`buffEffects`·`debuffEffects`·`instantEffects`)은 핸들러 타입이 서로 달라 각자 독립 `SpellDispatch<H>` 인스턴스를 소유한다.
 
 ### G5 — 저항 버프
 
-`resistBuff` family 정확히 4주문 {`SRFIRE`·`SRMAGI`·`SRCOLD`·`SSSHLD`}(`buffEffects.ts`)이 각각 대응 P-flag(`PRFIRE`·`PRMAGI`·`PRCOLD`·`PSSHLD`)를 갖는다. `standardBuff`가 `computeBuffDur`로 산출한 `until`을 대상 `Character.buffs`에 기록하고(`grantBuff`), `projectResistFlags(character, now)`가 활성(만료 안 된) 저항 버프만 fresh hex에 `F_SET`으로 투영한다 — `combat/statusEffects.projectStatusFlags`와 동일한 투영 계약이다. `SBRWAT`(수생술)은 catalog `family='buff'`라 G7로 귀속된다(family 필드 tie-breaker). `#84` 저항 감산(creature-only MRMAGI 판독)이 플레이어 수혜자의 저항-read를 소비하는 배선은 아직 없다.
+`resistBuff` family 정확히 4주문 {`SRFIRE`·`SRMAGI`·`SRCOLD`·`SSSHLD`}(`buffEffects.ts`)이 각각 대응 P-flag(`PRFIRE`·`PRMAGI`·`PRCOLD`·`PSSHLD`)를 갖는다. `standardBuff`가 `computeBuffDur`로 산출한 `until`을 대상 `Character.buffs`에 기록하고(`grantBuff`), `projectResistFlags(character, now)`가 활성(만료 안 된) 저항 버프만 fresh hex에 `F_SET`으로 변환한다 — `combat/statusEffects.projectStatusFlags`와 동일한 변환 계약이다. `SBRWAT`(수생술)은 catalog `family='buff'`라 G7로 귀속된다(family 필드 tie-breaker). `#84` 저항 감산(creature-only MRMAGI 읽기)이 플레이어 수혜자의 저항-read를 소비하는 연결은 아직 없다.
 
 ### G6 — 디버프
 
-`debuff` family 정확히 6주문 {`SFEARS`·`SSILNC`·`SCHARM`·`SBEFUD`·`SBLIND`·`SDREXP`}(`debuffEffects.ts`)를 대상(적 `Combatant`)에 순수-report `DebuffOutcome`으로 반환한다(실 write는 #99 라이브 조립 소관 — offensiveSpell의 realmGrowth 보고 선례). fear/silence/charm은 `computeDebuffDur`(G4)로 dur을 산출한다.
+`debuff` family 정확히 6주문 {`SFEARS`·`SSILNC`·`SCHARM`·`SBEFUD`·`SBLIND`·`SDREXP`}(`debuffEffects.ts`)를 대상(적 `Combatant`)에 순수-report `DebuffOutcome`으로 반환한다(실 write는 #99 라이브 조립 담당 — offensiveSpell의 realmGrowth 보고 선례). fear/silence/charm은 `computeDebuffDur`(G4)로 dur을 산출한다.
 
 - **fear**: dur 굴림 후 대상 `MPERMT`면 완전 면역(`applied:false`) — dur 굴림 자체는 면역 판정 前에 소비된다(roll-then-guard, 오라클 소비 수 일치).
 - **charm**: dur 굴림 후 `caster.level < target.level`(엄격 `<`) 또는 `MNOCHA`면 완전 반탄(`applied:false`).
@@ -100,11 +100,11 @@ study·teach가 읽는 PBLIND·PSILNC의 **영속 입력원은 `characterSchema.
 
 ### G7 — 비-offensive 즉발/버프
 
-**타이머 보유 10주문**(`buffEffects.ts` `TIMED_BUFF_META`) — 표준 7 {`SBLESS`·`SPROTE`·`SBRWAT`·`SDINVI`·`SDMAGI`·`SKNOWA`·`SFLYSP`}는 `standardBuff`(`computeBuffDur`), 예외 3 {`SINVIS`·`SLEVIT`·`SLIGHT`}는 `specialBuff`(`computeSpecialBuffDur`)로 처리한다. 각각 대응 P-flag(`PBLESS`·`PPROTE`·`PBRWAT`·`PDINVI`·`PDMAGI`·`PKNOWA`·`PFLYSP`·`PINVIS`·`PLEVIT`·`PLIGHT`)를 `projectBuffFlags`가 투영한다.
+**타이머 보유 10주문**(`buffEffects.ts` `TIMED_BUFF_META`) — 표준 7 {`SBLESS`·`SPROTE`·`SBRWAT`·`SDINVI`·`SDMAGI`·`SKNOWA`·`SFLYSP`}는 `standardBuff`(`computeBuffDur`), 예외 3 {`SINVIS`·`SLEVIT`·`SLIGHT`}는 `specialBuff`(`computeSpecialBuffDur`)로 처리한다. 각각 대응 P-flag(`PBLESS`·`PPROTE`·`PBRWAT`·`PDINVI`·`PDMAGI`·`PKNOWA`·`PFLYSP`·`PINVIS`·`PLEVIT`·`PLIGHT`)를 `projectBuffFlags`가 변환한다.
 
 **즉발 16주문**(`instantEffects.ts`)은 핸들러 타입에 따라 두 dispatch로 나뉜다.
 
-- **report 13주문**(회복 5 + seam 8, `InstantOutcome` 반환): 회복 — `SVIGOR`(vigor, CLERIC/PALADIN 클래스 보너스+RPMEXT), `SMENDW`(mend, CLERIC≥INVINCIBLE/PALADIN 보너스+RPMEXT), `SFHEAL`(완치, `toFull:true`), `SRESTO`(restore, `dice(2,10,0)`+`rng(1,100)<60`이면 마나 완전회복), `SRVIGO`(room_vigor, `rng(1,6)+pietyBonus`+RPMEXT AOE 보고). seam — `STELEP`(teleport)·`SRECAL`(recall)·`SSUMMO`(summon)·`SENCHA`(enchant)·`STRANO`(object_send)·`STRACK`(track)·`SLOCAT`(locate_player)·`SREMOV`(remove_curse) — room/item/world write가 필요해 `{ kind:'seam', effect }` 라벨만 보고하고 실 write는 유예한다.
+- **report 13주문**(회복 5 + seam 8, `InstantOutcome` 반환): 회복 — `SVIGOR`(vigor, CLERIC/PALADIN 클래스 보너스+RPMEXT), `SMENDW`(mend, CLERIC≥INVINCIBLE/PALADIN 보너스+RPMEXT), `SFHEAL`(완치, `toFull:true`), `SRESTO`(restore, `dice(2,10,0)`+`rng(1,100)<60`이면 마나 완전회복), `SRVIGO`(room_vigor, `rng(1,6)+pietyBonus`+RPMEXT AOE 보고). seam — `STELEP`(teleport)·`SRECAL`(recall)·`SSUMMO`(summon)·`SENCHA`(enchant)·`STRANO`(object_send)·`STRACK`(track)·`SLOCAT`(locate_player)·`SREMOV`(remove_curse) — room/item/world write가 필요해 `{ kind:'seam', effect }` 라벨만 보고하고 실 write는 보류한다.
 - **cure 3주문**(`Character`→`Character`): `SCUREP`→`clearPoison`, `SRMDIS`→`clearDisease`, `SRMBLD`→`clearBlind`(`combat/statusEffects.ts`) — `statusEffects` 필드를 해제한다. `rm_blindness`는 카탈로그에 별도 등록되지 않아 `SRMBLD`(rm_blind)로 통합됐다.
 
 회복량 산술은 마나를 소비하지 않는다(마나값은 시전 게이트 `gate.ts` S4가 소비). 마나 완전회복(`SRESTO`)은 별개 effect 보고(`restoredMana`)다.
@@ -113,11 +113,11 @@ study·teach가 읽는 PBLIND·PSILNC의 **영속 입력원은 `characterSchema.
 
 `crtSpell.ts`의 `isSelfTargetSpell(spellNo)`는 {`SVIGOR`·`SMENDW`·`SFHEAL`}에만 true를 반환한다. `selectSpell`이 이 3종 중 하나를 pick하고 `ospellOf(spellNo)===undefined`(비-offensive)이면 `castSelfHeal(creature, spellNo, ctx)`가 호출된다 — G7 `instantDispatch`(report 핸들러)를 `gated=false`로 재사용해 회복 outcome을 산출하고, `applySelfHeal`이 시전자 `creature.hpcur`에 in-place 적용(`toFull`이면 `hpmax`로 완치, 아니면 `min(hpmax, hpcur+healed)`)한 뒤 `'cast'`를 반환한다(이번 라운드 근접 대체). 그 외 비-offensive 주문 pick은 여전히 `'none'`(근접 진행)으로 접힌다.
 
-이 경로는 오라클 self-heal의 두 부수효과를 의도적으로 유예한다: **마나 소비**는 카탈로그에 치유 주문의 마나 정본이 없어(`OSPELL_GRID`는 공격 격자 전용) 날조 없이 이식 불가하므로 라이브 게이트 배선(#106)에 유예하고, **healer-class 게이트**(오라클은 `class!=CLERIC && !=PALADIN && <INVINCIBLE`이면 self-heal을 막음)는 상수·판정 로직 모두 존재해 이식 가능하나 G8 완료 기준(치유 pick 시 무조건 `'cast'`)이 범위를 좁혀 별도 토픽(#108)에 유예한다.
+이 경로는 오라클 self-heal의 두 부수효과를 의도적으로 보류한다: **마나 소비**는 카탈로그에 치유 주문의 마나 기준 값이 없어(`OSPELL_GRID`는 공격 격자 전용) 날조 없이 이식 불가하므로 라이브 게이트 연결(#106)로 미루고, **healer-class 게이트**(오라클은 `class!=CLERIC && !=PALADIN && <INVINCIBLE`이면 self-heal을 막음)는 상수·판정 로직 모두 존재해 이식 가능하나 G8 완료 기준(치유 pick 시 무조건 `'cast'`)이 범위를 좁혀 별도 토픽(#108)으로 미룬다.
 
 ## 36주문 커버리지
 
-`SPELL_CATALOG.family` 필드가 귀속 정본이다. 비-offensive 총계 = 활성 56 − offensive 20 = **36**, 4개 그룹이 중복·누락 없이 합한다.
+`SPELL_CATALOG.family` 필드가 귀속 기준이다. 비-offensive 총계 = 활성 56 − offensive 20 = **36**, 4개 그룹이 중복·누락 없이 합한다.
 
 | 그룹 | family | 주문 (spellNo 상수) | 수 |
 |---|---|---|---|
@@ -138,21 +138,21 @@ study·teach가 읽는 PBLIND·PSILNC의 **영속 입력원은 `characterSchema.
 
 ## 제약사항 / 범위 밖
 
-이 계층은 **순수 로직 + seam**만 이식한다. 다음은 명시적으로 후속 토픽 소관이다.
+이 계층은 **순수 로직 + seam**만 이식한다. 다음은 명시적으로 후속 토픽이 담당한다.
 
-- **라이브 command 라우팅** — `study`는 **배선 완료**다(#120, `progress:study`). `cast`(#122)·`teach`(#119)·`read`/`drink`/`zap`(#86)은 여전히 #106 체인 소관이다.
-- **production boot 배선**(effect·crtSpell을 라이브 tick에 조립) → #99.
+- **라이브 command 라우팅** — `study`는 **연결 완료**다(#120, `progress:study`). `cast`(#122)·`teach`(#119)·`read`/`drink`/`zap`(#86)은 여전히 #106 체인이 담당한다.
+- **production boot 연결**(effect·crtSpell을 라이브 tick에 조립) → #99.
 - **몬스터 마나 재생**(`mpcur += MAX(1, mpmax/6)`, A6 §9) → #99. 플레이어 마나 재생은 이미 이식됨(#81 `progression.md`).
 - **아이템(scroll/potion/wand) delivery** → #86. 이 계층은 `gated=true`(CAST) effect만 다룬다.
-- **offensive `spell_fail` 배선**(전사계 fizzle-after-consume) → #100.
-- **self-heal 게이트 2종 유예**: 마나 소비(치유 주문 마나 정본이 카탈로그에 없음) → #106. healer-class 게이트(G8 완료 기준의 무조건 시전 계약이 범위를 좁힘) → #108.
-- **realm 성장 write 위치** — `realmGrowthAmount`는 순수 성장량 스칼라만 반환한다. `caster.realm[]` in-place write·`markDirty` 배선은 이 계층에서 하지 않는다(#99). full-스냅샷 dirtyTracker의 last-write-wins와 충돌 가능성은 배선 시점(#99)에 조정한다.
-- **PvP 마법 사망·숙련 손실**(`realm[n-5] -= profloss/(9-n)`) → 사망 처리 토픽 소관. 이 계층의 realm 성장은 write(+)만 다룬다.
-- **PINVIS 해제**(시전 시 caster 은신 해제) → 라이브 caster 상태를 가진 토픽 소관.
+- **offensive `spell_fail` 연결**(전사계 fizzle-after-consume) → #100.
+- **self-heal 게이트 2종 보류**: 마나 소비(치유 주문 마나 기준 값이 카탈로그에 없음) → #106. healer-class 게이트(G8 완료 기준의 무조건 시전 계약이 범위를 좁힘) → #108.
+- **realm 성장 write 위치** — `realmGrowthAmount`는 순수 성장량 스칼라만 반환한다. `caster.realm[]` in-place write·`markDirty` 연결은 이 계층에서 하지 않는다(#99). full-스냅샷 dirtyTracker의 last-write-wins와 충돌 가능성은 연결 시점(#99)에 조정한다.
+- **PvP 마법 사망·숙련 손실**(`realm[n-5] -= profloss/(9-n)`) → 사망 처리 토픽 담당. 이 계층의 realm 성장은 write(+)만 다룬다.
+- **PINVIS 해제**(시전 시 caster 은신 해제) → 라이브 caster 상태를 가진 토픽 담당.
 
 ## 관련 문서
 
 - **oracle**: `docs/notes/game-analysis-20260625/a6-magic.md`(§5 realm 성장·§6 버프 타이머·§7 디버프·§8 학습전수·§9 마나·§11 구현 버그) · `legacy/muhan/src/magic1.c`(study/teach·addrealm)·`magic2~8.c`(개별 effect)
 - **의존 스펙**: [magic.md](magic.md)(#84 Caster·dispatch·gate·offensiveSpell·crtSpell — 이 계층이 확장) · [progression.md](progression.md)(#81 exp 파이프·마나 재생·dirtyTracker) · [combat.md](combat.md)(#83 `statusEffects` `until` 관례·DoT) · [persistence.md](persistence.md)(characterSchema 영속·backfill)
-- **후속**: #86(아이템 delivery) · #99(production boot 배선·몬스터 마나 재생·realm write 배선) · #100(offensive spell_fail 배선) · #106(라이브 command 라우팅·self-heal 마나 배선) · #108(self-heal healer-class 게이트)
+- **후속**: #86(아이템 delivery) · #99(production boot 연결·몬스터 마나 재생·realm write 연결) · #100(offensive spell_fail 연결) · #106(라이브 command 라우팅·self-heal 마나 연결) · #108(self-heal healer-class 게이트)
 - **이슈**: #85(본 토픽) · 상위 #84(magic-core) · 에픽 #36(E6 규칙 엔진)

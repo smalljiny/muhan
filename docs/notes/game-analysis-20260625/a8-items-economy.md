@@ -1,10 +1,10 @@
 # A8 아이템·장비·경제·은행
 
-> 무한의 아이템 체계(타입 taxonomy·착용/장비 규칙·object 필드), 경제(금화·가치·상점·전당포·수리·거래), 은행이 oracle에서 *무엇을 하는지*를 규명한다. 아이템 속성·가격 배수·착용 게이트·거래 규칙은 게임 규칙이므로 충실히 이식하고, 은행=별도 object 파일 컨테이너·`ready[]` 포인터 배열 비직렬화·상점 재고=인접방 규약·gold signed long 무가드는 원작의 구현 방식이므로 자유롭게 재설계한다. 이슈 #8. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)와 변환 산출물 `data/world/objects.json`. 코드 이식이 아니라 동작 추출.
+> 무한의 아이템 체계(타입 taxonomy·착용/장비 규칙·object 필드), 경제(금화·가치·상점·전당포·수리·거래), 은행이 oracle에서 *무엇을 하는지*를 정리한다. 아이템 속성·가격 배수·착용 게이트·거래 규칙은 게임 규칙이므로 충실히 이식하고, 은행=별도 object 파일 컨테이너·`ready[]` 포인터 배열 비직렬화·상점 재고=인접방 규약·gold signed long 무가드는 원작의 구현 방식이므로 자유롭게 재설계한다. 이슈 #8. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)와 변환 산출물 `data/world/objects.json`. 코드 이식이 아니라 동작 추출.
 >
 > **oracle 읽기 주의**: 하네스 `grep` 래퍼가 `-I`(binary skip)를 붙여 EUC-KR 파일을 스킵한다. `command grep -a` 또는 `iconv -f EUC-KR -t UTF-8 -c … | grep`로 우회한다([[muhan-oracle-toolchain]]).
 >
-> **전투·마법·진행 공식은 재유도하지 않는다**: 무기 데미지·명중·숙련은 [[a5-combat]], 물약/두루마기/지팡이의 주문 시전은 [[a6-magic]], AC/thaco 폐형 공식·스탯 보정은 [[a7-player-progression]]에 이미 확정돼 있다. 본 노트는 그 공식들에 **아이템이 기여하는 항**(장비 armor 합산·무기 adjustment 명중 보정)만 얹는다.
+> **전투·마법·진행 공식은 재유도하지 않는다**: 무기 데미지·명중·숙련은 [[a5-combat]], 물약/두루마기/지팡이의 주문 시전은 [[a6-magic]], AC/thaco 닫힌 식·스탯 보정은 [[a7-player-progression]]에 이미 확정돼 있다. 본 노트는 그 공식들에 **아이템이 기여하는 항**(장비 armor 합산·무기 adjustment 명중 보정)만 얹는다.
 
 ## 개요
 
@@ -190,7 +190,7 @@ compute_ac(ply_ptr);
 
 ## 4. 착용 스탯 효과: `ready[]` 재계산 (공식은 이식 / 트리거는 재설계)
 
-**착용은 능력치 필드를 직접 가감하지 않는다.** wear/ready/remove는 슬롯 포인터를 꽂거나 비운 뒤 파생 스탯을 **`ready[]` 전체에서 다시 계산**한다. [[a7-player-progression]] §11·§12에서 확정한 폐형 공식에 아이템이 기여하는 항만 여기 적는다:
+**착용은 능력치 필드를 직접 가감하지 않는다.** wear/ready/remove는 슬롯 포인터를 꽂거나 비운 뒤 파생 스탯을 **`ready[]` 전체에서 다시 계산**한다. [[a7-player-progression]] §11·§12에서 확정한 닫힌 식에 아이템이 기여하는 항만 여기 적는다:
 
 - **AC(방어)**: `compute_ac`(`player.c:971`)는 `100 − 5·bonus[dex] − (Σ ready[i]->armor) − (PPROTE ? 10 : 0)`, clamp[−127,127]. **아이템 기여 = 착용 방어구의 `armor` 필드 총합**. 방패도 `armor`로 합산된다. (기저 공식·dex 항은 [[a7-player-progression]] §11.)
 - **thaco(명중)**: `compute_thaco`(`player.c:1001`)는 `thaco_list[class][circle] − ready[WIELD-1]->adjustment − mod_profic − bonus[str]`. **아이템 기여 = 착용 무기의 `adjustment`(+N)**. `circle=(level+3)/4` 인덱싱과 나머지 항은 [[a7-player-progression]] §11.
@@ -213,7 +213,7 @@ compute_ac(ply_ptr);
 | SCROLL(7) | 읽기 | `readscroll`(`magic1.c:352`) | (소모) | SCROLL 컨텍스트 + `study`로 스펠 학습 가능 |
 | WAND(8) | 쏘기 | `zap`(`magic1.c:673`) | `shotscur--` | WAND 컨텍스트, `magicrealm`=계열 |
 
-시전되는 스펠 본체(효과·데미지·지속·마법 저항)는 [[a6-magic]]의 `spllist`/`ospell` 테이블이 정본이다. 본 노트 관점의 핵심은 **아이템이 스펠의 배달 수단**이라는 것: `magicpower-1`이 스펠 인덱스, `shotscur`가 남은 사용 횟수, 두루마기는 추가로 `study`(학습) 경로를 연다. 지팡이/열쇠는 `shotscur < 1`이면 고갈된 것으로 판정된다(전당포도 이를 저품질로 거부, §8).
+시전되는 스펠 본체(효과·데미지·지속·마법 저항)는 [[a6-magic]]의 `spllist`/`ospell` 테이블이 기준이다. 본 노트 관점의 핵심은 **아이템이 스펠의 배달 수단**이라는 것: `magicpower-1`이 스펠 인덱스, `shotscur`가 남은 사용 횟수, 두루마기는 추가로 `study`(학습) 경로를 연다. 지팡이/열쇠는 `shotscur < 1`이면 고갈된 것으로 판정된다(전당포도 이를 저품질로 거부, §8).
 
 ---
 
@@ -448,7 +448,7 @@ bnk_ptr->value -= amt;  ply_ptr->gold += amt;
 
 | # | 항목 | 성격 | 처리 |
 |---|---|---|---|
-| a | **은행 = 별도 object 파일 컨테이너**(`bank/<이름>`, 현금=value) | 구현 방식 | MongoDB 문서 `{owner, gold, items[]}`. player 인라인 또는 별도 컬렉션 모두 원본 의미와 정합 |
+| a | **은행 = 별도 object 파일 컨테이너**(`bank/<이름>`, 현금=value) | 구현 방식 | MongoDB 문서 `{owner, gold, items[]}`. player 인라인 또는 별도 컬렉션 모두 원본 의미와 일치 |
 | b | **`ready[20]` 포인터 배열** — 디스크상 4B 포인터×20, 로드 시 무의미 | 구현 방식 | 착용 슬롯을 objectId 참조로. 저장은 착용 여부(OWEARS)로 복원 |
 | c | **상점 재고 = `rom_num+1` 인접방 규약** — 방 번호 인접에 의존 | 구현 방식 | 명시적 재고 목록(shop inventory) 모델. 복제·무소진은 규칙으로 이식 |
 | d | **`gold` signed long 무가드** — 상한·음수 검증 없음, `+=100000` 등 | 구현 방식/결함 | 상한·검증 추가(또는 BigInt/unsigned) |
@@ -461,17 +461,17 @@ bnk_ptr->value -= amt;  ply_ptr->gold += amt;
 
 ---
 
-## 11. 아키텍처 함의
+## 11. 아키텍처 시사점
 
 1. **아이템 = 단일 `object` 문서, 착용은 슬롯 참조.** 무한의 모든 컨테이너(방·몹·플레이어·은행)가 같은 object를 담으므로, MongoDB에서도 object를 단일 스키마로 모델링하고 컨테이너는 objectId 배열로 참조한다. 착용은 `ready[]` 슬롯을 objectId 맵(`{ WIELD: id, BODY: id, … }`)으로 재현한다.
 
 2. **파생 스탯은 `ready[]`의 순수 함수**(§4). AC=`f(dex, Σ 착용 armor, 보호)`, thaco=`f(class, level, 무기 adjustment, 숙련, str)`. 착용/해제 시 필드를 가감하는 대신 슬롯 변경 → 재계산으로 두면 [[a7-player-progression]] §12의 최우선 재설계(base+modifier 분리)와 자연히 합쳐진다. 무기 `adjustment`는 명중 modifier, 방어구 `armor`는 AC modifier로 각각 태깅.
 
-3. **경제는 `value` 하나 위의 상수 배수.** 구매 100%·판매 50%(cap 10만)·수리 25%·몹구매 max(10,value). 이 배수는 코드가 아니라 **경제 config**(JSON)로 두어 튜닝을 코드에서 분리한다. `value`는 아이템 템플릿의 정본 필드로 이식.
+3. **경제는 `value` 하나 위의 상수 배수.** 구매 100%·판매 50%(cap 10만)·수리 25%·몹구매 max(10,value). 이 배수는 코드가 아니라 **경제 config**(JSON)로 두어 튜닝을 코드에서 분리한다. `value`는 아이템 템플릿의 기준 필드로 이식.
 
 4. **상점 재고를 선언적으로.** 원본은 재고를 "인접 방 번호 규약"으로 표현하지만(§8), 이는 방 번호 인접성에 묶인 구현 방식이다. 신규 스택은 상점에 명시적 재고 목록(무한/유한, 복제 여부)을 부여하고, 몹 상점의 `carry[]`도 상인 인벤토리로 모델링한다.
 
-5. **은행은 계좌 도메인으로 분리**(§9). 원본의 "은행=object 파일 컨테이너"는 영리한 재사용이지만 원작의 구현 방식이다. 계좌를 `{owner, gold, items[], slotLimit:200, cap:3억}` 문서로 두면 현금·보관을 명확히 분리하면서 원본 의미(이자 없음·3억 상한·이체 없음)를 그대로 이식한다. **이자 부재는 설계 선택 지점** — 무한 원작 충실성 vs 경제 확장 사이에서 결정 게이트로 표시.
+5. **은행은 계좌 도메인으로 분리**(§9). 원본의 "은행=object 파일 컨테이너"는 영리한 재사용이지만 원작의 구현 방식이다. 계좌를 `{owner, gold, items[], slotLimit:200, cap:3억}` 문서로 두면 현금·보관을 명확히 분리하면서 원본 의미(이자 없음·3억 상한·이체 없음)를 그대로 이식한다. **이자가 없다는 점은 설계 선택 지점** — 무한 원작 충실성 vs 경제 확장 사이에서 결정 게이트로 표시.
 
 6. **금화 무결성 가드 추가.** gold·value·잔고 전부 signed long 무가드다. 신규 스택은 상한·음수 검증·트랜잭션(입금/출금/판매의 원자성)을 넣는다 — 특히 은행은 두 파일(계좌+세이브) 동시 저장이라 부분 실패 시 유실/복제 위험이 있다.
 
@@ -485,6 +485,6 @@ bnk_ptr->value -= amt;  ply_ptr->gold += amt;
 - **경제·은행 핵심 수치 원본 재확인**(에이전트 단독 출처였던 load-bearing 값): 판매가 `MIN(value/2, 100000)`(command7.c:258 확정), 수리비 `value/4`(command8.c:249 확정), 몹구매 `MAX(10, value*1)`(command10.c:573 확정), 은행 3억 상한 `value+amt > 300000000`(bank.c:314 확정), 현금=object.value(입금 `bnk_ptr->value += amt` 확정), buy 함수명(command7.c:169 확정).
 - **정정**: 전당포 "2배 지급"은 **버그가 아니라 정상 동작**이다(lucky 분기 `gold += gold` if 내부 + if/else 밖 이중 가산 = 실제 2배, command7.c:277·284 확인). 초기 추출은 이를 미지급 버그로 오독했으나 라인 재확인으로 정정. 별개로 은행 초기화의 `F_ISSET(bnk_ptr, OCONTN)`(bank.c:311)은 테스트 매크로 오용으로 플래그가 실제 안 켜지는 **데드 statement**(§10-f).
 - **에이전트 추출 + 미직접확인**(신뢰하되 인용 라인 표기): 소비 아이템의 magic1.c 시전 경로(`drink`/`readscroll`/`zap`, magicpower-1 → [[a6-magic]] 위임), `die()` 금화 변환(creature.c:331)·몹 소지금 랜덤(creature.c:879), give/trade/get 거부 조건 세부(command8.c·command10.c·command2.c), bank_check.c 독립 유틸 성격.
-- **위임**: 무기 데미지·명중·숙련 공식은 [[a5-combat]], 물약/두루마기/지팡이 스펠 효과·마법계열은 [[a6-magic]], AC/thaco 폐형·`max_weight`·스탯 보정은 [[a7-player-progression]]. 본 노트는 아이템 기여 항(Σ armor·adjustment)만 얹었고 기저 공식은 재유도하지 않았다.
+- **위임**: 무기 데미지·명중·숙련 공식은 [[a5-combat]], 물약/두루마기/지팡이 스펠 효과·마법계열은 [[a6-magic]], AC/thaco 닫힌 식·`max_weight`·스탯 보정은 [[a7-player-progression]]. 본 노트는 아이템 기여 항(Σ armor·adjustment)만 얹었고 기저 공식은 재유도하지 않았다.
 - **미확인/근사**: CONTAINER2(14) 실사용은 `data/world/objects.json` 카운트로 확정 필요. 원거리/특수공격의 type별 분기는 command5.c 근접 경로만 확인(special1.c 등 미정독). 몹 `carry[]` 5칸/오버로드(carry[0]=WIMPYVALUE) 세부는 몹 AI 범위로 위임.
 - `command grep` 래퍼 `-I` EUC-KR skip 함정 재확인 — `command grep -a`/`iconv` 사용([[muhan-oracle-toolchain]]).

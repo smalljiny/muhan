@@ -4,13 +4,13 @@
 
 ## 개요
 
-운영자(DM)·월드 빌더가 게임 안에서 쓰는 명령 표면과, 게임 밖에서 데이터 파일을 직접 편집하는 오프라인 에디터를 카탈로그화한다. 결론부터: **이 표면 전체는 콘텐츠가 아니라 툴링·운영 구현 방식이다.** DM 명령은 `*`로 시작하는 49개 특수 명령이며, 전부 `dm1.c`~`dm6.c`에 구현되고 `global.c`의 단일 `cmdlist[]` 테이블에서 일반 명령과 함께 디스패치된다. `util/ed`는 서버와 별개로 도는 **DOS/curses 메뉴 프로그램**으로, object/creature/room/player 파일을 디스크에서 직접 열어 편집한다(자체 직렬화 루틴 사본 보유).
+운영자(DM)·월드 빌더가 게임 안에서 쓰는 명령 인터페이스와, 게임 밖에서 데이터 파일을 직접 편집하는 오프라인 에디터를 카탈로그화한다. 결론부터: **이 인터페이스 전체는 콘텐츠가 아니라 툴링·운영 구현 방식이다.** DM 명령은 `*`로 시작하는 49개 특수 명령이며, 전부 `dm1.c`~`dm6.c`에 구현되고 `global.c`의 단일 `cmdlist[]` 테이블에서 일반 명령과 함께 디스패치된다. `util/ed`는 서버와 별개로 도는 **DOS/curses 메뉴 프로그램**으로, object/creature/room/player 파일을 디스크에서 직접 열어 편집한다(자체 직렬화 루틴 사본 보유).
 
 가장 중요한 구조적 발견: **인게임 편집 명령(방/오브젝트/크리처 생성·필드 설정)은 최소한이고 대부분 DM 최상위 등급으로 게이트된다.** "빌더" 등급인 ZONEMAKER는 실제로 순간이동·인스펙션·저장만 할 수 있고 방을 편집하지 못한다. 즉 **실제 월드 제작은 게임 밖 `util/ed` 에디터에서 이뤄졌고**, 인게임 명령은 그 결과물을 순회·점검·미세조정하는 보조 도구였다.
 
-따라서 각 명령의 포팅 질문은 "이 C 함수를 이식하나?"가 아니라 **"이 capability가 신규 스택에서도 필요한가, 필요하면 어떤 표면(웹 admin/builder UI + API)으로 다시 제공하나?"** 이다. 이 렌즈로 판단이 세 갈래로 정렬된다 — **드롭**(구 아키텍처 종속: 디스크 flush/reload, fork 셧다운 타이머), **대체**(운영·빌딩 capability는 유지, 표면만 교체: 대다수), **이식**(명령이 실제 게임 규칙·시나리오를 인코딩한 드문 경우: `*gcast`/`*떨어져라`/`*침공`의 시나리오 상수만).
+따라서 각 명령의 포팅 질문은 "이 C 함수를 이식하나?"가 아니라 **"이 capability가 신규 스택에서도 필요한가, 필요하면 어떤 인터페이스(웹 admin/builder UI + API)로 다시 제공하나?"** 이다. 이 렌즈로 판단이 세 갈래로 정렬된다 — **드롭**(구 아키텍처 종속: 디스크 flush/reload, fork 셧다운 타이머), **대체**(운영·빌딩 capability는 유지, 인터페이스만 교체: 대다수), **이식**(명령이 실제 게임 규칙·시나리오를 인코딩한 드문 경우: `*gcast`/`*떨어져라`/`*침공`의 시나리오 상수만).
 
-이슈 비고대로 이 표면은 **후순위(post-MVP)** 가능성이 크다. 초기 운영은 DB 직접 접근으로 충분하고, 빌더 UI는 월드 규칙(A4~A9)이 서버에 살아난 뒤 얹는다. 본 노트의 산출물은 **카탈로그 + 이식/대체/드롭 판단 + defer 권고**이며, 대체 표면의 상세 설계는 범위 밖이다.
+이슈 비고대로 이 인터페이스는 **후순위(post-MVP)** 가능성이 크다. 초기 운영은 DB 직접 접근으로 충분하고, 빌더 UI는 월드 규칙(A4~A9)이 서버에 살아난 뒤 얹는다. 본 노트의 산출물은 **카탈로그 + 이식/대체/드롭 판단 + defer 권고**이며, 대체 인터페이스의 상세 설계는 범위 밖이다.
 
 ## 핵심 발견 요약
 
@@ -153,7 +153,7 @@ if(cmnd->str[0][0]=='*')
 | `*dmhelp`/`*도움말` | 143 | `dm5:660` | **DM** | 플래그·명령 레퍼런스 출력 | 드⁸ |
 
 ¹ `*force` 대상이 DM(12)이면 시전자도 DM이어야 함(`dm1:724`) — DM 간 권한 보호.
-² `dm_gspells`(`dm4:315`)는 실제 마법 효과 공식(SVIGOR/SMENDW/SRESTO/SFHEAL/SBLESS/SPROTE…)을 재사용 — 공식 정본 [A6](a6-magic.md). GM 시전 패널로 대체하되 공식은 콘텐츠로 이미 이식됨.
+² `dm_gspells`(`dm4:315`)는 실제 마법 효과 공식(SVIGOR/SMENDW/SRESTO/SFHEAL/SBLESS/SPROTE…)을 재사용 — 공식 기준 [A6](a6-magic.md). GM 시전 패널로 대체하되 공식은 콘텐츠로 이미 이식됨.
 ³ 조정 대상 파라미터의 **값 자체**는 밸런스 콘텐츠([A5](a5-combat.md)/[A7](a7-player-progression.md))이나, 런타임 튜닝 UI는 구현 방식.
 ⁴ lockout 데이터(차단 IP)는 운영 설정. 파일 재로드 메커니즘은 드롭, 차단 정책은 대체(admin 설정 UI).
 ⁵ 오브젝트를 방 영구 비품으로 만드는 빌더 기능(§3와 경계). `OPERM2`/`OTEMPP` 플래그 의미는 [A8](a8-items-economy.md) 참조.
@@ -165,7 +165,7 @@ if(cmnd->str[0][0]=='*')
 
 ## 3. 월드 빌더 명령 카탈로그
 
-방·오브젝트·크리처를 게임 안에서 생성·배치·편집하는 명령. `util/ed`(§4)의 in-game 대응물이나, **대부분 DM 전용이라 실제 제작보다 순회·미세조정 용도**다. object/creature/room **필드를 편집 노출**할 뿐이며, 필드 의미론은 [A4 이동·방](a4-movement-rooms.md)·[A8 아이템·경제](a8-items-economy.md)·[A9 몬스터 AI](a9-monster-ai.md)가 정본이다.
+방·오브젝트·크리처를 게임 안에서 생성·배치·편집하는 명령. `util/ed`(§4)의 in-game 대응물이나, **대부분 DM 전용이라 실제 제작보다 순회·미세조정 용도**다. object/creature/room **필드를 편집 노출**할 뿐이며, 필드 의미론은 [A4 이동·방](a4-movement-rooms.md)·[A8 아이템·경제](a8-items-economy.md)·[A9 몬스터 AI](a9-monster-ai.md)가 기준이다.
 
 | 명령(별칭) | cmdno | 구현 | 최소 class | 동작 | 판단 |
 |---|---|---|---|---|---|
@@ -221,14 +221,14 @@ if(cmnd->str[0][0]=='*')
 6. Quit
 ```
 
-**특성과 함의**:
+**특성과 시사점**:
 
 - **디스크 파일 직접 편집**: `load_obj_from_file`/`save_obj_to_file`(`editor.c:214/246`), `load_rom_from_file`/`save_rom_to_file`(`editor.c:1038/1065`) 등이 서버를 거치지 않고 objmon 템플릿·방 파일을 직접 연다. 서버 실행 중 쓰면 캐시 불일치가 나므로 **오프라인 빌딩 툴**이다(인게임 `*set`이 DM 전용인 것과 상보적).
 - **직렬화 루틴 중복 사본**: `editor3.c`가 `read_obj`/`write_obj`/`read_crt`/`write_crt`/`read_rom`/`write_rom`을, `editor4.c`가 `*_to_mem`/`*_from_mem`을 갖는다 — 서버 `files1.c`/`files3.c`의 **복제본**이다. 두 곳을 따로 유지해야 했던 1993 구조의 흔적.
 - **크로스플랫폼 빌드**: `editor.exe`(Windows)·`editor`(Unix)·`editor.mak`/`editor.mdp`(Visual C++ 프로젝트)가 함께 있다. 빌더가 PC에서 편집 → 서버로 파일 전송하는 워크플로우.
 - **`compress.c`**: `util/ed`에도 LZW 압축 사본이 있으나, CLAUDE.md 확인대로 실제 세이브는 비압축이므로 **불필요**(구현 방식이지 콘텐츠 아님).
 
-**판단**: 프로그램 전체 **대체(드롭+재설계)**. 신규 스택에서는 웹 빌더 UI가 이 역할을 흡수한다. 다만 `edit_object`/`edit_monster`/`edit_room`/`edit_player`가 **노출하던 편집 필드 집합**은 빌더 UI가 제공해야 할 필드의 선례로 보존 가치가 있다(필드 의미론은 A4/A8/A9 정본, 편집 UX 명세는 이 에디터의 화면 구성 참조).
+**판단**: 프로그램 전체 **대체(드롭+재설계)**. 신규 스택에서는 웹 빌더 UI가 이 역할을 흡수한다. 다만 `edit_object`/`edit_monster`/`edit_room`/`edit_player`가 **노출하던 편집 필드 집합**은 빌더 UI가 제공해야 할 필드의 선례로 보존 가치가 있다(필드 의미론은 A4/A8/A9 기준, 편집 UX 명세는 이 에디터의 화면 구성 참조).
 
 ---
 
@@ -238,7 +238,7 @@ if(cmnd->str[0][0]=='*')
 
 | 명령 | 구현 | 시나리오 (하드코딩 콘텐츠) |
 |---|---|---|
-| `*gcast`/`*전주문` | `dm_gspells` (`dm4:315`) | 마법 효과 공식 재사용(SVIGOR: `hpcur += 1d6+6`, SRESTO: full HP/MP, SBLESS: 3600초 지속 등) — 공식 정본 [A6](a6-magic.md) |
+| `*gcast`/`*전주문` | `dm_gspells` (`dm4:315`) | 마법 효과 공식 재사용(SVIGOR: `hpcur += 1d6+6`, SRESTO: full HP/MP, SBLESS: 3600초 지속 등) — 공식 기준 [A6](a6-magic.md) |
 | `*떨어져라` | `dm_moonstone` (`dm5:607`) | 오브젝트 **#640**("초인의 돌")을 `RNOTEL` 아닌 랜덤 방에 스폰, `shotsmax += 1d20`, 방송 "%s에 초인의 돌이 떨어졌습니다" |
 | `*침공` | `dm_monster` (`dm5:632`) | 몬스터 **265~299**를 방 **3601~3630**(무적존)에 10회 투입, 방송 "드레니아 몹이 침공했습니다"·NPC "라작" 대사 |
 
@@ -251,20 +251,20 @@ if(cmnd->str[0][0]=='*')
 | 분류 | 대상 | 처리 |
 |---|---|---|
 | **이식** | `*gcast`가 재사용하는 마법 공식, `*떨어져라`/`*침공`의 오브젝트·몬스터 ID·방 범위·방송 대사, `*parameter`가 조정하는 밸런스 값, `*set` 권한 상승 방지 규칙 | 규칙·공식은 A5~A9로 이식됨. 이벤트 유지 시 시나리오 상수를 **데이터로 외부화**. |
-| **재설계 — 대체** | 운영 명령(invis/send/purge/echo/force/spy/silence/broad/users/finger 등), 빌더 명령(create/monster/set_*/add_rom/link/name/append/replace/oname/cname), stat/inspection, `util/ed` 전체, 감사 로그 | 웹 admin/builder UI + API로 재설계. capability 유지, 표면 교체. |
+| **재설계 — 대체** | 운영 명령(invis/send/purge/echo/force/spy/silence/broad/users/finger 등), 빌더 명령(create/monster/set_*/add_rom/link/name/append/replace/oname/cname), stat/inspection, `util/ed` 전체, 감사 로그 | 웹 admin/builder UI + API로 재설계. capability 유지, 인터페이스 교체. |
 | **재설계 — 드롭** | 디스크 캐시 명령(reload/save/flushrooms/flushcrtobj/사용자저장), `*shutdown` 타이머, `*notepad`/`*dmhelp` 편의, `util/ed`의 `compress.c`, 2계층 게이트의 CARETAKER/INVINCIBLE 이상현상 | 신규 아키텍처(MongoDB+메모리 그래프)에서 무의미하거나 RBAC로 흡수. |
 
 ---
 
-## 7. 아키텍처 함의 & 이식/대체/드롭 권고
+## 7. 아키텍처 시사점 & 이식/대체/드롭 권고
 
-### 7.1 표면 전체는 post-MVP defer
+### 7.1 인터페이스 전체는 post-MVP defer
 
-DM/빌더 표면은 **게임 규칙이 서버에 살아난 뒤에 얹는 운영 계층**이다. 초기 개발·운영은 (a) 월드 편집 = `port/`로 변환한 JSON 직접 수정 후 재로드, (b) 운영 조치 = DB 직접 접근으로 충분하다. 이슈 비고 "후순위 가능성 큼"에 동의하며, **결정 게이트 이후 별도 토픽**으로 다룰 것을 권고한다.
+DM/빌더 인터페이스는 **게임 규칙이 서버에 살아난 뒤에 얹는 운영 계층**이다. 초기 개발·운영은 (a) 월드 편집 = `port/`로 변환한 JSON 직접 수정 후 재로드, (b) 운영 조치 = DB 직접 접근으로 충분하다. 이슈 비고 "후순위 가능성 큼"에 동의하며, **결정 게이트 이후 별도 토픽**으로 다룰 것을 권고한다.
 
 ### 7.2 메커니즘 드롭, capability 재설계
 
-- **`*command` telnet 문법·함수 포인터 디스패치·DOS 오프라인 에디터는 이식하지 않는다.** 신규 스택은 WebSocket 구조화 메시지 + admin API + 웹 UI가 표면이다.
+- **`*command` telnet 문법·함수 포인터 디스패치·DOS 오프라인 에디터는 이식하지 않는다.** 신규 스택은 WebSocket 구조화 메시지 + admin API + 웹 UI가 인터페이스다.
 - **RBAC로 클래스 이상현상 정리**: ZONEMAKER/CARETAKER/SUB_DM/DM/INVINCIBLE의 뒤엉킨 계급을 역할 기반(예: `builder`·`moderator`·`admin`)으로 재설계한다. 1993 계급 값 배치의 부작용(INVINCIBLE 0개, CARETAKER 3종, ZONEMAKER 편집 불가)을 그대로 재현할 이유는 없다. 다만 **빌더/운영 권한 분리**(월드 편집 ≠ 플레이어 god 조작) 자체는 유지 가치가 있다.
 - **감사 로그는 이식 요구사항**: 모든 admin action은 audit trail(`log_dmcmd` 대응)을 남긴다. 신규 스택에서는 구조화 로그/DB 테이블로.
 - **`*set`의 DM 강등 안전장치 계승**: 게임 안 도구로 최고 권한을 만들 수 없게 한 설계(권한 상승 방지)는 유지한다 — admin UI에서 역할 승격은 별도 경로·이중 확인으로.

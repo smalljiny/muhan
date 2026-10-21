@@ -16,7 +16,7 @@
 packages/shared/src/oracle/
 ├── types.ts                      # fixture JSON 포맷·zod 스키마·GoldenFixture 제네릭 타입
 ├── runner.ts                     # approve() — 체크인 fixture 대조 러너
-├── computeAc.ts                  # 방어도 산술 정본 (stats/derived.ts가 wrap)
+├── computeAc.ts                  # 방어도 산술 기준 (stats/derived.ts가 wrap)
 ├── fixtures/                     # 체크인 frozen fixture (compute_ac + E6 stats-core 공식·테이블)
 │   └── *.json
 └── generators/
@@ -24,7 +24,7 @@ packages/shared/src/oracle/
     └── *Fixture.ts               # manual 생성기 (참조 구현 + 기대값 산출·기록)
 ```
 
-대표 공식 `compute_ac`로 하네스 루프를 end-to-end 증명했고, E6 stats-core(#80)가 이 규약을 준용해 `computeThaco`·`maxWeight`·`computeHpMax`·`computeMpMax` 공식 fixture와 상수 테이블(`class_stats`·`thaco_list`·`mod_profic`) 전사 fixture를 추가했다(`writeFixtureFile`은 생성기 공용 `fixtureIo.ts`로 추출). 각 공식 fixture를 그 공식 소유 토픽이 생성하는 규약(아래 §범위)의 첫 적용이다.
+대표 공식 `compute_ac`로 하네스 루프를 end-to-end 증명했고, E6 stats-core(#80)가 이 규약을 준용해 `computeThaco`·`maxWeight`·`computeHpMax`·`computeMpMax` 공식 fixture와 상수 테이블(`class_stats`·`thaco_list`·`mod_profic`) 옮겨 적은 fixture를 추가했다(`writeFixtureFile`은 생성기 공용 `fixtureIo.ts`로 추출). 각 공식 fixture를 그 공식 담당 토픽이 생성하는 규약(아래 §범위)의 첫 적용이다.
 
 ### fixture JSON 포맷
 
@@ -101,6 +101,6 @@ end-to-end 데모는 (a) 체크인 fixture 전 케이스가 `computeAc`를 throw
 ## 관련 문서
 
 - ADR: `docs/specs/architecture.md` §3.9(D7 테스트 전략)
-- 분석 노트: `docs/notes/game-analysis-20260625/a5-combat.md`(공식 정본, `compute_ac`는 §184)
+- 분석 노트: `docs/notes/game-analysis-20260625/a5-combat.md`(공식 기준, `compute_ac`는 §184)
 - oracle 코드: `legacy/muhan/src/player.c:971`(방어도 공식)
 - 부모 에픽·이슈: #33(E8), #70(본 토픽), #71(E8-2 property), #36(E6 소비자)

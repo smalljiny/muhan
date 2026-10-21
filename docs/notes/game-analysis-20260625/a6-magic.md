@@ -1,6 +1,6 @@
 # A6 마법 시스템
 
-> 무한의 마법(주문 카탈로그·시전 규칙·데미지 공식·지속효과 타이머·마법 자원)이 oracle에서 *무엇을 하는지*를 규명한다. 주문 효과·수치는 밸런스 정의이므로 충실히 이식하고, 디스패치(함수 포인터 테이블·`how==CAST` 4중 분기·lasttime 슬롯 재사용)는 원작의 구현 방식이므로 자유롭게 재설계한다. 이슈 #6. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)와 변환 산출물 `data/world/creatures.json`(몬스터 템플릿 674). 코드 이식이 아니라 동작 추출.
+> 무한의 마법(주문 카탈로그·시전 규칙·데미지 공식·지속효과 타이머·마법 자원)이 oracle에서 *무엇을 하는지*를 정리한다. 주문 효과·수치는 밸런스 정의이므로 충실히 이식하고, 디스패치(함수 포인터 테이블·`how==CAST` 4중 분기·lasttime 슬롯 재사용)는 원작의 구현 방식이므로 자유롭게 재설계한다. 이슈 #6. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)와 변환 산출물 `data/world/creatures.json`(몬스터 템플릿 674). 코드 이식이 아니라 동작 추출.
 >
 > **oracle 읽기 주의**: 하네스 `grep` 래퍼가 `-I`(binary skip)를 붙여 EUC-KR 파일을 스킵한다. `command grep -a` 또는 `iconv -f EUC-KR -t UTF-8 -c … | grep`로 우회한다([[muhan-oracle-toolchain]] 갱신 대상).
 
@@ -8,7 +8,7 @@
 
 무한의 마법은 **단일 주문 함수 집합을 네 개의 진입 경로가 공유**하는 구조다. 주문 하나는 `int fn(ply_ptr, cmnd, how)` 시그니처의 C 함수이고, `how`(CAST·POTION·SCROLL·WAND)만 다르게 넘겨 재사용한다. 시전자가 누구든(플레이어든 몬스터든) 같은 함수를 탄다 — 몬스터 마법조차 `crt_spell`이 `crt_ptr`을 `ply_ptr` 자리에 넣어 **동일한 주문 함수를 CAST 경로로 호출**한다.
 
-주문은 `global.c`의 두 정적 테이블이 정본이다: **`spllist[]`**(55개 활성 주문 = 한글명·주문번호·함수포인터·전수등급)와 **`ospell[]`**(공격 주문 20개 = realm·마나·주사위). 명령 파서는 사용자가 친 한글 주문명을 `spllist`에서 선형 탐색(`strncmp` 접두 매칭)해 함수 포인터를 얻는다.
+주문은 `global.c`의 두 정적 테이블이 기준이다: **`spllist[]`**(55개 활성 주문 = 한글명·주문번호·함수포인터·전수등급)와 **`ospell[]`**(공격 주문 20개 = realm·마나·주사위). 명령 파서는 사용자가 친 한글 주문명을 `spllist`에서 선형 탐색(`strncmp` 접두 매칭)해 함수 포인터를 얻는다.
 
 중요한 비대칭이 하나 있다: **마나·클래스·주문지식 게이트는 전부 `how == CAST` 조건에 감싸여 있다.** 즉 두루마리·물약·지팡이로 시전하면 이 게이트를 전부 우회한다 — 도력이 부족해도, 그 직업이 아니어도, 그 주문을 안 배웠어도 아이템만 있으면 발동한다. 대신 아이템 경로는 소모(두루마리 소멸·`shotscur--`)와 `spell_fail` 굴림으로 게이트된다. 이것이 "효과·수치는 콘텐츠(이식) / 디스패치는 구현 방식(재설계)"의 핵심 접합점이다.
 
@@ -66,7 +66,7 @@ if(!S_ISSET(ply_ptr, SVIGOR) && how == CAST) { 미터득; return 0; } // knowled
 
 ## 2. 주문 카탈로그 = `spllist` + `ospell` (콘텐츠)
 
-주문번호 상수는 `mtype.h:233–289`에 `SVIGOR=0` … `SCURSE=56`으로 정의(57개, `SNAHAN=56` 주석 처리). `spllist[]`(global.c:571–636)가 활성 55개의 정본이다. 원소는 `{ 한글명, 주문번호, 함수포인터, 전수등급(spllv) }`.
+주문번호 상수는 `mtype.h:233–289`에 `SVIGOR=0` … `SCURSE=56`으로 정의(57개, `SNAHAN=56` 주석 처리). `spllist[]`(global.c:571–636)가 활성 55개의 기준이다. 원소는 `{ 한글명, 주문번호, 함수포인터, 전수등급(spllv) }`.
 
 **주문 분류**(함수별):
 
@@ -284,7 +284,7 @@ lasttime[LT_HEALS].interval = 5;                       // 5초 주기
 
 ---
 
-## 12. 아키텍처 함의
+## 12. 아키텍처 시사점
 
 1. **effect/delivery 분리.** 원본의 단일 `fn(caster, cmnd, how)`는 효과와 전달 경로가 한 함수에 얽혀 있다. 신규 스택은 **순수 효과 함수**(`applyVigor(caster, target, ctx)`)와 **delivery 어댑터**(cast/scroll/potion/wand — 각자 소모·쿨다운·spell_fail·게이트-우회 여부를 결정)로 분리한다. `how==CAST` 게이트 의미는 `ctx.gated` 한 플래그로 흡수한다.
 

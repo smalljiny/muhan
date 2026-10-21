@@ -11,7 +11,7 @@
 - **effectiveStat 계층** — base 영속 능력치 + 모디파이어(버프·장비·종족)를 유효 능력치로 합성.
 - **파생 resolver 계층** — 유효 능력치 스냅샷(`EffectiveStatContext`)을 받아 파생 스탯을 계산.
 
-소비자는 "필드 가감" 대신 "context 조립 → 재계산"으로 상태 일관성을 확보한다. base(`characterSchema.stats`·level 등)와 자신의 modifier로 context를 조립해 resolver를 호출하며, stats-core는 modifier를 **소비**만 한다(생성은 전투·마법·아이템 소유 토픽).
+소비자는 "필드 가감" 대신 "context 조립 → 재계산"으로 상태 일관성을 확보한다. base(`characterSchema.stats`·level 등)와 자신의 modifier로 context를 조립해 resolver를 호출하며, stats-core는 modifier를 **소비**만 한다(생성은 전투·마법·아이템 담당 토픽).
 
 ## 구조 / 스키마
 
@@ -33,7 +33,7 @@ packages/shared/src/stats/
 
 ### 정적 테이블 (tables.ts)
 
-원본 C 전역 상수를 32비트 oracle에서 전사한 4종:
+원본 C 전역 상수를 32비트 oracle에서 옮겨 적은 4종:
 
 | 테이블 | 형태 | 원본 | 용도 |
 |--------|------|------|------|
@@ -46,9 +46,9 @@ packages/shared/src/stats/
 
 ### EffectiveStatContext
 
-resolver 5종이 판독하는 필드의 합집합. 각 필드는 이미 합성된 유효값(`effective*`) 또는 순수 입력이며, resolver는 자신이 필요한 필드만 읽는다.
+resolver 5종이 읽는 필드의 합집합. 각 필드는 이미 합성된 유효값(`effective*`) 또는 순수 입력이며, resolver는 자신이 필요한 필드만 읽는다.
 
-| 필드 | 판독 resolver |
+| 필드 | 읽는 resolver |
 |------|---------------|
 | `effectiveDexterity` | computeAc |
 | `effectiveStrength` | computeThaco, maxWeight |
@@ -67,10 +67,10 @@ resolver 5종이 판독하는 필드의 합집합. 각 필드는 이미 합성�
 
 ### 파생 resolver 5종
 
-산술 정본의 위치가 두 모델로 나뉜다:
+산술 기준의 위치가 두 모델로 나뉜다:
 
-- **computeAc** — `oracle/computeAc.ts`가 산술 정본이고, resolver는 `EffectiveStatContext`를 `ComputeAcInput`으로 어댑트해 호출하는 얇은 wrapper다(드리프트 0). 공식: `ac = 100 - 5·bonus[MIN(dex,63)] - equipArmor - (protection?10:0)`, 최종 `[-127,127]` clamp (`player.c:971`).
-- **computeThaco·maxWeight·computeHpMax·computeMpMax** — 산술 정본이 resolver 함수 자체다. 독립 참조 구현(`oracle/generators/*Fixture.ts`)이 골든 fixture를 생성해 교차 검증한다.
+- **computeAc** — `oracle/computeAc.ts`가 산술 기준이고, resolver는 `EffectiveStatContext`를 `ComputeAcInput`으로 어댑트해 호출하는 얇은 wrapper다(드리프트 0). 공식: `ac = 100 - 5·bonus[MIN(dex,63)] - equipArmor - (protection?10:0)`, 최종 `[-127,127]` clamp (`player.c:971`).
+- **computeThaco·maxWeight·computeHpMax·computeMpMax** — 산술 기준이 resolver 함수 자체다. 독립 참조 구현(`oracle/generators/*Fixture.ts`)이 골든 fixture를 생성해 교차 검증한다.
 
 | resolver | 공식 요지 | 원본 |
 |----------|-----------|------|
@@ -89,16 +89,16 @@ resolver 5종이 판독하는 필드의 합집합. 각 필드는 이미 합성�
 
 - **computeAc** — byte-level C oracle 대조 + 골든 fixture(선행 #73/#79 하네스 재사용).
 - **computeThaco·maxWeight·computeHpMax·computeMpMax** — 독립 참조 구현이 생성한 골든 fixture와 SUT를 대조. 참조 구현은 SUT와 의도적으로 다른 표현이라 transcription tautology를 방어하며, 각 골든 테스트는 `+1` 음성 대조로 러너가 실차이를 잡는지 증명한다.
-- **상수 테이블** — `global.c`/`player.c` 전사값을 골든 fixture 체크인 diff로 검증.
+- **상수 테이블** — `global.c`/`player.c`에서 옮겨 적은 값을 골든 fixture 체크인 diff로 검증.
 - **effectiveStat** — 무clamp 가산 불변식을 수동 property 테스트로 검증.
 
 상세 하네스는 `docs/specs/golden-fixture-harness.md`(#73)·`docs/specs/property-testing.md`(#79) 참조.
 
 ## 제약사항
 
-- **스키마-중립 순수 라이브러리** — `characterSchema`를 변경하지 않는다. 영속 필드(level·exp·HP/MP·숙련) 추가는 소유 토픽(진행·아이템) 소관이다.
-- **상태·영속·스케줄러 없음** — 재생 틱·버프 만료 스케줄러 배선, 레벨업·능력치 성장·승급 로직, 장비 착용/해제 트리거는 범위 밖이다.
-- **modifier 소비 전용** — 장비 armor·주문 버프 등 실제 modifier 값 생성은 전투·마법·아이템 소유 토픽이 담당한다.
+- **스키마-중립 순수 라이브러리** — `characterSchema`를 변경하지 않는다. 영속 필드(level·exp·HP/MP·숙련) 추가는 담당 토픽(진행·아이템)이 맡는다.
+- **상태·영속·스케줄러 없음** — 재생 틱·버프 만료 스케줄러 연결, 레벨업·능력치 성장·승급 로직, 장비 착용/해제 트리거는 범위 밖이다.
+- **modifier 소비 전용** — 장비 armor·주문 버프 등 실제 modifier 값 생성은 전투·마법·아이템 토픽이 담당한다.
 - **HP/MP는 최대치만** — 현재 HP/MP·데미지 상태·재생은 파생하지 않는다.
-- **HP/MP 폐형은 oracle과 부분적으로 어긋남(수용)** — 원본 `up_level`은 `level%4≠0` 레벨에서 791행 조기 return으로 증분 누적값을 유지하고 4의 배수 레벨에서만 폐형으로 재동기화한다. stats-core는 이 드리프트를 `level%4` 조기 return이 만든 구현 버그로 판단해 깔끔한 폐형 하나만 구현한다 — 어긋나는 레벨에서 원본과 다를 수 있으며 수용된 결정이다(근거: `docs/notes/game-analysis-20260625/a7-player-progression.md` §2).
+- **HP/MP 닫힌 식은 oracle과 부분적으로 어긋남(수용)** — 원본 `up_level`은 `level%4≠0` 레벨에서 791행 조기 return으로 증분 누적값을 유지하고 4의 배수 레벨에서만 닫힌 식으로 재동기화한다. stats-core는 이 드리프트를 `level%4` 조기 return이 만든 구현 버그로 판단해 깔끔한 닫힌 식 하나만 구현한다 — 어긋나는 레벨에서 원본과 다를 수 있으며 수용된 결정이다(근거: `docs/notes/game-analysis-20260625/a7-player-progression.md` §2).
 - **maxWeight barbarian 항 무클램프** — 원본 그대로 재현하며 L≥81에서 소지량이 발산한다.

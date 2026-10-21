@@ -1,6 +1,6 @@
 # A7 플레이어 진행·스탯·클래스/종족
 
-> 무한의 플레이어 진행 체계(스탯 5종·능력치 보정·클래스/종족 효과·레벨업 곡선·hp/mp 재생)가 oracle에서 *무엇을 하는지*를 규명한다. 스탯 의미·성장 곡선·보정표는 밸런스 정의이므로 충실히 이식하고, 세이브 직렬화(디스크 구조체 → MongoDB)·유효값/기본값 미분리 필드 조작·데드코드는 원작의 구현 방식이므로 자유롭게 재설계한다. 이슈 #7. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)와 변환 산출물 `data/world/creatures.json`. 코드 이식이 아니라 동작 추출.
+> 무한의 플레이어 진행 체계(스탯 5종·능력치 보정·클래스/종족 효과·레벨업 곡선·hp/mp 재생)가 oracle에서 *무엇을 하는지*를 정리한다. 스탯 의미·성장 곡선·보정표는 밸런스 정의이므로 충실히 이식하고, 세이브 직렬화(디스크 구조체 → MongoDB)·유효값/기본값 미분리 필드 조작·데드코드는 원작의 구현 방식이므로 자유롭게 재설계한다. 이슈 #7. 출처는 `legacy/muhan/src`(EUC-KR, byte-level)와 변환 산출물 `data/world/creatures.json`. 코드 이식이 아니라 동작 추출.
 >
 > **oracle 읽기 주의**: 하네스 `grep` 래퍼가 `-I`(binary skip)를 붙여 EUC-KR 파일을 스킵한다. `command grep -a` 또는 `iconv -f EUC-KR -t UTF-8 -c … | grep`로 우회한다([[muhan-oracle-toolchain]]).
 
@@ -8,7 +8,7 @@
 
 무한의 플레이어는 **`creature` 구조체 하나**로 표현되며, 진행 상태는 그 안의 소수 필드에 담긴다: `level`(unsigned char), `class`·`race`(char), 능력치 5종 `strength`/`dexterity`/`constitution`/`intelligence`/`piety`(각 char), `hpmax`/`hpcur`/`mpmax`/`mpcur`(short), `experience`·`gold`(long), 파생 스탯 `armor`(AC)·`thaco`, 근접 주사위 `ndice`/`sdice`/`pdice`, 그리고 성장 누적자 `proficiency[5]`(무기 숙련)·`realm[4]`(마법 숙련, [[a6-magic]]). 몬스터도 같은 구조체를 쓴다.
 
-진행의 축은 **경험치 → 레벨**이지만 자동이 아니다. exp가 임계를 넘어도 플레이어는 **직업별 수련장(RTRAIN 방)에서 `연마`를 쳐야** 레벨이 오르고, 그때마다 gold도 소비된다. 레벨업은 hp/mp를 **폐형(closed-form) 공식으로 재계산**하고, 4레벨마다 능력치 하나를 클래스별 성장 주기표(`level_cycle`)에 따라 +1 한다.
+진행의 축은 **경험치 → 레벨**이지만 자동이 아니다. exp가 임계를 넘어도 플레이어는 **직업별 수련장(RTRAIN 방)에서 `연마`를 쳐야** 레벨이 오르고, 그때마다 gold도 소비된다. 레벨업은 hp/mp를 **닫힌 식(closed-form)으로 재계산**하고, 4레벨마다 능력치 하나를 클래스별 성장 주기표(`level_cycle`)에 따라 +1 한다.
 
 클래스는 13종이 정의돼 있으나 **생성 시 선택 가능한 건 8종**(자객·권법가·불제자·검사·도술사·무사·포졸·도둑 = Mordor의 assassin/barbarian/cleric/fighter/mage/paladin/ranger/thief를 한국어로 재테마). 나머지는 **승급 계층**(무적 INVINCIBLE, 초인 CARETAKER)과 운영자(SUB_DM/DM)다. 레벨 100에서 무적으로 승급하며 **레벨·경험치가 1·0으로 리셋**되지만, 무적의 시작 hp/mp가 400/250으로 점프하므로 너프가 아니라 새 성장 트랙의 시작이다.
 
@@ -22,7 +22,7 @@
 |---|------|------|
 | 1 | **능력치 5종 = str·dex·con·int·piety(각 char).** 생성 시 54점 포인트바이(각 3~18, 합 ≤54), 4레벨마다 `level_cycle[class]` 주기로 +1 성장 | 이식(스탯) |
 | 2 | **모든 스탯 효과는 `bonus[64]` 보정표 경유.** 스탯값(0~63)→보정(−4~+7). str→thaco·데미지·소지량, dex→AC, con→hp재생·독저항, int→mp재생·주문지속, piety→치유·기도·마법저항 | 이식(보정표) |
-| 3 | **HP/MP 곡선 = `max = start + 성장률×(level−1)/2` 폐형.** class_stats[class]의 hpstart/mpstart/hp/mp가 정본. 805–808 재계산은 `level==1`·`level%4==0`에서만 도달, `level%4≠0`은 증분(779–780)이 잔존해 **폐형과 어긋남**(§2 구현 잔재 참조). 신규 스택은 폐형 채택(차이 수용) | 이식(곡선) / 재설계(증분 드리프트 비재현) |
+| 3 | **HP/MP 곡선 = `max = start + 성장률×(level−1)/2` 닫힌 식.** class_stats[class]의 hpstart/mpstart/hp/mp가 기준. 805–808 재계산은 `level==1`·`level%4==0`에서만 도달, `level%4≠0`은 증분(779–780)이 잔존해 **닫힌 식과 어긋남**(§2 구현 잔재 참조). 신규 스택은 닫힌 식 채택(차이 수용) | 이식(곡선) / 재설계(증분 드리프트 비재현) |
 | 4 | **경험치 곡선 = `needed_exp[128]` 룩업.** L2=128, L36 부근 10만, L100 부근 1000만, L128=1.9억. 128 이상은 +500만/레벨 선형 | 이식(곡선) |
 | 5 | **레벨업은 수동 = `연마`(train) 명령.** exp≥needed_exp[L−1] AND gold≥needed/20 AND **직업별 수련장(RTRAIN 비트 매칭)** 에서만. 조건 만족 시 여러 레벨 배치업 | 이식(규칙) |
 | 6 | **승급 체계: L100→무적(레벨1·exp0 리셋, start 400/250), L127→초인(hp800/mp600 고정).** 직업전환은 별도 방에서 exp 10만 소비 후 exp_to_lev로 레벨 재동기화 | 이식(진행) |
@@ -32,7 +32,7 @@
 | 10 | **사망 페널티 = exp 손실만.** L<20: exp/20(5%), L≥20: exp/15(최대 10만 캡). 레벨은 클램프로 **유지**(플레이어 die는 down_level 미호출) | 이식(페널티) |
 | 11 | **파생 스탯: AC=`100−5·bonus[dex]−Σ방어구−보호10`(내림차순, 낮을수록 강).** thaco=`thaco_list[class][circle]−무기−mod_profic−bonus[str]`. circle=`(level+3)/4` | 이식(공식) |
 | 12 | **base/유효 스탯 미분리.** 가속(dex−15)·완력(str−3)·참선(int−3)·잠력격발(hpmax/mpmax−100) 버프가 필드를 직접 가감, 만료 시 역가감. 이중 만료·순서 의존 취약 | 재설계 |
-| 13 | **데드코드 다수.** piety 재생 가속(595 주석), PBLESS thaco−3(대입 후라 무효), up_level 홀짝 증분(`level%4≠0`에서 잔존·폐형과 어긋나나 구현 버그로 비재현), bonus[35] 구표 주석 | 재설계(비재현) |
+| 13 | **데드코드 다수.** piety 재생 가속(595 주석), PBLESS thaco−3(대입 후라 무효), up_level 홀짝 증분(`level%4≠0`에서 잔존·닫힌 식과 어긋나나 구현 버그로 비재현), bonus[35] 구표 주석 | 재설계(비재현) |
 
 ---
 
@@ -63,13 +63,13 @@ int bonus[64] = { -4,-4,-4,-3,-3,-2,-2,-1,-1,-1, 0, 0, 0, 0, 1, 1,
 
 인덱스 = 능력치값(0~63), 값 = 보정. 대표 구간: **3=−3, 8~9=−1, 10~13=0, 14~16=+1, 18=+2, 25=+4, 30=+5, 44+=+7**(상한). 생성 시 최대 18(=+2)에서 시작해 레벨 성장·마법·장비로 오른다.
 
-> **구현 메모**: `bonus[35]`(구표, `global.c:54`)가 주석 처리돼 있다. 값이 다르다(예: index 8·9는 구표 0 vs 신표 −1, index 14·15는 구표 0 vs 신표 +1, index 20은 구표 +2 vs 신표 +3). 이식은 활성 `bonus[64]`만 정본으로 삼는다.
+> **구현 메모**: `bonus[35]`(구표, `global.c:54`)가 주석 처리돼 있다. 값이 다르다(예: index 8·9는 구표 0 vs 신표 −1, index 14·15는 구표 0 vs 신표 +1, index 20은 구표 +2 vs 신표 +3). 이식은 활성 `bonus[64]`만 기준으로 삼는다.
 
 `bonus[]` 인덱싱은 능력치값을 그대로 배열 첨자로 쓰므로 **63 초과 시 out-of-bounds**다. `compute_ac`(player.c:978)는 `dexterity>63`을 명시적으로 클램프하지만, 대부분의 호출처(`bonus[ply_ptr->strength]` 등)는 클램프 없이 직접 인덱싱한다 — 정상 플레이에서는 스탯이 63을 넘지 않는다는 암묵 가정이다. 신규 스택은 보정을 **함수(clamp 내장)** 로 재구현한다.
 
 ---
 
-## 2. HP/MP 곡선 = class_stats 폐형 (콘텐츠 + 구현 잔재)
+## 2. HP/MP 곡선 = class_stats 닫힌 식 (콘텐츠 + 구현 잔재)
 
 레벨업 시 hp/mp는 클래스별 성장률표 `class_stats[13]`(`global.c:37`)로 결정된다. 원소는 `{hpstart, mpstart, hp, mp, ndice, sdice, pdice}`:
 
@@ -96,11 +96,11 @@ hpcur = hpmax;  mpcur = mpmax           (레벨업 시 완전 회복)
 
 예시(검사 hp6/mp1, start 56/50): **L1** 56/50 → **L10** 83/54 → **L50** 203/74 → **L100** 353/99. 도술사(mage hp4/mp3): **L50** 152hp/**123mp**. 권법가(barbarian hp7/mp1): **L50** 228hp/64mp. → hp는 권법가·검사가, mp는 불제자·도술사가 앞선다.
 
-> **구현 잔재(#3) — 정정(2026-07-16 리뷰)**: `up_level`은 폐형 재계산(805–808) 이전에 **홀짝 증분**(779–780: 홀수레벨 `hpmax+=hp`, 짝수 `mpmax+=mp`)을 먼저 수행한다. 폐형 재계산은 **`level==1` 또는 `level%4==0`에서만** 도달한다 — `level%4≠0`에서는 791행 조기 `return`이 폐형을 건너뛰므로 그 레벨의 `hpmax`/`mpmax`는 **증분 누적값 그대로 유지**된다. 이 증분값은 4의 배수 레벨에서만 폐형으로 재동기화된다.
+> **구현 잔재(#3) — 정정(2026-07-16 리뷰)**: `up_level`은 닫힌 식 재계산(805–808) 이전에 **홀짝 증분**(779–780: 홀수레벨 `hpmax+=hp`, 짝수 `mpmax+=mp`)을 먼저 수행한다. 닫힌 식 재계산은 **`level==1` 또는 `level%4==0`에서만** 도달한다 — `level%4≠0`에서는 791행 조기 `return`이 닫힌 식을 건너뛰므로 그 레벨의 `hpmax`/`mpmax`는 **증분 누적값 그대로 유지**된다. 이 증분값은 4의 배수 레벨에서만 닫힌 식으로 재동기화된다.
 >
-> 이전 서술("증분 합 = 폐형과 수학적으로 일치")은 **틀렸다**. 조기 return 때문에 증분값과 폐형은 절반가량 레벨에서 어긋난다. 전사(hpstart=56, hp=6) `hpmax` 검산: **L2** 게임56/폐형59, **L5** 게임71/폐형68, **L7** 77/74, **L9** 83/80(L1·L3·L4·L6·L8 등에서는 우연히 일치). `hpmax`는 `up_level` 안에서만 기록되고 디스크에 그대로 저장되므로(`files1.c:455–458` `read_crt`는 `hpmax`를 로드만, `update_ply`는 재계산 안 함), 이 증분값이 **실제 관측·저장되는 값**이다 — "일시적 미세 드리프트"가 아니라 영구적인 어긋남이다.
+> 이전 서술("증분 합 = 닫힌 식과 수학적으로 일치")은 **틀렸다**. 조기 return 때문에 증분값과 닫힌 식은 절반가량 레벨에서 어긋난다. 전사(hpstart=56, hp=6) `hpmax` 검산: **L2** 게임56/닫힌 식59, **L5** 게임71/닫힌 식68, **L7** 77/74, **L9** 83/80(L1·L3·L4·L6·L8 등에서는 우연히 일치). `hpmax`는 `up_level` 안에서만 기록되고 디스크에 그대로 저장되므로(`files1.c:455–458` `read_crt`는 `hpmax`를 로드만, `update_ply`는 재계산 안 함), 이 증분값이 **실제 관측·저장되는 값**이다 — "일시적 미세 드리프트"가 아니라 영구적인 어긋남이다.
 >
-> **채택 결정(폐형 유지)**: 이 어긋남은 `level%4` 조기 return이 만든 원본의 **의도치 않은 드리프트(구현 버그)**로 판단하고, 신규 스택은 깔끔한 폐형 하나(`start + 성장×(level−1)/2`)만 구현한다. 결과적으로 신규 캐릭터·재계산된 세이브는 어긋나는 레벨에서 원본보다 HP/MP가 다를 수 있으며(as-shipped 아님, 구현 방식 개선), 이는 수용된 차이다. `computeHpMax`/`computeMpMax` resolver 주석에 동일 근거를 명시한다.
+> **채택 결정(닫힌 식 유지)**: 이 어긋남은 `level%4` 조기 return이 만든 원본의 **의도치 않은 드리프트(구현 버그)**로 판단하고, 신규 스택은 깔끔한 닫힌 식 하나(`start + 성장×(level−1)/2`)만 구현한다. 결과적으로 신규 캐릭터·재계산된 세이브는 어긋나는 레벨에서 원본보다 HP/MP가 다를 수 있으며(as-shipped 아님, 구현 방식 개선), 이는 수용된 차이다. `computeHpMax`/`computeMpMax` resolver 주석에 동일 근거를 명시한다.
 
 ---
 
@@ -200,7 +200,7 @@ thaco = thaco_list[class][circle] − 무기.adjustment − mod_profic(ply) − 
 - **무기 숙련**(profic): 검사=가장 싸다(100%에 ~934,808), 권법가 2배, 도둑·포졸 3배, 불제자·무사·자객 ~4배, **도술사=가장 비싸다**(~6,543,656). 전사가 무기를 빨리 마스터.
 - **마법 숙련**(mprofic): **도술사=가장 싸다**(realm 100%에 ~2,073,306), 불제자 다음, 무사·포졸, 그 외(비시전직)=가장 비싸다(~5,495,000). [[a6-magic]] §7의 realm 성장이 이 곡선을 오른다.
 
-숙련 성장 자체는 [[a5-combat]](무기 명중 시 `proficiency` 누적)·[[a6-magic]](몬스터 마법 데미지 시 `realm` 누적)에서 다루며, A7은 그 누적자가 **어떻게 %로 환산되는지**(위 breakpoint)만 정본화한다.
+숙련 성장 자체는 [[a5-combat]](무기 명중 시 `proficiency` 누적)·[[a6-magic]](몬스터 마법 데미지 시 `realm` 누적)에서 다루며, A7은 그 누적자가 **어떻게 %로 환산되는지**(위 breakpoint)만 기준으로 정리한다.
 
 ---
 
@@ -332,7 +332,7 @@ PvP 사망(!RSUVIV): 추가로 무기 숙련(proficiency) 손실
 
 이 구조의 취약점:
 - **이중 만료/이중 적용**: 버프 재적용·저장/로드 타이밍이 어긋나면 필드가 영구 드리프트(예: 만료 처리 없이 저장 후 재로그인).
-- **파생 스탯 재계산 순서 의존**: dex 변형 후 `compute_ac`, str 변형 후 thaco 재계산을 수동 호출해야 정합. 누락하면 AC/thaco가 stale.
+- **파생 스탯 재계산 순서 의존**: dex 변형 후 `compute_ac`, str 변형 후 thaco 재계산을 수동 호출해야 값이 들어맞는다. 누락하면 AC/thaco가 stale.
 - **bonus[] 인덱스 폭주**: 버프로 dex가 63 초과 시 클램프 없는 호출처에서 OOB.
 
 → **신규 스택은 base 능력치 + 모디파이어 레이어를 분리**한다: `effectiveStr = baseStr + Σ activeModifiers`. 버프는 만료 이벤트를 가진 모디파이어 객체로, 파생 스탯(AC/thaco/소지량)은 유효 스탯의 **순수 함수**로 매 조회 시 계산(또는 모디파이어 변경 시 무효화). MongoDB 스키마는 `baseStats`만 영속화하고 활성 모디파이어는 라이브 상태([[muhan-mud-port]])에 둔다.
@@ -345,8 +345,8 @@ PvP 사망(!RSUVIV): 추가로 무기 숙련(proficiency) 손실
 |---|---|---|---|
 | a | **piety 재생 가속 주석 처리**(595행) — 정상 방 틱은 고정 5초, piety 무효 | dead | 정상 재생 piety 미반영으로 이식(또는 의도 복원 결정) |
 | b | **PBLESS thaco−3 데드코드**(1021–1022) — `ply_ptr->thaco` 대입(1016/1019) *이후* `thaco −= 3`이라 저장값에 반영 안 됨 | 버그 | 대입 전으로 이동하거나 축복 명중효과 재설계 |
-| c | **up_level 홀짝 증분**(779–780) — `level==1`·`level%4==0`에서만 805–808 폐형에 덮이고, `level%4≠0`은 791행 조기 return으로 증분만 잔존해 **폐형과 어긋남**(§2 정정 참조) | 구현 버그(드리프트) | 폐형 하나로 통합, 차이 수용(비재현) |
-| d | **bonus[35] 구표 주석**(54행) — 활성 bonus[64]와 값 상이 | dead | bonus[64]만 정본 |
+| c | **up_level 홀짝 증분**(779–780) — `level==1`·`level%4==0`에서만 805–808 닫힌 식에 덮이고, `level%4≠0`은 791행 조기 return으로 증분만 잔존해 **닫힌 식과 어긋남**(§2 정정 참조) | 구현 버그(드리프트) | 닫힌 식 하나로 통합, 차이 수용(비재현) |
+| d | **bonus[35] 구표 주석**(54행) — 활성 bonus[64]와 값 상이 | dead | bonus[64]만 기준 |
 | e | **base/유효 스탯 미분리**(§12) — 필드 직접 가감, 순서·타이밍 의존 | 구조 | 모디파이어 레이어 분리 |
 | f | **종족 보정 상·하한 미재검**(command1.c:338) — 54점 배분 후 종족 ± 적용 시 3~18 벗어날 수 있음 | 결함 | 적용 후 clamp 검토 |
 | g | **race_str "개구리족"(index 9)** — RACE 상수 대응 없음, 생성 불가 | dead | 제외 |
@@ -356,7 +356,7 @@ PvP 사망(!RSUVIV): 추가로 무기 숙련(proficiency) 손실
 
 ---
 
-## 14. 아키텍처 함의
+## 14. 아키텍처 시사점
 
 1. **base 스탯 + 모디파이어 레이어 분리**(§12). 진행 시스템의 최우선 재설계. 영속 필드는 base 능력치·level·exp·class·race·숙련 누적자만. 버프·장비 보정·파생 스탯(AC/thaco/소지량/재생량)은 유효 스탯의 순수 함수로 조회 시 계산. 이것이 무한을 "필드 직접 변형" MUD에서 상태 일관 서버로 옮기는 핵심.
 
@@ -376,8 +376,8 @@ PvP 사망(!RSUVIV): 추가로 무기 숙련(proficiency) 손실
 
 ## 검증 메모
 
-- **직접 읽어 확인**(byte-level): `init_ply`·`update_ply`·`up_level`·`down_level`·`compute_ac`·`compute_thaco`·`mod_profic`·`profic`·`mprofic`·`max_weight`(player.c), `create_ply`(command1.c), 연마·직업전환(command7.c), `die`·`exp_to_lev`(creature.c/misc.c), 종족 게이트(command3.c·room.c). 정본 테이블 class_stats/bonus/class_str/race_str/level_cycle/thaco_list/needed_exp/quest_exp는 global.c에서 값 직접 확인.
-- **핵심 주장 spot-check**: hp/mp 폐형 `start+성장×(level−1)/2`(805–808 확정; **증분은 `level%4≠0`에서 폐형과 어긋남** — 초기 "값 일치" 검산은 오류, §2 정정 참조), piety 재생 주석(595행 확정), PBLESS thaco 대입 후 감산(1021 무효 확정), 사망 시 down_level 미호출·레벨 클램프(creature.c 128–139 확정), 종족 효과 3종(->race 전 파일 grep으로 스탯보정·장비크기·암시야 외 없음 확증), 승급 L100 리셋·L127 초인 고정치(command7.c 606·618 확정).
-- **곡선 예시 수치**(검사 L50=203hp/74mp 등)는 폐형 공식에 class_stats 값 대입 계산 — 정수 나눗셈 반영.
+- **직접 읽어 확인**(byte-level): `init_ply`·`update_ply`·`up_level`·`down_level`·`compute_ac`·`compute_thaco`·`mod_profic`·`profic`·`mprofic`·`max_weight`(player.c), `create_ply`(command1.c), 연마·직업전환(command7.c), `die`·`exp_to_lev`(creature.c/misc.c), 종족 게이트(command3.c·room.c). 기준 테이블 class_stats/bonus/class_str/race_str/level_cycle/thaco_list/needed_exp/quest_exp는 global.c에서 값 직접 확인.
+- **핵심 주장 spot-check**: hp/mp 닫힌 식 `start+성장×(level−1)/2`(805–808 확정; **증분은 `level%4≠0`에서 닫힌 식과 어긋남** — 초기 "값 일치" 검산은 오류, §2 정정 참조), piety 재생 주석(595행 확정), PBLESS thaco 대입 후 감산(1021 무효 확정), 사망 시 down_level 미호출·레벨 클램프(creature.c 128–139 확정), 종족 효과 3종(->race 전 파일 grep으로 스탯보정·장비크기·암시야 외 없음 확증), 승급 L100 리셋·L127 초인 고정치(command7.c 606·618 확정).
+- **곡선 예시 수치**(검사 L50=203hp/74mp 등)는 닫힌 식에 class_stats 값 대입 계산 — 정수 나눗셈 반영.
 - **미확인/근사**: needed_exp의 레벨↔인덱스 정확 대응은 배열 주석이 불규칙해 "부근"으로 표기(임계값 자체는 배열 그대로 정확). profic/mprofic breakpoint 배열의 개별 중간값은 클래스 대표치만 인용(전 12칸×클래스 전부 재확인하지 않음). 스탯의 개별 기술 확률 기여(은신·도둑질 등)는 [[a2-command-catalog]] 범위로 위임.
 - `command grep` 래퍼 `-I` EUC-KR skip 함정 재확인 — `command grep -a` 사용([[muhan-oracle-toolchain]]).

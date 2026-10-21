@@ -1,17 +1,17 @@
-# 이름 매칭 (주문명·대상 해소 + 별칭 `key[3][20]`)
+# 이름 매칭 (주문명·대상 해석 + 별칭 `key[3][20]`)
 
-> 사용자가 친 한글 이름을 주문·대상(크리처·플레이어·아이템)으로 해소하는 오라클 규칙 2종과, 그 규칙이 실데이터에서 동작하는 데 필요한 별칭 파이프라인.
+> 사용자가 친 한글 이름을 주문·대상(크리처·플레이어·아이템)으로 해석하는 오라클 규칙 2종과, 그 규칙이 실데이터에서 동작하는 데 필요한 별칭 파이프라인.
 
 ## 개요
 
-라이브 게임 명령은 입력 문자열을 게임 객체로 해소해야 한다. 오라클은 이를 **서로 다른 두 규칙**으로 처리하며, 이 포트는 두 규칙을 각각 순수 함수로 이식한다.
+라이브 게임 명령은 입력 문자열을 게임 객체로 해석해야 한다. 오라클은 이를 **서로 다른 두 규칙**으로 처리하며, 이 포트는 두 규칙을 각각 순수 함수로 이식한다.
 
 | | 주문명 (`magic1.c:49-70` cast · `163-175` teach) | 대상 (`find_crt`·`find_obj`, `EQUAL` 매크로) |
 |---|---|---|
 | 규칙 | 완전일치 우선(즉시 확정) → 접두 누적 | **순수 접두만** — 완전일치 특례 없음 |
 | 검사 필드 | `koreanName` 1개 | `name` + `keys[0..2]` **4개** |
 | 모호할 때 | **거부** | 거부 없음 — **서수로 N번째 선택** |
-| 미발견 | `notFound` (호출자가 메시지 소유) | `undefined` |
+| 미발견 | `notFound` (호출자가 메시지 담당) | `undefined` |
 
 두 규칙을 한 함수로 합치면 어느 한쪽이 오라클과 어긋나므로 **통합하지 않는다**.
 
@@ -26,11 +26,11 @@
 | `shared/src/naming/matchSpellName.ts` | shared | 주문명 규칙 — 완전일치 우선 + 유일 접두 + 모호 거부 |
 | `shared/src/naming/matchTarget.ts` | shared | 대상 규칙 — 4필드 순수 접두 + 서수 선택 |
 | `shared/src/magic/catalog.ts` | shared | `spellByName(query)` — `SPELL_CATALOG`를 바인딩한 얇은 래퍼 |
-| `server/src/world/roomTargetResolvers.ts` | world | 방 스코프 크리처·플레이어 해소자 + `find_crt` 가시성 게이트 |
-| `server/src/ws/liveWorldWiring.ts` | ws | 해소자 2종을 seam으로 노출 (1회 생성 공유) |
+| `server/src/world/roomTargetResolvers.ts` | world | 방 스코프 크리처·플레이어 리졸버 + `find_crt` 가시성 게이트 |
+| `server/src/ws/liveWorldWiring.ts` | ws | 리졸버 2종을 확장 지점(seam)으로 노출 (1회 생성 공유) |
 | `port/templates.js`·`parseRoom.js` | port | `key[3][20]` 추출 (OBJ 오프셋 160 · CRT 오프셋 255, 3×20B) |
 
-매처는 shared 순수 함수이고 가시성 게이트·관찰자 flags는 server 해소자에 격리된다. 매처는 `{ name, keys? }` 형태만 보므로 크리처·아이템·플레이어 타입에 무관하다.
+매처는 shared 순수 함수이고 가시성 게이트·관찰자 flags는 server 리졸버에 격리된다. 매처는 `{ name, keys? }` 형태만 보므로 크리처·아이템·플레이어 타입에 무관하다.
 
 ### 매처 계약
 
@@ -40,18 +40,18 @@ matchSpellName(entries, query)
 
 matchTarget(candidates, query, ordinal = 1) → T | undefined
 
-// 방 스코프 해소자
+// 방 스코프 리졸버
 resolveRoomCreature(room, query, observerFlags, ordinal = 1) → CreatureInstance | undefined
 createRoomPlayerResolver(resolveCharacterName)(room, query, ordinal = 1) → characterId | undefined
 ```
 
-**매처는 관찰자를 받지 않는다.** 오라클이 가시성 게이트를 `match++` **앞**에 두므로 게이트에 걸린 후보는 서수 슬롯을 소모하면 안 되고, 따라서 해소자가 후보를 **먼저 거른 뒤** 매처에 넘긴다. 매처 시그니처에 관찰자를 넣으면 순수 함수가 flag 표상에 결합된다.
+**매처는 관찰자를 받지 않는다.** 오라클이 가시성 게이트를 `match++` **앞**에 두므로 게이트에 걸린 후보는 서수 슬롯을 소모하면 안 되고, 따라서 리졸버가 후보를 **먼저 거른 뒤** 매처에 넘긴다. 매처 시그니처에 관찰자를 넣으면 순수 함수가 flag 표상에 결합된다.
 
 ### 별칭 `keys`
 
 `CreatureInstance.keys?: string[]`·`ItemInstance.keys?: string[]` — 원본 `char key[3][20]`을 위생 처리한 배열.
 
-**선택 필드**로 둔다(`experience`/`alignment` 선례) — required면 흩어진 인라인 리터럴 테스트 픽스처가 전부 컴파일 실패한다. 다만 프로덕션 리더·물질화는 **항상 배열을 채운다**(없으면 `[]`, `undefined` 금지) — 매처가 두 경우를 따로 처리하지 않도록.
+**선택 필드**로 둔다(`experience`/`alignment` 선례) — required면 흩어진 인라인 리터럴 테스트 픽스처가 전부 컴파일 실패한다. 다만 프로덕션 리더·인스턴스 생성은 **항상 배열을 채운다**(없으면 `[]`, `undefined` 금지) — 매처가 두 경우를 따로 처리하지 않도록.
 
 실데이터 보유율: creature 681중 607(89%, name과 다른 진짜 별칭 359) · object 744중 666(90%). 실례 — `작은 거미`→`거미` · `야바단의 유령`→`유령`·`야바단`·`nildredge` · `검의 달인`→`달인`.
 
@@ -82,9 +82,9 @@ else if(!strncmp(str, spllist[c].splstr, strlen(str))) { match++; splno = c; }
 
 게이트가 `match++` 앞이라는 점이 곧 구현 계약이다 — 매칭 *후에* 거르면 투명 후보가 앞에 있을 때 `고블린 2`가 엉뚱한 대상을 고른다.
 
-### 배선 (1회 생성 공유)
+### 연결 (1회 생성 공유)
 
-`resolveRoomCreature`는 의존이 없어 모듈 함수를 그대로 노출한다(참조가 곧 단일 인스턴스). `resolveRoomPlayer`는 기존 `resolveCharacterName` **인스턴스를 재사용해** 1회 생성한다 — 지목 경로가 표시 경로와 다른 클로저를 배후에 두면 "보이는 이름"과 "지목되는 이름"이 갈린다. 정본은 [`live-world-foundation.md`](live-world-foundation.md) §조립.
+`resolveRoomCreature`는 의존이 없어 모듈 함수를 그대로 노출한다(참조가 곧 단일 인스턴스). `resolveRoomPlayer`는 기존 `resolveCharacterName` **인스턴스를 재사용해** 1회 생성한다 — 지목 경로가 표시 경로와 다른 클로저를 배후에 두면 "보이는 이름"과 "지목되는 이름"이 갈린다. 기준은 [`live-world-foundation.md`](live-world-foundation.md) §조립.
 
 ### 별칭 추출 위생
 
@@ -100,26 +100,26 @@ else if(!strncmp(str, spllist[c].splstr, strlen(str))) { match++; splno = c; }
 
 ### 알려진 divergence (의도)
 
-- **서수 기준 순서** — 오라클 `first_ply`·`first_mon`은 도착 순서 리스트가 아니라 **`strcmp` 이름 정렬 삽입 리스트**다(`room.c:17-19`). 이 포트는 도착 순서를 쓴다: `strcmp`는 EUC-KR 바이트 비교인데 KS X 1001 완성형 배열과 Unicode Hangul Syllables 배열이 달라 JS 문자열 비교로 재현되지 않으며, collation 테이블 없이는 이식이 불가능하다. 영향 범위는 **질의 접두가 같고 이름이 다른 후보가 공존할 때의 서수뿐**이다(한 방의 `고블린`·`고블린 대장`에 질의 `고`). 이식 여부는 **#137**이 소유한다.
+- **서수 기준 순서** — 오라클 `first_ply`·`first_mon`은 도착 순서 리스트가 아니라 **`strcmp` 이름 정렬 삽입 리스트**다(`room.c:17-19`). 이 포트는 도착 순서를 쓴다: `strcmp`는 EUC-KR 바이트 비교인데 KS X 1001 완성형 배열과 Unicode Hangul Syllables 배열이 달라 JS 문자열 비교로 재현되지 않으며, collation 테이블 없이는 이식이 불가능하다. 영향 범위는 **질의 접두가 같고 이름이 다른 후보가 공존할 때의 서수뿐**이다(한 방의 `고블린`·`고블린 대장`에 질의 `고`). 이식 여부는 **#137**이 담당한다.
 - **플레이어 별칭 미검사** — 오라클 `EQUAL`은 `first_ply`에도 `key[]`를 적용하나 플레이어 세이브의 key는 실무상 비어 있어 `characterSchema`에 별칭 필드를 두지 않는다.
 - **별칭 보관값 trim** — 리더가 빈 슬롯 판정뿐 아니라 보관값도 trim한다. 오라클은 앞뒤 공백을 보존하므로 `strncmp(" 거미", "거미", 4)`가 의도적으로 실패하는 반면 포트는 `거미`로 지목된다. 실측 영향은 앞공백 27·뒤공백 28슬롯이고 **전량 표지판 오브젝트**(key 필드에 안내문을 넣은 사례), 크리처는 0건이다. 값이 이미 `data/world/objects.json`에 동결돼 있다.
-- **20B NUL 미종단 키 절단** — 오라클 `strncmp`는 연속 메모리라 20B 경계를 넘어 다음 슬롯까지 이어 읽는다. 포트는 필드 길이에서 자른다(`name`·`description`의 기존 `cstr` 관례와 일관). 발현 조건은 병리적이며 테스트가 60B over-read 부재를 lock한다.
+- **20B NUL 미종단 키 절단** — 오라클 `strncmp`는 연속 메모리라 20B 경계를 넘어 다음 슬롯까지 이어 읽는다. 포트는 필드 길이에서 자른다(`name`·`description`의 기존 `cstr` 관례와 일관). 발현 조건은 병리적이며 테스트가 60B over-read가 없음을 lock한다.
 
 ### 미구현 경계 (소유권 분리)
 
-매처·해소자에 의도적으로 넣지 않은 것들이다. 미리 넣으면 소비 토픽의 게이트와 중복·충돌한다.
+매처·리졸버에 의도적으로 넣지 않은 것들이다. 미리 넣으면 소비 토픽의 게이트와 중복·충돌한다.
 
-- **플레이어 후보 가시성 게이트** — `PHIDDN`·`PINVIS`·`PDMINV` 점유자 필터는 표시 경로와 함께 **#129**가 소유한다(두 경로가 같은 관찰자 인자 설계를 공유해야 한다). 그때까지 플레이어 해소자는 이름이 해소되는 점유자를 무조건 후보로 싣는다 — 크리처 해소자와 **비대칭**이다.
-  - 세 비트의 도달 가능성이 다르다: `PHIDDN`·`PDMINV`는 영속 경로 부재로 영구 0이지만, **`PINVIS`는 `SINVIS` 버프 → `projectBuffFlags` → `composeCharacterFlags` 경로가 이미 완성돼 있고 시전 커맨드 부재만이 차단막**이다. 그 커맨드를 다는 #122(cast)가 착지하면 이 게이트는 즉시 필요해진다.
-- **자기 자신 제외 · `strlen(str) < 2` 거부** — `command5.c:79`의 2단 해소 조건은 **#121**(attack) 몫이다. 질의가 빈 문자열이면 `strncmp(a,b,0)===0`이라 첫 후보에 매치한다(오라클 그대로).
-- **질의 전처리** — `command5.c:76`의 첫 바이트 대문자화는 영문 플레이어명 관례이며 한글에 무효라 이식하지 않는다. 서수 토큰 분해·SOV 어순 처리도 입력 계층 소관이다.
+- **플레이어 후보 가시성 게이트** — `PHIDDN`·`PINVIS`·`PDMINV` 점유자 필터는 표시 경로와 함께 **#129**가 담당한다(두 경로가 같은 관찰자 인자 설계를 공유해야 한다). 그때까지 플레이어 리졸버는 이름이 해석되는 점유자를 무조건 후보로 싣는다 — 크리처 리졸버와 **비대칭**이다.
+  - 세 비트의 도달 가능성이 다르다: `PHIDDN`·`PDMINV`는 영속 경로가 없어 영구 0이지만, **`PINVIS`는 `SINVIS` 버프 → `projectBuffFlags` → `composeCharacterFlags` 경로가 이미 완성돼 있고 시전 커맨드가 없다는 점만이 차단막**이다. 그 커맨드를 다는 #122(cast)가 머지되면 이 게이트는 즉시 필요해진다.
+- **자기 자신 제외 · `strlen(str) < 2` 거부** — `command5.c:79`의 2단 해석 조건은 **#121**(attack) 몫이다. 질의가 빈 문자열이면 `strncmp(a,b,0)===0`이라 첫 후보에 매치한다(오라클 그대로).
+- **질의 전처리** — `command5.c:76`의 첫 바이트 대문자화는 영문 플레이어명 관례이며 한글에 무효라 이식하지 않는다. 서수 토큰 분해·SOV 어순 처리도 입력 계층 담당이다.
 - **생존·은신 게이트** — `hpcur > 0`과 `MHIDDN`은 `find_crt`에 없어 두지 않는다. 결과적으로 **숨은 크리처는 방 목록에 안 보여도 이름으로는 지목된다** — 표시 경로(`roomView.isCreatureHidden`)와 의도된 비대칭이다.
 
-### 미배선 소비자
+### 미연결 소비자
 
-- **아이템 해소자** — `characterSchema`에 `inventory`/`ready`가 없어 study 대상 자체가 존재하지 않는다(**#120**). 매처는 타입 무관이라 그대로 재사용된다.
+- **아이템 리졸버** — `characterSchema`에 `inventory`/`ready`가 없어 study 대상 자체가 존재하지 않는다(**#120**). 매처는 타입 무관이라 그대로 재사용된다.
 - **`ObjectTemplate.keys`** — 템플릿 인덱스는 `keys`를 전파하지 않는다. 이 인덱스를 읽는 이름 매칭 소비자가 0건이기 때문이며, #120이 template-backed 아이템 별칭을 필요로 할 때 함께 전파한다.
-- **명령 variant** — teach(#119)·study(#120)·attack(#121)·cast(#122)가 각자 배선한다. 본 문서 범위는 공유 seam까지다.
+- **명령 variant** — teach(#119)·study(#120)·attack(#121)·cast(#122)가 각자 연결한다. 본 문서 범위는 공유 seam까지다.
 
 ## 관련 문서
 
