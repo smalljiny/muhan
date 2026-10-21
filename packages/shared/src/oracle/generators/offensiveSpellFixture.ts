@@ -6,20 +6,20 @@ import { oracleMprofic } from './mproficFixture.js'
 export { writeFixtureFile }
 
 /**
- * offensive_spell 골든 전사-diff fixture 생성기 — manual oracle.
+ * offensive_spell 골든 옮겨 적기-diff fixture 생성기 — manual oracle.
  *
  * 원본 `magic1.c:820-1170`의 공격 주문 데미지 파이프(bns·방상성·마법저항·오버킬 캡·사망)를 **독립
- * 리터럴**로 전사해(전사 pass 2) 자기완결 시나리오 케이스로 감싼다. SUT `offensiveSpell`(server/magic)은
- * offensiveSpell.ts 구현(전사 pass 1)을 소비하므로, approve가 두 전사의 불일치를 잡아낸다.
+ * 리터럴**로 옮겨 적어(옮겨 적기 pass 2) 자기완결 시나리오 케이스로 감싼다. SUT `offensiveSpell`(server/magic)은
+ * offensiveSpell.ts 구현(옮겨 적기 pass 1)을 소비하므로, approve가 옮겨 적은 두 결과의 불일치를 잡아낸다.
  *
- * bns의 mprofic 항은 `oracleMprofic`(mproficFixture.ts의 pass-2 전사)을 재사용한다 — server mprofic.ts를
+ * bns의 mprofic 항은 `oracleMprofic`(mproficFixture.ts의 pass-2 옮겨 적기)를 재사용한다 — server mprofic.ts를
  * import하지 않아 anti-tautology를 유지한다. 플래그 비트·realm 코드도 server 상수가 아닌 mtype.h 리터럴이다.
  *
  * ## gated 한정 상성(오라클 divergence 명시)
  * 오라클은 방 상성을 게이트 밖에서 적용하나 이 포트는 gated로 접는다(offensiveSpell.ts 주석 참조). 따라서
  * gated=false + 반대속성 조합은 fixture에 **넣지 않는다** — 그 -5 divergence를 영구 고정하지 않기 위함이다.
  *
- * SUT 소비 approve는 server가 소유한다(`packages/server/src/magic/offensiveSpell.test.ts`) — shared는 server를
+ * SUT 소비 approve는 server가 담당한다(`packages/server/src/magic/offensiveSpell.test.ts`) — shared는 server를
  * import 못 하므로, 이 파일은 fixture만 생성하고 approve는 server 테스트가 디스크 json을 읽어 실행한다.
  *
  * ## 재생성 (수동 트리거)
@@ -62,7 +62,7 @@ export interface OffensiveInput {
   readonly rolls: readonly number[]
 }
 
-/** 관측 출력 — 적용 피해·최종 hp·사망·ledger 누적량·death 발화 횟수. */
+/** 관측 출력 — 적용 피해·최종 hp·사망·ledger 누적량·death 발생 횟수. */
 export interface OffensiveOutput {
   readonly dmg: number
   readonly finalHp: number
@@ -71,7 +71,7 @@ export interface OffensiveOutput {
   readonly deathFires: number
 }
 
-/** 독립 전사 F_ISSET(mtype.h:566) — hex string 바이트에서 지정 비트 판정. */
+/** 독립 옮겨 적기 F_ISSET(mtype.h:566) — hex string 바이트에서 지정 비트 판정. */
 function oracleFIsset(hex: string, bit: number): boolean {
   const i = (bit >> 3) * 2
   const byte = parseInt(hex.substring(i, i + 2), 16)
@@ -87,7 +87,7 @@ function divisor(bonusType: number): number {
   return 1
 }
 
-/** 방 상성 보정(magic1.c:867-895 독립 전사) — 동속성 ×2, 반대속성 min(-bns,-5). else-if 체인. */
+/** 방 상성 보정(magic1.c:867-895 독립 옮겨 적기) — 동속성 ×2, 반대속성 min(-bns,-5). else-if 체인. */
 function affinity(bns: number, realm: number, roomFlags: readonly number[]): number {
   const has = (bit: number) => oracleRoomFlag(roomFlags, bit)
   if (has(RB_RWATER)) {
@@ -112,7 +112,7 @@ function oracleRoomFlag(flags: readonly number[], bit: number): boolean {
   return ((flags[idx] ?? 0) & (1 << (bit % 8))) !== 0
 }
 
-/** 독립 전사 bns(magic1.c:853-895) — gated=false면 0. */
+/** 독립 옮겨 적기 bns(magic1.c:853-895) — gated=false면 0. */
 function oracleBns(input: OffensiveInput): number {
   if (!input.gated) return 0
   const { caster, osp } = input
@@ -121,7 +121,7 @@ function oracleBns(input: OffensiveInput): number {
 }
 
 /**
- * 독립 전사 데미지 파이프(magic1.c:1096-1170). 데미지 순서: max(1) → 저항(creature+MRMAGI) →
+ * 독립 옮겨 적기 데미지 파이프(magic1.c:1096-1170). 데미지 순서: max(1) → 저항(creature+MRMAGI) →
  * m=min(hpBefore,dmg) → hp-=dmg → 사망. no-op(hpBefore<1)은 전부 0.
  */
 function oracleOutput(input: OffensiveInput): OffensiveOutput {

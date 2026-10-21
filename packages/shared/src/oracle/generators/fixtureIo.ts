@@ -5,10 +5,10 @@ import type { GoldenFixture } from '../types.js'
  * 골든 fixture 생성기 공용 plumbing — manual-oracle envelope 조립 + frozen JSON 기록.
  *
  * 개별 생성기(computeAcFixture·classStatsFixture·thacoListFixture·modProficFixture)는
- * 대상별 `buildCases`(전사 리터럴)만 정의하고, envelope 규약(`method:'manual'`·`seed:null`·
+ * 대상별 `buildCases`(옮겨 적은 리터럴)만 정의하고, envelope 규약(`method:'manual'`·`seed:null`·
  * clock 스탬프)과 디스크 포맷(2-space indent + trailing newline)은 이 모듈로 단일화한다.
  * anti-tautology의 핵심인 ORACLE 리터럴·`buildCases`는 생성기별로 남는다 — 이 plumbing은
- * 그 리터럴을 건드리지 않으므로 전사 독립성을 해치지 않는다.
+ * 그 리터럴을 건드리지 않으므로 옮겨 적기 독립성을 해치지 않는다.
  */
 
 /**

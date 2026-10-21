@@ -5,11 +5,11 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * thaco_list 골든 전사-diff fixture 생성기 — manual oracle.
+ * thaco_list 골든 옮겨 적기-diff fixture 생성기 — manual oracle.
  *
- * 원본 `global.c:105`의 클래스×레벨 THAC0 13×20 테이블을 **독립 리터럴**로 전사해(전사 pass 2)
- * 각 셀을 조회 케이스로 감싼다. SUT `thacoOf`는 `stats/tables.ts`(전사 pass 1)를 읽으므로,
- * approve가 두 전사의 불일치(오타)를 셀 단위로 잡아낸다(anti-tautology).
+ * 원본 `global.c:105`의 클래스×레벨 THAC0 13×20 테이블을 **독립 리터럴**로 옮겨 적어(옮겨 적기 pass 2)
+ * 각 셀을 조회 케이스로 감싼다. SUT `thacoOf`는 `stats/tables.ts`(옮겨 적기 pass 1)를 읽으므로,
+ * approve가 옮겨 적은 두 결과의 불일치(오타)를 셀 단위로 잡아낸다(anti-tautology).
  *
  * expected는 이 파일에서 tables.ts를 import하지 않고 오라클 블록에서 직접 옮긴 리터럴이다.
  *
@@ -23,7 +23,7 @@ export { writeFixtureFile }
 /** thaco_list 조회 입력 — 행 인덱스 + 0-based 레벨 인덱스(0-19). */
 export type ThacoInput = { classIndex: number; levelIndex: number }
 
-// 독립 전사(pass 2) — global.c:105. 행=클래스 인덱스, 열=레벨 인덱스(0-19).
+// 독립 옮겨 적기(pass 2) — global.c:105. 행=클래스 인덱스, 열=레벨 인덱스(0-19).
 // tables.ts를 import하지 않고 오라클 블록에서 직접 옮긴 리터럴이다.
 const THACO_ORACLE: readonly (readonly number[])[] = [
   [20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20], // [0] placeholder

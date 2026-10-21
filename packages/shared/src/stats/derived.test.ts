@@ -17,7 +17,7 @@ function loadFixture(): GoldenFixture<ComputeAcInput, number> {
 
 /**
  * fixture의 `ComputeAcInput`을 런타임 wrapper 입력 `EffectiveStatContext`로 역-어댑트한다.
- * computeAc가 판독하는 3개 필드(effectiveDexterity·equipArmor·protection)만 의미가 있고,
+ * computeAc가 읽는 3개 필드(effectiveDexterity·equipArmor·protection)만 의미가 있고,
  * 나머지 5개(Story 4·5 소비)는 더미값으로 채운다 — computeAc는 이들을 읽지 않는다.
  */
 function adaptToContext(input: ComputeAcInput): EffectiveStatContext {

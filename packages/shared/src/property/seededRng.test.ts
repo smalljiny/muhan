@@ -30,9 +30,9 @@ describe('makeSeededRng', () => {
   })
 
   // 동결된 골든 벡터. 비교 기반 테스트는 알고리즘이 조용히 바뀌어도 두 인스턴스가
-  // 함께 변해 초록으로 남는다. 정본 mulberry32의 seed=12345 첫 5개 출력을 고정해
+  // 함께 변해 초록으로 남는다. 기준 mulberry32의 seed=12345 첫 5개 출력을 고정해
   // 우발적 상수·연산자 변경을 잡는다.
-  it('정본 mulberry32 골든 시퀀스를 재현한다 (seed=12345)', () => {
+  it('기준 mulberry32 골든 시퀀스를 재현한다 (seed=12345)', () => {
     const rng = makeSeededRng(12345)
     const seq = Array.from({ length: 5 }, () => rng())
     expect(seq).toEqual([

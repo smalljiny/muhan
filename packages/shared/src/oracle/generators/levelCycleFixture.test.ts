@@ -14,8 +14,8 @@ import {
 const FIXED_CLOCK = () => new Date('2026-07-21T00:00:00.000Z')
 
 describe('buildCases — anti-tautology 앵커 (level_cycle)', () => {
-  // 최중요(Layer B): 기대값은 참조 구현을 호출하지 않고 확정 정본 하드 리터럴로 박는다.
-  // 손 계산: L1→40 성장은 슬롯 {0,2,4,6,8}이 각 2회 발화. 각 클래스 행의 짝수 슬롯 값
+  // 최중요(Layer B): 기대값은 참조 구현을 호출하지 않고 확정 기준 하드 리터럴로 박는다.
+  // 손 계산: L1→40 성장은 슬롯 {0,2,4,6,8}이 각 2회 동작. 각 클래스 행의 짝수 슬롯 값
   // 히스토그램(v-1)×2가 분포다. 각 튜플 합은 10(성장 이벤트 10회).
   const HAND_COMPUTED_EXPECTED: readonly number[][] = [
     [4, 4, 2, 0, 0], // class1 assassin
@@ -33,7 +33,7 @@ describe('buildCases — anti-tautology 앵커 (level_cycle)', () => {
     expect(buildCases()).toHaveLength(9)
   })
 
-  it('각 케이스의 expected가 확정 정본 상수와 정확히 일치한다', () => {
+  it('각 케이스의 expected가 확정 기준 상수와 정확히 일치한다', () => {
     const cases = buildCases()
     cases.forEach((testCase, index) => {
       expect(testCase.expected).toEqual(HAND_COMPUTED_EXPECTED[index])
@@ -63,7 +63,7 @@ describe('참조 구현 — SUT와 독립 표현', () => {
     expect(referenceLevelCycleGains(4, 1)).toEqual([0, 0, 0, 0, 0])
   })
 
-  it('L1→4는 슬롯 index2(1회)만 발화한다 (fighter row[2]=2=DEX)', () => {
+  it('L1→4는 슬롯 index2(1회)만 동작한다 (fighter row[2]=2=DEX)', () => {
     expect(referenceLevelCycleGains(4, 4)).toEqual([0, 1, 0, 0, 0])
   })
 })
@@ -111,8 +111,8 @@ describe('체크인된 level_cycle.json fixture', () => {
     }
   })
 
-  // frozen 아티팩트 drift 가드(Layer B) — 체크인 JSON의 expected가 확정 정본 분포와 일치.
-  it('체크인 JSON의 expected가 확정 정본 분포와 일치한다', () => {
+  // frozen 아티팩트 drift 가드(Layer B) — 체크인 JSON의 expected가 확정 기준 분포와 일치.
+  it('체크인 JSON의 expected가 확정 기준 분포와 일치한다', () => {
     const url = new URL('../fixtures/level_cycle.json', import.meta.url)
     const parsed: unknown = JSON.parse(readFileSync(url, 'utf8'))
     const result = goldenFixtureSchema.safeParse(parsed)

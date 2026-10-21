@@ -19,7 +19,7 @@ function makeFakeSocket(): SocketLike {
   }
 }
 
-// 단일 ServerEvent를 소켓 onmessage로 발화한다. WsClient는 수신 프레임을 문자열로 기대한다.
+// 단일 ServerEvent를 소켓 onmessage로 발생시킨다. WsClient는 수신 프레임을 문자열로 기대한다.
 function emit(socket: SocketLike, event: unknown): void {
   act(() =>
     socket.onmessage?.(
@@ -248,7 +248,7 @@ describe('App', () => {
     expect(screen.getByLabelText('캐릭터 목록')).toBeInTheDocument()
   })
 
-  // 방 패널 배선 — 소켓에서 온 world:room이 스냅샷을 거쳐 화면에 도달하는 전 구간을 통합으로 확인한다.
+  // 방 패널 연결 — 소켓에서 온 world:room이 스냅샷을 거쳐 화면에 도달하는 전 구간을 통합으로 확인한다.
   // 방 내용 단정은 방 섹션 안으로 범위를 좁힌다(EventLog가 같은 이벤트를 원본 JSON으로도 렌더한다).
   it('renders the room panel after a world:room frame arrives in the entered shell', () => {
     const socket = makeFakeSocket()
@@ -260,7 +260,7 @@ describe('App', () => {
     const panel = within(screen.getByLabelText('방'))
     expect(panel.getByRole('heading', { name: '무한의 광장' })).toBeInTheDocument()
     // 진입 시퀀스의 본인(c1)은 사람 목록에서 빠지고, 목록이 비므로 섹션 자체가 없다.
-    // selfCharacterId 배선을 잡는 유일한 단정 — RoomPanel 자체 내용 검증은 RoomPanel.test.tsx가 담당한다.
+    // selfCharacterId 연결을 잡는 유일한 단정 — RoomPanel 자체 내용 검증은 RoomPanel.test.tsx가 담당한다.
     expect(panel.queryByLabelText('사람')).not.toBeInTheDocument()
   })
 
@@ -287,7 +287,7 @@ describe('App', () => {
 
     driveToEntered(socket)
     emit(socket, roomEvent(makeRoom()))
-    // 첫 출구('북')가 아니라 두 번째('동')를 눌러 exits[0] 하드코딩 배선을 배제한다.
+    // 첫 출구('북')가 아니라 두 번째('동')를 눌러 exits[0] 하드코딩 연결을 배제한다.
     await user.click(screen.getByRole('button', { name: '동' }))
 
     expect(sentFrame(send, 'world:move')).toContain('"direction":"동"')
@@ -326,7 +326,7 @@ describe('App', () => {
     const socket = makeFakeSocket()
     render(<App socketFactory={() => socket} />)
 
-    // 서버는 미해소 방에서 world:room 발화를 생략한다(스펙 §3.4) — 그 구간에도 셸은 정상이어야 한다.
+    // 서버는 해석되지 않은 방에서 world:room 발생을 생략한다(스펙 §3.4) — 그 구간에도 셸은 정상이어야 한다.
     driveToEntered(socket)
 
     expect(screen.queryByLabelText('방')).not.toBeInTheDocument()

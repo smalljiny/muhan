@@ -51,8 +51,8 @@ export * from './economy/index.js'
 // 선형 피벗 함정은 이 두 함수가 캡슐화한다. 실소비자가 생기면 그때 배럴에 추가한다(stats 선례).
 export { neededExp, expToLevel } from './progression/expCurve.js'
 
-// HP/MP 최대치 compute-on-read 래퍼(stats-core 폐형 + 초인 오버라이드 단일 소비 지점, D2)와
-// 현재치 불변식 클램프 헬퍼. 최대치는 저장하지 않고 class·level로 매 판독 시 파생한다.
+// HP/MP 최대치 compute-on-read 래퍼(stats-core 닫힌 식 + 초인 오버라이드 단일 소비 지점, D2)와
+// 현재치 불변식 클램프 헬퍼. 최대치는 저장하지 않고 class·level로 읽을 때마다 파생한다.
 // Story 4·5·7·8(레벨업·강등·재생·승급)이 이 세 함수를 공유 소비한다.
 export { resolveHpMax, resolveMpMax, clampVital } from './progression/maxResolvers.js'
 
@@ -63,11 +63,11 @@ export { upLevel, downLevel } from './progression/levelUp.js'
 
 // 승급(prestige) 순수 전이 — 무적(class<9→9·level1·exp0) / 초인(class9→10·level127) 전환과
 // 분기 판정(classifyPrestige). Story 6 train이 classifyPrestige로 게이트 후 디스패치 소비한다(D6).
-// gold 차감(train)·dice(combat)는 미소유하고 순수 class/level/experience/vitals 전이만 소유한다.
+// gold 차감(train)·dice(combat)는 담당하지 않고 순수 class/level/experience/vitals 전이만 담당한다.
 export { invinciblePrestige, caretakerPrestige, classifyPrestige } from './progression/prestige.js'
 
-// 주문 카탈로그 read-only 선언 테이블 — spllist 56 메타데이터 + ospell 20 realm×tier 격자(byte 정본).
-// effect 본체는 유예(#85)이고 이 배럴은 선언 테이블·타입·순수 조회 함수만 노출한다.
+// 주문 카탈로그 read-only 선언 테이블 — spllist 56 메타데이터 + ospell 20 realm×tier 격자(byte 원본).
+// effect 본체는 보류(#85)이고 이 배럴은 선언 테이블·타입·순수 조회 함수만 노출한다.
 export {
   REALM,
   SPELL_NO,
@@ -85,7 +85,7 @@ export {
 // 오라클 이름 매칭 규칙 2종의 순수 이식 — 서로 다른 규칙이라 통합하지 않는다.
 // matchTarget: EQUAL(mtype.h:579) 4필드 순수 접두 + 서수 선택, 완전일치 특례·모호 거부 없음.
 // matchSpellName: magic1.c:49-70 완전일치 우선(리셋+즉시 종료) + 유일 접두 확정 + 모호 거부.
-// 가시성 게이트·자기 제외는 매처가 갖지 않는다 — 방 스코프 해소자(#121) 책임이다.
+// 가시성 게이트·자기 제외는 매처가 갖지 않는다 — 방 스코프 리졸버(#121) 책임이다.
 export { matchTarget, type NameMatchable } from './naming/matchTarget.js'
 export {
   matchSpellName,

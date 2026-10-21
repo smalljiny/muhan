@@ -125,8 +125,8 @@ describe('characterSchema', () => {
     expect(result.success).toBe(true)
   })
 
-  it('alignment가 없으면 거부한다 (required 승격 — 학습 게이트·전투가 값을 요구)', () => {
-    // 픽스처는 alignment: 1을 담으므로, 제거해야 required 승격이 드러난다.
+  it('alignment가 없으면 거부한다 (required로 올림 — 학습 게이트·전투가 값을 요구)', () => {
+    // 픽스처는 alignment: 1을 담으므로, 제거해야 required로 올린 효과가 드러난다.
     const doc = validCharacter() as Partial<Character>
     delete doc.alignment
     expect(characterSchema.safeParse(doc).success).toBe(false)
@@ -138,8 +138,8 @@ describe('characterSchema', () => {
     if (result.success) expect(result.data.alignment).toBe(0)
   })
 
-  it('alignment에 값역 제약을 두지 않는다 (오라클 스케일 전환을 살아남는 영속 경계)', () => {
-    // 현 실 데이터 값역은 [0,2]지만 그건 한시적 인코딩이다. 오라클 alignment는 부호 있는 int16이고
+  it('alignment에 값 범위 제약을 두지 않는다 (오라클 스케일 전환을 살아남는 영속 경계)', () => {
+    // 현 실 데이터 값 범위는 [0,2]지만 그건 한시적 인코딩이다. 오라클 alignment는 부호 있는 int16이고
     // 소비 규칙이 이미 그 스케일 임계값(< -100 · > 250 등)을 보존한다 — 스키마에 [0,2] 캡을 걸면
     // 부호가 충돌하고 레거시 세이브 이식·E6(#123) 부분 롤아웃에서 문서가 로드 불가가 된다.
     // 도메인 강제는 상류(생성 FSM의 refine 1|2) 책임이며 스키마는 정수형만 본다.
@@ -189,7 +189,7 @@ describe('characterSchema', () => {
   })
 
   it('experience가 없으면 거부한다 (레벨링 필수 영속 필드)', () => {
-    // level/hpCurrent/mpCurrent와 동렬 — v2 문서는 load 직전 backfillCharacterV3가 승격한다.
+    // level/hpCurrent/mpCurrent와 동렬 — v2 문서는 load 직전 backfillCharacterV3가 올린다.
     const doc = validCharacter() as Partial<Character>
     delete doc.experience
     expect(characterSchema.safeParse(doc).success).toBe(false)
@@ -283,7 +283,7 @@ describe('characterSchema', () => {
   // 두 신규 효과는 계약이 동일하다(개별 선택 + until-only strictObject) — 키별 복제 대신
   // 테이블로 고정한다(debuffEffects.test.ts의 fear/silence it.each 선례).
   it.each(['silence', 'fear'] as const)(
-    '%s는 개별 선택이며 until만 갖는다 (음수·부재·미정의 키 거부)',
+    '%s는 개별 선택이며 until만 갖는다 (음수·없음·미정의 키 거부)',
     (key) => {
       const parse = (effect: unknown): boolean =>
         characterSchema.safeParse({ ...validCharacter(), statusEffects: { [key]: effect } }).success
@@ -318,7 +318,7 @@ describe('characterSchema', () => {
   })
 
   it('spells가 없으면 거부한다 (지식 비트마스크 필수 영속 필드)', () => {
-    // D1 차이: hpCurrent/experience와 동렬 — v4 문서는 load 직전 backfillCharacterV5가 승격한다.
+    // D1 차이: hpCurrent/experience와 동렬 — v4 문서는 load 직전 backfillCharacterV5가 올린다.
     const doc = validCharacter() as Partial<Character>
     delete doc.spells
     expect(characterSchema.safeParse(doc).success).toBe(false)

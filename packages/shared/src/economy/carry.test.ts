@@ -10,7 +10,7 @@ function n(weight: number, weightless = false, contents: WeightNode[] = []): Wei
   return { weight, weightless, contents }
 }
 
-// canCarry용 컨텍스트 — maxWeight가 판독하는 필드만 지정하고 나머지는 더미로 채운다.
+// canCarry용 컨텍스트 — maxWeight가 읽는 필드만 지정하고 나머지는 더미로 채운다.
 // fighter(class 4) L1 str10 → maxWeight = 20 + 10*10 = 120 (barbarian 항 없음).
 function ctx(overrides: {
   effectiveStrength: number
@@ -54,26 +54,26 @@ describe('weightOf — 재귀 무게 합 (OWTLES 자식 제외)', () => {
   })
 
   it('최상위 노드는 weightless여도 자기 무게가 항상 계산된다 (8)', () => {
-    // OWTLES 플래그는 부모만 판독한다 — 최상위 노드 자신의 무게는 항상 합산.
+    // OWTLES 플래그는 부모만 읽는다 — 최상위 노드 자신의 무게는 항상 합산.
     expect(weightOf(n(8, true, []))).toBe(8)
   })
 })
 
-describe('canCarry — 무게 경계 (strict >, 같으면 적재 가능)', () => {
+describe('canCarry — 무게 경계 (strict >, 같으면 소지 가능)', () => {
   // fighter L1 str10 → maxWeight = 120. 검증: derived.ts maxWeight (20 + str*10).
   const fighterCtx = ctx({ effectiveStrength: 10, characterClass: 4, level: 1 })
 
-  it('정확히 상한이면 적재 가능 (100 + 20 = 120, 120 > 120 거짓 → true)', () => {
+  it('정확히 상한이면 소지 가능 (100 + 20 = 120, 120 > 120 거짓 → true)', () => {
     const char = carrier({ weightCarried: 100, invCount: 0, context: fighterCtx })
     expect(canCarry(char, n(20), 'get')).toBe(true)
   })
 
-  it('상한 1 초과면 적재 불가 (100 + 21 = 121 > 120 → false)', () => {
+  it('상한 1 초과면 소지 불가 (100 + 21 = 121 > 120 → false)', () => {
     const char = carrier({ weightCarried: 100, invCount: 0, context: fighterCtx })
     expect(canCarry(char, n(21), 'get')).toBe(false)
   })
 
-  it('OWTLES 내용물이 무게를 낮춰 적재 가능해진다 (raw 60이면 초과, weightOf 10 → 적합)', () => {
+  it('OWTLES 내용물이 무게를 낮춰 소지 가능해진다 (raw 60이면 초과, weightOf 10 → 적합)', () => {
     // 남은 용량 20. 노드 raw 합은 10+50=60(초과)이나 OWTLES로 weightOf=10 → 110 ≤ 120.
     const char = carrier({ weightCarried: 100, invCount: 0, context: fighterCtx })
     expect(canCarry(char, n(10, false, [n(50, true)]), 'get')).toBe(true)
@@ -84,22 +84,22 @@ describe('canCarry — 개수 경계 (mode별 상한, strict >)', () => {
   const anyCtx = ctx({ effectiveStrength: 10, characterClass: 4, level: 1 })
   const light = n(0)
 
-  it('buy 상한 정확히 200이면 적재 가능', () => {
+  it('buy 상한 정확히 200이면 소지 가능', () => {
     const char = carrier({ weightCarried: 0, invCount: 200, context: anyCtx })
     expect(canCarry(char, light, 'buy')).toBe(true)
   })
 
-  it('buy 201이면 적재 불가', () => {
+  it('buy 201이면 소지 불가', () => {
     const char = carrier({ weightCarried: 0, invCount: 201, context: anyCtx })
     expect(canCarry(char, light, 'buy')).toBe(false)
   })
 
-  it('get 상한 정확히 150이면 적재 가능', () => {
+  it('get 상한 정확히 150이면 소지 가능', () => {
     const char = carrier({ weightCarried: 0, invCount: 150, context: anyCtx })
     expect(canCarry(char, light, 'get')).toBe(true)
   })
 
-  it('get 151이면 적재 불가', () => {
+  it('get 151이면 소지 불가', () => {
     const char = carrier({ weightCarried: 0, invCount: 151, context: anyCtx })
     expect(canCarry(char, light, 'get')).toBe(false)
   })

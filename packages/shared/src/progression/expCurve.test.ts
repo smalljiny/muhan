@@ -2,13 +2,13 @@ import { describe, it, expect } from 'vitest'
 import { neededExp, expToLevel } from './expCurve.js'
 import { needed_exp } from './tables.js'
 
-// 전사 무결성 앵커 — 128칸 테이블의 트랜스포지션·누락을 독립 리터럴로 차단한다.
+// 옮겨 적기 무결성 앵커 — 128칸 테이블의 트랜스포지션·누락을 독립 리터럴로 차단한다.
 describe('needed_exp 테이블 무결성', () => {
   it('정확히 128칸이다', () => {
     expect(needed_exp).toHaveLength(128)
   })
 
-  it('경계 인덱스가 oracle 정본과 일치한다 (0=128, 126=100000000, 127=190000000)', () => {
+  it('경계 인덱스가 oracle 기준과 일치한다 (0=128, 126=100000000, 127=190000000)', () => {
     expect(needed_exp[0]).toBe(128)
     expect(needed_exp[126]).toBe(100000000)
     expect(needed_exp[127]).toBe(190000000)
@@ -22,7 +22,7 @@ describe('needed_exp 테이블 무결성', () => {
 })
 
 describe('neededExp — 배열 룩업 + L128 초과 선형 확장', () => {
-  // 하드 리터럴 앵커 — SUT 구현과 독립적으로 확정 정본을 박아 tautology를 차단한다.
+  // 하드 리터럴 앵커 — SUT 구현과 독립적으로 확정 기준을 박아 tautology를 차단한다.
   it('L1 → 128 (needed_exp[0])', () => {
     expect(neededExp(1)).toBe(128)
   })

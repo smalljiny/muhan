@@ -1,7 +1,7 @@
 /**
  * spell store 비트마스크 헬퍼 — 플레이어 주문 지식(uint8[16]=128비트)의 비트 read/write.
  *
- * 원본 매크로 정본(legacy `mtype.h:570-571`):
+ * 원본 매크로 기준(legacy `mtype.h:570-571`):
  *   #define S_ISSET(p,f) ((p)->spells[(f)/8] & 1<<((f)%8))
  *   #define S_SET(p,f)   ((p)->spells[(f)/8] |= 1<<((f)%8))
  * f는 0-based 주문번호(비트 인덱스)다. C 연산자 우선순위상 `& 1<<(f%8)`은 `& (1<<(f%8))`이며,

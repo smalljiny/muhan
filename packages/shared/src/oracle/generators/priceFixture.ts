@@ -10,7 +10,7 @@ export { writeFixtureFile }
  * 원본 `command7.c:169`(구매)·`command7.c:258`(판매)·`command8.c:249`(수리)·
  * `command10.c:573`(몹구매)의 네 가격 공식을 참조 구현(`referencePrice`)으로 옮기고,
  * 손 계산으로 확정한 12개 케이스를 fixture로 감싸 `fixtures/price.json`에 기록한다.
- * 산술 정본은 런타임 `economy/priceConfig.ts`의 네 함수(직접 SUT 산술)에 둔다.
+ * 산술 기준은 런타임 `economy/priceConfig.ts`의 네 함수(직접 SUT 산술)에 둔다.
  *
  * ## GoldenFixture<I,O> 모델링: 4함수 dispatch
  * 대상이 네 함수(buy·mobBuy·sell·repair)인데 GoldenFixture는 단일 `fn`을 가정하므로,
@@ -19,7 +19,7 @@ export { writeFixtureFile }
  * 형태를 깨지 않고 네 함수를 한 fixture에 담을 수 있다.
  *
  * ## anti-tautology: SUT와 독립 표현
- * SUT(`priceConfig.ts`)는 `PRICE_CONFIG` 상수를 판독하고 `Math.trunc`로 버린다. 이 참조는
+ * SUT(`priceConfig.ts`)는 `PRICE_CONFIG` 상수를 읽고 `Math.trunc`로 버린다. 이 참조는
  * **인라인 리터럴**(`10`·`100000`·`/2`·`/4`)을 직접 쓰고 버림은 `Math.floor`로 표현한다
  * (value 비음수라 값은 동일, 표현만 다름). 참조는 SUT를 import·호출하지 않는다.
  *

@@ -7,7 +7,7 @@ import { buildCases, buildFixture, oracleKnownAfterSet, writeFixtureFile } from 
 
 const FIXED_CLOCK = (): Date => new Date('2026-07-16T00:00:00.000Z')
 
-describe('spellStoreFixture — oracleKnownAfterSet 독립 전사', () => {
+describe('spellStoreFixture — oracleKnownAfterSet 독립 옮겨 적기', () => {
   it('빈 setBits면 어느 비트든 false다', () => {
     expect(oracleKnownAfterSet([], 0)).toBe(false)
     expect(oracleKnownAfterSet([], 127)).toBe(false)

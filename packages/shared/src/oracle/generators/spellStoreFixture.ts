@@ -7,14 +7,14 @@ export { writeFixtureFile }
 /**
  * spell store 직렬화 골든 fixture 생성기 — manual oracle.
  *
- * 원본 `mtype.h:570-571`의 S_ISSET/S_SET 비트 레이아웃을 **독립 리터럴로 전사**(전사 pass 2)해
+ * 원본 `mtype.h:570-571`의 S_ISSET/S_SET 비트 레이아웃을 **독립 리터럴로 옮겨 적어**(옮겨 적기 pass 2)
  * {setBits[], queryBit} → boolean 왕복 케이스로 감싼다. SUT `isKnown`/`setKnown`(shared/magic)은
- * spellStore.ts의 구현(전사 pass 1)을 소비하므로, approve가 두 전사의 불일치를 잡아낸다.
+ * spellStore.ts의 구현(옮겨 적기 pass 1)을 소비하므로, approve가 옮겨 적은 두 결과의 불일치를 잡아낸다.
  *
- * expected는 이 파일의 `oracleKnownAfterSet`(mtype.h 독립 전사)에서 계산한다 — spellStore.ts를
+ * expected는 이 파일의 `oracleKnownAfterSet`(mtype.h 독립 옮겨 적기)에서 계산한다 — spellStore.ts를
  * import하지 않는다. import하면 SUT와 fixture가 같은 코드가 되어 anti-tautology가 무너진다.
  *
- * SUT 소비 approve는 server가 소유한다(`packages/server/src/magic/spellStore.test.ts`) — 완료 기준
+ * SUT 소비 approve는 server가 담당한다(`packages/server/src/magic/spellStore.test.ts`) — 완료 기준
  * "server 테스트에서 approve"에 맞춰 server가 디스크 json을 읽어 shared SUT로 approve를 실행한다
  * (mprofic 선례).
  *
@@ -36,7 +36,7 @@ export interface SpellStoreInput {
 const ORACLE_STORE_BYTES = 16
 
 /**
- * 독립 전사(pass 2) — mtype.h:570-571. setBits를 순서대로 S_SET한 뒤 queryBit를 S_ISSET한다.
+ * 독립 옮겨 적기(pass 2) — mtype.h:570-571. setBits를 순서대로 S_SET한 뒤 queryBit를 S_ISSET한다.
  * store[f/8] |= 1<<(f%8); return (store[q/8] & 1<<(q/8&7)) != 0. f/8=f>>3, f%8=f&7.
  */
 export function oracleKnownAfterSet(setBits: readonly number[], queryBit: number): boolean {
@@ -49,7 +49,7 @@ export function oracleKnownAfterSet(setBits: readonly number[], queryBit: number
   return (byte & (1 << (queryBit % 8))) !== 0
 }
 
-/** input을 oracleKnownAfterSet로 감싼 케이스로 만든다(expected는 독립 전사 계산값). */
+/** input을 oracleKnownAfterSet로 감싼 케이스로 만든다(expected는 독립 옮겨 적기 계산값). */
 function makeCase(
   input: SpellStoreInput,
   note?: string,

@@ -403,9 +403,9 @@ describe('clientCommandSchema (client→server 봉투)', () => {
       ).toBe(true)
     })
 
-    // 서수 하한 1이 해소자의 ordinal 0 갈래를 라이브에서 도달 불가로 만든다
+    // 서수 하한 1이 리졸버의 ordinal 0 갈래를 라이브에서 도달 불가로 만든다
     // (server/src/items/carriedTargetResolver.ts 헤더의 반대편 기록 참조).
-    it('ordinal 0을 거부한다 (하한 1 — 해소자 0 갈래 차단)', () => {
+    it('ordinal 0을 거부한다 (하한 1 — 리졸버 0 갈래 차단)', () => {
       expect(
         clientCommandSchema.safeParse({ type: 'progress:study', target: '비법서', ordinal: 0 })
           .success,

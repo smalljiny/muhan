@@ -10,15 +10,15 @@ export { writeFixtureFile }
  *
  * 원본 `global.c:78`(level_cycle) + `player.c:770`(up_level 성장 게이트)의 동작을 참조 구현
  * (`referenceLevelCycleGains`)으로 옮기고, 클래스 1-9의 "레벨 1→40 upLevel 반복 누적 성장
- * 분포"를 fixture로 감싸 `fixtures/level_cycle.json`에 기록한다. 런타임 정본은 `progression/
+ * 분포"를 fixture로 감싸 `fixtures/level_cycle.json`에 기록한다. 런타임 기준은 `progression/
  * levelUp.ts`의 `upLevel`(SUT)이며, 이 참조는 그 SUT와 **독립 표현**으로 작성한다 — SUT는
  * Character를 매 레벨 순차 변이하지만, 여기선 성장 레벨 집합을 `filter`로 유도하고 슬롯 값
  * 히스토그램을 `reduce`로 누적한다(값 동일·표현만 다름). level_cycle 테이블 자체는
- * `progression/tables.ts`에서 import한다(재전사 금지).
+ * `progression/tables.ts`에서 import한다(다시 옮겨 적기 금지).
  *
  * ## 결정적 함정: 성장 슬롯은 항상 짝수
- * 성장은 newLevel%4==0에서만 발화하고 슬롯 index=(newLevel-2)%10은 항상 짝수라, level_cycle
- * 홀수 슬롯은 이 분포에 절대 기여하지 않는다. 홀수 슬롯 전사 오류는 이 골든으로 잡히지 않으며,
+ * 성장은 newLevel%4==0에서만 동작하고 슬롯 index=(newLevel-2)%10은 항상 짝수라, level_cycle
+ * 홀수 슬롯은 이 분포에 절대 기여하지 않는다. 홀수 슬롯 옮겨 적기 오류는 이 골든으로 잡히지 않으며,
  * `tables.test.ts`의 셀 단위 하드 리터럴 대조가 그 몫을 담당한다.
  *
  * ## 재생성 (수동 트리거)
@@ -33,7 +33,7 @@ export { writeFixtureFile }
 /**
  * level_cycle 성장 분포 참조 구현 — SUT(`upLevel` 반복)와 독립 표현.
  *
- * SUT는 레벨 1→targetLevel을 순차 변이하며 매 스텝 게이트를 판정하지만, 여기선 성장이 발화하는
+ * SUT는 레벨 1→targetLevel을 순차 변이하며 매 스텝 게이트를 판정하지만, 여기선 성장이 동작하는
  * 레벨 집합(2..targetLevel 중 %4==0)을 `filter`로 한 번에 유도하고, 각 성장 레벨의 슬롯 값
  * v=level_cycle[class][(lvl-2)%10]을 stats 히스토그램(index v-1)에 `reduce`로 누적한다.
  * base stats 0에서 출발하므로 최종 stats == 누적 성장 분포다.
@@ -63,7 +63,7 @@ type LevelCycleCaseDraft = Omit<LevelCycleCase, 'expected'>
 
 /**
  * 골든 케이스 9개(클래스 1-9, 레벨 1→40)를 구성한다. expected는 참조 구현으로 채운다.
- * (테스트 측 Layer B 앵커는 이와 독립적으로 확정 정본 하드 리터럴로 tautology를 차단한다.)
+ * (테스트 측 Layer B 앵커는 이와 독립적으로 확정 기준 하드 리터럴로 tautology를 차단한다.)
  */
 export function buildCases(): LevelCycleCase[] {
   const inputs: LevelCycleCaseDraft[] = [

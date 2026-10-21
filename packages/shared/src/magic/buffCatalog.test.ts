@@ -3,7 +3,7 @@ import { SPELL_NO } from './catalog.js'
 import { BUFF_DUR_META, DEBUFF_DUR_META, NON_CAST_BUFF_DUR } from './buffCatalog.js'
 
 /**
- * buffCatalog 데이터 테이블 검증 — A6 §6·§7 dur 메타(magic2-8.c) 전사 정합.
+ * buffCatalog 데이터 테이블 검증 — A6 §6·§7 dur 메타(magic2-8.c) 옮겨 적은 값 일치.
  * 산술은 server computeBuffDur/computeDebuffDur가 fixture로 approve하므로, 여기선 테이블 셰이프·경계만.
  */
 

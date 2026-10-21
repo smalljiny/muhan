@@ -11,7 +11,7 @@ import { z } from 'zod'
 /** prompt 종류 — 캐릭터 선택 단계와 생성 필드 입력 단계(확인 단계도 createField로 처리). */
 export const promptKindSchema = z.enum(['selectCharacter', 'createField'])
 
-/** prompt 선택지 원소 — value는 session:reply.value(문자열)와 정합하는 기계값, label은 사람용 표시. */
+/** prompt 선택지 원소 — value는 session:reply.value(문자열)와 일치하는 기계값, label은 사람용 표시. */
 export const promptOptionSchema = z.strictObject({
   value: z.string().min(1),
   label: z.string().min(1),

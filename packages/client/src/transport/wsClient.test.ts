@@ -22,7 +22,7 @@ class FakeSocket implements SocketLike {
     this.onclose?.(new CloseEvent('close'))
   }
 
-  // 테스트 헬퍼 — 소켓 이벤트를 수동으로 발화한다.
+  // 테스트 헬퍼 — 소켓 이벤트를 수동으로 발생시킨다.
   fireOpen(): void {
     this.onopen?.(new Event('open'))
   }
@@ -102,7 +102,7 @@ describe('WsClient connect/disconnect/reconnect', () => {
     last().fireOpen()
     const oldSocket = last()
     client.reconnect()
-    // 브라우저는 close() 이후 onclose를 다음 틱에 발화한다 — reconnect 후 도착한 구 소켓 onclose 시뮬레이션.
+    // 브라우저는 close() 이후 onclose를 다음 틱에 실행한다 — reconnect 후 도착한 구 소켓 onclose 시뮬레이션.
     oldSocket.onclose?.(new CloseEvent('close'))
     // 새 소켓이 살아남아야 한다 — 구 소켓 핸들러가 this.socket/status를 오염시키면 안 된다.
     expect(client.getStatus()).toBe('connecting')

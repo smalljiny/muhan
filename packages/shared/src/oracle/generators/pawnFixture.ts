@@ -9,7 +9,7 @@ export { writeFixtureFile }
  *
  * 원본 `command7.c`의 판매 게이트(거부 매트릭스 + 1/250 이중 지급)를 참조 구현(`referencePawn`)으로
  * 옮기고, 손 계산으로 확정한 13개 케이스를 fixture로 감싸 `fixtures/pawn.json`에 기록한다. 판매가
- * 산술 정본은 런타임 `economy/priceConfig.ts`의 `sellPrice`(SUT)에, 거부·이중지급 게이트 정본은
+ * 산술 기준은 런타임 `economy/priceConfig.ts`의 `sellPrice`(SUT)에, 거부·이중지급 게이트 기준은
  * 런타임 `server`의 `shopService.sell`(SUT)에 둔다.
  *
  * ## 오라클 거부 순서 (command7.c sell)
@@ -24,7 +24,7 @@ export { writeFixtureFile }
  * 단일 `rng(1,250)===9` 굴림으로 대체한다 — 확률 1/250(콘텐츠)은 보존, `===9`는 오라클 상수를 반향한다.
  *
  * ## anti-tautology: SUT와 독립 표현
- * SUT(`priceConfig.sellPrice`)는 `PRICE_CONFIG` 상수를 판독하고 `Math.trunc`로 버린다. 이 참조는
+ * SUT(`priceConfig.sellPrice`)는 `PRICE_CONFIG` 상수를 읽고 `Math.trunc`로 버린다. 이 참조는
  * **인라인 리터럴**(`2`·`100000`·타입 상수)을 직접 쓰고 버림은 `Math.floor`로 표현한다(value 비음수라
  * 값 동일, 표현만 다름). 참조는 SUT(sellPrice·sell)를 import·호출하지 않는다.
  *
@@ -49,7 +49,7 @@ export { writeFixtureFile }
  */
 
 /**
- * fixture 한 case의 input 형태 — 판매 게이트가 판독하는 좁은 필드 + 결정적 1/250 굴림 값.
+ * fixture 한 case의 input 형태 — 판매 게이트가 읽는 좁은 필드 + 결정적 1/250 굴림 값.
  * `luckyRoll`은 `rng(1,250)`의 반환값을 고정한다(9면 이중 지급). 거부 케이스에서는 소비되지 않는다.
  */
 export type PawnInput = {
@@ -98,7 +98,7 @@ type PawnCase = { input: PawnInput; expected: PawnExpected; note?: string }
 type PawnCaseDraft = Omit<PawnCase, 'expected'>
 
 /**
- * 판독하지 않는 필드에 안전한 기본값을 채워 완전한 PawnInput을 만든다. 각 케이스는 검증 대상
+ * 읽지 않는 필드에 안전한 기본값을 채워 완전한 PawnInput을 만든다. 각 케이스는 검증 대상
  * 필드만 overrides로 지정한다. 기본은 type=13(MISC, 판매가능)·비귀속·빈용기·luckyRoll=1(비럭키).
  */
 function pawn(overrides: Partial<PawnInput>): PawnInput {

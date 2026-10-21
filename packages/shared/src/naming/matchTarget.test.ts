@@ -110,7 +110,7 @@ describe('matchTarget — 경계 케이스', () => {
   it('빈 문자열 query는 모든 후보에 매치한다 (strncmp(a,b,0) === 0)', () => {
     const candidates: Candidate[] = [{ name: '늑대' }, { name: '고블린' }]
 
-    // 거부 게이트를 넣지 않는다 — 빈 query·1음절 거부는 해소자(#121) 소관이다.
+    // 거부 게이트를 넣지 않는다 — 빈 query·1음절 거부는 리졸버(#121) 담당이다.
     expect(matchTarget(candidates, '')).toBe(candidates[0])
     expect(matchTarget(candidates, '', 2)).toBe(candidates[1])
   })
@@ -128,7 +128,7 @@ describe('matchTarget — 경계 케이스', () => {
 
 describe('matchTarget — 소비자 타입 계약', () => {
   it('CreatureInstance(keys?: string[] — 가변)를 그대로 후보로 받는다', () => {
-    // 스펙 §3.1 "타입 무관 — { name, keys? } 형태만 본다". readonly 제약이 Story 6 해소자의
+    // 스펙 §3.1 "타입 무관 — { name, keys? } 형태만 본다". readonly 제약이 Story 6 리졸버의
     // 실소비 타입을 거르면 여기서 컴파일이 깨진다.
     const creature = { name: '작은 거미', keys: ['거미'] } as unknown as CreatureInstance
     const candidates: CreatureInstance[] = [creature]

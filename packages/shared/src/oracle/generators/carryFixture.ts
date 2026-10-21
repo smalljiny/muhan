@@ -9,7 +9,7 @@ export { writeFixtureFile }
  * carry(재귀 무게 합 weightOf) 골든 fixture 생성기 — manual oracle의 독립 참조 구현(A8 §8/§13).
  *
  * 원본 `object.c` `weight_obj`의 재귀 무게 합을 참조 구현(`referenceWeightOf`)으로 옮기고,
- * 손 계산으로 확정한 5개 케이스를 fixture로 감싸 `fixtures/carry.json`에 기록한다. 산술 정본은
+ * 손 계산으로 확정한 5개 케이스를 fixture로 감싸 `fixtures/carry.json`에 기록한다. 산술 기준은
  * 런타임 `economy/carry.ts`의 `weightOf`(직접 SUT 산술)에 둔다. maxWeight·개수 상한은 각각
  * `max_weight.json`·단위 테스트가 이미 커버하므로 이 fixture는 **novel한 OWTLES 재귀**에만 집중한다.
  *
@@ -21,7 +21,7 @@ export { writeFixtureFile }
  * ## 결정적 함정: OWTLES 자식 서브트리 전체 제외
  * `weight_obj`는 자식마다 OWTLES를 검사한다. OWTLES 자식은 자기 무게 + 내용물 전체가 빠진다
  * (index 2 케이스: 10, 15·115 아님). 최상위 노드 자신의 무게는 weightless여도 항상 계산된다
- * (index 4 케이스: 8) — OWTLES 플래그는 부모만 판독하기 때문이다.
+ * (index 4 케이스: 8) — OWTLES 플래그는 부모만 읽기 때문이다.
  *
  * ## 재생성 (수동 트리거)
  * `expected`·`generatedAt`은 체크인 후 frozen이며, 회귀 테스트 중 자동 재생성은 없다.

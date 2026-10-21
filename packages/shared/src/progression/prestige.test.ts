@@ -8,8 +8,8 @@ import type { Character } from '../schema/character.js'
  * invinciblePrestige/caretakerPrestige/classifyPrestige(승급 전이) 테스트.
  *
  * oracle command7.c:607-635. 무적(class<9→9, level=1, exp=0)과 초인(class===9→10,
- * level=127)의 순수 class/level/experience/vitals 전이만 검증한다. gold·dice는 미소유(train·
- * combat 소관). vitals는 D4 예외로 **풀회복**(clamp 아님) — 입력 현재치를 max 미만으로 두어
+ * level=127)의 순수 class/level/experience/vitals 전이만 검증한다. gold·dice는 담당 밖(train·
+ * combat 담당). vitals는 D4 예외로 **풀회복**(clamp 아님) — 입력 현재치를 max 미만으로 두어
  * 풀회복과 클램프/보존을 판별한다.
  */
 
@@ -47,18 +47,18 @@ describe('invinciblePrestige — L100 일반직 → 무적 전환 (command7.c:60
     expect(after.experience).toBe(0)
   })
 
-  it('vitals를 새 캐릭터(class=9·level=1) 폐형 최대치로 풀회복한다 (clamp 아님)', () => {
+  it('vitals를 새 캐릭터(class=9·level=1) 닫힌 식 최대치로 풀회복한다 (clamp 아님)', () => {
     // 입력 hpCurrent=5는 새 최대치보다 낮으므로, 풀회복이면 max, 클램프면 5로 갈린다.
     const before = makeChar({ class: 4, level: 100, hpCurrent: 5, mpCurrent: 5 })
     const after = invinciblePrestige(before)
     expect(after.hpCurrent).toBe(resolveHpMax(after))
     expect(after.mpCurrent).toBe(resolveMpMax(after))
-    // 무적은 초인 오버라이드(800/600) 대상이 아니라 폐형을 따른다 — 최대치 > 5 확인.
+    // 무적은 초인 오버라이드(800/600) 대상이 아니라 닫힌 식을 따른다 — 최대치 > 5 확인.
     expect(after.hpCurrent).toBeGreaterThan(5)
     expect(after.mpCurrent).toBeGreaterThan(5)
   })
 
-  it('gold 등 나머지 필드는 스프레드 보존한다 (gold 미차감 — train 소관)', () => {
+  it('gold 등 나머지 필드는 스프레드 보존한다 (gold 미차감 — train 담당)', () => {
     const before = makeChar({ class: 4, level: 100, gold: 500 })
     const after = invinciblePrestige(before)
     expect(after.gold).toBe(500)
@@ -99,7 +99,7 @@ describe('caretakerPrestige — L127 무적 → 초인 전환 (command7.c:618-63
     expect(after.mpCurrent).toBe(resolveMpMax(after))
   })
 
-  it('gold 등 나머지 필드는 스프레드 보존한다 (gold 미차감 — train 소관)', () => {
+  it('gold 등 나머지 필드는 스프레드 보존한다 (gold 미차감 — train 담당)', () => {
     const before = makeChar({ class: 9, level: 127, gold: 500 })
     const after = caretakerPrestige(before)
     expect(after.gold).toBe(500)

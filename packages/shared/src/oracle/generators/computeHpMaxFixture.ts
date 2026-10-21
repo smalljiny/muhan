@@ -9,9 +9,9 @@ export { writeFixtureFile }
 /**
  * compute_hpmax(최대 HP) 골든 fixture 생성기 — manual oracle의 독립 참조 구현.
  *
- * 원본 `player.c:805`(up_level)의 HP 성장 폐형을 참조 구현(`referenceComputeHpMax`)으로
+ * 원본 `player.c:805`(up_level)의 HP 성장 닫힌 식을 참조 구현(`referenceComputeHpMax`)으로
  * 옮기고, A7 §2 손 계산으로 확정한 6개 케이스를 fixture로 감싸 `fixtures/compute_hpmax.json`에
- * 기록한다. Story 5는 산술 정본을 `oracle/*`가 아닌 **런타임 `stats/derived.ts`의
+ * 기록한다. Story 5는 산술 기준을 `oracle/*`가 아닌 **런타임 `stats/derived.ts`의
  * `computeHpMax`**에 둔다(직접 SUT 산술). 이 참조는 그 SUT와 **독립 표현**으로 작성한다 —
  * 여기선 곱을 중간 변수로 뽑아 `Math.floor`로 나누고, SUT는 인라인 `Math.trunc`.
  *
@@ -34,7 +34,7 @@ export { writeFixtureFile }
  *
  * SUT(`derived.ts`의 `computeHpMax`)는 인라인 `Math.trunc((hp*(level-1))/2)`를 쓰지만,
  * 여기선 곱을 명시 중간 변수 `product`로 분리하고 `Math.floor(product/2)`로 나눈다(level>=1
- * 이라 product>=0, 값은 동일·표현만 다름). start/growth는 `classStatOf`로 판독한다.
+ * 이라 product>=0, 값은 동일·표현만 다름). start/growth는 `classStatOf`로 읽는다.
  */
 export function referenceComputeHpMax(context: EffectiveStatContext): number {
   const start = classStatOf({ classIndex: context.characterClass, field: 'hpstart' })
@@ -50,8 +50,8 @@ type ComputeHpMaxCase = { input: EffectiveStatContext; expected: number; note?: 
 type ComputeHpMaxCaseDraft = Omit<ComputeHpMaxCase, 'expected'>
 
 /**
- * compute_hpmax가 판독하지 않는 컨텍스트 필드를 더미값으로 채워 전체 컨텍스트를 구성한다.
- * 판독 필드(characterClass·level)만 overrides로 지정한다.
+ * compute_hpmax가 읽지 않는 컨텍스트 필드를 더미값으로 채워 전체 컨텍스트를 구성한다.
+ * 읽는 필드(characterClass·level)만 overrides로 지정한다.
  */
 function ctx(overrides: { characterClass: number; level: number }): EffectiveStatContext {
   return {

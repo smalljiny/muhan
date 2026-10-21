@@ -10,7 +10,7 @@ export { writeFixtureFile }
  *
  * 원본 `player.c:1099`의 최대 소지량 공식을 참조 구현(`referenceMaxWeight`)으로 옮기고,
  * 손 계산으로 확정한 6개 케이스를 fixture로 감싸 `fixtures/max_weight.json`에 기록한다.
- * Story 4는 산술 정본을 **런타임 `stats/derived.ts`의 `maxWeight`**에 둔다(직접 SUT 산술).
+ * Story 4는 산술 기준을 **런타임 `stats/derived.ts`의 `maxWeight`**에 둔다(직접 SUT 산술).
  * 이 참조는 그 SUT와 **독립 표현**으로 작성한다 — 여기선 순수 합(base + barbarian 항),
  * SUT는 가변 누적 변수 `n`.
  *
@@ -49,8 +49,8 @@ type MaxWeightCase = { input: EffectiveStatContext; expected: number; note?: str
 type MaxWeightCaseDraft = Omit<MaxWeightCase, 'expected'>
 
 /**
- * max_weight가 판독하지 않는 컨텍스트 필드를 더미값으로 채워 전체 컨텍스트를 구성한다.
- * 판독 필드(effectiveStrength·characterClass·level)만 overrides로 지정한다.
+ * max_weight가 읽지 않는 컨텍스트 필드를 더미값으로 채워 전체 컨텍스트를 구성한다.
+ * 읽는 필드(effectiveStrength·characterClass·level)만 overrides로 지정한다.
  */
 function ctx(overrides: {
   effectiveStrength: number

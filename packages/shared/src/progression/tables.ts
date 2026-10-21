@@ -2,7 +2,7 @@
  * progression/tables — 무한 레벨링 exp 곡선의 정적 룩업 테이블 단일 물리 출처.
  *
  * 원본 C 전역 상수 `global.c:129`의 `long needed_exp[]`(128칸)를 32비트 oracle에서
- * 그대로 전사한다. 순수 데이터 모듈이며 런타임 I/O import(`node:fs` 등)를 절대 포함하지
+ * 그대로 옮겨 적는다. 순수 데이터 모듈이며 런타임 I/O import(`node:fs` 등)를 절대 포함하지
  * 않는다 — 서버·클라이언트 어느 쪽에서도 안전하게 import된다.
  *
  * ## oracle 출처
@@ -15,7 +15,7 @@
  * `needed_exp[126]=100000000`, `needed_exp[127]=190000000`은 인덱스 0..126이 단조 증가인
  * 것과 달리 마지막 칸(190M)이 곡선의 선형 확장 기준(index 126=100M)보다 크다. `neededExp`는
  * L128에서 index 127(190M)을 읽지만, `expToLevel`의 선형 base와 곡선 확장은 index 126(100M)을
- * 피벗으로 쓴다. 이 비단조성은 원본을 충실히 이식한 결과이며 전사 오류가 아니다.
+ * 피벗으로 쓴다. 이 비단조성은 원본을 충실히 이식한 결과이며 옮겨 적기 오류가 아니다.
  */
 
 /** exp 곡선 배열 룩업 상한(레벨 수). 원본 MAXALVL. */
@@ -65,17 +65,17 @@ export const needed_exp: readonly number[] = [
  * 레벨업 능력치 성장 대상 순환 테이블 `level_cycle[13][10]` — `global.c:78`.
  * 행=클래스 인덱스(직접 인덱싱 `level_cycle[class]`), 열=성장 슬롯(0-9).
  *
- * 값은 원본 enum 심볼을 숫자로 전사한 것: STR=1, DEX=2, CON=3, INT=4, PTY=5.
+ * 값은 원본 enum 심볼을 숫자로 옮겨 적은 것: STR=1, DEX=2, CON=3, INT=4, PTY=5.
  * 값 0(row 0 placeholder)은 성장 없음. up/downLevel은 성장 값 v(1..5)를 stats 튜플
  * 인덱스 `v-1`(StatIndex: strength=0..piety=4)로 변환해 증감한다.
  *
- * ## 결정적 함정: 홀수 슬롯은 런타임에서 판독되지 않는다(behaviorally dead)
- * 성장 게이트는 newLevel%4==0에서만 발화하고 슬롯 index=(newLevel-2)%10은 항상 짝수라,
- * 홀수 슬롯(1,3,5,7,9)은 up/downLevel이 절대 읽지 않는다. 전사 오류가 홀수 슬롯에 있어도
+ * ## 결정적 함정: 홀수 슬롯은 런타임에서 읽히지 않는다(behaviorally dead)
+ * 성장 게이트는 newLevel%4==0에서만 동작하고 슬롯 index=(newLevel-2)%10은 항상 짝수라,
+ * 홀수 슬롯(1,3,5,7,9)은 up/downLevel이 절대 읽지 않는다. 옮겨 적기 오류가 홀수 슬롯에 있어도
  * 런타임 영향이 0이므로, 무결성은 `tables.test.ts`의 셀 단위 하드 리터럴 대조로 확정한다.
  *
  * row 9(invincible)와 동일한 row 10·11·12는 prestige(승급) 후 재레벨링 경로가 클래스
- * 인덱스 9-12를 직접 인덱싱하므로 원본대로 중복 전사한다.
+ * 인덱스 9-12를 직접 인덱싱하므로 원본대로 중복으로 옮겨 적는다.
  */
 export const level_cycle: readonly (readonly number[])[] = [
   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // [0] placeholder (성장 없음)

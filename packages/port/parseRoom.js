@@ -20,8 +20,8 @@ const OFF = {
           trap: 100, trapexit: 102, track: 104, flags: 184, random: 192,
           traffic: 212, perm_mon: 216 },
   exit_: { name: 0, room: 20, flags: 22, key: 40 },
-  // key는 리터럴을 복제하지 않고 templates.js OBJ(오프셋 정본)를 참조한다 — 두 테이블의
-  // 드리프트는 조용히 어긋나므로(예: type 119 vs OBJ.type 306) 신규 필드는 정본에 연결한다.
+  // key는 리터럴을 복제하지 않고 templates.js OBJ(오프셋 기준)를 참조한다 — 두 테이블의
+  // 드리프트는 조용히 어긋나므로(예: type 119 vs OBJ.type 306) 신규 필드는 기준에 연결한다.
   object: { name: 0, description: 80, key: OBJ.key, value: 300, type: 119 /* 추정: 미사용 PoC */, flags: 324 },
   creature: { name: 0, level: -1 /* 아래서 직접 계산 안 함, 이름만 */, rom_num: 458 },
 };
@@ -63,7 +63,7 @@ function parseObject(c) {
 
 // write_crt: creature(1184) + int invcnt + obj들
 // D6: embedded 몬스터는 완전한 1184B creature 구조체다(빌더 커스터마이즈로 템플릿과 상이).
-// templates.js readCreature를 base-relative로 재사용해 전체 스탯을 emit한다(정본 오프셋 테이블).
+// templates.js readCreature를 base-relative로 재사용해 전체 스탯을 emit한다(기준 오프셋 테이블).
 // readCreature는 최대 오프셋 rom_num@458만 읽어 1184B 블록 내부라 over-read 없음.
 function parseCreature(c) {
   const base = c.off;

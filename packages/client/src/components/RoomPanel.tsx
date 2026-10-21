@@ -9,7 +9,7 @@
 // 보내며 occupants에 본인을 포함시킨다(스펙 §4).
 import type { RoomState } from '../transport/wsClient'
 
-/** 빈 방 이름·설명 대체 문구. 서버가 채우면 월드 데이터를 오염시키므로 표시 계층이 소유한다(OQ2·OQ2'). */
+/** 빈 방 이름·설명 대체 문구. 서버가 채우면 월드 데이터를 오염시키므로 표시 계층이 담당한다(OQ2·OQ2'). */
 const UNNAMED_ROOM = '이름 없는 곳'
 const NO_DESCRIPTION = '설명이 없다.'
 

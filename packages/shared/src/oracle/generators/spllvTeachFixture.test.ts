@@ -14,7 +14,7 @@ const INVINCIBLE = 9
 const CARETAKER = 10
 const SUB_DM = 11
 
-describe('spllvTeachFixture — oracleCanTeachSpllv 독립 전사', () => {
+describe('spllvTeachFixture — oracleCanTeachSpllv 독립 옮겨 적기', () => {
   it('spllv1은 CLERIC 또는 INVINCIBLE↑만 허용한다', () => {
     expect(oracleCanTeachSpllv(CLERIC, 1)).toBe(true)
     expect(oracleCanTeachSpllv(MAGE, 1)).toBe(false)

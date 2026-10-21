@@ -8,8 +8,8 @@ import { buildCases, buildFixture, writeFixtureFile } from './spellFailFixture.j
 /**
  * spellFailFixture 생성기 테스트 — buildCases/buildFixture/writeFixtureFile + 체크인 json 검증.
  *
- * SUT(spellFail) approve는 server가 소유한다(shared는 server import 불가). 여기서는 생성기의 독립
- * 전사가 magic8.c 공식을 맞게 옮겼는지 손계산 값으로 lock한다 — approve와 함께 anti-tautology를
+ * SUT(spellFail) approve는 server가 담당한다(shared는 server import 불가). 여기서는 생성기의 독립
+ * 옮겨 적기가 magic8.c 공식을 맞게 옮겼는지 손계산 값으로 lock한다 — approve와 함께 anti-tautology를
  * 양쪽에서 잠근다.
  */
 

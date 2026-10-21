@@ -7,7 +7,7 @@ import { buildCases, buildFixture, oracleMprofic, writeFixtureFile } from './mpr
 
 const FIXED_CLOCK = (): Date => new Date('2026-07-16T00:00:00.000Z')
 
-describe('mproficFixture — oracleMprofic 독립 전사', () => {
+describe('mproficFixture — oracleMprofic 독립 옮겨 적기', () => {
   it('realm=0이면 0이다', () => {
     expect(oracleMprofic(5, [0, 0, 0, 0], 1)).toBe(0)
   })

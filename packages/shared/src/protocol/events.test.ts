@@ -286,7 +286,7 @@ describe('serverEventSchema (server→client 봉투)', () => {
       if (parsed.success && parsed.data.type === 'world:room') {
         expect(parsed.data.roomId).toBe(0)
         expect(parsed.data.exits).toEqual([])
-        // 빈 name·longDesc는 정본 월드 데이터에 실재한다(빈 name 97방·빈 longDesc 433방) — 유효값이다.
+        // 빈 name·longDesc는 기준 월드 데이터에 실재한다(빈 name 97방·빈 longDesc 433방) — 유효값이다.
         expect(parsed.data.name).toBe('')
         expect(parsed.data.longDesc).toBe('')
       }
@@ -340,7 +340,7 @@ describe('serverEventSchema (server→client 봉투)', () => {
       },
     )
 
-    // 표시 이름은 최소 1자다 — 빈 문자열은 "미해소 점유자" 신호라 와이어에 오르면 안 된다.
+    // 표시 이름은 최소 1자다 — 빈 문자열은 "미해석 점유자" 신호라 와이어에 오르면 안 된다.
     // 식별자(characterId·instanceId)도 빈 문자열을 거부한다.
     it.each([
       ['occupants[].characterId', { occupants: [{ characterId: '', name: '타이' }] }],
@@ -351,9 +351,9 @@ describe('serverEventSchema (server→client 봉투)', () => {
       expect(serverEventSchema.safeParse({ ...baseRoom, ...patch }).success).toBe(false)
     })
 
-    // 표시 이름 최소길이는 occupants에만 요구한다 — 빈 이름이 "미해소 점유자" 신호로 쓰여
+    // 표시 이름 최소길이는 occupants에만 요구한다 — 빈 이름이 "미해석 점유자" 신호로 쓰여
     // projectRoomView가 그 항목을 목록에서 빼기 때문이다. 아이템·크리처엔 그 신호가 없다.
-    it('items[].name·creatures[].name은 빈 문자열도 허용한다 (미해소 신호가 없는 필드)', () => {
+    it('items[].name·creatures[].name은 빈 문자열도 허용한다 (미해석 신호가 없는 필드)', () => {
       expect(
         serverEventSchema.safeParse({
           ...baseRoom,
@@ -586,7 +586,7 @@ describe('serverEventSchema (server→client 봉투)', () => {
       }
     })
 
-    /** 첫 원소만 갈아끼운 길이 16 비트마스크 — 원소 값역 케이스의 입력. */
+    /** 첫 원소만 갈아끼운 길이 16 비트마스크 — 원소 값 범위 케이스의 입력. */
     const withFirstSpellByte = (value: number): number[] => [
       value,
       ...new Array<number>(15).fill(0),
