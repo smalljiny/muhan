@@ -20,9 +20,9 @@ import { F_ISSET, PUPDMG, OALCRT, OCURSE, MBEFUD } from '../world/hexFlags.js'
  * resolveAttack — 명중→피해→크리/불발→적용을 단일 파이프로 통합하고 HP<1이면 died=true를 반환하는(fire-free)
  * 오라클 충실 이식(플레이어 command5.c:207-345 / 몬스터 update.c:373-447, 플랜 G1/G5).
  *
- * Story 10(T10.1): death seam 발화는 호출자(initiateAttack/combatTick)가 소유한다 — 근접 라운드가
+ * Story 10(T10.1): death seam 실행은 호출자(initiateAttack/combatTick)가 담당한다 — 근접 라운드가
  * target death를 end-of-round로 지연해 "막타치면 target 생존"을 재현하려면 resolveAttack이 즉시
- * 발화하면 안 되기 때문이다. fireDeath·ResolveContext seam은 magic offensiveSpell 공유로 무변경이다.
+ * 실행하면 안 되기 때문이다. fireDeath·ResolveContext seam은 magic offensiveSpell 공유로 무변경이다.
  *
  * 순수 함수: 전역 상태·Date.now·Math.random 없이 모든 랜덤을 ctx.rng(주입 CombatRng)로만 굴린다.
  * 유일한 in-place 변형은 defender HP 차감(worldGraph 승인 carve-out)·ledger 누적이며 AttackOutcome은
@@ -36,7 +36,7 @@ import { F_ISSET, PUPDMG, OALCRT, OCURSE, MBEFUD } from '../world/hexFlags.js'
  *     크리 미발동 & 무기 착용 시에만 소비한다.
  *   - 의도적 미이식: 크리 시 무기 파괴 굴림 `mrand(1,100)<3`(command5.c:290)·불발 시 compute_thaco
  *     재계산·`if(crt->class>=DM)n=0`(command5.c:263, 무적 게이트는 Story 6)·숙련 XP 적립은 범위 밖.
- *     무기 오브젝트 이동(낙하·마모 shotscur)은 플래그로만 표면화한다.
+ *     무기 오브젝트 이동(낙하·마모 shotscur)은 플래그로만 드러낸다.
  */
 
 /** 사망 seam은 (dead, room, now)를 인자로 받는다(사전 바인딩 금지). Story 9가 deps만 바인딩한다. */
@@ -50,7 +50,7 @@ export interface ResolveContext {
 }
 
 /**
- * 단일 타격 결과(메시지 렌더링 입력). 무기 마모·낙하는 실제 오브젝트 이동 없이 플래그만 표면화한다.
+ * 단일 타격 결과(메시지 렌더링 입력). 무기 마모·낙하는 실제 오브젝트 이동 없이 플래그만 드러낸다.
  * specialAttack은 몬스터 명중 타격일 때만 non-null이다(플레이어·미명중은 null).
  */
 export interface AttackDescriptor {
@@ -62,7 +62,7 @@ export interface AttackDescriptor {
   readonly weaponDropped: boolean
   /**
    * 몬스터 특수공격(update.c:387~480) 결과 마커 — 브레스·에너지드레인·독·질병·실명·장비용해 서술.
-   * 실 status 부여·exp 차감·장비용해 적용은 #99 유예(여기선 마커만 표면화). 플레이어·미명중은 null.
+   * 실 status 부여·exp 차감·장비용해 적용은 #99 보류(여기선 마커만 드러냄). 플레이어·미명중은 null.
    */
   readonly specialAttack: SpecialAttackResult | null
 }
@@ -147,7 +147,7 @@ function resolveCritFumble(state: PlayerCombatState, n: number, rng: CombatRng):
   if (weapon !== null) {
     const fumbleRoll = rng(1, 100)
     if (fumbleRoll <= 5 - p && !F_ISSET(weapon.flags ?? '', OCURSE)) {
-      // 무기 낙하·compute_thaco 재계산은 범위 밖 — 낙하 플래그만 표면화.
+      // 무기 낙하·compute_thaco 재계산은 범위 밖 — 낙하 플래그만 드러냄.
       return { damage: 0, critical: false, fumble: true, weaponDropped: true }
     }
   }
@@ -159,7 +159,7 @@ function resolveCritFumble(state: PlayerCombatState, n: number, rng: CombatRng):
  * 단일 타격의 피해 산출. 플레이어는 base→max(1,n)→PALADIN 보정→크리/불발, 몬스터는 특수공격 게이트
  * → breath-replace ?? monsterDamage 순으로 산출한다(재클램프 없음).
  *
- * ## 몬스터 특수공격 배선 (update.c:387~480, Story 9)
+ * ## 몬스터 특수공격 연결 (update.c:387~480, Story 9)
  * 명중 직후 특수공격 6종(브레스·에너지드레인·독·질병·실명·장비용해) 게이트를 monsterDamage **전에**
  * 굴린다 — MBRETH 게이트가 먼저 굴려져야 breath-replace가 성립하기 때문이다. 그 뒤:
  *   - **breath-replace(`??` lazy)**: 브레스 발동 시 breath 데미지가 normal melee를 **대체**한다. `??`의
@@ -173,14 +173,14 @@ function resolveCritFumble(state: PlayerCombatState, n: number, rng: CombatRng):
  *     →MDISIT)는 오라클 순서를 정확히 보존하나, monsterDamage(melee)는 오라클(중간)과 달리 `??` 지연으로
  *     post-status 게이트 **뒤**에 굴려진다. status 게이트가 melee 값과 독립이라 behaviorally inert다.
  *
- * ## substrate gap (#99 유예)
+ * ## substrate gap (#99 보류)
  * PlayerCombatState는 experience 필드가 없어 흡수 상한을 실효 무효화한다 — MAX_SAFE_INTEGER를 넘겨
- * pre-cap raw drain을 산출하고, 실 exp 대비 상한·차감은 #99 소관이다. status 부여·장비용해 적용도 #99로
- * 유예하며 여기선 SpecialAttackResult 마커만 표면화한다(AttackOutcome은 새 객체, HP·ledger만 in-place).
+ * pre-cap raw drain을 산출하고, 실 exp 대비 상한·차감은 #99 담당이다. status 부여·장비용해 적용도 #99로
+ * 보류하며 여기선 SpecialAttackResult 마커만 드러낸다(AttackOutcome은 새 객체, HP·ledger만 in-place).
  */
 function computeStrike(attacker: Combatant, defender: Combatant, rng: CombatRng): StrikeDamage {
   if (attacker.kind === 'creature') {
-    // defender flags(PRCOLD/PRFIRE 저항 판독)는 Combatant 통합 flags 필드로 kind 비대칭을 흡수한다.
+    // defender flags(PRCOLD/PRFIRE 저항 읽기)는 Combatant 통합 flags 필드로 kind 비대칭을 흡수한다.
     const special = resolveSpecialAttack(
       attacker.instance,
       { flags: defender.flags, experience: Number.MAX_SAFE_INTEGER },
@@ -215,7 +215,7 @@ function hitRollMax(attacker: Combatant): number {
 
 /**
  * 단일 타격 처리 — 명중 판정 → 피해 산출 → 내구도 → in-place 차감 → ledger 누적. 사망은 상위 루프가
- * HP 판독으로 감지한다(내구도 굴림은 사망 판정보다 먼저, command5.c:308<341).
+ * HP 읽기로 감지한다(내구도 굴림은 사망 판정보다 먼저, command5.c:308<341).
  */
 function performStrike(attacker: Combatant, defender: Combatant, ctx: ResolveContext): AttackDescriptor {
   const { rng } = ctx
@@ -250,9 +250,9 @@ function performStrike(attacker: Combatant, defender: Combatant, ctx: ResolveCon
 }
 
 /**
- * defender 사망 seam을 kind별로 발화한다(command5.c:341). resolveAttack은 fire-free이므로(Story 10)
+ * defender 사망 seam을 kind별로 실행한다(command5.c:341). resolveAttack은 fire-free이므로(Story 10)
  * 이 함수를 호출자가 소비한다 — 근접은 initiateAttack(오프너 킬)·combatTick(end-of-round·counter 킬),
- * 주문은 offensiveSpell이 직접 발화한다. CastContext가 ResolveContext를 확장하므로 주문 경로도 동일
+ * 주문은 offensiveSpell이 직접 실행한다. CastContext가 ResolveContext를 확장하므로 주문 경로도 동일
  * 시그니처로 공유한다. seam·시그니처 무변경(magic 공유).
  */
 export function fireDeath(defender: Combatant, ctx: ResolveContext): void {
@@ -276,13 +276,13 @@ const DEAD_DEFENDER_NOOP: AttackOutcome = {
 
 /**
  * 공격 해석 진입점 — 다중공격 count만큼 타격을 반복하되, defender HP<1이면 died=true를 세우고 break한다
- * (fire-free — death seam은 호출자가 발화, 오라클 die() 지연 재현). 집계 AttackOutcome을 새 객체로 반환한다.
+ * (fire-free — death seam은 호출자가 실행, 오라클 die() 지연 재현). 집계 AttackOutcome을 새 객체로 반환한다.
  *
  * 진입 가드: 이미 사망한(HP<1) defender에 대한 stale/재진입 공격은 no-op한다. 오라클은 die()가 대상을
- * 즉시 free/제거해 재공격이 구조적으로 불가능하나, 이 포트는 사망 제거를 커넥션 계층으로 유예하므로
+ * 즉시 free/제거해 재공격이 구조적으로 불가능하나, 이 포트는 사망 제거를 커넥션 계층으로 보류하므로
  * (D2 레지스트리 remove·방 occupants 제거가 별도) 사망 후에도 combatTick 근접 target·stale 참조로
  * resolveAttack이 재호출될 여지가 있다. 가드 없이 진입하면 오버킬로 음수가 된 HP에서 death seam이
- * 재발화(#83 소환·분배 중복)되고 음수 ledger가 누적된다 — 진입 시 HP<1이면 굴림 전에 차단한다.
+ * 재실행(#83 소환·분배 중복)되고 음수 ledger가 누적된다 — 진입 시 HP<1이면 굴림 전에 차단한다.
  */
 export function resolveAttack(attacker: Combatant, defender: Combatant, ctx: ResolveContext): AttackOutcome {
   if (combatantHp(defender) < 1) return DEAD_DEFENDER_NOOP
@@ -299,9 +299,9 @@ export function resolveAttack(attacker: Combatant, defender: Combatant, ctx: Res
     // hit=true라 포함). command5.c:341이 명중 블록 안에 위치.
     //
     // ★ Story 10(T10.1): resolveAttack는 fire-free다. HP<1을 감지하면 died=true·break만 하고 death
-    // seam을 발화하지 않는다 — 발화 책임은 호출자(initiateAttack/combatTick)로 이양한다. 근거:
+    // seam을 실행하지 않는다 — 실행 책임은 호출자(initiateAttack/combatTick)로 이양한다. 근거:
     // 오라클 update.c:501~530 근접 라운드는 target death를 end-of-round로 지연해야 counter가 target을
-    // 구할 수 있다("막타치면 target 생존"). resolveAttack이 근접 중 즉시 발화하면 이 지연이 불가능하다.
+    // 구할 수 있다("막타치면 target 생존"). resolveAttack이 근접 중 즉시 실행하면 이 지연이 불가능하다.
     // fireDeath·ResolveContext seam은 magic offensiveSpell 공유로 무변경이며, 여기선 호출만 제거한다.
     if (descriptor.hit && combatantHp(defender) < 1) {
       died = true

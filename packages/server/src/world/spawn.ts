@@ -16,8 +16,8 @@ import { F_ISSET, F_SET, MPERMT } from './hexFlags.js'
  *      충돌), 방별 단조 카운터로 발급한다.
  *
  * perm 리스폰은 스케줄러가 아니라 입장 시점 lazy 재계산이다(빈 방 미리젠 없음) — onRoomEntered
- * (Story 2 seam)에서 호출되며 조립 배선은 Story 6이 소유한다. `room.creatures` push는 라이브 가변
- * carve-out(worldGraph 타입 주석과 정합)이다.
+ * (Story 2 seam)에서 호출되며 조립 연결은 Story 6이 담당한다. `room.creatures` push는 라이브 가변
+ * carve-out(worldGraph 타입 주석과 일치)이다.
  */
 
 /** 스폰 템플릿 = 크리처 소스 + numwander(random 그룹 크기 입력, D9). */
@@ -41,20 +41,20 @@ export function buildSpawnTemplateIndex(raw: readonly RawCreatureTemplate[]): Sp
       dexterity: c.dexterity,
       gold: c.gold,
       special: c.special,
-      // 전투 스탯(D6) — creatures.json 소스에서 그대로 옮긴다(fromTemplate 물질화가 인스턴스로 전파).
+      // 전투 스탯(D6) — creatures.json 소스에서 그대로 옮긴다(fromTemplate 인스턴스 생성이 인스턴스로 전파).
       armor: c.armor,
       thaco: c.thaco,
       ndice: c.ndice,
       sdice: c.sdice,
       pdice: c.pdice,
-      // 마법 읽기 필드(Story 2) — creatures.json 소스에서 그대로 옮긴다(fromTemplate 물질화가 인스턴스로
+      // 마법 읽기 필드(Story 2) — creatures.json 소스에서 그대로 옮긴다(fromTemplate 인스턴스 생성이 인스턴스로
       // 전파). realm은 소스에 없어 materialize가 [0,0,0,0] 기본값을 채운다.
       spells: c.spells,
       class: c.class,
       intelligence: c.intelligence,
       piety: c.piety,
       // 사망 분배 읽기 필드(Story 6) — creatures.json 소스에서 그대로 옮긴다. 명시 매핑이므로
-      // 여기서 누락하면 fromTemplate 물질화가 undefined를 실어 Story 7 분배가 값을 못 읽는다.
+      // 여기서 누락하면 fromTemplate 인스턴스 생성이 undefined를 실어 Story 7 분배가 값을 못 읽는다.
       experience: c.experience,
       alignment: c.alignment,
       // 이름 매칭용 별칭(Story 4) — creatures.json 소스에서 옮긴다. keys는 선택 필드라 여기서
@@ -120,9 +120,9 @@ export interface PermRespawnDeps {
  *   - 같은 misc의 뒤 슬롯 중 `ltime + interval < now`인 것을 합산해 총 스폰 수 n을 얻는다
  *     (원본의 바깥 `> t`·안쪽 `< t` 경계 비대칭까지 재현).
  *   - 방 내 살아있는 동명 MPERMT 수 m을 세어 n − m마리만 스폰한다(중복 방지).
- *   - 각 스폰: 팩토리 (b) 물질화 → MPERMT 세팅 → room.creatures push. idx는 monotonic 발급기(D7).
+ *   - 각 스폰: 팩토리 (b) 인스턴스 생성 → MPERMT 세팅 → room.creatures push. idx는 monotonic 발급기(D7).
  *
- * ltime은 여기서 쓰지 않는다(읽기만) — 사망 시 `ltime = now` 리셋은 Story 5(onCreatureDeath) 소관.
+ * ltime은 여기서 쓰지 않는다(읽기만) — 사망 시 `ltime = now` 리셋은 Story 5(onCreatureDeath) 담당.
  * 스폰된 크리처 배열을 반환한다(테스트·조립 지점 관찰용).
  */
 export function respawnPermCreatures(room: RoomNode, now: number, deps: PermRespawnDeps): CreatureInstance[] {

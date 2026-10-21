@@ -4,7 +4,7 @@ import type { DiceSpec } from './dice.js'
 /**
  * 라이브 플레이어 전투상태 — 세션 액터의 매-라운드 전투 입력·가변 상태를 담는다(플랜 D2/T4.1).
  *
- * 플레이어는 방-물질화 객체(CreatureInstance)가 아니라 세션 액터이므로 방 부착이 아닌
+ * 플레이어는 방에서 인스턴스 생성되는 객체(CreatureInstance)가 아니라 세션 액터이므로 방 부착이 아닌
  * characterId-keyed 레지스트리(combatRegistry)로 관리한다. armor/thaco는 stats-core의
  * computeAc/computeThaco로 파생하며(재구현 금지), 무기 데미지 서술자는 중첩 `weapon`으로
  * 담아 `mdice(state.weapon, rng)`(DiceSpec 구조 호환)로 바로 소비한다.
@@ -39,7 +39,7 @@ export type PlayerCombatState = {
   /** 유효 민첩(effectiveContext.effectiveDexterity). */
   readonly dexterity: number
   /**
-   * 주문 지식 비트마스크(Character.spells, uint8[16]=128비트). Caster.knows가 isKnown으로 판독한다.
+   * 주문 지식 비트마스크(Character.spells, uint8[16]=128비트). Caster.knows가 isKnown으로 읽는다.
    * 원작에서 플레이어도 creature 구조체(spells[16])를 가지므로 세션 액터에 그대로 이식한다.
    */
   readonly spells: readonly number[]
@@ -51,11 +51,11 @@ export type PlayerCombatState = {
   /**
    * 플레이어 상태 플래그 — creature flags와 동일한 hex string 바이트 배열(원작에서 플레이어도
    * creature 구조체). PBLIND=42·PFEARS=43은 비트 인덱스 >31이라 number bitfield로 표현 불가하므로
-   * hex string이 정본이다. F_ISSET(flags, bit)로 판정한다.
+   * hex string이 기준이다. F_ISSET(flags, bit)로 판정한다.
    *
    * **조립 시점 스냅샷**이다 — 호출부가 `composeCharacterFlags(character, now)`로 합성한 hex를 그대로
    * 싣는다. readonly를 유지해 라운드 중 in-place mutation 경로를 두지 않는다(만료로 비트가 내려가야
-   * 하면 재조립이 정본 경로다). 상태 플래그가 없는 플레이어는 빈 hex 또는 all-zero hex다.
+   * 하면 재조립이 기준 경로다). 상태 플래그가 없는 플레이어는 빈 hex 또는 all-zero hex다.
    */
   readonly flags: string
   /** 성향(PALADIN 성향 보정에 Story 5가 소비). */
@@ -72,7 +72,7 @@ export type PlayerCombatState = {
 /**
  * 무기 데미지 서술자 — mdice가 읽는 DiceSpec(ndice/sdice/pdice)을 확장해 명중 보정·숙련도를 더한다.
  * `DiceSpec`을 명시적으로 확장해 mdice 소비 계약을 컴파일 시점에 고정한다(DiceSpec 필드 변경이
- * WeaponDamage에 자동 전파). 장비/무기 해소는 상위 입력(범위 밖) — 조립 헬퍼는 이 값을 그대로 이식한다.
+ * WeaponDamage에 자동 전파). 장비/무기 해석은 상위 입력(범위 밖) — 조립 헬퍼는 이 값을 그대로 이식한다.
  */
 export type WeaponDamage = DiceSpec & {
   readonly adjustment: number
@@ -89,13 +89,13 @@ export type WeaponDamage = DiceSpec & {
  *
  * armor/thaco는 반드시 computeAc/computeThaco로 파생한다(재구현 금지 — stats-core 소비).
  * base 필드는 character에서, dexterity/effectiveStrength는 effectiveContext에서, 무기는 weaponDamage에서
- * 취한다(미착용이면 null 전달). alignment는 character.alignment를 그대로 싣고(v6 required — 부재 문서는
- * backfillCharacterV6 소관), flags는 주입값을 그대로, nextAttackAt은 초기값 0. 새 객체를 반환한다.
+ * 취한다(미착용이면 null 전달). alignment는 character.alignment를 그대로 싣고(v6 required — 필드가 없는 문서는
+ * backfillCharacterV6 담당), flags는 주입값을 그대로, nextAttackAt은 초기값 0. 새 객체를 반환한다.
  *
- * @param flags P-flag hex 스냅샷. **호출부(배선 계층)가 `composeCharacterFlags(character, now)`를 계산해
+ * @param flags P-flag hex 스냅샷. **호출부(연결 계층)가 `composeCharacterFlags(character, now)`를 계산해
  *   주입한다** — 이 헬퍼는 hex를 인자로만 받고 합성하지 않는다. 두 가지 이유다. ① `now` 의존성을 조립
  *   헬퍼 밖에 두면 헬퍼가 시간에 무관한 순수 매핑으로 남는다(debuffEffects가 절대 시각이 아니라 상대
- *   dur만 보고하는 선례와 동형이다). ② 의존 방향 규약 — `character/flags.ts` JSDoc이 정본이다.
+ *   dur만 보고하는 선례와 동형이다). ② 의존 방향 규약 — `character/flags.ts` JSDoc이 기준이다.
  *   상태 플래그가 없으면 빈 hex(`''`)를 넘긴다.
  */
 export function toPlayerCombatState(
@@ -121,7 +121,7 @@ export function toPlayerCombatState(
     spells: character.spells,
     realm: character.realm,
     flags,
-    // alignment는 v6에서 required로 승격됐다 — 부재 문서는 load 직전 backfillCharacterV6가 0으로
+    // alignment는 v6에서 required로 바뀌었다 — 필드가 없는 문서는 load 직전 backfillCharacterV6가 0으로
     // 시딩하므로 여기서 ?? 폴백을 두지 않는다(죽은 분기 제거, 폴백 출처를 backfill 한 곳으로 고정).
     alignment: character.alignment,
     weapon: weaponDamage,

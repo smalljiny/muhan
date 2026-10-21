@@ -20,25 +20,25 @@ import {
  *
  * 순수 함수 seam: 전역 상태·Date.now·Math.random 없이 모든 굴림을 ctx.rng(주입 CombatRng)로만 굴리고,
  * defender를 변형하지 않으며 effect 서술(marker) 객체를 새로 반환한다. 라이브 defender status·
- * AttackOutcome 표면화는 Story 9(resolveAttack 배선) 소관이다.
+ * AttackOutcome으로 드러내는 일은 Story 9(resolveAttack 연결) 담당이다.
  *
  * byte-fidelity 함정:
  *   - `(lv+3)/4`는 C 정수 나눗셈이라 Math.trunc로 브레스/드레인 주사위 개수 q를 산출한다.
  *   - rng 소비 순서는 오라클 if 단축평가를 재현한다 — 플래그가 세팅됐을 때만 해당 게이트 rng를 굴린다.
  *     순서: MBRETH 게이트 → (발동 시 브레스 dice) / (else 분기면 MENEDR 게이트 → 발동 시 드레인 dice) →
- *     MPOISS → MDISEA → MBLNDR → MDISIT. 이 순서를 Story 9 배선에서도 보존한다.
+ *     MPOISS → MDISEA → MBLNDR → MDISIT. 이 순서를 Story 9 연결에서도 보존한다.
  *   - breath와 energy-drain은 상호배제(XOR)다 — 브레스가 발동하면 else 분기에 진입하지 않아 MENEDR을
  *     굴리지 않는다.
  *   - status는 boolean 마커만 반환한다(Story 3 grant 헬퍼는 Character/statusEffects 타입이라 여기 적용
  *     대상이 아니다). MDISIT 장비용해·lower_prof는 굴림만 하고 효과는 미이식(Non-goal)이다.
  */
 
-/** 특수공격 시전자 — 레벨스케일 주사위 q·특수공격 M-flag 판독에 필요한 최소 필드(CreatureInstance 부분집합). */
+/** 특수공격 시전자 — 레벨스케일 주사위 q·특수공격 M-flag 읽기에 필요한 최소 필드(CreatureInstance 부분집합). */
 export type SpecialAttacker = Pick<CreatureInstance, 'level' | 'flags'>
 
 /** 방어자 최소 인터페이스 — 브레스 반감용 저항 P-flag(PRCOLD/PRFIRE)와 exp드레인 흡수 상한. */
 export interface SpecialAttackDefender {
-  /** 저항 P-flag 판독용 hex flags(PRCOLD/PRFIRE). */
+  /** 저항 P-flag 읽기용 hex flags(PRCOLD/PRFIRE). */
   readonly flags: string
   /** 에너지드레인 흡수 상한 — 흡수량은 이 값을 넘지 못한다(update.c). */
   readonly experience: number
@@ -69,7 +69,7 @@ export interface SpecialAttackResult {
   readonly disease: boolean
   /** 실명 부여 마커(MBLNDR 게이트). */
   readonly blind: boolean
-  /** MDISIT 장비용해 성공 굴림 마커(효과는 Story 9/유예). */
+  /** MDISIT 장비용해 성공 굴림 마커(효과는 Story 9/보류). */
   readonly dissolveItemRolled: boolean
 }
 

@@ -6,8 +6,8 @@ import { canTeachSpllv } from './learning.js'
 /**
  * spllv 전수등급 골든 fixture approve — magic1.c:212-235 spllv 5-if 체인 대조.
  *
- * anti-tautology: fixture expected는 spllvTeachFixture.ts의 magic1.c 독립 전사(oracleCanTeachSpllv),
- * SUT는 server/magic/learning.ts의 canTeachSpllv 구현. 두 전사가 diff되면 approve가 throw한다.
+ * anti-tautology: fixture expected는 spllvTeachFixture.ts의 magic1.c를 독립적으로 옮겨 적은 것(oracleCanTeachSpllv),
+ * SUT는 server/magic/learning.ts의 canTeachSpllv 구현. 옮겨 적은 두 코드가 diff되면 approve가 throw한다.
  * 완료 기준 "spllv 전수등급 fixture가 server 테스트에서 approve"에 맞춰 server가 디스크 json을 읽어
  * shared SUT로 실행한다(mprofic.json·spellStore.json 선례 — fixture는 shared 소유, SUT 소비 approve는 server).
  */

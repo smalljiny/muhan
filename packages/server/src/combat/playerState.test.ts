@@ -3,8 +3,8 @@ import { computeAc, computeThaco, type EffectiveStatContext, type Character } fr
 import { toPlayerCombatState, type PlayerCombatState, type WeaponDamage } from './playerState.js'
 import type { StudyChar, TeachCaster } from '../magic/learning.js'
 import { F_ISSET, PFEARS, PSILNC, PBLIND, PPOISN } from '../world/hexFlags.js'
-// 테스트 전용 간선 — 의존 방향 규약은 `character/flags.ts` JSDoc이 정본이다. 여기서는 실제 배선
-// 계층이 주입할 hex를 재현해 "합성 → 주입 → F_ISSET 판독" 경로가 끝까지 이어짐을 고정한다.
+// 테스트 전용 간선 — 의존 방향 규약은 `character/flags.ts` JSDoc이 기준이다. 여기서는 실제 연결
+// 계층이 주입할 hex를 재현해 "합성 → 주입 → F_ISSET 읽기" 경로가 끝까지 이어짐을 고정한다.
 import { composeCharacterFlags } from '../character/flags.js'
 
 /**
@@ -96,9 +96,9 @@ describe('toPlayerCombatState', () => {
     expect(state.level).toBe(9)
   })
 
-  it('alignment 실값을 그대로 이식한다 (v6 required — 폴백은 backfillCharacterV6 소관)', () => {
-    // v6에서 alignment가 required가 돼 undefined 케이스는 타입상 불가하다. 부재 문서의 0 시딩은
-    // load 경로의 backfillCharacterV6가 소유하므로, 여기서는 실값 이식만 단언한다.
+  it('alignment 실값을 그대로 이식한다 (v6 required — 폴백은 backfillCharacterV6 담당)', () => {
+    // v6에서 alignment가 required가 돼 undefined 케이스는 타입상 불가하다. 필드가 없는 문서의 0 시딩은
+    // load 경로의 backfillCharacterV6가 담당하므로, 여기서는 실값 이식만 단언한다.
     expect(toPlayerCombatState(character, ctx, weapon, '').alignment).toBe(1)
     const evil: Character = { ...character, alignment: 2 }
     expect(toPlayerCombatState(evil, ctx, weapon, '').alignment).toBe(2)
@@ -113,7 +113,7 @@ describe('toPlayerCombatState', () => {
   })
 
   it('침묵·공포 캐릭터의 합성 hex를 주입하면 PSILNC·PFEARS가 선다', () => {
-    // 배선 계층이 하는 일(composeCharacterFlags(character, now))을 재현해 주입한다 — 조립 헬퍼는
+    // 연결 계층이 하는 일(composeCharacterFlags(character, now))을 재현해 주입한다 — 조립 헬퍼는
     // now를 모르며 합성 결과 hex만 받는다.
     const state = toPlayerCombatState(character, ctx, weapon, composeCharacterFlags(afflicted, NOW))
     expect(F_ISSET(state.flags, PSILNC)).toBe(true)
@@ -135,7 +135,7 @@ describe('toPlayerCombatState', () => {
     const state = toPlayerCombatState(character, ctx, weapon, '')
     // 검증 채널은 vitest가 아니라 tsc다 — readonly가 사라지면 이 지시자가 unused가 돼 tsc가 실패한다.
     // 런타임에는 막지 않는다(hpCurrent/nextAttackAt의 가변 carve-out과 같은 객체다). 만료로 비트가
-    // 내려가야 하면 재조립이 정본 경로다.
+    // 내려가야 하면 재조립이 기준 경로다.
     // @ts-expect-error flags는 readonly — 라운드 중 라이브 mutation 경로를 두지 않는다.
     state.flags = 'ffffffffffffffff'
   })
@@ -203,10 +203,10 @@ describe('toPlayerCombatState', () => {
 /**
  * 학습 게이트 입력 재사용 계약(타입 레벨) — pvp.test.ts의 게이트 입력 계약 선례와 동형이다.
  *
- * `study`/`teach`는 최소 구조 shape(StudyChar·TeachCaster)을 받는다. flags가 주입 배선을 얻은 지금
- * PlayerCombatState가 두 shape을 구조적으로 만족하므로, 배선 계층은 어댑터를 끼우지 않고 라이브
+ * `study`/`teach`는 최소 구조 shape(StudyChar·TeachCaster)을 받는다. flags가 주입 연결을 얻은 지금
+ * PlayerCombatState가 두 shape을 구조적으로 만족하므로, 연결 계층은 어댑터를 끼우지 않고 라이브
  * 전투상태를 그대로 넘길 수 있다. 이 할당성이 깨지면(예: flags 타입 변경, alignment optional 회귀)
- * 배선 시점이 아니라 여기서 컴파일 실패로 드러난다.
+ * 연결 시점이 아니라 여기서 컴파일 실패로 드러난다.
  *
  * expectTypeOf는 런타임에 소거되므로 이 단언의 검증 채널은 `tsc --noEmit`이다(vitest run 아님).
  */

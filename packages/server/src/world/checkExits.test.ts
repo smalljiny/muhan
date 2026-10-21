@@ -46,8 +46,8 @@ describe('createCheckExitsSlot — 슬롯 계약', () => {
   })
 })
 
-describe('createCheckExitsSlot — 타이머 자동 재설정 (WorldClock 구동)', () => {
-  it('만료된 XLOCKS-only 출구를 XLOCKD·XCLOSD 둘 다 재설정한다(room.c:469, "잠금은 닫힘 함의")', () => {
+describe('createCheckExitsSlot — 타이머 자동 재설정 (WorldClock 기반)', () => {
+  it('만료된 XLOCKS-only 출구를 XLOCKD·XCLOSD 둘 다 재설정한다(room.c:469, "잠금은 닫힘을 포함")', () => {
     // ltime=0, interval=5 → now>=6에서 만료(5<6). tick(6)으로 now=6까지 진행.
     // XCLOSS 없는 XLOCKS-only 출구(data/world에 4개 실재)라도 원본은 XCLOSD를 함께 세팅해
     // "잠겼지만 열린" 모순 상태를 만들지 않는다.

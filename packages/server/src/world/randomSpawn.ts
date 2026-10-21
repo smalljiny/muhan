@@ -16,11 +16,11 @@ import type { SpawnTemplate, SpawnTemplateIndex, InstanceIdAllocator } from './s
  *   3. `random[mrand(0,9)]` 단일 슬롯을 뽑아 0(빈 슬롯)이면 스킵(재시도 없음). 팩토리 (b) 조회.
  *   4. 그룹 크기: RPLWAN(방 flag 23)이면 mrand(1, 방 플레이어수), 아니면 numwander>1이면
  *      mrand(1, numwander), 아니면 1.
- *   5. 각 마리: 팩토리 (b) 물질화 + 타이머 초기화(nextActionAt=now+cadence, scavenge/wander 게이트
+ *   5. 각 마리: 팩토리 (b) 인스턴스 생성 + 타이머 초기화(nextActionAt=now+cadence, scavenge/wander 게이트
  *      = now) + monotonic idx(D7) → room.creatures push.
  *
- * clock seam은 WorldClock이 소유한다(creatureTick·gameTime 선례). 확률·그룹 크기 mrand 굴림은 주입
- * `SpawnRng` seam이며 기본 stub은 결정적으로 비발화(traffic 게이트 항상 실패)라 미배선 부팅이 조용하다.
+ * clock seam은 WorldClock이 담당한다(creatureTick·gameTime 선례). 확률·그룹 크기 mrand 굴림은 주입
+ * `SpawnRng` seam이며 기본 stub은 결정적으로 실행되지 않음(traffic 게이트 항상 실패)이라 미연결 부팅이 조용하다.
  */
 
 /** random 폴링 주기(실초). 원본 Random_update_interval 20초 미러. */
@@ -41,7 +41,7 @@ export interface SpawnRng {
 
 /**
  * 결정적 기본 rng — traffic 게이트를 항상 실패시킨다(roll100=101 > 최대 traffic 100). 조립 지점이
- * 실 확률 굴림으로 대체할 때까지 미배선 부팅을 조용하게 유지한다(neverFireRng 철학과 정합).
+ * 실 확률 굴림으로 대체할 때까지 미연결 부팅을 조용하게 유지한다(neverFireRng 철학과 일치).
  */
 export const defaultSpawnRng: SpawnRng = {
   roll100: () => 101,
@@ -57,7 +57,7 @@ export interface RandomSpawnDeps {
   readonly templates: SpawnTemplateIndex
   /** 방별 monotonic idx 발급기(D7). */
   readonly alloc: InstanceIdAllocator
-  /** 확률·후보·그룹 크기 굴림 seam(기본 결정적 비발화). */
+  /** 확률·후보·그룹 크기 굴림 seam(기본 결정적으로 실행되지 않음). */
   readonly rng?: SpawnRng
   /** carry/gold 랜덤화 seam(기본 결정적 identity). */
   readonly creatureRng?: CreatureRng
@@ -88,7 +88,7 @@ export function createRandomSpawn(deps: RandomSpawnDeps): WorldTickSlot {
         if (template === undefined) continue
         // (4) 그룹 크기.
         const num = groupSize(room, template, rng)
-        // (5) 각 마리 물질화 + 타이머 초기화 + monotonic idx.
+        // (5) 각 마리 인스턴스 생성 + 타이머 초기화 + monotonic idx.
         for (let l = 0; l < num; l += 1) {
           const idx = deps.alloc.next(room)
           const creature = fromTemplate(misc, room.roomId, idx, creatureRng, deps.templates)

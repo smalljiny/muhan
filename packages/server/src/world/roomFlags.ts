@@ -1,6 +1,6 @@
 /**
- * roomFlags — 방 상태 플래그 비트 상수의 정본(mtype.h). room.flags는 8바이트(64비트) number[]라
- * `hasFlag`(door.ts)로 판독한다(hex-string F_ISSET 전용 hexFlags.ts와 구분).
+ * roomFlags — 방 상태 플래그 비트 상수의 기준(mtype.h). room.flags는 8바이트(64비트) number[]라
+ * `hasFlag`(door.ts)로 읽는다(hex-string F_ISSET 전용 hexFlags.ts와 구분).
  *
  * realm 4종(REARTH~RWATER)과 플레이어 위험방 4종(RPHARM~RPBEFU)을 여기서 단일 정의한다.
  * magic/offensiveSpell.ts(방 상성)와 combat/dot.ts(위험방 DoT)가 이 모듈을 import해 중복을 없앤다.
@@ -22,7 +22,7 @@ export const RPHARM = 24
 export const RPPOIS = 25
 /** 플레이어 mp 드레인 방 — RPMPDR bit 26(mtype.h). 틱마다 mp를 MIN(mpCurrent,3) 감소시킨다. */
 export const RPMPDR = 26
-/** 플레이어 혼란 방 — RPBEFU bit 27(mtype.h). LT_ATTCK 쿨다운 부여(combat-state 소관, #99 유예). */
+/** 플레이어 혼란 방 — RPBEFU bit 27(mtype.h). LT_ATTCK 쿨다운 부여(combat-state 담당, #99 보류). */
 export const RPBEFU = 27
 
 /**

@@ -3,7 +3,7 @@ import * as combat from './index.js'
 import { maxRollRng } from './dice.testutil.js'
 
 /**
- * combat 배럴 스모크 — 공개 표면(dice·mdice·튜닝 상수)이 배럴에서 재export되고, 결정적 stub은
+ * combat 배럴 스모크 — 공개 인터페이스(dice·mdice·튜닝 상수)이 배럴에서 재export되고, 결정적 stub은
  * 배럴에 노출되지 않음을 고정한다.
  */
 describe('combat 배럴', () => {
@@ -26,12 +26,12 @@ describe('combat 배럴', () => {
     expect('seqRng' in combat).toBe(false)
   })
 
-  it('playerState·registry 표면을 재export한다', () => {
+  it('playerState·registry 인터페이스를 재export한다', () => {
     expect(typeof combat.toPlayerCombatState).toBe('function')
     expect(typeof combat.createCombatRegistry).toBe('function')
   })
 
-  it('combatant·attackStats 표면을 재export한다', () => {
+  it('combatant·attackStats 인터페이스를 재export한다', () => {
     expect(typeof combat.toCombatant).toBe('function')
     expect(typeof combat.hitThreshold).toBe('function')
     expect(typeof combat.playerBaseDamage).toBe('function')
@@ -47,20 +47,20 @@ describe('combat 배럴', () => {
     expect(combat.INVINCIBLE).toBe(9)
   })
 
-  it('pvp 게이트 표면을 재export한다', () => {
+  it('pvp 게이트 인터페이스를 재export한다', () => {
     expect(typeof combat.checkTargetImmunityPre).toBe('function')
     expect(typeof combat.checkTargetImmunityPost).toBe('function')
     expect(typeof combat.checkPvpGate).toBe('function')
   })
 
-  it('enmity·데미지 원장 표면을 재export한다', () => {
+  it('enmity·데미지 원장 인터페이스를 재export한다', () => {
     expect(typeof combat.registerEnemy).toBe('function')
     expect(typeof combat.createDamageLedger).toBe('function')
     expect(typeof combat.accumulateDamage).toBe('function')
     expect(typeof combat.createCreatureLedgers).toBe('function')
   })
 
-  it('라이브 조립 표면(전투상태 조립기)을 재export한다', () => {
+  it('라이브 조립 인터페이스(전투상태 조립기)을 재export한다', () => {
     expect(typeof combat.assemblePlayerCombatState).toBe('function')
   })
 

@@ -49,7 +49,7 @@ export interface PvpGateInput {
   /**
    * 가족-전쟁 판정 결과(주입 seam). 원작 `check_war(...)` 대체값이다 — 양측 PFAMIL일 때만 의미가
    * 있으며, true면 선악 게이트를 재적용(전쟁 중 패거리원 교전 허용), false면 스킵(평시 패거리 보호).
-   * 이름을 `atWar`가 아닌 `checkWarResult`로 두어, 미래 배선자가 의미를 조용히 뒤집지 못하게 한다.
+   * 이름을 `atWar`가 아닌 `checkWarResult`로 두어, 미래에 연결하는 사람이 의미를 조용히 뒤집지 못하게 한다.
    */
   readonly checkWarResult: boolean
 }

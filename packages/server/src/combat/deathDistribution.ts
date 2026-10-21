@@ -7,7 +7,7 @@ import { F_ISSET, MTRADE } from '../world/hexFlags.js'
  *
  * 순수·반환 기반·무변형. 데미지비례 exp 분배·멤버십 게이트·그룹킬 보너스·전리품/골드 드롭을 계산해
  * `{ awards, drops }`로 **반환만** 한다 — dead·room·ledger·inventory를 변형하지 않는다. exp/alignment
- * 실 누적·클램프·drops의 room.items push·라이브 조립은 #99 소관이다(applyPlayerDeath·resolvePlayerDot의
+ * 실 누적·클램프·drops의 room.items push·라이브 조립은 #99 담당이다(applyPlayerDeath·resolvePlayerDot의
  * 반환/불변 선례).
  *
  * ── 오라클 분배 루프(B 블록, creature.c:287~311) ─────────────────────────────
@@ -24,16 +24,16 @@ import { F_ISSET, MTRADE } from '../world/hexFlags.js'
  *     사용 전 미할당인 **미초기화 포인터 버그**다 — 재현하지 않고 `contributors.length >= 2`로 대체,
  *     각 기여자에 loop-invariant로 동일 적용한다.
  *  3. contributor 정의: `enemies` 멤버 AND `ledger.get(id) > 0`. 이 집합이 awards와 groupkill 카운트를
- *     둘 다 구동한다. 순서는 **enemies 배열 순서**(오라클 first_enm 순회 충실 — ledger Map 순서 아님).
+ *     둘 다 실행한다. 순서는 **enemies 배열 순서**(오라클 first_enm 순회 충실 — ledger Map 순서 아님).
  *  4. ★ 이중 divergence: (a) alignment 페널티를 **기여자마다** 적용한다(오라클 루프 내부). 플랜 T7.2
  *     "살해자"는 오라클과 충돌하므로 오라클(behavioral truth, CLAUDE.md 포팅 원칙)로 이식한다.
  *     (b) **기여자 축 divergence(오라클 대비 축소)**: 오라클 루프 게이트는 `find_who(ep->enemy)`
- *     (플레이어 present/해소 여부, 데미지 무관)라, present인 0-데미지 적(빗나간 오프너가 resolveAttack
+ *     (플레이어 present/해석 여부, 데미지 무관)라, present인 0-데미지 적(빗나간 오프너가 resolveAttack
  *     전 registerEnemy로 등록한 경우 등)도 exp(버림 후 0)·alignment 페널티·groupkill 카운트를 받는다.
  *     이 포트는 기여자를 `damage > 0`으로 좁혀(#3) 그런 적을 셋 다에서 제외한다 — awards·groupkill·
  *     alignment가 present 축이 아닌 damage 축으로 게이팅된다. 여기서 "exp 0 기여자"는 damage>0이나
  *     버림 후 0인 경우만 가리키며, 진짜 0-데미지 present 적은 제외된다. 라이브 조립(#99)이 기여자 축을
- *     present 기준으로 재검토할지 결정한다(이 resolver는 반환만). alignment 클램프 ±1000도 #99 소유
+ *     present 기준으로 재검토할지 결정한다(이 resolver는 반환만). alignment 클램프 ±1000도 #99 담당
  *     (delta만 반환, 무클램프).
  *  5. levels 루프 미이식: 오라클 A 블록(creature.c:278~285, `levels`·첫 `expdiv=exp/levels`)은
  *     B 블록이 덮어쓰는 사장 코드 → 이식하지 않는다.
@@ -50,16 +50,16 @@ import { F_ISSET, MTRADE } from '../world/hexFlags.js'
  * 플레이어가 몬스터 B에 준 데미지가 attackerId 단일 키로 합산돼 몬스터 A 사망 보상(exp·alignment·
  * groupkill 카운트)을 부풀린다(multi-monster 전투에서 관측). 따라서 호출자는 반드시
  * **per-creature ledger를 라우팅**해야 한다 — 아니면 한 크리처 사망이 다른 크리처에 가한 데미지로
- * 보상을 인플레한다. 이 라우팅은 `combat/creatureLedgers.ts`(#121)가 소유한다 — 크리처 instanceId별
+ * 보상을 인플레한다. 이 라우팅은 `combat/creatureLedgers.ts`(#121)가 담당한다 — 크리처 instanceId별
  * `DamageLedger`를 캐시해 `for(instanceId)`로 내주고 사망 시 `discard`한다. 반면 ledger 타입 자체를
  * defender-scoped로 바꾸는 것은 enmity.ts·resolveAttack·combatTick 파급의 인프라 변경이라 여전히
- * #99 소관이다. 아래 계약 테스트(`ledger 스코핑 계약`)가 이 전제를 실행 가능한 형태로 표면화한다.
+ * #99 담당이다. 아래 계약 테스트(`ledger 스코핑 계약`)가 이 전제를 실행 가능한 형태로 드러낸다.
  *
- * ## 유예(Non-goal)
- *  - MPERMT 리스폰·MSUMMO 소환은 world/creatureDeath.ts onCreatureDeath 소관(중복 구현 금지).
+ * ## 보류(Non-goal)
+ *  - MPERMT 리스폰·MSUMMO 소환은 world/creatureDeath.ts onCreatureDeath 담당(중복 구현 금지).
  *  - exp/alignment 실 누적·±1000 클램프·drops의 room.items push·라이브 조립은 #99.
  *  - ledger 타입의 defender 스코핑은 #99 — 위 "ledger 스코핑 전제" 참조. 이 resolver는 주어진
- *    ledger를 이 크리처 데미지로 신뢰만 하며, 스코핑 라우팅은 `combat/creatureLedgers.ts`가 소유한다.
+ *    ledger를 이 크리처 데미지로 신뢰만 하며, 스코핑 라우팅은 `combat/creatureLedgers.ts`가 담당한다.
  */
 
 /** 개별 기여자 exp/alignment 보상(누적 미적용 — delta만). */
@@ -103,7 +103,7 @@ function makeGoldDrop(dead: CreatureInstance): ItemInstance {
 
 /**
  * 몬스터 사망 시 exp 분배·전리품 드롭을 계산해 반환한다(무변형). ledger는 명시 파라미터로 수령하며
- * fireCreatureDeath 시그니처는 무변경이다(Q2 — 라이브 조립 #99 유예).
+ * fireCreatureDeath 시그니처는 무변경이다(Q2 — 라이브 조립 #99 보류).
  *
  * ★ 전제: 전달된 ledger는 **이 죽은 크리처에 스코핑된** 데미지여야 한다(위 "ledger 스코핑 전제" 참조).
  * 현재 DamageLedger는 attackerId-only라 defender-agnostic이므로, 호출자가 `createCreatureLedgers`로

@@ -241,11 +241,11 @@ describe('initiateAttack — 게이트 통과(개시 성공)', () => {
 })
 
 /**
- * Story 10(T10.1 ripple) — resolveAttack가 fire-free가 되면서 initiateAttack이 death 발화 책임을 진다.
+ * Story 10(T10.1 ripple) — resolveAttack가 fire-free가 되면서 initiateAttack이 death 실행 책임을 진다.
  * 오프너가 크리처를 죽이면 initiateAttack이 스스로 `if(outcome.died) fireDeath`를 호출해야 하며,
- * 안 그러면 오프너 킬이 loot/exp/death를 silently 드롭한다. 단타 semantics는 관측상 즉시 발화로 동일하다.
+ * 안 그러면 오프너 킬이 loot/exp/death를 silently 드롭한다. 단타 semantics는 관측상 즉시 실행으로 동일하다.
  */
-describe('initiateAttack — 오프너 킬 death 발화 (T10.1 ripple)', () => {
+describe('initiateAttack — 오프너 킬 death 실행 (T10.1 ripple)', () => {
   it('오프너가 크리처를 죽이면 fireCreatureDeath 정확히 1회 + died=true', () => {
     const attacker = toCombatant(makePlayer())
     const defender = makeCreature({ hpcur: 3 })
@@ -259,8 +259,8 @@ describe('initiateAttack — 오프너 킬 death 발화 (T10.1 ripple)', () => {
     if (!result.ok) return
     expect(result.outcome.died).toBe(true)
     expect(defender.hpcur).toBe(-2)
-    expect(defender.enemies).toContain('char-1') // 적대 등록(발화 전)
-    expect(creatureDeaths).toHaveLength(1) // initiateAttack이 발화
+    expect(defender.enemies).toContain('char-1') // 적대 등록(실행 전)
+    expect(creatureDeaths).toHaveLength(1) // initiateAttack이 실행
     expect(creatureDeaths[0]?.[0]).toBe(defender)
     expect(creatureDeaths[0]?.[2]).toBe(2000)
     expect(playerDeaths).toHaveLength(0)
@@ -278,7 +278,7 @@ describe('initiateAttack — 오프너 킬 death 발화 (T10.1 ripple)', () => {
     if (!result.ok) return
     expect(result.outcome.died).toBe(true)
     expect(defenderState.hpCurrent).toBe(-4)
-    expect(playerDeaths).toHaveLength(1) // initiateAttack이 발화(PvP 경로도 fire-free ripple)
+    expect(playerDeaths).toHaveLength(1) // initiateAttack이 실행(PvP 경로도 fire-free ripple)
     expect(playerDeaths[0]?.[0]).toBe(defenderState)
     expect(creatureDeaths).toHaveLength(0)
   })

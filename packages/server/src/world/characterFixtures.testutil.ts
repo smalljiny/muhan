@@ -9,7 +9,7 @@ import { characterSchema, type Character } from 'shared'
  * 고쳐야 하고, 한 곳을 빠뜨려도 테스트는 계속 통과한다.
  *
  * `characterSchema.parse`를 통과시켜 만드는 것이 load-bearing이다. 리터럴을 그대로 반환하면 스키마가
- * 거부할 시드로도 테스트가 통과해, 배선이 실제로 유효한 문서를 다루는지 검증하지 못한다.
+ * 거부할 시드로도 테스트가 통과해, 연결이 실제로 유효한 문서를 다루는지 검증하지 못한다.
  *
  * 파일명이 `.testutil.ts`라 server build(tsconfig.build.json)·coverage(vitest.config.ts) 양쪽 glob에서
  * 자동 제외된다(테스트 인프라, 프로덕션 코드 아님).

@@ -8,7 +8,7 @@ import { seededSpawnRng } from './seededRngSeams.testutil.js'
  * 스폰 seam property 테스트 — `seededSpawnRng`(SUT)의 세 굴림이 임의 seed·len·max
  * 조합 전체에서 범위 불변식을 지킴을 fast-check로 실증한다.
  *
- * 비-vacuity: 각 property는 실제 SUT를 구동하고, assertInRange가 위반 시 shrink된
+ * 비-vacuity: 각 property는 실제 SUT를 실행하고, assertInRange가 위반 시 shrink된
  * 반례와 함께 throw한다(tautology 아님 — T5.5에서 상한을 뒤집어 실제 반례 리포트를 확인).
  *
  * import 규약(크로스패키지 재사용):

@@ -6,7 +6,7 @@ import { F_ISSET, MAGGRE, MGAGGR, MEAGGR, MDINVI, PHIDDN, PINVIS, PDMINV } from 
  * lowest_piety(player.c:1314, MAGGRE용)·low_piety_alg(player.c:1473, MGAGGR/MEAGGR용)를 재현한다.
  *
  * 순수 함수 seam: 전역 상태·Date.now·Math.random 없이 모든 굴림을 주입 CombatRng로만 굴리고, 입력을
- * 변형하지 않는다. 실제 선공 등록(add_enm_crt)·live dispatch·실 이동은 배선 소관이다(이 모듈은 어느
+ * 변형하지 않는다. 실제 선공 등록(add_enm_crt)·live dispatch·실 이동은 연결 담당이다(이 모듈은 어느
  * 플레이어에게 적개심을 걸지·이번 라운드 회피됐는지만 결정한다).
  *
  * ── 가중 랜덤 선택(argmin 아님) ──
@@ -24,7 +24,7 @@ import { F_ISSET, MAGGRE, MGAGGR, MEAGGR, MDINVI, PHIDDN, PINVIS, PDMINV } from 
  * (MAGGRE lowest_piety에는 레벨 게이트 없음).
  */
 
-/** 선공 후보 플레이어 최소 shape. 자격 flag(PHIDDN/PINVIS/PDMINV)는 hex flags로 F_ISSET 판독. */
+/** 선공 후보 플레이어 최소 shape. 자격 flag(PHIDDN/PINVIS/PDMINV)는 hex flags로 F_ISSET로 읽는다. */
 export interface AggroPlayer {
   readonly id: string
   /**
@@ -39,11 +39,11 @@ export interface AggroPlayer {
   readonly alignment: number
   /** 민첩 회피 판정 — target.dexterity>attacker.dexterity면 회피 굴림. */
   readonly dexterity: number
-  /** 자격 flag 판독용 hex flags(PHIDDN/PINVIS/PDMINV). */
+  /** 자격 flag 읽기용 hex flags(PHIDDN/PINVIS/PDMINV). */
   readonly flags: string
 }
 
-/** 공격자 크리처 최소 shape. 공격형 M-flag(MAGGRE/MGAGGR/MEAGGR)·MDINVI(투명 탐지)·dex를 판독. */
+/** 공격자 크리처 최소 shape. 공격형 M-flag(MAGGRE/MGAGGR/MEAGGR)·MDINVI(투명 탐지)·dex를 읽는다. */
 export interface AggroAttacker {
   readonly level: number
   readonly dexterity: number
@@ -88,9 +88,9 @@ export function selectAggroTarget(
     if (F_ISSET(p.flags, PDMINV)) return false
     if (alg === 0) return true // MAGGRE — alignment/레벨 필터 없음.
     if (levelTier(p.level) < attackerTier) return false // alg 변종 레벨 게이트(단일 eligible set).
-    // known divergence — 현 alignment 값역 [0,2](생성 1|2 + backfill sentinel 0)에서는 두 조건이
+    // known divergence — 현 alignment 값 범위 [0,2](생성 1|2 + backfill sentinel 0)에서는 두 조건이
     // 항상 참이라 MGAGGR·MEAGGR 몹이 아무도 선공하지 않는다. 오라클 임계값을 보존해 E6 성향
-    // 시스템(-1000..+1000, #123)에서 코드 변경 없이 발화하게 둔다(magic/learning.ts 주석 참조).
+    // 시스템(-1000..+1000, #123)에서 코드 변경 없이 동작하게 둔다(magic/learning.ts 주석 참조).
     if (alg === -1 && p.alignment < 100) return false // MGAGGR: 선인(alignment>=100)만.
     if (alg === 1 && p.alignment > -100) return false // MEAGGR: 악인(alignment<=-100)만.
     return true

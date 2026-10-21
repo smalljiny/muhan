@@ -5,10 +5,10 @@ import { PALADIN } from './constants.js'
 
 /**
  * flee — 플레이어 도주 결정(update.c:534~551)의 순수 함수 이식. boolean(도주 여부)만 반환한다. 실제 방
- * 이동(flee 액션)은 movement seam(#99) 유예다 — 이 함수는 "도주할지"만 결정하고 어디로 도주할지는
- * 배선하지 않는다.
+ * 이동(flee 액션)은 movement seam(#99)으로 보류한다 — 이 함수는 "도주할지"만 결정하고 어디로 도주할지는
+ * 연결하지 않는다.
  *
- * 오라클은 death → PWIMPY → PFEARS의 else-if 체인이다(death 검사는 배선 소관). PWIMPY가 세팅되면 PFEARS
+ * 오라클은 death → PWIMPY → PFEARS의 else-if 체인이다(death 검사는 연결 담당). PWIMPY가 세팅되면 PFEARS
  * 분기는 평가되지 않는다(else-if).
  *   - PWIMPY: hpCurrent<=wimpyValue면 도주(굴림 없음). wimpyValue는 오라클 carry[0](WIMPYVALUE 필드).
  *   - PFEARS: ff 공식 굴림 후 ff<rng(1,100)이면 도주.
@@ -29,9 +29,9 @@ import { PALADIN } from './constants.js'
  * Math.trunc로 재현해 hp항이 40 또는 0만 되게 한다 — 부드러운 비율로 float화하지 않는다.
  */
 
-/** 도주 판정 대상 플레이어 최소 shape. PWIMPY/PFEARS는 hex flags로 F_ISSET 판독. */
+/** 도주 판정 대상 플레이어 최소 shape. PWIMPY/PFEARS는 hex flags로 F_ISSET로 읽는다. */
 export interface FleePlayer {
-  /** 도주 모드 flag 판독용 hex flags(PWIMPY/PFEARS). */
+  /** 도주 모드 flag 읽기용 hex flags(PWIMPY/PFEARS). */
   readonly flags: string
   readonly hpCurrent: number
   readonly hpMax: number

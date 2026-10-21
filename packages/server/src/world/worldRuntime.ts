@@ -22,9 +22,9 @@ import type { MoveActor } from './tryMove.js'
 
 /**
  * 월드 런타임 컴포지션 팩토리 — G1~G4 조각(활성 집합·크리처 tick·스폰 3트리거·entry/leave 훅)을
- * 하나의 배선 단위로 조립한다(플랜 Story 6).
+ * 하나의 연결 단위로 조립한다(플랜 Story 6).
  *
- * index.ts boot는 커버리지 제외 배선 코드라, 배선 로직을 테스트 가능한 이 팩토리로 추출하고 index.ts는
+ * index.ts boot는 커버리지 제외 연결 코드라, 연결 로직을 테스트 가능한 이 팩토리로 추출하고 index.ts는
  * `createWorldRuntime(...)` 호출과 슬롯 register만 남기는 얇은 glue로 둔다. 팩토리는 슬롯 배열과
  * onRoomEntered/onRoomLeft 훅, 활성 집합을 반환한다.
  *
@@ -36,11 +36,11 @@ import type { MoveActor } from './tryMove.js'
  * 별도 발급기를 두면 같은 방에서 idx가 충돌한다. worldGraph의 pristine creatures.length로 seed한다.
  *
  * dormant 경계(E4-2): onRoomEntered/onRoomLeft는 구성만 되고 프로덕션에서 tryMove를 부르는 실 caller가
- * 아직 없다(movement/command 에픽 소관) — 배선은 완비하되 실제 발화는 후속 에픽이 tryMove를 프로덕션에
- * 결선할 때 활성화된다. 그 전까지 활성 집합은 비어 creatureTick·randomSpawn은 boot 후 no-op이다.
+ * 아직 없다(movement/command 에픽 담당) — 연결은 완비하되 실제 실행은 후속 에픽이 tryMove를 프로덕션에
+ * 연결할 때 활성화된다. 그 전까지 활성 집합은 비어 creatureTick·randomSpawn은 boot 후 no-op이다.
  *
  * 확률 seam은 각 슬롯 모듈 기본값(neverFireRng·defaultSpawnRng·defaultInvasionRng)을 그대로 쓴다 —
- * 실 확률 굴림 배선은 E6/E8 소관이고, 그 발화 경로는 슬롯 단위 테스트가 이미 검증한다. 팩토리 deps는
+ * 실 확률 굴림 연결은 E6/E8 담당이고, 그 실행 경로는 슬롯 단위 테스트가 이미 검증한다. 팩토리 deps는
  * E6/E7 seam(onCombatTick·broadcast·creatureRng)과 테스트 격리용 주입(templates·events·worldRoot)만
  * 노출한다.
  */
@@ -57,7 +57,7 @@ export interface WorldRuntimeDeps {
   readonly creatureRng?: CreatureRng
   /**
    * random 배회 진입 확률 seam(traffic 게이트·후보 선택·그룹 크기). 미주입 시 `defaultSpawnRng`
-   * (결정적 비발화 — traffic 게이트 항상 실패)라 random 슬롯이 조용하다. 실 확률·시드는 E8-2 RNG가
+   * (결정적으로 실행되지 않음 — traffic 게이트 항상 실패)라 random 슬롯이 조용하다. 실 확률·시드는 E8-2 RNG가
    * 이 seam으로 주입한다 — 노출하지 않으면 코드 수정 없이 random 스폰을 살릴 수 없다(adversarial 지적).
    */
   readonly spawnRng?: SpawnRng
@@ -74,19 +74,19 @@ export interface WorldRuntimeDeps {
   readonly broadcast?: SpawnBroadcast
 }
 
-/** 컴포지션 산출물 — boot가 register할 슬롯 + tryMove가 결선할 훅 + 활성 집합. */
+/** 컴포지션 산출물 — boot가 register할 슬롯 + tryMove가 연결할 훅 + 활성 집합. */
 export interface WorldRuntime {
   /** WorldClock에 register할 슬롯(creatureTick·randomSpawn·이벤트당 invasion). */
   readonly slots: WorldTickSlot[]
-  /** tryMove join 경로 결선용 entry-hook(활성화 + perm 리스폰). */
+  /** tryMove join 경로 연결용 entry-hook(활성화 + perm 리스폰). */
   readonly onRoomEntered: (room: RoomNode, actor: MoveActor) => void
-  /** tryMove leave 경로 결선용 leave-hook(빈 방 비활성화). */
+  /** tryMove leave 경로 연결용 leave-hook(빈 방 비활성화). */
   readonly onRoomLeft: (room: RoomNode, actor: MoveActor) => void
   /** 활성 집합(테스트·후속 조회용). */
   readonly activeSet: ActiveSet
   /**
    * 방별 monotonic idx 발급기(D7). perm·random·invasion 3경로가 이미 공유하며, E6이 전투 사망을
-   * 결선할 때 `onCreatureDeath`/`onDeathSummon`이 **이 동일 인스턴스**를 재사용해야 소환 크리처
+   * 연결할 때 `onCreatureDeath`/`onDeathSummon`이 **이 동일 인스턴스**를 재사용해야 소환 크리처
    * instanceId가 스폰 크리처와 충돌하지 않는다(별도 발급기 생성 시 방별 `n`부터 중복 발급). D7 4경로
    * 공유 계약을 조립 지점에서 닫기 위해 노출한다.
    */

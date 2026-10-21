@@ -55,7 +55,7 @@ function makeRoom(over: Partial<RoomNode> = {}): RoomNode {
   }
 }
 
-/** 결정적 발화 rng — traffic 게이트 통과(roll100=1), 첫 후보(0), 그룹 크기=max. */
+/** 결정적 실행 rng — traffic 게이트 통과(roll100=1), 첫 후보(0), 그룹 크기=max. */
 function firingRng(over: Partial<SpawnRng> = {}): SpawnRng {
   return { roll100: () => 1, pickIndex: () => 0, groupSize: (max) => max, ...over }
 }
@@ -227,8 +227,8 @@ describe('D7 monotonic idx + rng seam', () => {
   })
 })
 
-describe('WorldClock 통합(FakeClock 구동)', () => {
-  it('20초마다 발화한다', () => {
+describe('WorldClock 통합(FakeClock 기반)', () => {
+  it('20초마다 실행된다', () => {
     const clock = new FakeClock()
     const world = new WorldClock({ clock })
     const room = makeRoom()

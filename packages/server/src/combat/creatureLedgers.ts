@@ -10,7 +10,7 @@ import { createDamageLedger } from './enmity.js'
  * 데미지가 attackerId 단일 키로 합산돼 몬스터 A 사망 보상(exp·alignment·groupkill)을 부풀린다.
  * `distributeCreatureDeath`(deathDistribution.ts)는 건네받은 원장을 "이 크리처에 가해진 데미지"로
  * **검증 없이 신뢰**하므로, 원장을 크리처별로 갈라 주는 책임은 호출자에게 있다. 이 모듈이 그
- * 라우터다 — 라이브 배선은 단일 원장 대신 이 객체를 쥐고 `for(defender.instanceId)`로 얻은 원장에
+ * 라우터다 — 라이브 연결은 단일 원장 대신 이 객체를 쥐고 `for(defender.instanceId)`로 얻은 원장에
  * 누적하고, 같은 원장을 사망 분배에 넘긴다.
  *
  * 원장 타입 자체를 defender-scoped(`Map<defenderId, Map<attackerId, number>>` 등)로 바꾸는 것은
@@ -51,7 +51,7 @@ export function createCreatureLedgers(): CreatureLedgers {
       // wanderOut splice)는 사망 seam을 타지 않아 원장이 남는다. "죽으면 다 정리된다"고 읽으면
       // 안 된다 — 공격받다 배회로 사라진 크리처만큼 누수가 가동 시간에 비례해 늘어난다.
       // 지금 닫지 못하는 이유는 `world/`가 `combat/`을 import하지 않는 규약이라 creatureTick이
-      // 직접 부를 수 없고, 비사망 소멸을 바깥에 알리는 seam이 아직 없어서다. 그 seam은 **#147**이 소유한다.
+      // 직접 부를 수 없고, 비사망 소멸을 바깥에 알리는 seam이 아직 없어서다. 그 seam은 **#147**이 담당한다.
       ledgers.delete(instanceId)
     },
   }

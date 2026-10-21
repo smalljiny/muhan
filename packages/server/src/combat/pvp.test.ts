@@ -10,7 +10,7 @@ import { PVP_COOLDOWN_INCREMENT, CARETAKER } from './constants.js'
 
 // 재사용 계약 고정 — 게이트 입력은 최소 구조 shape이나, 실 타입(PlayerCombatState/CreatureInstance/
 // RoomNode)이 구조적으로 할당 가능해야 호출자가 그대로 넘길 수 있다. 이 할당성이 깨지면 Story 8~10
-// 배선 시점이 아니라 여기서 컴파일 실패로 드러난다.
+// 연결 시점이 아니라 여기서 컴파일 실패로 드러난다.
 describe('게이트 입력 재사용 계약(타입 레벨)', () => {
   it('실 전투 타입이 게이트 입력 shape에 구조적으로 할당된다', () => {
     expectTypeOf<PlayerCombatState>().toMatchTypeOf<TargetImmunityInput['attacker']>()
@@ -40,7 +40,7 @@ describe('checkTargetImmunityPre (player→creature MUNKIL, registerEnemy 前, S
     expect(r.ok).toBe(false)
   })
 
-  it('MMGONL/MENONL은 pre-단계에서 판정하지 않는다(post 소관 — 여기선 허용)', () => {
+  it('MMGONL/MENONL은 pre-단계에서 판정하지 않는다(post 담당 — 여기선 허용)', () => {
     expect(checkTargetImmunityPre({ defender: { flags: F_SET('', MMGONL) } }).ok).toBe(true)
     expect(checkTargetImmunityPre({ defender: { flags: F_SET('', MENONL) } }).ok).toBe(true)
   })
@@ -66,7 +66,7 @@ describe('checkTargetImmunityPost (player→creature MMGONL/MENONL, registerEnem
     expect(r.ok).toBe(false)
   })
 
-  it('MUNKIL은 post-단계에서 판정하지 않는다(pre 소관 — 여기선 허용)', () => {
+  it('MUNKIL은 post-단계에서 판정하지 않는다(pre 담당 — 여기선 허용)', () => {
     const r = checkTargetImmunityPost({
       attacker: { class: FIGHTER, weapon: null },
       defender: { flags: F_SET('', MUNKIL) },

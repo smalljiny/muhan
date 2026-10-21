@@ -9,7 +9,7 @@ import { RPHARM, RPPOIS, RPMPDR, RPBEFU, REARTH, RFIRER } from '../world/roomFla
  *
  * 결정적 rng·now 주입으로 오라클 공식(독 hpmax/5·질병 dice·위험방 8-MIN(con,2))을 검증하고,
  * xor 계약 입력 dotApplied·died 반환·immutability를 확정한다. 재생 분기·realm 저항 게이트는
- * 미이식(#99 유예)이므로 이식된 damage 경로만 검증한다.
+ * 미이식(#99 보류)이므로 이식된 damage 경로만 검증한다.
  */
 
 const NOW = 1000
@@ -186,7 +186,7 @@ describe('resolvePlayerDot', () => {
     expect(result.dotApplied).toBe(false)
   })
 
-  it('RPHARM+realm(RFIRER) 방은 8-MIN(con,2) 무저항 피해(저항 게이트 #99 유예)', () => {
+  it('RPHARM+realm(RFIRER) 방은 8-MIN(con,2) 무저항 피해(저항 게이트 #99 보류)', () => {
     const char = makeChar({ hpCurrent: 50 })
     const room = makeRoom(flagsWith(RPHARM, RFIRER))
     // con bonus 1 → 8 - MIN(1,2) = 7 → 50-7=43.

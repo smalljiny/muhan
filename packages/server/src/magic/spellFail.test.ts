@@ -135,8 +135,8 @@ describe('체크인된 spell_fail.json 골든 fixture', () => {
   })
 
   it('approve가 spellFail SUT로 전 케이스를 throw 없이 통과한다(무cap·클래스별 chance)', () => {
-    // anti-tautology: fixture expected는 spellFailFixture.ts의 magic8.c 독립 전사,
-    // SUT spellFail은 spellFail.ts 구현. 두 전사가 diff되면 approve가 throw한다.
+    // anti-tautology: fixture expected는 spellFailFixture.ts의 magic8.c를 독립적으로 옮겨 적은 것,
+    // SUT spellFail은 spellFail.ts 구현. 옮겨 적은 두 코드가 diff되면 approve가 throw한다.
     const fixture = loadFixture()
     const sut = (input: unknown): unknown => {
       const c = input as { class: number; level: number; intBonus: number; n: number }

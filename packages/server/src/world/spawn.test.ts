@@ -291,14 +291,14 @@ describe('loadSpawnTemplates — data/world/creatures.json', () => {
 
   it('사망 분배 필드 experience/alignment를 creatures.json에서 담는다(Story 6, 서브셋 드롭 없음)', () => {
     const templates = loadSpawnTemplates()
-    const c0 = templates.get(0) // 파수꾼: 정본 experience=300, alignment=250
+    const c0 = templates.get(0) // 파수꾼: 기준 experience=300, alignment=250
     expect(c0?.experience).toBe(300)
     expect(c0?.alignment).toBe(250)
   })
 
-  it('별칭 keys를 creatures.json에서 담고 fromTemplate 물질화까지 전파한다(Story 4)', () => {
+  it('별칭 keys를 creatures.json에서 담고 fromTemplate 인스턴스 생성까지 전파한다(Story 4)', () => {
     const templates = loadSpawnTemplates()
-    expect(templates.get(0)?.keys).toEqual(['파수꾼']) // 정본 별칭
+    expect(templates.get(0)?.keys).toEqual(['파수꾼']) // 기준 별칭
     // 실 스폰 경로(인덱스 → fromTemplate)를 그대로 통과시켜 인스턴스까지 도달하는지 고정한다.
     const c = fromTemplate(0, 50, 0, defaultCreatureRng, templates)
     expect(c?.name).toBe('파수꾼')

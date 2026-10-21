@@ -35,7 +35,7 @@ export function hitThreshold(attacker: Combatant, defender: Combatant): number {
 /**
  * 플레이어 base 피해 — command5.c:237-262. base 분기 → MAGE/CLERIC override 2단계(평탄화 금지).
  * MAX(1,·)·PALADIN·크리티컬은 여기서 제외(Story 8 시퀀싱). 오라클의 self 주사위는 클래스 성장
- * 주사위(class_stats[class])다(플레이어도 creature 구조체 — mdice(ply_ptr)가 자기 ndice/sdice/pdice 판독).
+ * 주사위(class_stats[class])다(플레이어도 creature 구조체 — mdice(ply_ptr)가 자기 ndice/sdice/pdice를 읽음).
  */
 export function playerBaseDamage(attacker: PlayerCombatant, rng: CombatRng): number {
   const { state } = attacker
@@ -82,9 +82,9 @@ export function monsterDamage(
  * Story 8 파이프가 시퀀싱한다(Story 5는 base만 반환하고 이 헬퍼를 노출만).
  *   alignment<0 → trunc(n/2)(악행 페널티), alignment>250 → n + mrand(1,3)(선행 보너스), 그 외 → n.
  *
- * known divergence — 현 `alignment` 값역은 [0,2](생성 인터뷰 1|2 + backfill sentinel 0)라 두 분기가
- * 모두 거짓이고 PALADIN 성향 보정은 실 데이터에서 미발화한다(항상 n 반환). 오라클 임계값을 보존해
- * E6 성향 시스템(-1000..+1000, #123)에서 코드 변경 없이 발화하게 둔다 — `magic/learning.ts`의
+ * known divergence — 현 `alignment` 값 범위는 [0,2](생성 인터뷰 1|2 + backfill sentinel 0)라 두 분기가
+ * 모두 거짓이고 PALADIN 성향 보정은 실 데이터에서 동작하지 않는다(항상 n 반환). 오라클 임계값을 보존해
+ * E6 성향 시스템(-1000..+1000, #123)에서 코드 변경 없이 동작하게 둔다 — `magic/learning.ts`의
  * study 성향 게이트 주석과 같은 성격이다.
  */
 export function applyPaladinAlignment(n: number, alignment: number, rng: CombatRng): number {

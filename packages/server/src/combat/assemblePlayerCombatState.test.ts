@@ -19,7 +19,7 @@ import {
 /**
  * LiveCharacter → PlayerCombatState 조립기 테스트.
  *
- * 이 조립기는 산술을 소유하지 않는다 — armor/thaco는 toPlayerCombatState 경유의 stats-core
+ * 이 조립기는 산술을 담당하지 않는다 — armor/thaco는 toPlayerCombatState 경유의 stats-core
  * 결과와 정확히 같아야 하고, 장비 기여는 projectEquipStats 결과와 같아야 한다. 그래서 기대값을
  * 손으로 적은 숫자가 아니라 같은 입력으로 호출한 stats-core 결과로 표현한다.
  */
@@ -46,7 +46,7 @@ function expectedContext(overrides: Partial<EffectiveStatContext> = {}): Effecti
   }
 }
 
-/** 무기 템플릿(objnum 200) — WIELD 슬롯 착용 시 weapon으로 해소돼야 한다. */
+/** 무기 템플릿(objnum 200) — WIELD 슬롯 착용 시 weapon으로 해석돼야 한다. */
 const WEAPON_FLAGS = flagsHex(3)
 const weaponTemplate = makeObjectTemplate({
   objnum: 200,
@@ -102,7 +102,7 @@ function wornArmor(overrides: Partial<ObjectInstance> = {}): ObjectInstance {
 }
 
 describe('assemblePlayerCombatState', () => {
-  describe('무기 해소', () => {
+  describe('무기 해석', () => {
     it('WIELD 착용이면 weapon 6필드가 템플릿 값(+proficiency 0)과 일치한다', () => {
       const state = assemblePlayerCombatState(makeLive([wieldedWeapon()]), templates, NO_FLAGS)
       expect(state.weapon).toEqual({

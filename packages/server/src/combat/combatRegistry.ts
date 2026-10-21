@@ -7,7 +7,7 @@ import type { PlayerCombatState } from './playerState.js'
  * 전역 싱글턴을 조회하지 않는다(기존 seam 선례 — 순수 인메모리, 주입 가능). get은 register된
  * 동일 참조를 반환해 전투 resolver가 그 참조로 hpCurrent를 in-place 차감할 수 있게 한다.
  *
- * 세션 lifecycle 콜사이트 배선(월드 입장 시 register / 퇴장 시 remove, occupants add/remove
+ * 세션 lifecycle 콜사이트 연결(월드 입장 시 register / 퇴장 시 remove, occupants add/remove
  * 대칭)은 커넥션 계층 글루로 이번 범위 밖이다 — 여기서는 순수 저장소 API만 제공한다.
  */
 export interface CombatRegistry {

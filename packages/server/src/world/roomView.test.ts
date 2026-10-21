@@ -5,17 +5,17 @@ import { projectRoomView } from './roomView.js'
 import { NO_FLAGS, exitFlags, flagsHex, makeExit, makeItem, makeCreature, makeRoom } from './roomFixtures.testutil.js'
 
 /**
- * projectRoomView — 오라클 방 표시 규칙(room.c) 투영 단위 스펙.
+ * projectRoomView — 오라클 방 표시 규칙(room.c) 변환 단위 스펙.
  *
  * 두 flags 표현이 섞인다: 출구는 바이트당 한 원소인 number[](door.ts hasFlag), 아이템·크리처는
  * 16자 hex string(hexFlags.ts F_ISSET). 픽스처는 손으로 비트를 계산하지 않고 setFlag·F_SET
  * 헬퍼로 만든다(roomFixtures.testutil.ts) — 바이트 오프셋 실수를 원천 차단한다.
  */
 
-/** 모든 characterId를 `이름:<id>`로 해소하는 기본 해소자. */
+/** 모든 characterId를 `이름:<id>`로 해석하는 기본 리졸버. */
 const resolveAll = (characterId: string): string => `이름:${characterId}`
 
-describe('projectRoomView — 비필터 방 전량 투영', () => {
+describe('projectRoomView — 비필터 방 전량 변환', () => {
   it('필터 대상이 없으면 출구·점유자·아이템·크리처를 전부 싣는다', () => {
     const room = makeRoom({
       roomId: 42,
@@ -155,8 +155,8 @@ describe('projectRoomView — 크리처 가시성·생존 필터', () => {
   })
 })
 
-describe('projectRoomView — 점유자 이름 해소', () => {
-  it('이름 해소에 실패한(undefined) 점유자를 제외한다', () => {
+describe('projectRoomView — 점유자 이름 해석', () => {
+  it('이름 해석에 실패한(undefined) 점유자를 제외한다', () => {
     const room = makeRoom({ occupants: new Set(['c1', 'ghost', 'c2']) })
     const resolve = (id: string): string | undefined => (id === 'ghost' ? undefined : `이름:${id}`)
 
@@ -166,7 +166,7 @@ describe('projectRoomView — 점유자 이름 해소', () => {
     ])
   })
 
-  it('빈 문자열로 해소된 점유자를 제외한다(와이어 계약 name.min(1))', () => {
+  it('빈 문자열로 해석된 점유자를 제외한다(와이어 계약 name.min(1))', () => {
     const room = makeRoom({ occupants: new Set(['c1', 'nameless']) })
     const resolve = (id: string): string | undefined => (id === 'nameless' ? '' : `이름:${id}`)
 

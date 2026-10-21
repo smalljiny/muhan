@@ -351,8 +351,8 @@ describe('drain_exp — SDREXP (즉발, 타이머·플래그 없음)', () => {
   })
 })
 
-// ── player 대상 유예(HANDOFF A — PvP P-flag 전 계열 defer) ────────────────────
-describe('player 대상은 유예(applied=false)', () => {
+// ── player 대상 보류(HANDOFF A — PvP P-flag 전 계열 defer) ────────────────────
+describe('player 대상은 보류(applied=false)', () => {
   it.each([
     ['fear', SPELL_NO.SFEARS],
     ['silence', SPELL_NO.SSILNC],

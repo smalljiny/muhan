@@ -3,15 +3,15 @@ import { F_SET, PPOISN, PDISEA, PBLIND, PSILNC, PFEARS } from '../world/hexFlags
 
 /**
  * statusEffects — 명명 상태이상(Story 1 characterSchema.statusEffects)의 부여·만료 순수 헬퍼와
- * 명명 필드 → combat flag hex 뷰 투영.
+ * 명명 필드 → combat flag hex 뷰 변환.
  *
  * 만료 관례: statusEffects의 until은 befuddledUntil/charmedUntil과 동일한 절대-틱 만료다(잔여-틱
  * 아님). 현재 틱 now를 파라미터로 받아 `until < now`이면 비활성, `until >= now`이면 활성으로 본다.
  *
- * 투영 계약: Character에는 combat flags 필드가 없다(flags는 라이브 PlayerCombatState 소관). 따라서
+ * 변환 계약: Character에는 combat flags 필드가 없다(flags는 라이브 PlayerCombatState 담당). 따라서
  * 병합 대상이 없어, ZERO_FLAGS(16자 0)에서 활성 명명 상태이상 비트만 F_SET한 fresh hex를 반환한다.
- * 소비측은 combat의 F_ISSET(projectedHex, PBLIND) 관용을 그대로 써서 판독한다(#99 라이브 배선 유예 —
- * 이 모듈은 투영 함수만 노출하고 attackStats.ts:29·combatTick.ts:142 소비측을 건드리지 않는다).
+ * 소비측은 combat의 F_ISSET(projectedHex, PBLIND) 관용을 그대로 써서 읽는다(#99 라이브 연결 보류 —
+ * 이 모듈은 변환 함수만 노출하고 attackStats.ts:29·combatTick.ts:142 소비측을 건드리지 않는다).
  *
  * immutability: 모든 grant는 입력 Character·기존 statusEffects 객체를 변형하지 않고 새 객체를 반환한다.
  */
@@ -49,8 +49,8 @@ export function grantBlind(character: Character, until: number): Character {
 /**
  * silence until을 세팅한 새 Character를 반환한다(blind 대칭 — 간격 없음, 발화 차단은 주기 피해가 아니다).
  *
- * 시전 경로 미배선 — 플레이어 대상 디버프 부여는 본 토픽 범위 밖(debuffEffects는
- * `target.kind !== 'creature'`에서 유예 유지)이다. 이 헬퍼는 순수 상태 전이만 제공한다.
+ * 시전 경로 미연결 — 플레이어 대상 디버프 부여는 본 토픽 범위 밖(debuffEffects는
+ * `target.kind !== 'creature'`에서 보류 유지)이다. 이 헬퍼는 순수 상태 전이만 제공한다.
  */
 export function grantSilence(character: Character, until: number): Character {
   return {
@@ -62,8 +62,8 @@ export function grantSilence(character: Character, until: number): Character {
 /**
  * fear until을 세팅한 새 Character를 반환한다(blind 대칭 — 간격 없음).
  *
- * 시전 경로 미배선 — 플레이어 대상 디버프 부여는 본 토픽 범위 밖(debuffEffects는
- * `target.kind !== 'creature'`에서 유예 유지)이다. 이 헬퍼는 순수 상태 전이만 제공한다.
+ * 시전 경로 미연결 — 플레이어 대상 디버프 부여는 본 토픽 범위 밖(debuffEffects는
+ * `target.kind !== 'creature'`에서 보류 유지)이다. 이 헬퍼는 순수 상태 전이만 제공한다.
  */
 export function grantFear(character: Character, until: number): Character {
   return {
@@ -103,7 +103,7 @@ export function clearBlind(character: Character): Character {
 /**
  * silence 필드를 해제한 새 Character를 반환한다(clearBlind 대칭, 입력 불변).
  *
- * 시전 경로 미배선 — 플레이어 대상 디버프 해제도 본 토픽 범위 밖이다.
+ * 시전 경로 미연결 — 플레이어 대상 디버프 해제도 본 토픽 범위 밖이다.
  */
 export function clearSilence(character: Character): Character {
   if (character.statusEffects === undefined) return character
@@ -115,7 +115,7 @@ export function clearSilence(character: Character): Character {
 /**
  * fear 필드를 해제한 새 Character를 반환한다(clearBlind 대칭, 입력 불변).
  *
- * 시전 경로 미배선 — 플레이어 대상 디버프 해제도 본 토픽 범위 밖이다.
+ * 시전 경로 미연결 — 플레이어 대상 디버프 해제도 본 토픽 범위 밖이다.
  */
 export function clearFear(character: Character): Character {
   if (character.statusEffects === undefined) return character
@@ -144,21 +144,21 @@ export function isBlindActive(character: Character, now: number): boolean {
   return isActive(character.statusEffects?.blind, now)
 }
 
-/** silence가 활성(만료 안 됨)인지. 시전 경로 미배선 — 판정만 제공한다. */
+/** silence가 활성(만료 안 됨)인지. 시전 경로 미연결 — 판정만 제공한다. */
 export function isSilenceActive(character: Character, now: number): boolean {
   return isActive(character.statusEffects?.silence, now)
 }
 
-/** fear가 활성(만료 안 됨)인지. 시전 경로 미배선 — 판정만 제공한다. */
+/** fear가 활성(만료 안 됨)인지. 시전 경로 미연결 — 판정만 제공한다. */
 export function isFearActive(character: Character, now: number): boolean {
   return isActive(character.statusEffects?.fear, now)
 }
 
 /**
- * 명명 상태이상 → combat flag hex 뷰 투영. 활성(만료 안 된) 효과만 대응 P-flag 비트를 세팅한다:
+ * 명명 상태이상 → combat flag hex 뷰 변환. 활성(만료 안 된) 효과만 대응 P-flag 비트를 세팅한다:
  * poison→PPOISN(16), disease→PDISEA(41), blind→PBLIND(42), fear→PFEARS(43), silence→PSILNC(44).
  * 만료 효과는 제외한다. PFEARS·PSILNC도 PBLIND와 같은 byte 5에 안착하므로 ZERO_FLAGS 16자 폭에서
- * 절단 없이 세팅된다. 반환 hex는 F_ISSET로 판독 가능하다(소비측의 combat flag 관용 무파괴).
+ * 절단 없이 세팅된다. 반환 hex는 F_ISSET로 읽을 수 있다(소비측의 combat flag 관용 무파괴).
  */
 export function projectStatusFlags(character: Character, now: number): string {
   let hex = ZERO_FLAGS

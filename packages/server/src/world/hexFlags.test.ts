@@ -49,10 +49,10 @@ describe('F_ISSET — hex string 비트 조회', () => {
 
 /**
  * P-flag 비트 번호 고정 — `help/pflags` 문서 값(PBLIND 43·PFEARS 44·PSILNC 45)은 raw `#define`보다
- * +1이라 mtype.h를 정본으로 채택했다(hexFlags.ts 상단 주석). 세 비트는 전부 byte 5를 공유하므로
- * off-by-one이 들어오면 투영·절단 검증이 조용히 어긋난다. 소유 모듈에서 수치를 pin한다.
+ * +1이라 mtype.h를 기준으로 채택했다(hexFlags.ts 상단 주석). 세 비트는 전부 byte 5를 공유하므로
+ * off-by-one이 들어오면 변환·절단 검증이 조용히 어긋난다. 담당 모듈에서 수치를 pin한다.
  */
-describe('P-flag 비트 번호 — mtype.h 정본', () => {
+describe('P-flag 비트 번호 — mtype.h 기준', () => {
   it('PBLIND=42 · PFEARS=43 · PSILNC=44 (전부 byte 5)', () => {
     expect(PBLIND).toBe(42)
     expect(PFEARS).toBe(43)
@@ -93,7 +93,7 @@ describe('F_SET / F_CLR — 새 hex string 반환(불변)', () => {
 })
 
 /**
- * orFlags 폭 보존 검증 — 8바이트(16자) 고정 순회가 정본이다. `Math.min(a.length, b.length)`로
+ * orFlags 폭 보존 검증 — 8바이트(16자) 고정 순회가 기준이다. `Math.min(a.length, b.length)`로
  * 순회하면 짧은 피연산자가 결과 폭을 결정해 긴 쪽의 고바이트가 절단된다. PBLIND(42)·PFEARS(43)·
  * PSILNC(44)는 전부 byte5(문자 인덱스 10-11)라 절단에 정확히 걸리는 회귀 탐지 비트다.
  */
@@ -136,7 +136,7 @@ describe('orFlags — 폭 보존 hex OR', () => {
 
   it('양쪽에 겹쳐 세팅된 비트를 OR한다(XOR 아님)', () => {
     // byte1: 0xff | 0xf0 = 0xff (XOR이면 0x0f), byte5: 0x1c | 0x1c = 0x1c (XOR이면 0x00).
-    // 세 투영 출처의 비트 집합은 오늘 서로소라 상위 Story가 겹침 입력을 만들지 않는다 —
+    // 세 변환 출처의 비트 집합은 오늘 서로소라 상위 Story가 겹침 입력을 만들지 않는다 —
     // OR/XOR 구별은 이 단위 케이스가 유일한 방어선이다.
     const out = orFlags('00ff0000001c0000', '00f00000001c0000')
     expect(out).toBe('00ff0000001c0000')

@@ -343,7 +343,7 @@ describe('offensiveSpell — T5.5 데미지 순서 + T5.4 저항', () => {
     expect(creatureDeaths).toHaveLength(0)
   })
 
-  it('이미 사망(hp<1) 대상: no-op 반환(death 재발화·ledger 누적 없음)', () => {
+  it('이미 사망(hp<1) 대상: no-op 반환(death 재실행·ledger 누적 없음)', () => {
     const caster = makeCaster()
     const target = makeCreatureTarget({ hpcur: 0 })
     const osp = makeOsp({ ndice: 2, sdice: 5, pdice: 7 })
@@ -438,8 +438,8 @@ describe('offensiveSpell — T4.2 realm 성장 훅(magic1.c:1128)', () => {
 })
 
 // ── T5.6 디스패치 등록 ───────────────────────────────────────────────────────
-describe('registerOffensiveSpells — offensive 20종 배선', () => {
-  it('offensive 20 주문번호가 전부 핸들러로 해소된다', () => {
+describe('registerOffensiveSpells — offensive 20종 연결', () => {
+  it('offensive 20 주문번호가 전부 핸들러로 해석된다', () => {
     const dispatch = new SpellDispatch<OffensiveSpellHandler>()
     registerOffensiveSpells(dispatch)
     for (const osp of OSPELL_GRID) {
@@ -463,7 +463,7 @@ describe('registerOffensiveSpells — offensive 20종 배선', () => {
   it('비-offensive 주문은 offensiveSpell 디스패처에서 미등록(undefined)으로 남는다', () => {
     const dispatch = new SpellDispatch<OffensiveSpellHandler>()
     registerOffensiveSpells(dispatch)
-    // SVIGOR(회복)은 비-offensive → registerOffensiveSpells는 등록하지 않는다(effect 모듈 소관).
+    // SVIGOR(회복)은 비-offensive → registerOffensiveSpells는 등록하지 않는다(effect 모듈 담당).
     expect(dispatch.resolve(SPELL_NO.SVIGOR)).toBeUndefined()
   })
 })
@@ -497,8 +497,8 @@ describe('체크인된 offensive_spell.json 골든 fixture', () => {
   })
 
   it('approve가 offensiveSpell SUT로 전 케이스를 throw 없이 통과한다(피해·상성·저항·사망)', () => {
-    // anti-tautology: fixture expected는 offensiveSpellFixture.ts의 magic1.c 독립 전사,
-    // SUT offensiveSpell은 offensiveSpell.ts 구현. 두 전사가 diff되면 approve가 throw한다.
+    // anti-tautology: fixture expected는 offensiveSpellFixture.ts의 magic1.c를 독립적으로 옮겨 적은 것,
+    // SUT offensiveSpell은 offensiveSpell.ts 구현. 옮겨 적은 두 코드가 diff되면 approve가 throw한다.
     const fixture = loadFixture()
     const casterId = 'mob-1'
 

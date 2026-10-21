@@ -327,13 +327,13 @@ describe('resolveAttack — 몬스터 attacker (단타·무크리)', () => {
 
 /**
  * Story 10(T10.1) — resolveAttack는 fire-free다. HP<1을 감지하면 died=true·break만 하고 death seam을
- * 발화하지 않는다(호출자 initiateAttack/combatTick이 발화 책임을 진다). 근거: 오라클 update.c:501~530은
+ * 실행하지 않는다(호출자 initiateAttack/combatTick이 실행 책임을 진다). 근거: 오라클 update.c:501~530은
  * 근접 중 target death를 end-of-round로 지연해야 counter가 target을 구할 수 있다("막타치면 target 생존").
- * resolveAttack이 즉시 발화하면 이 지연이 불가능하다. fireDeath seam·시그니처는 magic offensiveSpell 공유로
+ * resolveAttack이 즉시 실행하면 이 지연이 불가능하다. fireDeath seam·시그니처는 magic offensiveSpell 공유로
  * 무변경이며, 여기서 호출만 제거한다.
  */
-describe('resolveAttack — 사망 감지 (fire-free — 호출자가 발화)', () => {
-  it('몬스터 defender 사망: died=true + HP·ledger 적용하되 fireCreatureDeath 미발화', () => {
+describe('resolveAttack — 사망 감지 (fire-free — 호출자가 실행)', () => {
+  it('몬스터 defender 사망: died=true + HP·ledger 적용하되 fireCreatureDeath 실행 안 함', () => {
     const player = makePlayer()
     const creature = makeCreature({ hpcur: 3 })
     const room = makeRoom({ creatures: [creature] })
@@ -345,11 +345,11 @@ describe('resolveAttack — 사망 감지 (fire-free — 호출자가 발화)', 
     expect(out.damage).toBe(5) // 비캡 n
     expect(creature.hpcur).toBe(-2) // in-place 차감(fire-free여도 HP는 적용)
     expect(ledger.get('char-1')).toBe(3) // m=min(3,5) 오버킬 캡
-    expect(creatureDeaths).toHaveLength(0) // fire-free — 호출자가 발화
+    expect(creatureDeaths).toHaveLength(0) // fire-free — 호출자가 실행
     expect(playerDeaths).toHaveLength(0)
   })
 
-  it('플레이어 defender 사망: died=true 하되 firePlayerDeath 미발화 (ledger 미누적)', () => {
+  it('플레이어 defender 사망: died=true 하되 firePlayerDeath 실행 안 함 (ledger 미누적)', () => {
     const monster = makeCreature({ instanceId: 'mon-1', thaco: 10, ndice: 1, sdice: 6, pdice: 0 })
     const player = makePlayer({ hpCurrent: 1, armor: 70 })
     const room = makeRoom()
@@ -436,7 +436,7 @@ describe('resolveAttack — 다중공격(초인 PUPDMG count 루프)', () => {
 
     expect(out.messageInputs.attacks).toHaveLength(1)
     expect(out.died).toBe(true)
-    expect(creatureDeaths).toHaveLength(0) // fire-free — 호출자가 발화
+    expect(creatureDeaths).toHaveLength(0) // fire-free — 호출자가 실행
   })
 })
 
@@ -454,11 +454,11 @@ describe('resolveAttack — 이미 사망한 defender 진입 가드(stale/재진
     expect(out.damage).toBe(0)
     expect(out.messageInputs.attacks).toHaveLength(0)
     expect(creature.hpcur).toBe(-2) // 추가 차감 없음
-    expect(creatureDeaths).toHaveLength(0) // death seam 재발화 없음
+    expect(creatureDeaths).toHaveLength(0) // death seam 재실행 없음
     expect(ledger.size).toBe(0) // 음수 ledger 누적 없음
   })
 
-  it('HP<1 플레이어 defender: firePlayerDeath 재발화 없이 no-op', () => {
+  it('HP<1 플레이어 defender: firePlayerDeath 재실행 없이 no-op', () => {
     const attacker = makeCreature()
     const deadPlayer = makePlayer({ characterId: 'p-dead', hpCurrent: -1 })
     const { ctx, playerDeaths } = makeCtx([])
@@ -482,14 +482,14 @@ describe('resolveAttack — 이미 사망한 defender 진입 가드(stale/재진
     expect(out.hit).toBe(true)
     expect(out.died).toBe(true)
     expect(creature.hpcur).toBe(-4)
-    expect(creatureDeaths).toHaveLength(0) // fire-free — 호출자가 발화
+    expect(creatureDeaths).toHaveLength(0) // fire-free — 호출자가 실행
   })
 })
 
 /**
- * Story 9 — 몬스터 명중 경로에 특수공격(update.c:387~480) 배선.
+ * Story 9 — 몬스터 명중 경로에 특수공격(update.c:387~480) 연결.
  *
- * 배선 계약 pin:
+ * 연결 계약 pin:
  *   - 몬스터 한정: 특수공격은 attacker.kind==='creature'일 때만 굴림. 플레이어 attacker는 미호출.
  *   - breath-replace(`??` lazy): 브레스 발동 시 monsterDamage를 굴리지 않고 breath 데미지로 대체.
  *     seqRng를 breath dice까지만 채워 monsterDamage 굴림이 없음을 소진으로 증명한다.
@@ -498,8 +498,8 @@ describe('resolveAttack — 이미 사망한 defender 진입 가드(stale/재진
  *   - rng 순서: hit → MBRETH → (breath|MENEDR drain) → MPOISS → MDISEA → MBLNDR → MDISIT → monsterDamage(lazy).
  *     melee-position은 오라클(중간) 대비 last로 밀리는 inert divergence(status 게이트가 melee 값과 독립).
  */
-describe('resolveAttack — 몬스터 특수공격 배선 (Story 9)', () => {
-  it('breath 발동: normal melee를 대체하고 specialAttack 마커를 표면화 (monsterDamage 미굴림)', () => {
+describe('resolveAttack — 몬스터 특수공격 연결 (Story 9)', () => {
+  it('breath 발동: normal melee를 대체하고 specialAttack 마커를 드러냄 (monsterDamage 미굴림)', () => {
     // level 5 → q=trunc(8/4)=2. spit=dice(2,3,0). MBEFUD 없음.
     const monster = makeCreature({ instanceId: 'mon-1', level: 5, flags: flagsWith(MBRETH, MBRWP1), thaco: 10 })
     const player = makePlayer({ hpCurrent: 50, armor: 0 })
@@ -531,7 +531,7 @@ describe('resolveAttack — 몬스터 특수공격 배선 (Story 9)', () => {
     expect(out.specialAttack?.breathDamage).toBeNull()
   })
 
-  it('post-status 마커(MPOISS)를 monsterDamage와 함께 표면화한다', () => {
+  it('post-status 마커(MPOISS)를 monsterDamage와 함께 드러낸다', () => {
     const monster = makeCreature({ instanceId: 'mon-1', flags: flagsWith(MPOISS), thaco: 10, ndice: 1, sdice: 6, pdice: 0 })
     const player = makePlayer({ hpCurrent: 50, armor: 70 })
     // seq [hit=15, MPOISS gate=15(<=15 발동), monsterDamage mdice=5] → n=5-trunc(0/5)=5.

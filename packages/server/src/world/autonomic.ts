@@ -10,7 +10,7 @@ import {
  *
  * 원본 update.c:229 update_active의 §3.1(상태이상 만료)·§3.2(재생)·§3.3(scavenge)·§3.4(wander-out)를
  * 이식한다. §3.0 공격 타이머 게이트(LT_ATTCK=nextActionAt)와 §3.5 조기종료·onCombatTick 디스패치는
- * tick 계층(creatureTick)이 소유한다.
+ * tick 계층(creatureTick)이 담당한다.
  *
  * 순수성: 입력 크리처를 in-place로 변형하지 않고 새 `CreatureInstance`를 반환한다(flags·hpcur·mpcur·
  * 타이머 필드를 담은 새 객체). 방 아이템 이동(scavenge)·크리처 제거(wander-out)는 부수효과 서술자
@@ -23,9 +23,9 @@ import {
 /** mrand(1,max) 굴림 seam. `<=` 임계와 비교되므로 낮은 값=통과, 높은 값=실패. */
 export type AutonomicRng = (max: number) => number
 
-/** 항상 최저 굴림(1) — scavenge/wander 확률을 항상 통과시킨다(테스트·강제 발화용). */
+/** 항상 최저 굴림(1) — scavenge/wander 확률을 항상 통과시킨다(테스트·강제 실행용). */
 export const alwaysFireRng: AutonomicRng = () => 1
-/** 항상 최고 굴림(101) — scavenge/wander 확률을 항상 실패시킨다. tick 기본값(결정적 비발화). */
+/** 항상 최고 굴림(101) — scavenge/wander 확률을 항상 실패시킨다. tick 기본값(결정적으로 실행되지 않음). */
 export const neverFireRng: AutonomicRng = () => 101
 
 /** autonomic 처리 컨텍스트. */
@@ -120,7 +120,7 @@ export function runAutonomic(creature: CreatureInstance, ctx: AutonomicContext):
   }
 
   // §3.4 wander-out — 배회 크리처(!MHASSC·!MPERMT·!MDMFOL)·20초↑·rng≤traffic·적 없음이면 소멸.
-  // "배회"는 양성 flag가 아니라 이 세 flag의 부재다. scavenge로 방금 세팅된 MHASSC도 여기서 제외된다.
+  // "배회"는 양성 flag가 아니라 이 세 flag가 없는 상태다. scavenge로 방금 세팅된 MHASSC도 여기서 제외된다.
   let wanderOut = false
   const wanders = !F_ISSET(flags, MHASSC) && !F_ISSET(flags, MPERMT) && !F_ISSET(flags, MDMFOL)
   if (wanders && now - lastWanderAt > IDLE_GATE) {

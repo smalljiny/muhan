@@ -302,7 +302,7 @@ describe('computeSpecialBuffDur — 표준 공식 예외 3주문(A6 §6·§11)',
   })
 
   it('표준 버프(SBLESS 등)는 이 함수 대상이 아니다 → throw', () => {
-    // 표준 공식 주문은 computeBuffDur 소관. computeSpecialBuffDur는 invis/levit/light만 처리.
+    // 표준 공식 주문은 computeBuffDur 담당. computeSpecialBuffDur는 invis/levit/light만 처리.
     expect(() => computeSpecialBuffDur(SPELL_NO.SBLESS, {
       intBonus: 0, level: 10, casterClass: MAGE, gated: true, rpmext: false,
     })).toThrow()
@@ -338,7 +338,7 @@ describe('computeDebuffDur — 디버프 지속(A6 §7)', () => {
   })
 
   it('befuddle(SBEFUD)는 이 함수 대상이 아니다(Story 8) → throw', () => {
-    // befuddle은 dur=3/MAX(5) 저항 모델(비-/2)이라 Story 8 소관. 카탈로그 미등록 → throw.
+    // befuddle은 dur=3/MAX(5) 저항 모델(비-/2)이라 Story 8 담당. 카탈로그 미등록 → throw.
     expect(() => computeDebuffDur(SPELL_NO.SBEFUD, { intBonus: 0, targetHasPrmagi: false }, roll(1))).toThrow()
   })
 

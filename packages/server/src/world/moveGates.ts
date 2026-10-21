@@ -10,7 +10,7 @@ import { hasFlag, XLOCKD, XCLOSD } from './door.js'
  *   부수효과 없는 순수 predicate로 만든다. 강제 게이트는 실 거부하고, 입력 에픽 대기 게이트는
  *   순서상 자리만 지키는 pass-through stub이다.
  *
- * 범위: gate 1(출구 존재)·XNOSEE 이름 탐색 제외는 이 모듈 밖(tryMove 소관, Story 7)이다.
+ * 범위: gate 1(출구 존재)·XNOSEE 이름 탐색 제외는 이 모듈 밖(tryMove 담당, Story 7)이다.
  *   여기서는 gate 1b(dangling)부터 20까지를 다룬다. 통과 시 leave/join·점유자 재배치도 tryMove가 한다.
  *
  * 순수성: 모든 게이트는 입력을 읽기만 하고 변형하지 않는다(출구 flags·방 occupants·actor 불변).
@@ -52,8 +52,8 @@ export type MoveGateActor = {
 
 /**
  * 게이트 건틀릿 입력. exit·targetRoom은 이미 해석된 상태로 주입된다(출구 선택·대상 해석은
- * tryMove의 mode 분기 소관). currentHour는 G2 gameTime.currentHour() 주입값(0~23)이다.
- * targetRoom이 undefined면 dangling(대상 방 부재)이다.
+ * tryMove의 mode 분기 담당). currentHour는 G2 gameTime.currentHour() 주입값(0~23)이다.
+ * targetRoom이 undefined면 dangling(대상 방 없음)이다.
  */
 export interface MoveGateInput {
   readonly exit: ExitEdge
@@ -74,7 +74,7 @@ const PASS: MoveGateResult = { ok: true }
  * 1b dangling — 대상 방이 그래프에 없으면 거부한다.
  *
  * spec §3.3가 gate 1 직후·나머지 앞에 배치한 확정 순서다(원본 command2.c:510의 dangling
- * 검사가 게이트 중반에 있으나, 대상 방 부재는 다른 어떤 방 게이트보다 선행해야 논리적이라
+ * 검사가 게이트 중반에 있으나, 대상 방이 없는 경우는 다른 어떤 방 게이트보다 선행해야 논리적이라
  * 스펙이 의도적으로 재정렬했다 — 되돌리지 않는다).
  */
 export function danglingGate(input: MoveGateInput): MoveGateResult {
@@ -95,7 +95,7 @@ export function closedGate(input: MoveGateInput): MoveGateResult {
  * 7·8 시간 — 야간/주간 전용 출구를 게임시각(Time%24)으로 게이트한다.
  *
  * XNGHTO(야간전용)는 낮(6<t<20, command2.c:401)에 거부, XDAYON(주간전용)은 밤
- * (t<6 || t>20, :406)에 거부한다. 경계는 strict 비교로 원본 정합: XNGHTO는 t=7..19에서만
+ * (t<6 || t>20, :406)에 거부한다. 경계는 strict 비교로 원본과 일치: XNGHTO는 t=7..19에서만
  * 거부(t=6·20 통과), XDAYON은 t<=5 또는 t>=21에서만 거부(t=6·20 통과). §3.3가 두 검사를
  * 한 시간 게이트 행(7·8)으로 묶으므로 XNGHTO를 먼저(원본 순서) 평가한다.
  */
@@ -119,7 +119,7 @@ export function timeGate(input: MoveGateInput): MoveGateResult {
  * 필터 도입 후 정정한다.
  *
  * targetRoom undefined는 dangling 게이트가 선행 거부하므로 건틀릿 경로에선 도달 불가다.
- * 직접 호출 시의 방어로 undefined면 통과한다(부재를 만원으로 오판하지 않는다).
+ * 직접 호출 시의 방어로 undefined면 통과한다(없음을 만원으로 오판하지 않는다).
  */
 export function capacityGate(input: MoveGateInput): MoveGateResult {
   const room = input.targetRoom

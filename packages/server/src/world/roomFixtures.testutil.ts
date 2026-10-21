@@ -8,7 +8,7 @@ import { F_SET } from './hexFlags.js'
  * `projectRoomView`(roomView.test.ts)·`buildRoomSummary`(liveWorldBinding.test.ts)·
  * `createMoveHandler`(handlers/move.test.ts)·`liveWorldWiring.test.ts`가 각자 복사해 두던 동일
  * 픽스처 헬퍼를 여기 하나로 모은다. 두 flags 표현이 섞인다 — 출구는 바이트당 한 원소인
- * number[](door.ts hasFlag, `RoomNode`/`ExitEdge` 정본 폭 8바이트), 아이템·크리처는 16자 hex
+ * number[](door.ts hasFlag, `RoomNode`/`ExitEdge` 기준 폭 8바이트), 아이템·크리처는 16자 hex
  * string(hexFlags.ts F_ISSET). 픽스처는 손으로 비트를 계산하지 않고 setFlag·F_SET 헬퍼로 만든다 —
  * 바이트 오프셋 실수를 원천 차단한다.
  *
@@ -16,7 +16,7 @@ import { F_SET } from './hexFlags.js'
  * glob에서 자동 제외된다(테스트 인프라, 프로덕션 코드 아님).
  */
 
-/** 지정 비트들을 세팅한 출구 flags(number[], 8바이트 — RoomNode 출구 flags 정본 폭)를 만든다. */
+/** 지정 비트들을 세팅한 출구 flags(number[], 8바이트 — RoomNode 출구 flags 기준 폭)를 만든다. */
 export function exitFlags(...bits: number[]): number[] {
   const flags = [0, 0, 0, 0, 0, 0, 0, 0]
   for (const bit of bits) setFlag(flags, bit)

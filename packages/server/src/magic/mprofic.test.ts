@@ -5,7 +5,7 @@ import { MAGE, CLERIC, PALADIN, RANGER, INVINCIBLE, CARETAKER, SUB_DM, DM, FIGHT
 import { mprofic } from './mprofic.js'
 
 /**
- * mprofic 숙련 환산 단위 테스트 — player.c:1204-1261 정본.
+ * mprofic 숙련 환산 단위 테스트 — player.c:1204-1261 기준.
  * realm[index-1] 원시경험치 → prof_array[12] 임계 → 0-110 백분율. 정수 나눗셈=Math.trunc, 엄격 <.
  */
 describe('mprofic', () => {
@@ -78,8 +78,8 @@ describe('체크인된 mprofic.json 골든 fixture', () => {
   })
 
   it('approve가 mprofic SUT로 전 케이스를 throw 없이 통과한다', () => {
-    // anti-tautology: fixture expected는 mproficFixture.ts의 player.c 독립 전사(oracleMprofic),
-    // SUT mprofic은 mprofic.ts 구현. 두 전사가 diff되면 approve가 throw한다.
+    // anti-tautology: fixture expected는 mproficFixture.ts의 player.c를 독립적으로 옮겨 적은 것(oracleMprofic),
+    // SUT mprofic은 mprofic.ts 구현. 옮겨 적은 두 코드가 diff되면 approve가 throw한다.
     const fixture = loadFixture()
     const sut = (input: unknown): unknown => {
       const c = input as { class: number; realm: number[]; index: number }

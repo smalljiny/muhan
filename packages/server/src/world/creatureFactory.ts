@@ -1,7 +1,7 @@
 import type { CreatureInstance } from 'shared'
 
 /**
- * 크리처 인스턴스 팩토리 — 크리처 템플릿/embedded 몬스터를 라이브 `CreatureInstance`로 물질화한다.
+ * 크리처 인스턴스 팩토리 — 크리처 템플릿/embedded 몬스터를 라이브 `CreatureInstance`를 생성한다.
  *
  * 두 출처(spec §2, 플랜 T2.2):
  *   (a) `fromEmbedded` — 방 파일에 박힌 완전한 creature 구조체(빌더 커스터마이즈, `templateId=null`).
@@ -13,7 +13,7 @@ import type { CreatureInstance } from 'shared'
  */
 
 /**
- * 물질화 입력 소스의 최소 shape. 방 embedded 몬스터(rooms.json `monsters[]`, T2.0 전체 필드)와
+ * 인스턴스 생성 입력 소스의 최소 shape. 방 embedded 몬스터(rooms.json `monsters[]`, T2.0 전체 필드)와
  * 크리처 템플릿(creatures.json 엔트리)이 모두 구조적으로 이 타입을 만족한다(추가 필드 무시).
  *
  * `CreatureInstance`와 겹치는 8개 스탯 필드는 `Pick`으로 파생해 자동 동기화한다 — 인스턴스 쪽
@@ -47,7 +47,7 @@ export type CreatureSource = Pick<
   | 'alignment'
   // 이름 매칭용 별칭(Story 4) — creatures.json / rooms.json monsters[]에 항상 존재한다(별칭이
   // 없으면 빈 배열). CreatureInstance에서 optional이라 Pick 결과도 optional이며, materialize가
-  // 부재 시 빈 배열로 정규화한다.
+  // 없으면 빈 배열로 정규화한다.
   | 'keys'
 >
 
@@ -66,7 +66,7 @@ function creatureInstanceId(roomId: number, idx: number): string {
 }
 
 /**
- * 공통 물질화 — 소스 스탯을 라이브 인스턴스로 옮긴다. hpcur=hpmax·mpcur=mpmax(스폰 시 만신),
+ * 공통 인스턴스 생성 — 소스 스탯을 라이브 인스턴스로 옮긴다. hpcur=hpmax·mpcur=mpmax(스폰 시 만신),
  * enemies는 빈 배열(E6 전투가 채우는 seam), 타이머 필드는 미설정(Story 3 next-action 큐가 세팅).
  */
 function materialize(
@@ -96,8 +96,8 @@ function materialize(
     pdice: src.pdice,
     // 마법 읽기 필드(Story 2) — spells·class·intelligence·piety는 소스에서 그대로 옮긴다(콘텐츠 불변).
     // realm은 소스 JSON에 없으므로 상수 [0,0,0,0]을 기본값으로 채운다 — port readCrt가 offset 380
-    // realm을 추출하지 않아 정본 값이 전 몬스터 0이며, 이 기본값은 추출 결과와 byte-identical이다.
-    // 실 realm 추출·성장 write(addrealm)는 #85 소관이다.
+    // realm을 추출하지 않아 기준 값이 전 몬스터 0이며, 이 기본값은 추출 결과와 byte-identical이다.
+    // 실 realm 추출·성장 write(addrealm)는 #85가 담당한다.
     spells: src.spells,
     class: src.class,
     intelligence: src.intelligence,
@@ -114,13 +114,13 @@ function materialize(
     flags: src.flags,
     enemies: [],
     // inventory는 라이브 가변 배열(scavenge 회수분·Story 5 드롭 출처). 스폰 시 빈 배열이며,
-    // embedded 몬스터의 초기 소지품 물질화는 별도(아이템 에픽) 소관이다.
+    // embedded 몬스터의 초기 소지품 인스턴스 생성은 별도(아이템 에픽) 담당이다.
     inventory: [],
   }
 }
 
 /**
- * (a) 방 embedded 몬스터를 라이브 인스턴스로 물질화한다. `templateId=null`(인라인 데이터라
+ * (a) 방 embedded 몬스터를 라이브 인스턴스를 생성한다. `templateId=null`(인라인 데이터라
  * 템플릿 링크 없음). embedded 스탯은 빌더 커스터마이즈로 템플릿과 다를 수 있으므로 그대로 쓴다.
  */
 export function fromEmbedded(
@@ -133,7 +133,7 @@ export function fromEmbedded(
 }
 
 /**
- * (b) 템플릿 번호로 `creaturesById`를 조회해 물질화한다(perm/random 스폰·MSUMMO 소환).
+ * (b) 템플릿 번호로 `creaturesById`를 조회해 인스턴스를 생성한다(perm/random 스폰·MSUMMO 소환).
  * 알 수 없는 id면 undefined(호출측이 스폰을 건너뛴다). `templateId`=조회 id.
  */
 export function fromTemplate(
