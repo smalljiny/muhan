@@ -40,16 +40,16 @@ import {
  * 세션 FSM 단위 스펙 — 3층 아키텍처를 각 층 고유의 테스트 스타일로 검증한다.
  *
  * 1층(순수 decider): plain data 입력→결정 단언(포트·emit·소켓 없음, 동기 유지).
- * 2층(StateHandler): 시드 인메모리 어댑터 + 배열 수집 emit으로 포트 호출·이벤트 발화를 소켓 없이 관찰.
- * 3층 배선(applyTransition·enterInitialState·handleSessionFrame): ctx.state 변이 단일화·enter/exit 콜백 구동.
+ * 2층(StateHandler): 시드 인메모리 어댑터 + 배열 수집 emit으로 포트 호출·이벤트 발생을 소켓 없이 관찰.
+ * 3층 연결(applyTransition·enterInitialState·handleSessionFrame): ctx.state 변이 단일화·enter/exit 콜백 실행.
  *
- * 포트가 async(Promise 반환)라 2·3층 배선 함수도 async다 — 각 테스트는 호출을 await한다. 1층 decider는
+ * 포트가 async(Promise 반환)라 2·3층 연결 함수도 async다 — 각 테스트는 호출을 await한다. 1층 decider는
  * 포트를 부르지 않아 동기로 유지한다.
  */
 
 /**
- * 배열 수집 emit과 시드 어댑터를 배선한 세션 컨텍스트를 만든다(소켓 없이 2층 테스트).
- * rearmDeadline/clearDeadline은 vi.fn() 스파이로 배선해 데드라인 seam 호출을 관찰한다.
+ * 배열 수집 emit과 시드 어댑터를 연결한 세션 컨텍스트를 만든다(소켓 없이 2층 테스트).
+ * rearmDeadline/clearDeadline은 vi.fn() 스파이로 연결해 데드라인 seam 호출을 관찰한다.
  */
 function makeSession(): {
   session: SessionContext
@@ -135,7 +135,7 @@ describe('decideCharacterSelectInput (1층 순수 decider)', () => {
 })
 
 describe('characterSelect StateHandler.onEnter (2층)', () => {
-  it('계정 캐릭터 목록을 characterList로, 선택 prompt를 함께 발화한다', async () => {
+  it('계정 캐릭터 목록을 characterList로, 선택 prompt를 함께 발생시킨다', async () => {
     const { session, events } = makeSession()
 
     await stateHandlers[ConnectionState.characterSelect].onEnter?.(makeCtx(), session)
@@ -161,7 +161,7 @@ describe('characterSelect StateHandler.onEnter (2층)', () => {
 })
 
 describe('characterSelect StateHandler.handleInput (2층)', () => {
-  it('소유 캐릭터 선택 시 enterWorld 등록 후 session:entered 발화 후 command로 전이한다', async () => {
+  it('소유 캐릭터 선택 시 enterWorld 등록 후 session:entered 발생 후 command로 전이한다', async () => {
     const { session, events, enterWorld } = makeSession()
 
     const next = await stateHandlers[ConnectionState.characterSelect].handleInput(makeCtx(), session, {
@@ -170,12 +170,12 @@ describe('characterSelect StateHandler.handleInput (2층)', () => {
     })
 
     expect(next).toBe(ConnectionState.command)
-    // enterWorld가 emit보다 먼저 characterId로 호출된다(등록 확정 후 이벤트 발화).
+    // enterWorld가 emit보다 먼저 characterId로 호출된다(등록 확정 후 이벤트 발생).
     expect(enterWorld).toHaveBeenCalledWith(SEED_CHARACTER_ID)
     expect(events).toEqual([{ type: 'session:entered', characterId: SEED_CHARACTER_ID }])
   })
 
-  it('enterWorld가 resumed를 반환하면 session:resumed를 발화한다 (재연결 경로)', async () => {
+  it('enterWorld가 resumed를 반환하면 session:resumed를 발생시킨다 (재연결 경로)', async () => {
     const { session, events, enterWorld } = makeSession()
     enterWorld.mockReturnValue('resumed')
 
@@ -202,7 +202,7 @@ describe('characterSelect StateHandler.handleInput (2층)', () => {
     expect(events).toEqual([])
   })
 
-  it('소유하지 않은 캐릭터 선택은 unauthorized error 발화 후 상태를 유지한다', async () => {
+  it('소유하지 않은 캐릭터 선택은 unauthorized error 발생 후 상태를 유지한다', async () => {
     const { session, events } = makeSession()
 
     const next = await stateHandlers[ConnectionState.characterSelect].handleInput(makeCtx(), session, {
@@ -216,7 +216,7 @@ describe('characterSelect StateHandler.handleInput (2층)', () => {
     ])
   })
 
-  it('현재 상태에서 허용되지 않는 프레임은 session_state error 발화 후 상태를 유지한다', async () => {
+  it('현재 상태에서 허용되지 않는 프레임은 session_state error 발생 후 상태를 유지한다', async () => {
     const { session, events } = makeSession()
 
     const next = await stateHandlers[ConnectionState.characterSelect].handleInput(makeCtx(), session, {
@@ -259,13 +259,13 @@ describe('characterSelect StateHandler.handleInput (2층)', () => {
         characterId: SEED_CHARACTER_ID,
       }),
     ).rejects.toThrow(boom)
-    // entered는 발화되지 않는다(전파로 중단).
+    // entered는 발생하지 않는다(전파로 중단).
     expect(events).toEqual([])
   })
 })
 
 describe('create StateHandler (2층 — 생성 다단 대화)', () => {
-  it('onEnter는 createProgress를 name 단계로 초기화하고 create:name prompt를 발화한다', async () => {
+  it('onEnter는 createProgress를 name 단계로 초기화하고 create:name prompt를 발생시킨다', async () => {
     const { session, events } = makeSession()
     const ctx = makeCtx(ConnectionState.create)
 
@@ -277,7 +277,7 @@ describe('create StateHandler (2층 — 생성 다단 대화)', () => {
     ])
   })
 
-  it('name 응답은 createProgress를 gender 단계로 전진하고 create:gender prompt를 발화한다 (create 유지)', async () => {
+  it('name 응답은 createProgress를 gender 단계로 전진하고 create:gender prompt를 발생시킨다 (create 유지)', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = { state: ConnectionState.create, createProgress: { step: 'name', collected: {} }, deleteProgress: null }
 
@@ -294,7 +294,7 @@ describe('create StateHandler (2층 — 생성 다단 대화)', () => {
     ])
   })
 
-  it('confirm 승인은 검증된 dto로 캐릭터를 생성하고 entered 발화 후 command로 전이한다', async () => {
+  it('confirm 승인은 검증된 dto로 캐릭터를 생성하고 entered 발생 후 command로 전이한다', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = {
       state: ConnectionState.create,
@@ -313,7 +313,7 @@ describe('create StateHandler (2층 — 생성 다단 대화)', () => {
     expect(events).toEqual([{ type: 'session:entered', characterId: 'char-1' }])
   })
 
-  it('현재 단계와 다른 promptId 응답(미해결)은 session_state error 발화 후 단계를 유지한다', async () => {
+  it('현재 단계와 다른 promptId 응답(미해결)은 session_state error 발생 후 단계를 유지한다', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = {
       state: ConnectionState.create,
@@ -332,7 +332,7 @@ describe('create StateHandler (2층 — 생성 다단 대화)', () => {
     expect(events).toEqual([expect.objectContaining({ type: 'error', code: 'session_state' })])
   })
 
-  it('무효 값(포인트바이 합 초과)은 session_state error 발화 후 현재 단계를 유지한다', async () => {
+  it('무효 값(포인트바이 합 초과)은 session_state error 발생 후 현재 단계를 유지한다', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = {
       state: ConnectionState.create,
@@ -351,7 +351,7 @@ describe('create StateHandler (2층 — 생성 다단 대화)', () => {
     expect(events).toEqual([expect.objectContaining({ type: 'error', code: 'session_state' })])
   })
 
-  it('createProgress가 null인데 프레임이 오면(불변식 위반) session_state error를 발화한다', async () => {
+  it('createProgress가 null인데 프레임이 오면(불변식 위반) session_state error를 발생시킨다', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = { state: ConnectionState.create, createProgress: null, deleteProgress: null }
 
@@ -435,7 +435,7 @@ describe('close-race 가드 (Story 4 — 포트 await 도중 소켓 close)', () 
 })
 
 describe('command 스텁 StateHandler (2층 — 라우터 위임 이전)', () => {
-  it('command 상태 스텁 입력은 session_state error 발화 후 상태를 유지한다', async () => {
+  it('command 상태 스텁 입력은 session_state error 발생 후 상태를 유지한다', async () => {
     const { session, events } = makeSession()
 
     const next = await stateHandlers[ConnectionState.command].handleInput(
@@ -521,7 +521,7 @@ describe('데드라인 seam (Story 6 — 진행 시 rearm, command 도달 시 cl
 })
 
 describe('applyTransition (3층 — ctx.state 변이 단일화)', () => {
-  it('상태가 바뀌면 목적 상태의 onEnter를 구동하고 ctx.state를 대입한다', async () => {
+  it('상태가 바뀌면 목적 상태의 onEnter를 실행하고 ctx.state를 대입한다', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
@@ -532,7 +532,7 @@ describe('applyTransition (3층 — ctx.state 변이 단일화)', () => {
     expect(events).toEqual([])
   })
 
-  it('동일 상태로의 전이는 no-op이며 onEnter를 재구동하지 않는다 (재발화 없음)', async () => {
+  it('동일 상태로의 전이는 no-op이며 onEnter를 다시 실행하지 않는다 (재발생 없음)', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
@@ -544,7 +544,7 @@ describe('applyTransition (3층 — ctx.state 변이 단일화)', () => {
 })
 
 describe('enterInitialState (3층 — accept 시 characterSelect 진입)', () => {
-  it('characterSelect onEnter를 구동해 characterList+prompt를 발화한다', async () => {
+  it('characterSelect onEnter를 실행해 characterList+prompt를 발생시킨다', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
@@ -558,8 +558,8 @@ describe('enterInitialState (3층 — accept 시 characterSelect 진입)', () =>
 describe('회귀: emit 순서 보존 (async 마이그레이션 불변식)', () => {
   // 이 블록은 async 마이그레이션(포트 Promise화 + await 삽입)이 관찰 가능한 emit 순서를 재정렬하거나
   // 프레임을 누락하지 않음을 고정한다. characterSelect 진입은 항상 characterList → select prompt 순서로
-  // 정확히 2개를 발화해야 하고, create 왕복은 매 단계 prompt가 순서대로 나온 뒤 마지막에 entered가 와야 한다.
-  it('characterSelect 진입은 characterList를 select prompt보다 먼저 정확히 2개 발화한다', async () => {
+  // 정확히 2개를 발생시켜야 하고, create 왕복은 매 단계 prompt가 순서대로 나온 뒤 마지막에 entered가 와야 한다.
+  it('characterSelect 진입은 characterList를 select prompt보다 먼저 정확히 2개 발생시킨다', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
@@ -571,7 +571,7 @@ describe('회귀: emit 순서 보존 (async 마이그레이션 불변식)', () =
     expect(listIdx).toBeLessThan(promptIdx)
   })
 
-  it('create 왕복은 8단계 prompt 순서 뒤 마지막에 entered를 발화한다', async () => {
+  it('create 왕복은 8단계 prompt 순서 뒤 마지막에 entered를 발생시킨다', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
@@ -597,7 +597,7 @@ describe('회귀: emit 순서 보존 (async 마이그레이션 불변식)', () =
 })
 
 /**
- * characterSelect에서 create 신호부터 confirm 승인까지 8단계 인터뷰 전체를 구동한다(happy path 헬퍼).
+ * characterSelect에서 create 신호부터 confirm 승인까지 8단계 인터뷰 전체를 실행한다(happy path 헬퍼).
  * enterInitialState가 이미 호출된 ctx를 받는다. 각 단계 유효 값을 순서대로 답한다.
  */
 async function driveFullCreate(ctx: FsmContext, session: SessionContext): Promise<void> {
@@ -617,7 +617,7 @@ async function driveFullCreate(ctx: FsmContext, session: SessionContext): Promis
 }
 
 describe('handleSessionFrame (3층 — handleInput + applyTransition 결합)', () => {
-  it('유효 선택 프레임으로 entered 발화 후 ctx.state를 command로 전이한다', async () => {
+  it('유효 선택 프레임으로 entered 발생 후 ctx.state를 command로 전이한다', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
@@ -630,7 +630,7 @@ describe('handleSessionFrame (3층 — handleInput + applyTransition 결합)', (
     expect(events).toEqual([{ type: 'session:entered', characterId: SEED_CHARACTER_ID }])
   })
 
-  it('거부 프레임은 error만 발화하고 상태를 유지한다', async () => {
+  it('거부 프레임은 error만 발생시키고 상태를 유지한다', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
@@ -644,7 +644,7 @@ describe('handleSessionFrame (3층 — handleInput + applyTransition 결합)', (
     const { session, events } = makeSession()
     const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
-    // characterSelect에서 create 신호 → create 진입(첫 prompt는 create.onEnter가 발화).
+    // characterSelect에서 create 신호 → create 진입(첫 prompt는 create.onEnter가 발생시킴).
     await handleSessionFrame(ctx, session, {
       type: 'session:reply',
       promptId: SELECT_CHARACTER_PROMPT_ID,
@@ -929,7 +929,7 @@ describe('와이어 계약 보존 (신규 메시지 타입·프로토콜 미변�
     expect(promptKindSchema.options).toEqual(['selectCharacter', 'createField'])
   })
 
-  it('8단계 인터뷰가 발화하는 create prompt는 모두 kind=createField다 (신규 wire 타입 미도입)', async () => {
+  it('8단계 인터뷰가 발생시키는 create prompt는 모두 kind=createField다 (신규 wire 타입 미도입)', async () => {
     const { session, events } = makeSession()
     const ctx: FsmContext = { state: ConnectionState.characterSelect, createProgress: null, deleteProgress: null }
 
@@ -1029,7 +1029,7 @@ describe('decideDeleteConfirmInput (1층 순수 decider — 「찐짜로」 정�
 })
 
 describe('delete StateHandler (2층 — 자살 서브플로우, T8.2/T8.3)', () => {
-  it('onEnter는 characterList와 삭제 대상 선택 prompt(selectCharacter)를 발화한다', async () => {
+  it('onEnter는 characterList와 삭제 대상 선택 prompt(selectCharacter)를 발생시킨다', async () => {
     const { session, events } = makeSession()
 
     await stateHandlers[ConnectionState.delete].onEnter?.(makeCtx(ConnectionState.delete), session)
@@ -1042,7 +1042,7 @@ describe('delete StateHandler (2층 — 자살 서브플로우, T8.2/T8.3)', () 
     })
   })
 
-  it('1단계: 소유 대상 선택 시 deleteProgress에 target을 저장하고 confirm prompt(createField)를 발화한다 (delete 유지)', async () => {
+  it('1단계: 소유 대상 선택 시 deleteProgress에 target을 저장하고 confirm prompt(createField)를 발생시킨다 (delete 유지)', async () => {
     const { session, events } = makeSession()
     const ctx = makeCtx(ConnectionState.delete)
 
@@ -1058,7 +1058,7 @@ describe('delete StateHandler (2층 — 자살 서브플로우, T8.2/T8.3)', () 
     ])
   })
 
-  it('1단계: 소유하지 않은 대상 선택은 unauthorized error 발화 후 characterSelect로 복귀한다', async () => {
+  it('1단계: 소유하지 않은 대상 선택은 unauthorized error 발생 후 characterSelect로 복귀한다', async () => {
     const { session, events } = makeSession()
     const ctx = makeCtx(ConnectionState.delete)
 
@@ -1072,7 +1072,7 @@ describe('delete StateHandler (2층 — 자살 서브플로우, T8.2/T8.3)', () 
     expect(events).toEqual([expect.objectContaining({ type: 'error', code: 'unauthorized' })])
   })
 
-  it('1단계: session:selectCharacter가 아닌 프레임은 session_state error 발화 후 delete를 유지한다', async () => {
+  it('1단계: session:selectCharacter가 아닌 프레임은 session_state error 발생 후 delete를 유지한다', async () => {
     const { session, events } = makeSession()
     const ctx = makeCtx(ConnectionState.delete)
 
@@ -1159,7 +1159,7 @@ describe('delete StateHandler (2층 — 자살 서브플로우, T8.2/T8.3)', () 
     expect(deleteSpy).not.toHaveBeenCalled()
   })
 
-  it('2단계: 미일치 promptId(stale) 응답은 session_state error 발화 후 delete를 유지한다', async () => {
+  it('2단계: 미일치 promptId(stale) 응답은 session_state error 발생 후 delete를 유지한다', async () => {
     const { session } = makeSession()
     const deleteSpy = vi.spyOn(session.sessionAuth, 'deleteCharacter')
     const ctx: FsmContext = {
@@ -1205,7 +1205,7 @@ describe('delete close-race 가드 (Story 4 프레임-vs-close 패턴, T8.2)', (
       characterId: SEED_CHARACTER_ID,
     })
 
-    // 현재 상태(delete) 반환 → applyTransition no-op. target 미저장·confirm prompt 미발화.
+    // 현재 상태(delete) 반환 → applyTransition no-op. target 미저장·confirm prompt 미발생.
     expect(next).toBe(ConnectionState.delete)
     expect(ctx.deleteProgress).toBeNull()
     expect(events).toEqual([])
@@ -1242,7 +1242,7 @@ describe('delete close-race 가드 (Story 4 프레임-vs-close 패턴, T8.2)', (
 
     await handleSessionFrame(ctx, session, reply(DELETE_CONFIRM_PROMPT_ID, DELETE_CONFIRM_VALUE))
 
-    // 상태 대입이 일어나지 않아 delete로 유지되고, deleteProgress도 정리되지 않는다(onExit 미구동).
+    // 상태 대입이 일어나지 않아 delete로 유지되고, deleteProgress도 정리되지 않는다(onExit 미실행).
     expect(ctx.state).toBe(ConnectionState.delete)
   })
 })
@@ -1413,8 +1413,8 @@ function makeRoomNode(roomId: number, exitNames: string[] = []): RoomNode {
 
 /**
  * roomSummary 페이크가 돌려줄 world:room 페이로드 픽스처 — 확장 계약 전 필드를 한 곳에서 채운다.
- * `makeRoomNode`가 만드는 방을 실 투영(projectRoomView)한 결과와 같은 값을 낸다(이름 `방-<id>`, 빈 설명,
- * 점유자·아이템·크리처 없음). FSM은 이 페이로드를 그대로 스프레드해 발화할 뿐 해석하지 않는다.
+ * `makeRoomNode`가 만드는 방을 실 변환(projectRoomView)한 결과와 같은 값을 낸다(이름 `방-<id>`, 빈 설명,
+ * 점유자·아이템·크리처 없음). FSM은 이 페이로드를 그대로 스프레드해 발생시킬 뿐 해석하지 않는다.
  */
 function makeRoomView(
   roomId: number,
@@ -1432,7 +1432,7 @@ function makeRoomView(
 }
 
 describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', () => {
-  it('배치(entry): enterWorld→place→session:entered→world:room 순서로 발화하고 place는 1회, world:room은 exit 이름을 싣는다', async () => {
+  it('배치(entry): enterWorld→place→session:entered→world:room 순서로 발생시키고 place는 1회, world:room은 exit 이름을 싣는다', async () => {
     const R = 501
     const live: LiveCharacter = {
       character: makeLiveCharacter(SEED_CHARACTER_ID, R),
@@ -1473,7 +1473,7 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
     expect(order).toEqual(['enterWorld', 'place', 'emit:session:entered', 'emit:world:room'])
     const roomEvents = events.filter((e) => e.type === 'world:room')
     expect(roomEvents).toHaveLength(1)
-    // 요약 필드를 재열거하지 않고 통째로 스프레드해 발화한다(계약 확장이 조용히 누락되지 않는다).
+    // 요약 필드를 재열거하지 않고 통째로 스프레드해 발생시킨다(계약 확장이 조용히 누락되지 않는다).
     expect(roomEvents[0]).toEqual({ type: 'world:room', ...makeRoomView(R, ['북', '남']) })
   })
 
@@ -1547,7 +1547,7 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
     expect(events.some((e) => e.type === 'world:room')).toBe(true)
   })
 
-  it('재연결(resumed): 재로드·재배치 없이 world:room을 발화하고 currentRoom을 보존한다', async () => {
+  it('재연결(resumed): 재로드·재배치 없이 world:room을 발생시키고 currentRoom을 보존한다', async () => {
     const R = 888
     const room = makeRoomNode(R, ['동', '서'])
     const rooms = new Map<number, RoomNode>([[R, room]])
@@ -1601,7 +1601,7 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
     expect(onRoomEntered).not.toHaveBeenCalled()
     // currentRoom은 라이브 값으로 보존된다(디스크 문서로 덮어쓰지 않음).
     expect(registry.get(SEED_CHARACTER_ID)?.character.currentRoom).toBe(R)
-    // resumed + world:room이 여전히 발화된다(재연결 클라도 위치가 필요 — D-C).
+    // resumed + world:room이 여전히 발생한다(재연결 클라도 위치가 필요 — D-C).
     expect(events.some((e) => e.type === 'session:resumed')).toBe(true)
     expect(events.some((e) => e.type === 'world:room')).toBe(true)
   })
@@ -1641,7 +1641,7 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
     expect(events).toEqual([])
   })
 
-  it('create 완주 경로도 hydrate→place→world:room을 배선한다(양 진입점 대칭)', async () => {
+  it('create 완주 경로도 hydrate→place→world:room을 연결한다(양 진입점 대칭)', async () => {
     const R = 601
     const created: LiveCharacter = { character: makeLiveCharacter('char-1', R), inventory: [] }
     const events: ServerEvent[] = []
@@ -1679,7 +1679,7 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
     ])
   })
 
-  it('liveWorld 미주입(absent): hydrate/place 없이 기존 동작대로 entered만 발화한다(T4.5)', async () => {
+  it('liveWorld 미주입(absent): hydrate/place 없이 기존 동작대로 entered만 발생시킨다(T4.5)', async () => {
     const { session, events, enterWorld } = makeSession() // liveWorld 없음
 
     const next = await stateHandlers[ConnectionState.characterSelect].handleInput(makeCtx(), session, {

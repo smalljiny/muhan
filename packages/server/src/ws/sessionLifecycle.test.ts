@@ -7,7 +7,7 @@ import { createConnectionContext, type ConnectionContext, type IdleTimer } from 
 import { ConnectionState } from './fsm/sessionFsm.js'
 
 // createSessionLifecycle는 소켓·emit 없이 registry·resolveDisconnect·주입 setTimeoutFn만으로 동작하는
-// 셸 조율 단위다. 실 registry + 실 resolveDisconnect + 스파이 포트 + fake setTimeoutFn을 배선해
+// 셸 조율 단위다. 실 registry + 실 resolveDisconnect + 스파이 포트 + fake setTimeoutFn을 연결해
 // 전체 경로를 결정적으로 관측한다(§3.7 verify 규율: 포트 호출 횟수·바인딩 identity·grace 콜백 identity 검사).
 
 /** 가짜 grace 타이머 핸들. */
@@ -22,7 +22,7 @@ function makePort(): SessionLifecyclePort & { onSessionEnd: ReturnType<typeof vi
 
 /**
  * lifecycle 테스트 하네스 — 실 registry + 실 resolveDisconnect + 스파이 포트 + fake setTimeoutFn.
- * grace 콜백을 캡처해 fake clock으로 발화할 수 있게 한다(만료 시점을 테스트가 제어).
+ * grace 콜백을 캡처해 fake clock으로 실행할 수 있게 한다(만료 시점을 테스트가 제어).
  */
 /** 스파이 idle 타이머 — arm/clear를 관측하고 onExpire를 캡처해 fake 만료를 재현한다. */
 interface SpyIdle extends IdleTimer {
@@ -235,7 +235,7 @@ describe('createSessionLifecycle', () => {
       expect(h.registry.get('char-1')).toBeUndefined()
     })
 
-    it('rebind가 바인딩을 교체한 뒤 옛 grace 콜백이 발화하면 identity 불일치로 no-op이다', () => {
+    it('rebind가 바인딩을 교체한 뒤 옛 grace 콜백이 실행되면 identity 불일치로 no-op이다', () => {
       const h = makeHarness()
       const ctxOld = commandCtx()
       h.lifecycle.enterWorld(ctxOld, 'acc-1', 'char-1')
@@ -245,7 +245,7 @@ describe('createSessionLifecycle', () => {
       const ctxNew = commandCtx()
       expect(h.lifecycle.enterWorld(ctxNew, 'acc-1', 'char-1')).toBe('resumed')
 
-      // 이제 옛 grace 콜백이 발화해도 캡처한 옛 deadBinding이 map 엔트리와 불일치라 종결하지 않는다.
+      // 이제 옛 grace 콜백이 실행돼도 캡처한 옛 deadBinding이 map 엔트리와 불일치라 종결하지 않는다.
       h.fireGrace()
 
       expect(h.port.onSessionEnd).not.toHaveBeenCalled()
@@ -344,8 +344,8 @@ describe('createSessionLifecycle', () => {
 
       h.lifecycle.enterWorld(ctx, 'acc-1', 'char-1')
 
-      // 팩토리로 idle을 1회 생성해 ctx.idle에 배선하고 arm했다.
-      // (idle 값이 env thunk에서 읽히는지는 아래 "기본 createIdle 미주입" 테스트가 소유한다.)
+      // 팩토리로 idle을 1회 생성해 ctx.idle에 연결하고 arm했다.
+      // (idle 값이 env thunk에서 읽히는지는 아래 "기본 createIdle 미주입" 테스트가 담당한다.)
       expect(h.createIdle).toHaveBeenCalledTimes(1)
       expect(ctx.idle).toBe(h.idleTimers[0])
       expect(h.idleTimers[0]?.arm).toHaveBeenCalledTimes(1)
@@ -421,7 +421,7 @@ describe('createSessionLifecycle', () => {
       expect(h.registry.get('char-1')?.connection).toBe(ctxNew)
     })
 
-    it('기본 createIdle 미주입 시 idleMs 값을 setTimeoutFn 지연으로 흘린다 (env 값 배선 — 하드코딩 없음)', () => {
+    it('기본 createIdle 미주입 시 idleMs 값을 setTimeoutFn 지연으로 흘린다 (env 값 연결 — 하드코딩 없음)', () => {
       // createIdle을 주입하지 않으면 기본 팩토리(createIdleTimer)가 idle에도 이 setTimeoutFn을 쓴다.
       // enterWorld만 호출(grace 미개입)하므로 유일한 setTimeout 호출은 idle arm이고, 그 지연이 idleMs여야 한다.
       const registry = createSessionRegistry({

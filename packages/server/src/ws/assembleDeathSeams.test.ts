@@ -13,8 +13,8 @@ import type { PlayerCombatState } from '../combat/playerState.js'
 /**
  * 사망 seam 조립기 테스트.
  *
- * 이 조립기는 보상 산술을 소유하지 않는다 — 분배는 `distributeCreatureDeath`, 방 제거·리스폰
- * 타이머는 `onCreatureDeath`가 소유한다. 그래서 여기서 고정하는 것은 **연결 순서와 라이브 반영**이다:
+ * 이 조립기는 보상 산술을 담당하지 않는다 — 분배는 `distributeCreatureDeath`, 방 제거·리스폰
+ * 타이머는 `onCreatureDeath`가 담당한다. 그래서 여기서 고정하는 것은 **연결 순서와 라이브 반영**이다:
  * 원장을 읽은 뒤에 버리는가, 기여자 경험치가 레지스트리에 실제로 남는가, 성향·전리품처럼 적용하지
  * 않기로 한 것이 새어 들어오지 않는가.
  *
@@ -58,7 +58,7 @@ function setup() {
 /**
  * 라이브 엔트리를 등록한다. 인벤토리를 인자로 받는 것이 load-bearing이다 — 항상 빈 배열로 등록하면
  * 조립기가 교체 등록에서 인벤을 통째로 떨어뜨려도 테스트가 통과한다(그 회귀는 조용하고, 진입에서
- * 1회 적재한 인벤을 되돌릴 경로가 이 토픽에 없다).
+ * 1회 로드한 인벤을 되돌릴 경로가 이 토픽에 없다).
  */
 function place(
   liveRegistry: ReturnType<typeof createLiveCharacterRegistry>,
@@ -168,7 +168,7 @@ describe('assembleDeathSeams — fireCreatureDeath 방·원장 처리', () => {
 
   it('교체 등록이 기여자의 인벤토리를 보존한다', () => {
     // 조립기가 새 LiveCharacter를 만들어 register하므로 인벤을 옮기지 않으면 통째로 사라진다.
-    // 진입에서 1회 적재한 인벤을 되돌릴 경로가 이 토픽에 없어 그 회귀는 조용하고 복구 불가다.
+    // 진입에서 1회 로드한 인벤을 되돌릴 경로가 이 토픽에 없어 그 회귀는 조용하고 복구 불가다.
     const ctx = setup()
     const carried = makeObjectInstance({ _id: 'inv-1', objnum: 200 })
     place(ctx.liveRegistry, makeCharacter({ _id: 'char-1', experience: 0 }), [carried])

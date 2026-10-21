@@ -31,7 +31,7 @@ export interface ChannelPort {
 }
 
 /**
- * 채널별 선언 메타 — E3는 어느 항목도 강제하지 않는다(선언만). audience·cost는 ChannelPort 소유(강제
+ * 채널별 선언 메타 — E3는 어느 항목도 강제하지 않는다(선언만). audience·cost는 ChannelPort 담당(강제
  * E4/E7), gate(레벨/클래스 실행 자격)는 PermissionPort 개념 영역(강제 E5). Open Q2.
  *
  * audience는 전파 범위(room=방 내부, zone=인접 방 1홉, global=전서버), cost는 발화 자원 비용(HP·일일

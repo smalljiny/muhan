@@ -8,7 +8,7 @@ import {
 import { createConnectionContext, type ConnectionContext } from './connection.js'
 
 // 순수 자료구조 + 주입 콜백이라 실소켓·실타이머 없이 spy만으로 결정적으로 검증한다(fake clock 불필요 —
-// Story 3의 어떤 함수도 타이머를 발화하지 않는다). `terminate`/`scheduleGrace`/`clearTimeoutFn`이 모든
+// Story 3의 어떤 함수도 타이머를 실행하지 않는다). `terminate`/`scheduleGrace`/`clearTimeoutFn`이 모든
 // 관측점을 제공한다. 각 테스트는 얕은 통과를 피하려 전이 전(pre-transition) 객체를 캡처해 검사한다.
 
 /** 가짜 grace 타이머 핸들. clearTimeoutFn 대상 identity를 추적하려고 매번 새 핸들을 만든다. */
@@ -208,7 +208,7 @@ describe('createSessionRegistry', () => {
       expect(bindings).toHaveLength(3)
       expect(bindings.map((x) => x.characterId).sort()).toEqual(['char-1', 'char-2', 'char-3'])
       // 반환 원소는 map에 등록된 바로 그 바인딩 객체 참조들이다(toContain=Object.is identity).
-      // 이 identity가 shutdown 수렴의 resolveDisconnect identity 가드가 의존하는 계약이다.
+      // 이 identity가 shutdown 일괄 종료의 resolveDisconnect identity 가드가 의존하는 계약이다.
       expect(bindings).toContain(a)
       expect(bindings).toContain(b)
       expect(bindings).toContain(c)

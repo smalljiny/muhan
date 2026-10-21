@@ -11,8 +11,8 @@ import { makeErrorEvent } from '../serverEvent.js'
  * move 핸들러 의존성 seam(전역 금지 — 인자 주입).
  *
  * `liveRegistry`는 방 위치 단일 출처(`character.currentRoom`, D-A1)를 조회할 라이브 레지스트리로,
- * 핸들러가 소비하는 유일한 메서드 `get`만 요구한다(최소 표면). `tryMoveDeps`는 통합 이동 경로가
- * 소비하는 방 그래프·게임시각·방송·훅·rng seam이다(tryMove가 소유·전달, 핸들러는 그대로 위임).
+ * 핸들러가 소비하는 유일한 메서드 `get`만 요구한다(최소 인터페이스). `tryMoveDeps`는 통합 이동 경로가
+ * 소비하는 방 그래프·게임시각·방송·훅·rng seam이다(tryMove가 담당·전달, 핸들러는 그대로 위임).
  * `markCharacterDirty`는 write-behind 영속화 seam으로, characters 스냅샷을 전체 Character 문서로
  * 통일하는 타입 좁힌 헬퍼다(부분 스냅샷은 타입 에러 — markCharacterDirty.ts 참조).
  * `resolveCharacterName`은 도착 방 점유자 characterId를 표시 이름으로 바꾸는 seam으로, 진입 경로
@@ -26,14 +26,14 @@ export interface MoveHandlerDeps {
 }
 
 /**
- * `world:move{direction, id?}` 명령을 실 이동으로 배선하는 핸들러 팩토리.
+ * `world:move{direction, id?}` 명령을 실 이동으로 연결하는 핸들러 팩토리.
  *
  * 방 위치 단일 출처는 `LiveCharacter.character.currentRoom`이다(D-A1) — 핸들러는 currentRoom을
  * 오직 registry 엔트리에서 읽고, actor(accountId/characterId만 보유, 방 필드 없음)에서 읽지 않는다(D2).
- * 방향 별칭·단축키 해소는 클라이언트 책임이라(D-B) 서버는 해소된 최종 `direction` 문자열만 받아
+ * 방향 별칭·단축키 해석은 클라이언트 책임이라(D-B) 서버는 해석된 최종 `direction` 문자열만 받아
  * mode를 `directional`로 고정한다(flee/sneak/named를 노출하지 않는다).
  *
- * 점유자 재배치·leave/join 방송·leave/enter 훅은 `tryMove`가 소유한다(tryMove.ts:194-199) —
+ * 점유자 재배치·leave/join 방송·leave/enter 훅은 `tryMove`가 담당한다(tryMove.ts:194-199) —
  * 핸들러는 occupants Set을 건드리지 않고, 성공 시 `live.character.currentRoom`만 in-place 갱신
  * (immutability 규칙의 승인된 라이브 carve-out)한 뒤 **그 갱신 이후에** 라이브 캐릭터를
  * markCharacterDirty에 흘린다(순서가 뒤집히면 출발 방이 스냅샷에 실린다).
@@ -42,15 +42,15 @@ export interface MoveHandlerDeps {
  *
  * 반환:
  *   - 성공 → `world:room{roomId, name, longDesc, exits, occupants, items, creatures}`(상태 이벤트,
- *     correlationId 없음). 페이로드는 `projectRoomView`가 도착 방에서 투영하며, 진입 경로
- *     (`enterCommand` → `buildRoomSummary`)와 같은 투영을 공유해 두 경로가 분기하지 않는다.
+ *     correlationId 없음). 페이로드는 `projectRoomView`가 도착 방에서 변환하며, 진입 경로
+ *     (`enterCommand` → `buildRoomSummary`)와 같은 변환을 공유해 두 경로가 분기하지 않는다.
  *   - 거부 → `error{rule_rejected, message}`(게임 규칙 거부, id 있으면 correlationId 반향 — D-D).
- *   - 라이브 미등록 actor(registry에 엔트리 없음) → `error{internal}`(배선 격리). 방이 그래프에서
- *     미해소인 경우는 이 경로가 아니라 tryMove가 `NO_EXIT`→`rule_rejected`로 처리한다.
+ *   - 라이브 미등록 actor(registry에 엔트리 없음) → `error{internal}`(연결 격리). 방이 그래프에서
+ *     미해석인 경우는 이 경로가 아니라 tryMove가 `NO_EXIT`→`rule_rejected`로 처리한다.
  */
 export function createMoveHandler(deps: MoveHandlerDeps): CommandHandler {
   return (command: ClientCommand, actor: ActorContext): ServerEvent | undefined => {
-    // (1) defensive narrow — router는 world:move type에만 이 핸들러를 배선하므로 false 갈래는
+    // (1) defensive narrow — router는 world:move type에만 이 핸들러를 연결하므로 false 갈래는
     //     구조적으로 도달 불가한 방어선이다.
     if (command.type !== 'world:move') return undefined
 
@@ -66,7 +66,7 @@ export function createMoveHandler(deps: MoveHandlerDeps): CommandHandler {
       currentRoomId: live.character.currentRoom,
     }
 
-    // (4) 통합 이동 — mode는 directional 고정(D-B). tryMove가 점유자 재배치·방송·훅을 소유한다.
+    // (4) 통합 이동 — mode는 directional 고정(D-B). tryMove가 점유자 재배치·방송·훅을 담당한다.
     const result = tryMove(deps.tryMoveDeps, moveActor, command.direction, 'directional')
 
     // (5) 거부 — 게임 규칙 거부(D-D). tryMove가 mutation 전 bail하므로 live·markCharacterDirty 불변.
@@ -78,7 +78,7 @@ export function createMoveHandler(deps: MoveHandlerDeps): CommandHandler {
     //     갱신이 마킹보다 반드시 먼저다 — 순서가 뒤집히면 출발 방이 스냅샷에 실린다.
     live.character.currentRoom = result.arrivedRoom.roomId
     deps.markCharacterDirty(actor.characterId, live.character)
-    // 필드를 손으로 열거하지 않고 진입 경로와 같은 투영(projectRoomView)을 스프레드한다 — 두 생산자가
+    // 필드를 손으로 열거하지 않고 진입 경로와 같은 변환(projectRoomView)을 스프레드한다 — 두 생산자가
     // 같은 방에 대해 같은 페이로드를 내야 한다(가시성 필터 포함).
     return { type: 'world:room', ...projectRoomView(result.arrivedRoom, deps.resolveCharacterName) }
   }

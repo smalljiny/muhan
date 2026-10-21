@@ -8,7 +8,7 @@ import type { SessionLifecyclePort } from './sessionLifecyclePort.js'
  * inMemorySessionAuthAdapter.ts의 seam 관례를 미러한다.
  */
 
-/** 어댑터가 의존하는 최소 로거 표면. Fastify의 app.log(pino)가 구조적으로 충족한다. */
+/** 어댑터가 의존하는 최소 로거 인터페이스. Fastify의 app.log(pino)가 구조적으로 충족한다. */
 export interface LifecycleLogger {
   info(obj: object, msg: string): void
 }

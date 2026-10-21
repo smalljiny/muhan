@@ -92,7 +92,7 @@ describe('createResolveDisconnect', () => {
   })
 
   it('재진입 차단: teardown이 같은 바인딩으로 resolve를 재호출해도 포트는 정확히 1회(선-제거→teardown 순서 검증)', () => {
-    // 실 경로 모델: teardown → socket.close() → close 리스너 → resolveDisconnect 재발화. 재진입이 teardown
+    // 실 경로 모델: teardown → socket.close() → close 리스너 → resolveDisconnect 재실행. 재진입이 teardown
     // (step 5) '안에서' 트리거되므로, 이 테스트가 판별하는 것은 선-제거가 teardown '앞'이라는 순서다 — 제거가
     // teardown 뒤였다면 재진입이 가드를 통과해 포트가 2회 호출된다(순차 이중 호출은 두 순서 모두 통과하므로
     // 구별 못 함). 구현은 여기서 한 걸음 더 나아가 제거를 포트 '앞'에도 둔다 — onSessionEnd 안에서의 동기
@@ -197,7 +197,7 @@ describe('createResolveDisconnect', () => {
   })
 
   it('account 불일치 link-dead 엔트리를 register 경로로 종결: 포트 1회 + graceTimer clear로 누수 없음', () => {
-    // §3.7 immutable-boundary case 2: resolveDisconnect를 register의 terminate로 배선하고, 같은 캐릭터
+    // §3.7 immutable-boundary case 2: resolveDisconnect를 register의 terminate로 연결하고, 같은 캐릭터
     // 다른 account로 재로그인해 link-dead 엔트리를 register 경로(evict-old)로 종결시킨다.
     const registry = createSessionRegistry()
     const clearTimeoutFn = vi.fn() as unknown as typeof clearTimeout

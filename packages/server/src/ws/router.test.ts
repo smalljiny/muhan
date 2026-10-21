@@ -20,7 +20,7 @@ const testPermission: PermissionPort = { check: () => true }
 
 // T6.5 — 라우터 디스패치의 순수 단위 스펙. 소켓 I/O 없이 결정적으로 검증한다.
 // 레이어링(allowlist → payload → permission → 예외 격리), correlationId 반향, Map 안전성, echo 왕복을 커버한다.
-// T2.4 — dispatch 반환이 DispatchResult로 승격되어 outcome('handled'|'rejected')·events 배열 구조로 검증한다.
+// T2.4 — dispatch 반환이 DispatchResult 타입으로 올려져 outcome('handled'|'rejected')·events 배열 구조로 검증한다.
 // T3.x — permission 레이어(safeParse 성공 후·handler 전)가 forbidden으로 거부하는 seam을 검증한다.
 describe('dispatch', () => {
   describe('allowlist 가드 (Map 기반)', () => {
@@ -352,7 +352,7 @@ describe('dispatch', () => {
 
   describe('chat variant 통합 (레지스트리 엔트리 ↔ 스키마 variant 일치)', () => {
     // 등록 type에 스키마 variant가 없으면 safeParse가 매칭 실패해 영구 bad_payload로 떨어진다.
-    // 이 스펙은 chat:message·chat:emote가 스키마·레지스트리 양쪽에 함께 랜딩했음을 dispatch 경로로 고정한다.
+    // 이 스펙은 chat:message·chat:emote가 스키마·레지스트리 양쪽에 함께 반영됐음을 dispatch 경로로 고정한다.
     it('chat:message가 handled로 디스패치되고 채널 포트로 핸드오프된다', () => {
       const deliver = vi.fn()
       const registry = createCommandRegistry({ deliver })

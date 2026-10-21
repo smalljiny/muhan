@@ -32,13 +32,13 @@ describe('createHeartbeat', () => {
     expect(socket.terminate).not.toHaveBeenCalled()
   })
 
-  it('start는 타이머 핸들을 반환한다 (ctx.heartbeat 배선용)', () => {
+  it('start는 타이머 핸들을 반환한다 (ctx.heartbeat 연결용)', () => {
     const { hb, socket, clock } = makeHb()
 
     const handle = hb.start()
 
     // 핸들은 단순 non-null이 아니라 cleanup이 clear할 수 있는 실제 타이머 핸들이어야 한다
-    // (ctx.heartbeat 배선의 계약). 이 핸들로 clear하면 이후 tick에서 ping이 멈춰야 한다.
+    // (ctx.heartbeat 연결의 계약). 이 핸들로 clear하면 이후 tick에서 ping이 멈춰야 한다.
     expect(handle).toBeDefined()
     clock.clearInterval(handle)
     clock.tick(1)
@@ -58,7 +58,7 @@ describe('createHeartbeat', () => {
     clock.tick(1)
     expect(socket.terminate).toHaveBeenCalledTimes(1)
 
-    // 정지 후 추가 tick은 ping·terminate를 더 발화하지 않는다.
+    // 정지 후 추가 tick은 ping·terminate를 더 실행하지 않는다.
     clock.tick(5)
     expect(socket.ping).toHaveBeenCalledTimes(3)
     expect(socket.terminate).toHaveBeenCalledTimes(1)
@@ -68,7 +68,7 @@ describe('createHeartbeat', () => {
     const { hb, socket, clock } = makeHb()
 
     hb.start()
-    // 매 라운드 pong을 수신하면 미스가 누적되지 않아 terminate가 절대 발화하지 않는다.
+    // 매 라운드 pong을 수신하면 미스가 누적되지 않아 terminate가 절대 실행되지 않는다.
     for (let i = 0; i < 20; i += 1) {
       clock.tick(1)
       hb.notePong()
@@ -96,7 +96,7 @@ describe('createHeartbeat', () => {
     expect(socket.terminate).toHaveBeenCalledTimes(1)
   })
 
-  it('stop 후에는 타이머가 발화하지 않는다', () => {
+  it('stop 후에는 타이머가 실행되지 않는다', () => {
     const { hb, socket, clock } = makeHb()
 
     hb.start()

@@ -30,7 +30,7 @@ function fakeIdle(): IdleTimer & { clear: ReturnType<typeof vi.fn> } {
 
 /**
  * fake ConnectionRateLimiter. 슬롯 참조로만 쓴다 — cleanupConnection은 이 핸들의 메서드를 부르지 않는다
- * (계정 버킷 반납은 close 리스너 소유, cleanup은 슬롯 null화만 한다).
+ * (계정 버킷 반납은 close 리스너 담당, cleanup은 슬롯 null화만 한다).
  */
 function fakeRateLimiter(): ConnectionRateLimiter {
   return {
@@ -73,7 +73,7 @@ describe('cleanupConnection', () => {
     const deadline = fakeDeadline()
     const connections = new Map<WebSocket, ConnectionContext>()
     const ctx = createConnectionContext()
-    // 하트비트 분기를 격리하기 위해 heartbeat는 null로 두고 deadline만 배선한다.
+    // 하트비트 분기를 격리하기 위해 heartbeat는 null로 두고 deadline만 연결한다.
     ctx.heartbeat = null
     ctx.deadline = deadline
     connections.set(socket, ctx)
@@ -90,11 +90,11 @@ describe('cleanupConnection', () => {
     expect(ctx.rateLimiter).toBeNull()
   })
 
-  it('rateLimiter 슬롯이 non-null이면 null로 비운다(계정 반납은 close 리스너 소유, 슬롯만 정리)', () => {
+  it('rateLimiter 슬롯이 non-null이면 null로 비운다(계정 반납은 close 리스너 담당, 슬롯만 정리)', () => {
     const socket = fakeSocket()
     const connections = new Map<WebSocket, ConnectionContext>()
     const ctx = createConnectionContext()
-    // 다른 슬롯 분기를 격리하기 위해 heartbeat·deadline·idle은 null로 두고 rateLimiter만 배선한다.
+    // 다른 슬롯 분기를 격리하기 위해 heartbeat·deadline·idle은 null로 두고 rateLimiter만 연결한다.
     ctx.heartbeat = null
     ctx.deadline = null
     ctx.idle = null
@@ -103,7 +103,7 @@ describe('cleanupConnection', () => {
 
     cleanupConnection(connections, socket)
 
-    // 슬롯을 null로 비운다 — releaseAccount는 여기서 부르지 않는다(별도 close 리스너 소유).
+    // 슬롯을 null로 비운다 — releaseAccount는 여기서 부르지 않는다(별도 close 리스너 담당).
     expect(ctx.rateLimiter).toBeNull()
     expect(connections.has(socket)).toBe(false)
   })

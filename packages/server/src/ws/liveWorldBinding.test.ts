@@ -11,8 +11,8 @@ import { buildRoomSummary, buildSessionLiveWorld } from './liveWorldBinding.js'
  * buildRoomSummary — world:room emit용 방 뷰 파생 단위 스펙.
  *
  * exits는 반드시 exit **이름**(ExitEdge.name)이어야 한다(인덱스 아님 — tryMove selector 계약).
- * 미해소 방은 undefined를 반환해 enterCommand가 world:room을 건너뛴다. 가시성 필터·점유자 이름 해소
- * 규칙 자체는 `projectRoomView`(roomView.test.ts)가 소유하나, 이 파생기가 실제로 그 투영을 경유하는지는
+ * 미해석 방은 undefined를 반환해 enterCommand가 world:room을 건너뛴다. 가시성 필터·점유자 이름 해석
+ * 규칙 자체는 `projectRoomView`(roomView.test.ts)가 담당하나, 이 파생기가 실제로 그 변환을 경유하는지는
  * 여기서 확인한다 — 위임이 끊기면 진입 경로만 조용히 숨김 개체를 노출한다.
  */
 
@@ -38,11 +38,11 @@ function makeRoom(
   })
 }
 
-/** 이름을 해소하지 못하는 기본 해소자 — 점유자를 다루지 않는 케이스의 잡음을 없앤다. */
+/** 이름을 해석하지 못하는 기본 리졸버 — 점유자를 다루지 않는 케이스의 잡음을 없앤다. */
 const noNames = (): undefined => undefined
 
 describe('buildRoomSummary', () => {
-  it('해소된 방을 world:room 전 필드(이름·설명·출구·점유자·아이템·크리처)로 투영한다', () => {
+  it('해석된 방을 world:room 전 필드(이름·설명·출구·점유자·아이템·크리처)로 변환한다', () => {
     const rooms = new Map<number, RoomNode>([
       [
         50,
@@ -82,7 +82,7 @@ describe('buildRoomSummary', () => {
     })
   })
 
-  it('미해소 방(resolveRoom undefined)은 undefined를 반환한다', () => {
+  it('미해석 방(resolveRoom undefined)은 undefined를 반환한다', () => {
     const summary = buildRoomSummary(() => undefined, noNames)
 
     expect(summary(9999)).toBeUndefined()
@@ -112,7 +112,7 @@ describe('buildRoomSummary', () => {
     expect(view?.creatures).toEqual([{ instanceId: 'crt-1', name: '보이는 쥐', level: 3 }])
   })
 
-  it('점유자 이름을 resolveCharacterName으로 해소하고 미해소 id는 제외한다', () => {
+  it('점유자 이름을 resolveCharacterName으로 해석하고 미해석 id는 제외한다', () => {
     const rooms = new Map<number, RoomNode>([
       [4, makeRoom(4, [], { occupants: new Set(['char-1', 'char-ghost']) })],
     ])

@@ -25,7 +25,7 @@ import type { ChannelPort } from '../channelPort.js'
 import type { PermissionPort } from '../permissionPort.js'
 
 /**
- * progress:train 핸들러 스펙 — 라이브 레지스트리·방 해소·train() 3게이트를 하나의 명령 경로로 배선한다.
+ * progress:train 핸들러 스펙 — 라이브 레지스트리·방 해석·train() 3게이트를 하나의 명령 경로로 연결한다.
  *
  * 픽스처(방 flags·class·level·exp·gold 임계)는 progression/train.test.ts의 것을 그대로 재사용한다 —
  * RTRAIN base 비트 + class-bit 역순 매칭과 neededExp/goldToTrain 임계를 여기서 재유도하지 않는다
@@ -62,8 +62,8 @@ function makeRoom(roomId: number, flags: number[]): RoomNode {
 /**
  * 유효 Character 픽스처 — progression/train.test.ts의 makeChar 미러.
  *
- * `alignment`는 v6에서 **required로 승격**돼 더는 생략할 수 없다(부재 문서의 sentinel 0 시딩은
- * backfillCharacterV6 소관). train 경로가 alignment를 한 번도 읽지 않는다는 사실(checkLocation·
+ * `alignment`는 v6에서 **required로 올라가** 더는 생략할 수 없다(필드가 없는 문서의 sentinel 0 시딩은
+ * backfillCharacterV6 담당). train 경로가 alignment를 한 번도 읽지 않는다는 사실(checkLocation·
  * neededExp·goldToTrain·classifyPrestige·upLevel·resync 전 구간)은 그대로이나, 그 사실을 "필드를
  * 생략한 문서"로 표현하는 것이 타입상 불가해졌으므로 형제 픽스처 관례대로 `1`을 싣는다.
  */
@@ -177,7 +177,7 @@ describe('createTrainHandler', () => {
       expect(events[1]).toMatchObject({ type: 'character:stats' })
     })
 
-    it('발화 이벤트가 전부 와이어 계약(serverEventSchema)을 통과한다', () => {
+    it('발생한 이벤트가 전부 와이어 계약(serverEventSchema)을 통과한다', () => {
       const { deps } = makeDeps({
         live: { character: makeSuccessChar() },
         room: makeRoom(1, trainingFlagsForClass(1)),
@@ -198,7 +198,7 @@ describe('createTrainHandler', () => {
 
     /**
      * D10 — 스탯 통지는 `character:stats` 하나로 통일한다. 이 이벤트는 **연마가 확정한 문서**에서
-     * 투영해야 한다. 명령 시작 시점 문서(`live.character`)로 투영하면 클라이언트가 한 박자 뒤처진
+     * 변환해야 한다. 명령 시작 시점 문서(`live.character`)로 변환하면 클라이언트가 한 박자 뒤처진
      * 레벨·경험치를 받는다.
      */
     it('character:stats가 연마 후 확정 문서의 level·experience를 싣는다', () => {
@@ -219,7 +219,7 @@ describe('createTrainHandler', () => {
 
     /**
      * `hpMax`·`mpMax`는 문서에 없고 `class`·`level`에서 매번 파생한다(compute-on-read). 따라서
-     * **레벨이 오르면 최대치도 바뀐다** — 이 케이스가 "낡은 문서로 투영" 변이를 잡는 지점이다.
+     * **레벨이 오르면 최대치도 바뀐다** — 이 케이스가 "낡은 문서로 변환" 변이를 잡는 지점이다.
      */
     it('character:stats의 hpMax·mpMax가 연마 후 레벨의 resolveHpMax·resolveMpMax와 일치한다', () => {
       const before = makeSuccessChar()
@@ -238,14 +238,14 @@ describe('createTrainHandler', () => {
         hpMax: resolveHpMax(grown),
         mpMax: resolveMpMax(grown),
       })
-      // 비-공허 근거: 연마 전후의 최대치가 실제로 다르다. 같다면 위 단언은 낡은 문서로 투영해도
+      // 비-공허 근거: 연마 전후의 최대치가 실제로 다르다. 같다면 위 단언은 낡은 문서로 변환해도
       // 통과하므로 계약을 검증하지 못한다.
       expect(resolveHpMax(before)).not.toBe(resolveHpMax(grown))
       expect(resolveMpMax(before)).not.toBe(resolveMpMax(grown))
     })
 
     /**
-     * 승급(무적) 경로가 **가장 강한 stale-투영 검출기**다. 일반 연마는 레벨이 +1이지만 승급은
+     * 승급(무적) 경로가 **가장 강한 stale-변환 검출기**다. 일반 연마는 레벨이 +1이지만 승급은
      * `level 100 → 1`·`experience → 0`·`class → 9`로 전 필드가 크게 튄다. 게다가
      * `progress:trained`만 보면 `levelsGained: 0`이라 아무 일도 없었던 것처럼 보이고, 실제 변화는
      * 오직 `character:stats`에만 나타난다 — 이 Story가 추가한 계약이 이 경로에서 특히 load-bearing이다.
@@ -270,7 +270,7 @@ describe('createTrainHandler', () => {
         levelsGained: 0,
         prestige: 'invincible',
       })
-      // 전이 후 상태: class 9·level 1·experience 0. 시작 시점 문서로 투영하면 셋 다 틀린다.
+      // 전이 후 상태: class 9·level 1·experience 0. 시작 시점 문서로 변환하면 셋 다 틀린다.
       const promoted = { class: INVINCIBLE_CLASS, level: 1 }
       expect(events[1]).toMatchObject({
         type: 'character:stats',
@@ -320,7 +320,7 @@ describe('createTrainHandler', () => {
       }
     })
 
-    it('markCharacterDirty가 정확히 1회 호출된다 (핸들러 중복 마킹 없음 — train.finalize가 소유)', () => {
+    it('markCharacterDirty가 정확히 1회 호출된다 (핸들러 중복 마킹 없음 — train.finalize가 담당)', () => {
       const { deps, markDirty } = makeDeps({
         live: { character: makeSuccessChar() },
         room: makeRoom(1, trainingFlagsForClass(1)),
@@ -441,7 +441,7 @@ describe('createTrainHandler', () => {
     })
   })
 
-  describe('배선 격리 (internal)', () => {
+  describe('연결 격리 (internal)', () => {
     it('라이브 미등록 actor면 error{internal}, train 미실행', () => {
       const { deps, markDirty, resolveRoom } = makeDeps({
         room: makeRoom(1, trainingFlagsForClass(1)),
@@ -451,11 +451,11 @@ describe('createTrainHandler', () => {
 
       expect(event).toMatchObject({ type: 'error', code: 'internal', correlationId: 't1' })
       expect(markDirty).not.toHaveBeenCalled()
-      // 라이브 조회가 먼저 실패하므로 방 해소까지 가지 않는다.
+      // 라이브 조회가 먼저 실패하므로 방 해석까지 가지 않는다.
       expect(resolveRoom).not.toHaveBeenCalled()
     })
 
-    it('방이 해소되지 않으면 error{internal} 1개, train 미실행', () => {
+    it('방이 해석되지 않으면 error{internal} 1개, train 미실행', () => {
       const { deps, markDirty } = makeDeps({
         live: { character: makeSuccessChar() },
         room: undefined,
@@ -468,7 +468,7 @@ describe('createTrainHandler', () => {
       expect(markDirty).not.toHaveBeenCalled()
     })
 
-    it('방 해소는 actor.characterId로 조회한다', () => {
+    it('방 해석은 actor.characterId로 조회한다', () => {
       const { deps, resolveRoom } = makeDeps({
         live: { character: makeSuccessChar() },
         room: makeRoom(1, trainingFlagsForClass(1)),
@@ -587,7 +587,7 @@ describe('createCommandRegistry — progress:train 조건부 등록', () => {
    * 인벤 보존 회귀 — 엔트리 교체는 **character만** 갈아끼워야 한다.
    *
    * 핸들러가 `register({ character })`처럼 새 객체를 통째로 만들면 인벤이 조용히 사라진다. 진입에서
-   * 한 번만 적재하는 설계라 그 손실을 되돌릴 경로가 없다(다음 재접속까지 빈손이 된다).
+   * 한 번만 로드하는 설계라 그 손실을 되돌릴 경로가 없다(다음 재접속까지 빈손이 된다).
    */
   it('연마 성공 후에도 라이브 엔트리의 인벤토리가 유실되지 않는다', () => {
     const book: ObjectInstance = {

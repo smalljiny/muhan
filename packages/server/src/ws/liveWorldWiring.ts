@@ -41,22 +41,22 @@ import type { ConnectionContext } from './connection.js'
 /**
  * 라이브 월드 조립 팩토리(Story 7) — index.ts가 넘기는 라이브 월드 의존 묶음을 진입 seam(liveWorldBinding)·
  * 이동 seam(moveDeps)·연마 seam(trainDeps)·학습 seam(studyDeps)·세션 수명 어댑터(lifecyclePort)·
- * 방 해소자(resolveRoom)로 파생한다.
+ * 방 리졸버(resolveRoom)로 파생한다.
  *
- * index.ts boot는 커버리지 제외 배선 코드라, 이 파생 로직을 테스트 가능한 순수 팩토리로 추출하고 index.ts는
+ * index.ts boot는 커버리지 제외 연결 코드라, 이 파생 로직을 테스트 가능한 순수 팩토리로 추출하고 index.ts는
  * 묶음 조립·전달만 남긴다(worldRuntime.ts 관례 미러). 팩토리는 transport(소켓·safeSend)를 만지지 않아
  * fake 없이 단위 테스트된다 — transport 결합은 `assembleRoomChannelPort`의 sendTo 클로저 하나에 격리한다.
  *
  * 단일 공유 불변식(#3): entry(진입 코어)·liveRegistry는 hydrate/place(liveWorldBinding)·이동(moveDeps)·
- * 종료 정리(lifecyclePort.release)·발화자 방 해소(resolveRoom)가 **동일 인스턴스**를 배후에 둬야 상태가
+ * 종료 정리(lifecyclePort.release)·발화자 방 해석(resolveRoom)이 **동일 인스턴스**를 배후에 둬야 상태가
  * 분기하지 않는다. 팩토리가 entry를 1회 생성해 네 소비자에 같은 참조를 전달한다. 같은 이유로 점유자 이름
- * 해소자(resolveCharacterName)도 1회 생성해 진입·이동 두 world:room 생산자가 같은 참조를 공유한다.
- * 방 스코프 플레이어 해소자(resolveRoomPlayer)는 그 이름 해소자를 **재사용해** 1회 생성한다 — 지목 경로가
+ * 리졸버(resolveCharacterName)도 1회 생성해 진입·이동 두 world:room 생산자가 같은 참조를 공유한다.
+ * 방 스코프 플레이어 리졸버(resolveRoomPlayer)는 그 이름 리졸버를 **재사용해** 1회 생성한다 — 지목 경로가
  * 표시 경로와 다른 클로저를 배후에 두면 "보이는 이름"과 "지목되는 이름"이 갈린다.
  *
  * 이 불변식은 **이 팩토리를 거친 묶음 파생 경로에 한정**된다. `plugin.ts`가 진입 seam을
- * `liveWorld ?? wiring?.liveWorldBinding`로 해소하므로, 호출자가 `liveWorld`와 `liveWorldDeps`를 함께
- * 주입하면 두 생산자가 서로 다른 해소자를 갖게 된다(현재 프로덕션 호출자는 후자만 넘겨 도달 불가).
+ * `liveWorld ?? wiring?.liveWorldBinding`로 해석하므로, 호출자가 `liveWorld`와 `liveWorldDeps`를 함께
+ * 주입하면 두 생산자가 서로 다른 리졸버를 갖게 된다(현재 프로덕션 호출자는 후자만 넘겨 도달 불가).
  */
 
 /** logger seam — save/logger·worldClock 관례 미러(console 금지). EntryLogger를 그대로 재사용한다. */
@@ -67,7 +67,7 @@ export type LiveWorldLogger = EntryLogger
  * 원재료에서 진입·이동·수명 seam을 파생한다(전역 조회 금지 — 인자 주입).
  */
 export interface LiveWorldWiringBundle {
-  /** 정본 방 그래프(roomId → 방 노드). resolveRoom·tryMove·liveWorldBinding이 공유한다. */
+  /** 기준 방 그래프(roomId → 방 노드). resolveRoom·tryMove·liveWorldBinding이 공유한다. */
   readonly worldGraph: Map<number, RoomNode>
   /** 라이브 캐릭터 레지스트리(단일 인스턴스). entry·moveDeps·lifecyclePort·resolveRoom이 공유한다. */
   readonly liveRegistry: LiveCharacterRegistry
@@ -82,9 +82,9 @@ export interface LiveWorldWiringBundle {
   /**
    * object 템플릿 인덱스(objnum → 템플릿). boot가 `loadObjectTemplates()`로 **1회** 만들어 싣는다 —
    * objects.json은 부팅 시 고정 콘텐츠라 세션·명령마다 다시 읽을 이유가 없고, 모든 소비자가 같은
-   * 참조를 봐야 이름·스탯 해소가 갈리지 않는다(#3 단일 공유 불변식의 확장).
+   * 참조를 봐야 이름·스탯 해석이 갈리지 않는다(#3 단일 공유 불변식의 확장).
    *
-   * 소비자는 인스턴스↔템플릿 결합과 인벤 스코프 이름 해소(#120)다.
+   * 소비자는 인스턴스↔템플릿 결합과 인벤 스코프 이름 해석(#120)이다.
    */
   readonly objectTemplates: ObjectTemplateIndex
   /**
@@ -106,7 +106,7 @@ export interface LiveWorldWiringBundle {
    * 가리킨다. 예외도 로그도 남지 않는 종류의 사고다.
    */
   readonly alloc: InstanceIdAllocator
-  /** 변경 엔티티 side registry 기록 — 이동 write-behind·종료 수렴이 소비한다(실 flush는 저장 스케줄러). */
+  /** 변경 엔티티 side registry 기록 — 이동 write-behind·종료 정리가 소비한다(실 flush는 저장 스케줄러). */
   readonly markDirty: (collection: string, id: string, snapshot: unknown) => void
   /**
    * 미영속 스냅샷 조회 seam(`SaveEngine.peekPending`). 원시 `(collection, id)` 형태로 싣고, 팩토리가
@@ -134,23 +134,23 @@ export interface LiveWorldWiringBundle {
 
 /** 팩토리 산출물 — registerWebsocket이 소비할 파생 seam 묶음. */
 export interface LiveWorldWiring {
-  /** 세션 진입 seam(hydrate/place/roomSummary 파생용 진입 코어 + roomId 해소자). */
+  /** 세션 진입 seam(hydrate/place/roomSummary 파생용 진입 코어 + roomId 리졸버). */
   readonly liveWorldBinding: LiveWorldBinding
-  /** world:move 배선용 이동 의존(라이브 레지스트리·tryMove seam·markCharacterDirty). */
+  /** world:move 연결용 이동 의존(라이브 레지스트리·tryMove seam·markCharacterDirty). */
   readonly moveDeps: MoveHandlerDeps
   /**
-   * progress:train 배선용 연마 의존(라이브 레지스트리·by-character 방 해소자·markCharacterDirty).
+   * progress:train 연결용 연마 의존(라이브 레지스트리·by-character 방 리졸버·markCharacterDirty).
    * 신규 원재료 없이 기존 seam 셋의 조합이다 — 묶음(LiveWorldWiringBundle)은 변하지 않는다.
    */
   readonly trainDeps: TrainHandlerDeps
   /**
-   * progress:study 배선용 학습 의존(라이브 레지스트리·템플릿 인덱스·now·두 영속 마킹 seam).
+   * progress:study 연결용 학습 의존(라이브 레지스트리·템플릿 인덱스·now·두 영속 마킹 seam).
    * 신규 원재료는 `now` 하나뿐이고, 나머지는 기존 seam(레지스트리·objectTemplates·markDirty 파생)의 조합이다.
    */
   readonly studyDeps: StudyHandlerDeps
   /**
-   * combat:attack 배선용 공격 의존. 이 팩토리가 사망 seam·원장·전투 레지스트리를 **1회씩** 조립해
-   * 싣고, 나머지 seam(방·대상 해소자·이름 해소자·markCharacterDirty)은 위에서 만든 인스턴스를
+   * combat:attack 연결용 공격 의존. 이 팩토리가 사망 seam·원장·전투 레지스트리를 **1회씩** 조립해
+   * 싣고, 나머지 seam(방·대상 리졸버·이름 리졸버·markCharacterDirty)은 위에서 만든 인스턴스를
    * 그대로 재사용한다(#3).
    */
   readonly attackDeps: AttackHandlerDeps
@@ -166,17 +166,17 @@ export interface LiveWorldWiring {
    * 같은 인스턴스를 공유하며, 후속 라이브 호출처(train 등)도 이것을 소비한다.
    */
   readonly markCharacterDirty: MarkCharacterDirty
-  /** 발화자(characterId) 현재 방 해소자 — 방 채널 어댑터가 fan-out 대상 방을 얻는 데 쓴다. */
+  /** 발화자(characterId) 현재 방 리졸버 — 방 채널 어댑터가 fan-out 대상 방을 얻는 데 쓴다. */
   readonly resolveRoom: (characterId: string) => RoomNode | undefined
   /**
-   * 방 스코프 크리처 해소자(이름·별칭 접두 + 서수 + `find_crt` 가시성 게이트). 의존이 없는 순수 함수라
-   * 모듈 함수를 그대로 싣는다 — 관찰자 flags는 호출 인자이지 배선 원재료가 아니다(#121이 합성해 넘긴다).
+   * 방 스코프 크리처 리졸버(이름·별칭 접두 + 서수 + `find_crt` 가시성 게이트). 의존이 없는 순수 함수라
+   * 모듈 함수를 그대로 싣는다 — 관찰자 flags는 호출 인자이지 연결 원재료가 아니다(#121이 합성해 넘긴다).
    */
   readonly resolveRoomCreature: RoomCreatureResolver
   /**
-   * 방 스코프 플레이어 해소자(점유자 표시 이름 접두 + 서수 → characterId). 아래 이름 해소자
+   * 방 스코프 플레이어 리졸버(점유자 표시 이름 접두 + 서수 → characterId). 아래 이름 리졸버
    * (`resolveCharacterName`)를 **재사용해 1회 생성**한다(#3) — 새로 만들면 지목 경로가 두 world:room
-   * 생산자와 다른 해소자를 배후에 두게 되어 이름 규칙이 갈릴 수 있다.
+   * 생산자와 다른 리졸버를 배후에 두게 되어 이름 규칙이 갈릴 수 있다.
    */
   readonly resolveRoomPlayer: RoomPlayerResolver
 }
@@ -184,7 +184,7 @@ export interface LiveWorldWiring {
 /**
  * 라이브 월드 의존 묶음을 파생 seam으로 조립한다(순수 — transport 미접촉).
  *
- * entry를 1회 생성해 liveWorldBinding·lifecyclePort가 공유하고(#3), roomId 해소자(worldGraph.get)를
+ * entry를 1회 생성해 liveWorldBinding·lifecyclePort가 공유하고(#3), roomId 리졸버(worldGraph.get)를
  * liveWorldBinding·tryMove가 공유한다. 이동 방송(broadcastLeave/broadcastJoin)은 Story 8 몫이라 여기서는
  * no-op으로 채운다 — 방 채팅과 달리 이동 통지는 이 토픽 완료 기준 밖이다.
  */
@@ -200,7 +200,7 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
   // 형제 `markCharacterDirty`와 달리 이 seam은 `LiveWorldWiring` 산출물에 노출하지 않는다. 노출의 효용은
   // "여러 파생 seam이 같은 인스턴스를 쓴다"를 테스트가 단언할 수 있게 하는 것인데(둘 다 프로덕션에서
   // `wiring.*`로 직접 읽는 호출자는 없다 — 소비는 전부 파생된 deps를 통한다), 내부 소비자가
-  // studyDeps 하나뿐이면 단언할 대상이 없어 표면만 넓어진다. 두 번째 소비자가 생기면 그때 노출한다.
+  // studyDeps 하나뿐이면 단언할 대상이 없어 인터페이스만 넓어진다. 두 번째 소비자가 생기면 그때 노출한다.
   const markObjectDeleted = createMarkObjectDeleted(bundle.markDirty)
 
   // characters pending 조회 seam — 원시 `peekPending`을 'characters'로 **1회** 좁힌다(#3, markCharacterDirty 미러).
@@ -228,7 +228,7 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
    * **왜 `liveCharacterEntry`를 직접 고치지 않는가**: `world/`는 `combat/`을 import하지 않는다
    * (스펙 §3.2 — `liveCharacterRegistry`·`assemblePlayerCombatState`의 JSDoc이 같은 규약을 명시한다).
    * 진입 코어에 조립기를 넣으면 그 규약이 깨지고 world 계층이 전투 계층을 역참조하게 된다. 그래서
-   * 배선 계층인 이 팩토리가 감싼다 — 방향은 ws→world·ws→combat로 유지되고, 두 도메인은 서로를 모른다.
+   * 연결 계층인 이 팩토리가 감싼다 — 방향은 ws→world·ws→combat로 유지되고, 두 도메인은 서로를 모른다.
    *
    * flags는 `composeCharacterFlags(character, now)`로 여기서 합성한다(조립기는 hex를 인자로만 받는
    * 순수 함수다 — `playerState.ts`의 주입 규약).
@@ -262,7 +262,7 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
         assemblePlayerCombatState(authoritative, bundle.objectTemplates, flags, carry),
       )
     },
-    // 등록·제거를 같은 래퍼가 대칭으로 소유한다 — 제거를 lifecyclePort에만 두면 `entry.release`를
+    // 등록·제거를 같은 래퍼가 대칭으로 담당한다 — 제거를 lifecyclePort에만 두면 `entry.release`를
     // 포트 밖에서 부르는 호출자가 생겼을 때 전투상태가 남는다. `remove`는 미등록에 no-op이라
     // 어댑터의 제거와 중복돼도 무해하다.
     release: (characterId: string) => {
@@ -271,12 +271,12 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     },
   }
 
-  // 점유자 이름 해소자 — **1회 생성**해 진입 seam(liveWorldBinding)과 이동 seam(moveDeps)이 같은 참조를
-  // 공유한다(#3). 두 번 만들면 두 발화 경로가 서로 다른 클로저를 쓰게 되어 나중에 해소 규칙이 갈릴 수 있다.
+  // 점유자 이름 리졸버 — **1회 생성**해 진입 seam(liveWorldBinding)과 이동 seam(moveDeps)이 같은 참조를
+  // 공유한다(#3). 두 번 만들면 두 발생 경로가 서로 다른 클로저를 쓰게 되어 나중에 해석 규칙이 갈릴 수 있다.
   const resolveCharacterName = (characterId: string): string | undefined =>
     bundle.liveRegistry.get(characterId)?.character.name
 
-  // 방 스코프 플레이어 해소자 — 위 이름 해소자를 감싸 **1회 생성**한다(#3의 확장). 지목 경로가 표시
+  // 방 스코프 플레이어 리졸버 — 위 이름 리졸버를 감싸 **1회 생성**한다(#3의 확장). 지목 경로가 표시
   // 경로(world:room 두 생산자)와 같은 클로저를 배후에 둬야 "보이는 이름"과 "지목되는 이름"이 갈리지 않는다.
   const resolveRoomPlayer = createRoomPlayerResolver(resolveCharacterName)
 
@@ -286,8 +286,8 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     resolveCharacterName,
   }
 
-  // 이동 방송 seam은 Story 8이 채널 어댑터로 결선한다(이동 통지). 이 토픽은 no-op으로 두어 tryMove 계약만
-  // 충족한다 — 방 채팅 전파(#6)는 채널 포트가, 이동 leave/join 통지는 후속 토픽이 소유한다.
+  // 이동 방송 seam은 Story 8이 채널 어댑터로 연결한다(이동 통지). 이 토픽은 no-op으로 두어 tryMove 계약만
+  // 충족한다 — 방 채팅 전파(#6)는 채널 포트가, 이동 leave/join 통지는 후속 토픽이 담당한다.
   const noopBroadcast = (_room: RoomNode, _actor: MoveActor): void => {}
   const tryMoveDeps: TryMoveDeps = {
     resolveRoom: resolveRoomById,
@@ -314,22 +314,22 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     combatRegistry,
   })
 
-  // 발화자 방 해소자(by-character): registry로 라이브 엔트리를 찾고 currentRoom(단일 출처)으로 방을 얻는다.
+  // 발화자 방 리졸버(by-character): registry로 라이브 엔트리를 찾고 currentRoom(단일 출처)으로 방을 얻는다.
   const resolveRoom = (characterId: string): RoomNode | undefined => {
     const live = bundle.liveRegistry.get(characterId)
     if (live === undefined) return undefined
     return bundle.worldGraph.get(live.character.currentRoom)
   }
 
-  // 연마 의존 — 신규 원재료 없이 기존 세 seam의 조합이다(레지스트리·by-character 방 해소자·스냅샷 헬퍼).
-  // moveDeps와 달리 by-roomId 해소자가 아니라 위의 by-character resolveRoom을 쓰므로 그 선언 뒤에 둔다.
+  // 연마 의존 — 신규 원재료 없이 기존 세 seam의 조합이다(레지스트리·by-character 방 리졸버·스냅샷 헬퍼).
+  // moveDeps와 달리 by-roomId 리졸버가 아니라 위의 by-character resolveRoom을 쓰므로 그 선언 뒤에 둔다.
   const trainDeps: TrainHandlerDeps = {
     liveRegistry: bundle.liveRegistry,
     resolveRoom,
     markCharacterDirty,
   }
 
-  // 학습 의존 — 방을 읽지 않는다(대상이 소지품 스코프라 방 해소자가 필요 없다). 신규 원재료는 `now`뿐이고,
+  // 학습 의존 — 방을 읽지 않는다(대상이 소지품 스코프라 방 리졸버가 필요 없다). 신규 원재료는 `now`뿐이고,
   // 두 마킹은 위에서 1회씩 만든 인스턴스를 그대로 싣는다(#3).
   const studyDeps: StudyHandlerDeps = {
     liveRegistry: bundle.liveRegistry,
@@ -356,7 +356,7 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
 
   // 공격 의존 — 신규 원재료는 없다. 사망 seam·원장·전투 레지스트리는 위에서 1회씩 만든 것이고,
   // 나머지는 전부 기존 인스턴스의 재사용이다(#3). 특히 `resolveCharacterName`은 world:room 두
-  // 생산자와 같은 참조여야 "보이는 이름"과 사망 후 방 재투영의 이름이 갈리지 않는다.
+  // 생산자와 같은 참조여야 "보이는 이름"과 사망 후 방 뷰 재생성의 이름이 갈리지 않는다.
   const attackDeps: AttackHandlerDeps = {
     ...deathSeams,
     liveRegistry: bundle.liveRegistry,
@@ -367,7 +367,7 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     resolveRoomPlayer,
     resolveCharacterName,
     now: bundle.now,
-    // 굴림 seam — 전투 모듈은 순수 함수로 남고 프로덕션 배선이 실 rng를 꽂는다(attack.ts 헤더).
+    // 굴림 seam — 전투 모듈은 순수 함수로 남고 프로덕션 연결이 실 rng를 꽂는다(attack.ts 헤더).
     rng: defaultCombatRng,
     ledgers,
     markCharacterDirty,
@@ -383,15 +383,15 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     lifecyclePort,
     resolveRoom,
     markCharacterDirty,
-    // 크리처 해소자는 의존이 없어 모듈 함수를 그대로 노출한다(재생성 없음 — 참조가 곧 단일 인스턴스).
+    // 크리처 리졸버는 의존이 없어 모듈 함수를 그대로 노출한다(재생성 없음 — 참조가 곧 단일 인스턴스).
     resolveRoomCreature,
     resolveRoomPlayer,
   }
 }
 
-/** assembleRoomChannelPort 의존 seam — 발화자 방 해소자 + 세션 색인 + 소켓 해소자 + 안전 전송. */
+/** assembleRoomChannelPort 의존 seam — 발화자 방 리졸버 + 세션 색인 + 소켓 리졸버 + 안전 전송. */
 export interface RoomChannelPortDeps<Socket> {
-  /** 발화자(characterId) 현재 방 해소자(wiring.resolveRoom). fan-out 대상 방을 얻는다. */
+  /** 발화자(characterId) 현재 방 리졸버(wiring.resolveRoom). fan-out 대상 방을 얻는다. */
   readonly resolveRoom: (characterId: string) => RoomNode | undefined
   /** characterId → 세션 바인딩 색인(소켓 역참조용 connection 보유). */
   readonly registry: Pick<SessionRegistry, 'get'>

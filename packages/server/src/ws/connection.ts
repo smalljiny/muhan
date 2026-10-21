@@ -12,8 +12,8 @@ import type { ConnectionRateLimiter } from './messageRateLimiter.js'
  * 완료 여부로, 첫 `system:ready`가 서버 버전과 일치하면 true로 전이한다(연결당 1회). `heartbeat`는
  * 하트비트 타이머 슬롯으로, Story 5-6이 여기에 ping 타이머 핸들을 대입한다(현재는 미채움, 초기값 null).
  * `account`는 preValidation 게이트가 확정한 계정 신원으로, upgrade 성공 시 소켓 핸들러가 `req.account`를
- * 여기 대입한다(초기값 null — 게이트 통과 전이거나 배선 오류 시 null). `state`는 세션 FSM의 현재 상태로,
- * 핸드셰이크 완료(accept) 전엔 FSM 미진입이라 초기값 characterSelect를 두되 onEnter는 accept 시 구동한다
+ * 여기 대입한다(초기값 null — 게이트 통과 전이거나 조립 오류 시 null). `state`는 세션 FSM의 현재 상태로,
+ * 핸드셰이크 완료(accept) 전엔 FSM 미진입이라 초기값 characterSelect를 두되 onEnter는 accept 시 실행한다
  * (`ready` 플래그가 진입 전/후를 구분). `createProgress`는 create 다단 대화의 서브상태 슬롯으로, create
  * 상태 밖에선 null이다(create.onEnter가 초기화, onExit가 정리). SessionContext가 매 프레임 재조립되므로
  * 대화 상태는 소켓 수명 동안 유지되는 이 컨텍스트에 둔다. **create 도중 연결 종료 = 폐기**(Story 6):
@@ -35,7 +35,7 @@ import type { ConnectionRateLimiter } from './messageRateLimiter.js'
  * `rateLimiter`는 인바운드 프레임 유량 제한 핸들 슬롯이다. 소켓 open 시 팩토리가 이 연결의 핸들을 대입하고
  * (deadline/idle과 달리 arm은 handshake가 아니라 open 시점이라 pre-handshake 창도 제한된다), message 핸들러가
  * 프레임마다 `check(now)`로 verdict를 받아 gate한다. cleanup은 이 슬롯을 null로 비운다 — heartbeat/deadline/idle과
- * 달리 clear할 타이머가 없고(순수 회계), 계정 버킷 반납은 별도 close 리스너가 소유하므로 여기서는 슬롯만 정리한다.
+ * 달리 clear할 타이머가 없고(순수 회계), 계정 버킷 반납은 별도 close 리스너가 담당하므로 여기서는 슬롯만 정리한다.
  */
 export interface ConnectionContext {
   readonly protocolVersion: number
@@ -51,7 +51,7 @@ export interface ConnectionContext {
   // 동일하게 이 per-connection 컨텍스트에만 살고 cleanupConnection이 컨텍스트째 폐기한다(delete 도중 종료 = 폐기).
   deleteProgress: DeleteProgress | null
   boundCharacterId: string | null
-  // 소켓 close 발화 여부. 포트 호출이 async가 된 뒤(Story 4) FSM이 포트 await로 멈춘 사이 소켓이 닫히면
+  // 소켓 close 발생 여부. 포트 호출이 async가 된 뒤(Story 4) FSM이 포트 await로 멈춘 사이 소켓이 닫히면
   // 'close' 핸들러(frameTail 큐와 별개 리스너)가 이 플래그를 세운다. await 재개 후 FSM은 이 플래그로 죽은 연결에
   // 대한 월드 등록(register)·command 상태 대입·데드라인 rearm 같은 부수효과를 건너뛴다(좀비 바인딩·형제 evict 방지).
   closed: boolean
@@ -64,7 +64,7 @@ export interface ConnectionContext {
 }
 
 /**
- * idle(무입력) 타이머 핸들의 최소 표면. `arm`은 타이머를 (재)설정하고, `clear`는 idempotent 해제다.
+ * idle(무입력) 타이머 핸들의 최소 인터페이스. `arm`은 타이머를 (재)설정하고, `clear`는 idempotent 해제다.
  * 팩토리 구현은 Story 6이 붙인다 — 여기서는 종결 경로(resolveDisconnect·cleanupConnection)가 slot을
  * clear할 수 있도록 타입만 먼저 고정한다(Deadline 인터페이스 관례 미러).
  */
@@ -124,7 +124,7 @@ export function cleanupConnection(
   }
   // rateLimiter 슬롯은 null로 비우기만 한다 — 순수 회계 핸들이라 clear할 타이머가 없어(heartbeat/deadline/idle과
   // 달리 null 전 부수효과가 없다) 무조건 대입으로 충분하다. 계정 버킷 반납은 별도 close 리스너(releaseAccount)가
-  // 소유한다(여기서 반납하면 이중 감소로 형제 연결의 계정 엔트리를 지운다).
+  // 담당한다(여기서 반납하면 이중 감소로 형제 연결의 계정 엔트리를 지운다).
   if (ctx) ctx.rateLimiter = null
   connections.delete(socket)
 }

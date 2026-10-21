@@ -11,9 +11,9 @@ import { makeErrorEvent } from '../serverEvent.js'
  * train 핸들러 의존성 seam(전역 금지 — 인자 주입).
  *
  * `liveRegistry`는 라이브 캐릭터 단일 출처다. 핸들러가 소비하는 두 메서드 `get`·`register`만
- * 요구한다(최소 표면) — `register`는 train()이 반환한 새 Character로 엔트리를 교체하는 데 쓴다.
- * `resolveRoom`은 발화자(characterId) 현재 방 해소자로, 훈련방 flag 판정 입력을 준다(방 위치 단일
- * 출처는 `character.currentRoom`이므로 by-character 해소자를 쓴다 — D-A1).
+ * 요구한다(최소 인터페이스) — `register`는 train()이 반환한 새 Character로 엔트리를 교체하는 데 쓴다.
+ * `resolveRoom`은 발화자(characterId) 현재 방 리졸버로, 훈련방 flag 판정 입력을 준다(방 위치 단일
+ * 출처는 `character.currentRoom`이므로 by-character 리졸버를 쓴다 — D-A1).
  * `markCharacterDirty`는 write-behind 영속화 seam으로, train()이 성공 경로에서 1회 소비한다.
  */
 export interface TrainHandlerDeps {
@@ -32,15 +32,15 @@ const REJECT_MESSAGES: Record<Extract<TrainResult, { ok: false }>['reason'], str
 }
 
 /**
- * `progress:train{id?}` 명령을 실 연마(레벨업)로 배선하는 핸들러 팩토리.
+ * `progress:train{id?}` 명령을 실 연마(레벨업)로 연결하는 핸들러 팩토리.
  *
  * 게임 규칙 판정(훈련방·클래스 일치·exp·gold 3게이트, prestige 승급, 배치 상승)은 전부
- * `progression/train`이 소유한다 — 핸들러는 라이브 상태 조회·방 해소·결과 사상만 한다.
+ * `progression/train`이 담당한다 — 핸들러는 라이브 상태 조회·방 해석·결과 사상만 한다.
  *
  * ## 권한 정책(OQ3) — 기본 allow
  * `progress:train`은 permissionPort에 명령별 정책을 두지 않는다(현 어댑터는 항상 allow하는
- * permissive stub이고, 클래스·레벨·방 플래그 기반 실 RBAC는 E5의 실 어댑터 소관이다). 연마 게이트는
- * 이미 train()의 3게이트(location→exp→gold)가 단독 소유하므로 권한 레이어에 중복 게이트를 두지
+ * permissive stub이고, 클래스·레벨·방 플래그 기반 실 RBAC는 E5의 실 어댑터가 담당한다). 연마 게이트는
+ * 이미 train()의 3게이트(location→exp→gold)가 단독 담당하므로 권한 레이어에 중복 게이트를 두지
  * 않는다 — 같은 판정이 두 레이어에 흩어지면 분기하고, 거부 코드도 rule_rejected/forbidden으로 갈린다.
  *
  * ## 라이브 엔트리 교체
@@ -58,23 +58,23 @@ const REJECT_MESSAGES: Record<Extract<TrainResult, { ok: false }>['reason'], str
  * 연마는 레벨·경험치·hp·mp를 한꺼번에 바꾸므로 `progress:trained`에 스탯 필드를 더 얹고 싶어지지만,
  * 그러면 같은 값이 명령마다 다른 이벤트 형태로 나가 클라이언트가 명령별 파서를 갖게 된다. 대신
  * 공격·연마가 공유하는 스냅샷 이벤트를 **덧붙인다** — `progress:trained`의 기존 필드는 한 글자도
- * 바꾸지 않는다(D15). 투영 규칙의 단일 출처는 `ws/characterStatsEvent.ts`이고 여기서 재구현하지 않는다.
+ * 바꾸지 않는다(D15). 변환 규칙의 단일 출처는 `ws/characterStatsEvent.ts`이고 여기서 재구현하지 않는다.
  *
- * 투영 입력은 `train()`이 **확정한 문서**(`result.character`)다. 명령 시작 시점의 `live.character`를
+ * 변환 입력은 `train()`이 **확정한 문서**(`result.character`)다. 명령 시작 시점의 `live.character`를
  * 넘기면 방금 오른 레벨과 그 레벨에서 파생되는 `hpMax`·`mpMax`가 한 박자 늦게 나간다.
  *
  * 반환:
  *   - 성공 → `[progress:trained, character:stats]`(둘 다 상태 이벤트라 correlationId 없음 — world:room 선례).
  *   - 게임 규칙 거부 → `error{rule_rejected, message}` **1개**(id 있으면 correlationId 반향 — D-D).
  *     상태가 안 바뀌었으므로 스탯 스냅샷을 붙이지 않는다.
- *   - 라이브 미등록 actor·방 미해소 → `error{internal}`(배선 격리 — 게임 규칙 거부와 구분).
+ *   - 라이브 미등록 actor·방 미해석 → `error{internal}`(연결 격리 — 게임 규칙 거부와 구분).
  */
 export function createTrainHandler(deps: TrainHandlerDeps): CommandHandler {
   return (
     command: ClientCommand,
     actor: ActorContext,
   ): ServerEvent | readonly ServerEvent[] | undefined => {
-    // (1) defensive narrow — router는 progress:train type에만 이 핸들러를 배선하므로 false 갈래는
+    // (1) defensive narrow — router는 progress:train type에만 이 핸들러를 연결하므로 false 갈래는
     //     구조적으로 도달 불가한 방어선이다.
     if (command.type !== 'progress:train') return undefined
 
@@ -84,14 +84,14 @@ export function createTrainHandler(deps: TrainHandlerDeps): CommandHandler {
       return makeErrorEvent('internal', '캐릭터 라이브 상태를 찾을 수 없습니다', command.id)
     }
 
-    // (3) 현재 방 해소(by-character — currentRoom 단일 출처 경유). 그래프 미해소는 배선 오류다.
+    // (3) 현재 방 해석(by-character — currentRoom 단일 출처 경유). 그래프 미해석은 조립 오류다.
     const room = deps.resolveRoom(actor.characterId)
     if (room === undefined) {
       return makeErrorEvent('internal', '현재 방을 찾을 수 없습니다', command.id)
     }
 
     // (4) 게임 규칙 판정 일체를 train()에 위임한다. 성공 경로의 markCharacterDirty 1회 호출도
-    //     train()의 finalize가 소유하므로 핸들러는 중복 마킹하지 않는다.
+    //     train()의 finalize가 담당하므로 핸들러는 중복 마킹하지 않는다.
     const result = train(live.character, room, { markCharacterDirty: deps.markCharacterDirty })
 
     // (5) 거부 — 게임 규칙 거부(D-D). train()은 거부 시 마킹·변이 없이 bail한다.
@@ -101,7 +101,7 @@ export function createTrainHandler(deps: TrainHandlerDeps): CommandHandler {
 
     // (6) 성공 — 라이브 엔트리의 character만 교체한 뒤 성장 결과를 통지한다.
     //     `{ ...live }`로 나머지 필드(인벤토리)를 그대로 옮긴다 — 새 객체를 통째로 만들면 진입에서
-    //     1회 적재한 인벤이 조용히 사라지고, 이 토픽 범위에는 그것을 되돌릴 경로가 없다.
+    //     1회 로드한 인벤이 조용히 사라지고, 이 토픽 범위에는 그것을 되돌릴 경로가 없다.
     //     stats는 참조 그대로 싣는다(map/spread는 5-튜플을 number[]로 넓혀 와이어 계약을 깬다).
     deps.liveRegistry.register({ ...live, character: result.character })
     return [
@@ -116,7 +116,7 @@ export function createTrainHandler(deps: TrainHandlerDeps): CommandHandler {
         stats: result.character.stats,
         prestige: result.prestige,
       },
-      // 연마가 확정한 문서에서 투영한다(위 헤더 참조) — 라이브 엔트리에 실은 것과 같은 객체다.
+      // 연마가 확정한 문서에서 변환한다(위 헤더 참조) — 라이브 엔트리에 실은 것과 같은 객체다.
       characterStatsEvent(result.character),
     ]
   }
