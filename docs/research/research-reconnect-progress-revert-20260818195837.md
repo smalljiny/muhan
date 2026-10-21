@@ -3,7 +3,7 @@
 
 ## Executive Summary
 
-이 문제는 write-behind 캐시의 알려진 실패 모드이고, 업계는 이미 이름을 붙여 다루고 있다. 핵심 명제는 **"캐시가 진실의 원천인 동안에는 저장소를 다시 읽으면 안 된다"**이다. Meta는 같은 형상(캐시 fill 응답과 무효화 이벤트의 경쟁)을 TAO에서 수년간 다뤘고, 해법은 **버전 필드를 통한 충돌 해소** — "오래된 데이터가 새 데이터를 덮어써서는 안 된다"였다 ([Meta Engineering](https://engineering.fb.com/2022/06/08/core-infra/cache-made-consistent/)). 다만 Meta는 그 위에 함정 하나를 더 지적한다: 버전을 가진 캐시 엔트리가 **evict되면 최신 데이터에 대한 지식 자체가 사라진다**. 본 토픽의 `release(id)`가 정확히 그 evict다.
+이 문제는 write-behind 캐시의 알려진 실패 모드이고, 업계는 이미 이름을 붙여 다루고 있다. 핵심 명제는 **"캐시가 진실의 원천인 동안에는 저장소를 다시 읽으면 안 된다"**이다. Meta는 같은 패턴(캐시 fill 응답과 무효화 이벤트의 경쟁)을 TAO에서 수년간 다뤘고, 해법은 **버전 필드를 통한 충돌 해소** — "오래된 데이터가 새 데이터를 덮어써서는 안 된다"였다 ([Meta Engineering](https://engineering.fb.com/2022/06/08/core-infra/cache-made-consistent/)). 다만 Meta는 그 위에 함정 하나를 더 지적한다: 버전을 가진 캐시 엔트리가 **evict되면 최신 데이터에 대한 지식 자체가 사라진다**. 본 토픽의 `release(id)`가 정확히 그 evict다.
 
 가장 값진 발견은 **두 write의 순서가 손실 방향을 결정한다는 것이 15년 된 게임 서버 상식**이라는 점이다. gamedev.stackexchange의 채택 답변은 거래 시나리오로 이를 명시한다 — "'받는 쪽에 아이템 추가'와 '보내는 쪽에서 아이템 차감' 두 명령 중 첫 번째 뒤·두 번째 전에 실패하면 **아이템 복제**가 생긴다. 순서를 뒤집으면 **아이템 소실**이 생긴다" ([gamedev.SE](https://gamedev.stackexchange.com/questions/19338/how-often-to-save-players-state-in-persistent-online-games)). #120이 `markCharacterDirty` → `markObjectDeleted` 순서를 고른 근거와 정확히 같은 추론이고, 같은 답변이 이어서 **"서로 의존하는 연속 명령은 함께 저장돼야 한다"**고 못박는다.
 
@@ -34,7 +34,7 @@ Meta가 제시한 해법과 그 한계가 둘 다 중요하다.
 
 이 한계가 본 토픽에 직접 적용된다. `onSessionEnd`의 `release(id)`가 라이브 엔트리를 제거하는 순간이 곧 evict이고, 그 뒤의 `hydrate`에는 "무엇이 더 새로운지" 판단할 근거가 남지 않는다. **버전 가드만 라이브 레지스트리에 얹는 해법은 release가 그 버전을 함께 지우면 무력화된다** — 가드는 `release`보다 오래 사는 곳(DirtyTracker)에 있어야 한다.
 
-Meta는 또 하나를 짚는다. 동적 캐시는 **읽기(fill) 경로와 쓰기(무효화) 경로 양쪽에서 데이터가 변한다**는 점이 race condition의 근원이라는 것이다. 본 토픽의 `hydrate`(읽기)와 `markCharacterDirty`(쓰기)가 같은 `characters:<id>` 키를 건드리는 구조가 정확히 이 형상이다.
+Meta는 또 하나를 짚는다. 동적 캐시는 **읽기(fill) 경로와 쓰기(무효화) 경로 양쪽에서 데이터가 변한다**는 점이 race condition의 근원이라는 것이다. 본 토픽의 `hydrate`(읽기)와 `markCharacterDirty`(쓰기)가 같은 `characters:<id>` 키를 건드리는 구조가 정확히 이 패턴이다.
 
 Redis도 캐시 드리프트의 원인을 셋으로 정리하며 같은 지점을 든다 — TTL 창, **캐시와 DB 사이의 write-ordering 경쟁**, 여러 앱 인스턴스의 캐시 fill 충돌 ([Redis](https://redis.io/blog/cache-consistency-strategies/)).
 

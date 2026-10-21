@@ -8,8 +8,8 @@ E3-1([`transport-protocol.md`](./transport-protocol.md))은 transport-only WS(�
 
 이 계층은 **연결과 캐릭터의 관계**를 도입한다:
 
-- **세션 레지스트리** — `characterId → SessionBinding` 인메모리 색인. 1캐릭터 1세션을 강제하고, 재연결이 참조할 캐릭터→세션 바인딩을 색인한다(원작 무한 A12 §2.2 "같은 이름 기존 fd disconnect"의 형상 재현).
-- **link-dead grace 재연결** — `command` 소켓 단절 시 세션 엔트리를 grace 동안 보존했다가 새 소켓으로 rebind한다(재로드 없이). telnet 원작에 없는 형상 신규 설계로, 순간적 네트워크 단절 복원력을 웹 클라이언트 기대에 맞춰 추가한다.
+- **세션 레지스트리** — `characterId → SessionBinding` 인메모리 색인. 1캐릭터 1세션을 강제하고, 재연결이 참조할 캐릭터→세션 바인딩을 색인한다(원작 무한 A12 §2.2 "같은 이름 기존 fd disconnect"의 패턴 재현).
+- **link-dead grace 재연결** — `command` 소켓 단절 시 세션 엔트리를 grace 동안 보존했다가 새 소켓으로 rebind한다(재로드 없이). telnet 원작에 없는 구현 방식의 신규 설계로, 순간적 네트워크 단절 복원력을 웹 클라이언트 기대에 맞춰 추가한다.
 - **disconnect 수렴 seam** — grace 만료·idle timeout·중복 로그인 evict가 모두 단일 종결 함수 `resolveDisconnect`를 거쳐 **lifecycle 포트**를 정확히 한 번 호출한다(A12 §1.4 "disconnect가 save 수렴점" 의미 보존).
 - **idle timeout** — `command` 상태 무활동 종료 창(A12 §1.6, 최후의 세이브 안전망).
 

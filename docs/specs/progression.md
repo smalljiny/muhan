@@ -73,7 +73,7 @@ backfill 시딩은 level 정합: `level<=1 ? 0 : neededExp(level-1)`(그 레벨 
 원본 `player.c` 공유 조기 return이 두 규칙을 하나처럼 보이게 하나, 분리한다:
 
 - **능력치 성장**: `upLevel`이 **`level%4==0`일 때만** `level_cycle[class][(level-2)%10]` 대상 능력치를 +1. `downLevel`은 정확한 역연산(강등 레벨이 `%4==0`였으면 -1). `level_cycle` 성장 분포는 골든 fixture로 검증.
-- **HP/MP 최대치 재계산**: `%4` 게이트 없이 **매 판독마다** compute-on-read. `resolveHpMax(char)`/`resolveMpMax(char)`가 `class`·`level`로 stats-core `computeHpMax`/`computeMpMax` 폐형에 위임(능력치는 최대치 산출에 불필요). `class===초인(10)`이면 800/600 고정 오버라이드, INVINCIBLE(9)은 폐형(400+성장)을 따른다. 원본 `%4` 증분 누적은 stats-core가 형상버그로 폐기한 정책을 승계한다.
+- **HP/MP 최대치 재계산**: `%4` 게이트 없이 **매 판독마다** compute-on-read. `resolveHpMax(char)`/`resolveMpMax(char)`가 `class`·`level`로 stats-core `computeHpMax`/`computeMpMax` 폐형에 위임(능력치는 최대치 산출에 불필요). `class===초인(10)`이면 800/600 고정 오버라이드, INVINCIBLE(9)은 폐형(400+성장)을 따른다. 원본 `%4` 증분 누적은 stats-core가 구현 버그로 폐기한 정책을 승계한다.
 
 `hpCurrent ≤ resolveHpMax` 불변식은 `clampVital(current, max)=Math.min`로 유지한다(레벨업·강등·재생·승급 공유 소비). 정상 레벨업은 `hpCurrent`를 올리지 않고 최대치 하락 시 클램프만 한다(재생이 격차를 메운다).
 

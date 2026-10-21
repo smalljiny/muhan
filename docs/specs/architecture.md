@@ -12,13 +12,13 @@
 
 무한은 1991~93년 Mordor MUD의 한국어 파생본(32비트 C, telnet, fork 없는 단일 프로세스 `select` 루프, 파일 기반 세이브)이다. 전 디스크 포맷 역설계·JSON 변환이 완료됐고(`data/world/` = 방 2341 + object 709 + creature 674 ≈ 2.9MB), 게임 분석 A1~A13이 런타임·명령·전투·마법·진행·경제·몬스터 AI·소셜·특수 오브젝트·세션·DM 전 영역의 동작 명세를 확보했다. 남은 것은 서버 코드 이전에 스택·아키텍처를 확정하는 것이다(이슈 #14).
 
-포팅 원칙: 게임 콘텐츠·규칙(무엇을)은 충실 이식, 소프트웨어 형상(어떻게)은 신규 스택으로 재설계. 1:1 트랜스파일이 아니다. `legacy/muhan/src`는 이식 대상이 아니라 behavioral oracle이다.
+포팅 원칙: 게임 콘텐츠·규칙(무엇을)은 충실 이식, 소프트웨어 구현 방식(어떻게)은 신규 스택으로 재설계. 1:1 트랜스파일이 아니다. `legacy/muhan/src`는 이식 대상이 아니라 behavioral oracle이다.
 
 ### 1.2 목적
 
 - 8개 결정 축을 확정해 서버 스캐폴딩·구현 토픽이 시작할 수 있는 아키텍처 기준선을 세운다.
 - 각 결정의 근거를 게임 분석 노트·외부 선례 리서치와 함께 기록해, 후속 구현이 재논쟁 없이 참조하게 한다.
-- 콘텐츠(충실 재현) vs 형상(적극 개선)의 경계와 두 프로젝트 정책(as-shipped 재현 / 형상 개선)을 명문화한다.
+- 콘텐츠(충실 재현) vs 구현 방식(적극 개선)의 경계와 두 프로젝트 정책(as-shipped 재현 / 구현 방식 개선)을 명문화한다.
 
 ### 1.3 결합 근거 (Coupling Rationale)
 
@@ -36,15 +36,15 @@
 6. **인증·권한 확정** — account/character 분리, ~~argon2id~~ **Firebase Auth(세션 쿠키)**(§3.7 보정), RBAC, WS 핸드셰이크.
 7. **테스트 전략 확정** — C oracle 대조 frozen 골든 fixture + property 테스트.
 8. **프로젝트 구성 확정** — pnpm monorepo + Vite/tsup.
-9. **정책 명문화** — §4의 두 전역 정책(as-shipped 재현 / 형상 개선)과 전역 불변식.
+9. **정책 명문화** — §4의 두 전역 정책(as-shipped 재현 / 구현 방식 개선)과 전역 불변식.
 
 ## 3. 아키텍처
 
 ### 3.1 전역 정책
 
 - **P1. as-shipped 재현 기본 + 항목별 결정.** 게임 규칙(콘텐츠)은 원본 동작을 충실 재현하며, 노트가 발견한 ~40개 버그·데드코드도 기본값은 재현(behavioral parity, binary parity 아님). 되살림·수정은 항목별 명시 결정. 테스트는 '선택된 동작'을 assert.
-- **P2. 형상은 재현이 아니라 개선.** 과거 기술 제약(파일 저장·telnet·select·32비트·평문)의 산물인 형상은 신규 스택으로 적극 개선한다. 단 이 원칙은 일반 현대화 인프라를 정당화할 뿐 특정 프레임워크 채택을 자동 정당화하지 않는다(적합성 별도 판단).
-- P1·P2는 상보적: 콘텐츠=충실 재현, 형상=개선. 경계가 모호하면(예: 조사 ㄹ 예외) 제약 산물인지로 판정한다.
+- **P2. 구현 방식은 재현하지 않고 개선한다.** 과거 기술 제약(파일 저장·telnet·select·32비트·평문)의 산물인 구현 방식은 신규 스택으로 적극 개선한다. 단 이 원칙은 일반 현대화 인프라를 정당화할 뿐 특정 프레임워크 채택을 자동 정당화하지 않는다(적합성 별도 판단).
+- P1·P2는 상보적: 콘텐츠=충실 재현, 구현 방식=개선. 경계가 모호하면(예: 조사 ㄹ 예외) 제약 산물인지로 판정한다.
 
 ### 3.2 전역 불변식 (노트 확정)
 
@@ -61,7 +61,7 @@
 
 ### 3.4 영속화 (D2)
 
-라이브 권위 상태 = 프로세스 메모리 객체 그래프(방 2341 부팅 시 전량 로드, 원본 `load_rom` LRU+write-back 폐기). MongoDB = 영속화 계층이며 hot-path 왕복 금지. **세이브 정책은 DB-네이티브로 신규 설계**(원본의 이벤트-only 세이브 타이밍은 파일 시대 형상 P2): (1) 플레이어=dirty-flag 주기 flush(60~300초) + 중요 이벤트(레벨업·거래·로그아웃) 즉시 write, (2) 월드 변경(문·리스폰 타임스탬프)=비동기 배치, (3) 경제·은행=트랜잭션(원자성). "객체 그래프가 아니라 값을 저장"(안정 ID·평문·version 필드). account/character는 별도 문서, 통화(gold)는 character·bankAccount에 스칼라 필드로 임베드. 금화 무결성 가드(상한·음수·트랜잭션) 필수.
+라이브 권위 상태 = 프로세스 메모리 객체 그래프(방 2341 부팅 시 전량 로드, 원본 `load_rom` LRU+write-back 폐기). MongoDB = 영속화 계층이며 hot-path 왕복 금지. **세이브 정책은 DB-네이티브로 신규 설계**(원본의 이벤트-only 세이브 타이밍은 파일 시대 구현 방식 P2): (1) 플레이어=dirty-flag 주기 flush(60~300초) + 중요 이벤트(레벨업·거래·로그아웃) 즉시 write, (2) 월드 변경(문·리스폰 타임스탬프)=비동기 배치, (3) 경제·은행=트랜잭션(원자성). "객체 그래프가 아니라 값을 저장"(안정 ID·평문·version 필드). account/character는 별도 문서, 통화(gold)는 character·bankAccount에 스칼라 필드로 임베드. 금화 무결성 가드(상한·음수·트랜잭션) 필수.
 
 **불변식 5 범위 명확화(E2-1 구현 반영)** — 불변식 5의 "참조 컨테이너"는 **라이브 인메모리 참조 모델**이다: 부팅 그래프에서 방·몹·플레이어가 object 인스턴스를 참조한다(§3.3 런타임 모델·`docs/specs/persistence.md` 부팅 월드 그래프가 준수). **영속 계층은 이를 단일 소유권 `object.owner` 필드로 materialize한다** — object 문서마다 `owner:{type:'character'|'bank', id}`를 두어 소유를 canonical하게 못박고, character·bank는 인벤토리/보관을 권위 배열로 저장하지 않고 `objects`를 owner로 쿼리해 파생한다(드리프트 제거·구조적 dupe 차단, 원작 세이브-타이밍 복제 결함 봉쇄). 즉 `object.owner`는 불변식 5를 supersede하는 게 아니라 영속 계층의 표현 선택이며, 라이브 참조 모델과 모순되지 않는다. E2-1 세부는 `docs/specs/persistence.md` 참조.
 
@@ -73,13 +73,13 @@
 
 ### 3.6 프로토콜·입력·i18n (D4·D4-b·D5)
 
-command(클라→서버)·event(서버→클라) 계약을 명시 분리. 메시지당 Zod 스키마 1개 + `z.infer`로 TS 타입 파생(병렬 `type` 금지), `domain:action` discriminator 래퍼. 명령 인자는 5개 패턴으로 수렴(무인자 / 대상+서수 / 대상+보조대상 / 자유텍스트 / 대화형 다단). 권한=미들웨어 레이어(입력 파싱과 분리). 좌표=클라 파생(서버는 그래프 권위, A4). **입력=구조화 UI + 자유 텍스트 병행**(명령=버튼·메뉴·타겟, 말·이모트=자유 채팅, 파워유저 자유 명령줄 옵션; 한글 동사-후치 파싱은 자유 모드 한정 콘텐츠). **i18n**: UTF-8 전용(EUC-KR→UTF-8은 `port/`에서 1회), 런타임 변환 경계 없음. 조사=Unicode 산술(`(code-0xAC00)%28`) 클라 i18n 레이어 렌더(서버는 명사+조사 슬롯 코드 전송), `으로/로` ㄹ 예외 수정(형상 P2).
+command(클라→서버)·event(서버→클라) 계약을 명시 분리. 메시지당 Zod 스키마 1개 + `z.infer`로 TS 타입 파생(병렬 `type` 금지), `domain:action` discriminator 래퍼. 명령 인자는 5개 패턴으로 수렴(무인자 / 대상+서수 / 대상+보조대상 / 자유텍스트 / 대화형 다단). 권한=미들웨어 레이어(입력 파싱과 분리). 좌표=클라 파생(서버는 그래프 권위, A4). **입력=구조화 UI + 자유 텍스트 병행**(명령=버튼·메뉴·타겟, 말·이모트=자유 채팅, 파워유저 자유 명령줄 옵션; 한글 동사-후치 파싱은 자유 모드 한정 콘텐츠). **i18n**: UTF-8 전용(EUC-KR→UTF-8은 `port/`에서 1회), 런타임 변환 경계 없음. 조사=Unicode 산술(`(code-0xAC00)%28`) 클라 i18n 레이어 렌더(서버는 명사+조사 슬롯 코드 전송), `으로/로` ㄹ 예외 수정(구현 방식 P2).
 
 ### 3.7 인증·권한 (D6)
 
 account 1급 + `account 1:N character`. argon2id 해시 + 상수시간 비교(평문 교체). 세션 FSM 명시(상태 enum + 핸들러 맵, `io->fn` 함수 포인터 대체). WS 핸드셰이크 + TLS, identd·telnet 협상 폐기. 로그인 실패 잠금 → rate-limit. authz=RBAC 역할(builder/moderator/admin, 원본 클래스 계급 이상현상 재현 안 함, P2), 빌더/운영 권한 분리·감사 로그 유지. `system()` 셸 호출 제거(DB soft-delete). DM/빌더 표면은 post-MVP defer(별도 토픽).
 
-> **인증 방식 보정 (E3, 2026-07-06, 이슈 #32).** 위 "argon2id 해시 + 상수시간 비교(평문 교체)"는 **Firebase Auth(Google OAuth) 위임으로 대체**한다. account = Firebase uid이며 서버는 비밀번호 해시를 보관하지 않는다. 인증 토폴로지: 브라우저가 Firebase 로그인 → HTTP 엔드포인트(`/session/login`)가 `createSessionCookie`로 HttpOnly·Secure·SameSite 세션 쿠키 발급 → WS 핸드셰이크의 `@fastify/websocket` **preValidation 훅**에서 `verifySessionCookie` + Origin allowlist(CSWSH 방어)로 검증. **세션 FSM·RBAC·감사 로그·soft-delete 결정은 불변** — 인증 크리덴셜 저장·검증 메커니즘만 바뀐다. 원작 "이름=크리덴셜, 평문 비번"(A12)은 여전히 폐기 대상이며, 이 보정은 그 대체 형상을 argon2id 자체 해싱에서 Firebase 위임으로 변경한 것이다. 세부·근거는 이슈 #32 인증 seam 코멘트, 파급 스코프는 E5(#35). **P2 형상 정책(§5) 및 D6 요약표의 argon2id 표기도 이 보정으로 갱신됨.**
+> **인증 방식 보정 (E3, 2026-07-06, 이슈 #32).** 위 "argon2id 해시 + 상수시간 비교(평문 교체)"는 **Firebase Auth(Google OAuth) 위임으로 대체**한다. account = Firebase uid이며 서버는 비밀번호 해시를 보관하지 않는다. 인증 토폴로지: 브라우저가 Firebase 로그인 → HTTP 엔드포인트(`/session/login`)가 `createSessionCookie`로 HttpOnly·Secure·SameSite 세션 쿠키 발급 → WS 핸드셰이크의 `@fastify/websocket` **preValidation 훅**에서 `verifySessionCookie` + Origin allowlist(CSWSH 방어)로 검증. **세션 FSM·RBAC·감사 로그·soft-delete 결정은 불변** — 인증 크리덴셜 저장·검증 메커니즘만 바뀐다. 원작 "이름=크리덴셜, 평문 비번"(A12)은 여전히 폐기 대상이며, 이 보정은 그 대체 설계를 argon2id 자체 해싱에서 Firebase 위임으로 변경한 것이다. 세부·근거는 이슈 #32 인증 seam 코멘트, 파급 스코프는 E5(#35). **P2 구현 방식 정책(§5) 및 D6 요약표의 argon2id 표기도 이 보정으로 갱신됨.**
 
 ### 3.8 프로젝트 구성 (D8)
 
@@ -98,10 +98,10 @@ C oracle을 behavioral oracle로 삼는 **frozen 골든 fixture**(characterizati
 | 항목 | 결정 | 근거 |
 |------|------|------|
 | P1 재현 정책 | as-shipped 기본 + 항목별 결정 | 포팅 원칙 "동작 충실 재현"; A5·A6·A7·A9·A10 버그 목록. 확정 2026-07-01 |
-| P2 형상 정책 | 형상은 신규 스택으로 개선 | 형상 개선 원칙 2026-07-01; 노트 전반(telnet→WS·평문→Firebase Auth 세션 쿠키(§3.7 E3 보정)·파일→Mongo) |
+| P2 구현 방식 정책 | 구현 방식은 신규 스택으로 개선 | 구현 방식 개선 원칙 2026-07-01; 노트 전반(telnet→WS·평문→Firebase Auth 세션 쿠키(§3.7 E3 보정)·파일→Mongo) |
 | D0 전송 | 손수 `ws` + EventEmitter (Colyseus 반려); **Fastify HTTP 호스트 + `@fastify/websocket` 보정(E1)** | 장르 부적합·A10 소셜 밀도·상태 커플링·소규모는 단일 프로세스 충분; StateView 대규모 필터 비권장(Colyseus 문서); 단일 프로세스 3만~10만 WS 연결(Stack Harbor). **Fastify=HTTP 호스트(정적·`/health`·인증 REST), 게임 소켓=`@fastify/websocket`(내부 `ws`) → "손수 `ws`"·EventEmitter·Colyseus 반려 모두 불변; §3.5 보정 참조** |
 | D1 런타임 | 단일 프로세스, 1Hz heartbeat, next-action 큐 | A1(update_game 1Hz), A9(활성 집합 이벤트 구동), A11(스크립팅 불요); LuminariMUD·Evennia·LPMud 선례 |
-| D2 영속화 | 메모리 그래프 권위 + MongoDB, DB-네이티브 세이브 신규 설계 | A4(load_rom 폐기·전량 로드), A12(원본 세이브 타이밍=형상 재분류), A8(은행·금화); AlgoDaily 스냅샷 경계·dirty-flag autosave |
+| D2 영속화 | 메모리 그래프 권위 + MongoDB, DB-네이티브 세이브 신규 설계 | A4(load_rom 폐기·전량 로드), A12(원본 세이브 타이밍=구현 방식 재분류), A8(은행·금화); AlgoDaily 스냅샷 경계·dirty-flag autosave |
 | D3 브로드캐스트 | in-process EventEmitter 채널, Redis 후순위 | A10(채널=토픽+필터), A4(방=채널); 단일 프로세스 여유·wildcard fan-out 함정(AhsanLab) |
 | D4 프로토콜 | 구조화 JSON command/event, Zod 단일 출처, 공유 타입 | A2(명령=구조화 이벤트·5 패턴), A3·A11; zod-sockets·OpenFrontIO·tRPC 선례 |
 | D4-b 입력 | 구조화 UI + 자유 텍스트 병행 | A2 §arch(자유 모드 한정 동사-후치); 확정 |

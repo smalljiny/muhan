@@ -152,7 +152,7 @@ study·teach가 읽는 PBLIND·PSILNC의 **영속 입력원은 `characterSchema.
 
 ## 관련 문서
 
-- **oracle**: `docs/notes/game-analysis-20260625/a6-magic.md`(§5 realm 성장·§6 버프 타이머·§7 디버프·§8 학습전수·§9 마나·§11 형상버그) · `legacy/muhan/src/magic1.c`(study/teach·addrealm)·`magic2~8.c`(개별 effect)
+- **oracle**: `docs/notes/game-analysis-20260625/a6-magic.md`(§5 realm 성장·§6 버프 타이머·§7 디버프·§8 학습전수·§9 마나·§11 구현 버그) · `legacy/muhan/src/magic1.c`(study/teach·addrealm)·`magic2~8.c`(개별 effect)
 - **의존 스펙**: [magic.md](magic.md)(#84 Caster·dispatch·gate·offensiveSpell·crtSpell — 이 계층이 확장) · [progression.md](progression.md)(#81 exp 파이프·마나 재생·dirtyTracker) · [combat.md](combat.md)(#83 `statusEffects` `until` 관례·DoT) · [persistence.md](persistence.md)(characterSchema 영속·backfill)
 - **후속**: #86(아이템 delivery) · #99(production boot 배선·몬스터 마나 재생·realm write 배선) · #100(offensive spell_fail 배선) · #106(라이브 command 라우팅·self-heal 마나 배선) · #108(self-heal healer-class 게이트)
 - **이슈**: #85(본 토픽) · 상위 #84(magic-core) · 에픽 #36(E6 규칙 엔진)

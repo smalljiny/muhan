@@ -30,7 +30,7 @@
 | `server/src/ws/liveWorldWiring.ts` | ws | 해소자 2종을 seam으로 노출 (1회 생성 공유) |
 | `port/templates.js`·`parseRoom.js` | port | `key[3][20]` 추출 (OBJ 오프셋 160 · CRT 오프셋 255, 3×20B) |
 
-매처는 shared 순수 함수이고 가시성 게이트·관찰자 flags는 server 해소자에 격리된다. 매처는 `{ name, keys? }` 형상만 보므로 크리처·아이템·플레이어 타입에 무관하다.
+매처는 shared 순수 함수이고 가시성 게이트·관찰자 flags는 server 해소자에 격리된다. 매처는 `{ name, keys? }` 형태만 보므로 크리처·아이템·플레이어 타입에 무관하다.
 
 ### 매처 계약
 
@@ -51,7 +51,7 @@ createRoomPlayerResolver(resolveCharacterName)(room, query, ordinal = 1) → cha
 
 `CreatureInstance.keys?: string[]`·`ItemInstance.keys?: string[]` — 원본 `char key[3][20]`을 위생 처리한 배열.
 
-**선택 필드**로 둔다(`experience`/`alignment` 선례) — required면 흩어진 인라인 리터럴 테스트 픽스처가 전부 컴파일 실패한다. 다만 프로덕션 리더·물질화는 **항상 배열을 채운다**(없으면 `[]`, `undefined` 금지) — 매처가 두 형상을 분기하지 않도록.
+**선택 필드**로 둔다(`experience`/`alignment` 선례) — required면 흩어진 인라인 리터럴 테스트 픽스처가 전부 컴파일 실패한다. 다만 프로덕션 리더·물질화는 **항상 배열을 채운다**(없으면 `[]`, `undefined` 금지) — 매처가 두 경우를 따로 처리하지 않도록.
 
 실데이터 보유율: creature 681중 607(89%, name과 다른 진짜 별칭 359) · object 744중 666(90%). 실례 — `작은 거미`→`거미` · `야바단의 유령`→`유령`·`야바단`·`nildredge` · `검의 달인`→`달인`.
 

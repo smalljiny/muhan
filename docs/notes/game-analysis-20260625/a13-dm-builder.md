@@ -4,7 +4,7 @@
 
 ## 개요
 
-운영자(DM)·월드 빌더가 게임 안에서 쓰는 명령 표면과, 게임 밖에서 데이터 파일을 직접 편집하는 오프라인 에디터를 카탈로그화한다. 결론부터: **이 표면 전체는 콘텐츠가 아니라 툴링·운영 형상이다.** DM 명령은 `*`로 시작하는 49개 특수 명령이며, 전부 `dm1.c`~`dm6.c`에 구현되고 `global.c`의 단일 `cmdlist[]` 테이블에서 일반 명령과 함께 디스패치된다. `util/ed`는 서버와 별개로 도는 **DOS/curses 메뉴 프로그램**으로, object/creature/room/player 파일을 디스크에서 직접 열어 편집한다(자체 직렬화 루틴 사본 보유).
+운영자(DM)·월드 빌더가 게임 안에서 쓰는 명령 표면과, 게임 밖에서 데이터 파일을 직접 편집하는 오프라인 에디터를 카탈로그화한다. 결론부터: **이 표면 전체는 콘텐츠가 아니라 툴링·운영 구현 방식이다.** DM 명령은 `*`로 시작하는 49개 특수 명령이며, 전부 `dm1.c`~`dm6.c`에 구현되고 `global.c`의 단일 `cmdlist[]` 테이블에서 일반 명령과 함께 디스패치된다. `util/ed`는 서버와 별개로 도는 **DOS/curses 메뉴 프로그램**으로, object/creature/room/player 파일을 디스크에서 직접 열어 편집한다(자체 직렬화 루틴 사본 보유).
 
 가장 중요한 구조적 발견: **인게임 편집 명령(방/오브젝트/크리처 생성·필드 설정)은 최소한이고 대부분 DM 최상위 등급으로 게이트된다.** "빌더" 등급인 ZONEMAKER는 실제로 순간이동·인스펙션·저장만 할 수 있고 방을 편집하지 못한다. 즉 **실제 월드 제작은 게임 밖 `util/ed` 에디터에서 이뤄졌고**, 인게임 명령은 그 결과물을 순회·점검·미세조정하는 보조 도구였다.
 
@@ -24,7 +24,7 @@
 
 5. **무게이트 명령 3종 + CARETAKER/INVINCIBLE 이상현상**. inner 게이트가 아예 없는 명령은 `*사용자저장`(`dm_save_all_ply` body가 `save_all_ply();` 한 줄)·`*떨어져라`·`*침공` **3종뿐**. 따라서 CARETAKER(10)는 outer를 통과하지만 나머지 모든 명령의 `< SUB_DM`/`< DM` 게이트에 막혀 **이 3종만 실행 가능**하다. INVINCIBLE(9)은 outer 게이트에서 완전 차단되어 **실행 가능한 `*` 명령이 0개**다. 둘 다 계급 값 배치의 부작용(레거시 불일치)으로 판단.
 
-6. **`util/ed` = 서버 외부 오프라인 에디터**. `editor.c` `main()`은 "1.Edit Object / 2.Edit Creature / 3.Edit Room / 4.Edit Player / 5.Check Player / 6.Quit" 메뉴를 도는 **독립 실행 프로그램**(`clearscreen`/`posit`/`getnum` = 커서 제어). `editor3.c`/`editor4.c`에 서버 `files1.c`/`files3.c`와 **중복된 직렬화 루틴 사본**을 갖는다. `editor.exe`+`editor.mak`(Visual C++)로 PC에서 편집 후 서버로 파일 전송하는 워크플로우. 순수 형상 — 신규 스택에서는 빌더 UI가 통째로 대체하며, 이 에디터가 노출하던 **편집 필드 집합**이 UI 설계의 선례가 된다.
+6. **`util/ed` = 서버 외부 오프라인 에디터**. `editor.c` `main()`은 "1.Edit Object / 2.Edit Creature / 3.Edit Room / 4.Edit Player / 5.Check Player / 6.Quit" 메뉴를 도는 **독립 실행 프로그램**(`clearscreen`/`posit`/`getnum` = 커서 제어). `editor3.c`/`editor4.c`에 서버 `files1.c`/`files3.c`와 **중복된 직렬화 루틴 사본**을 갖는다. `editor.exe`+`editor.mak`(Visual C++)로 PC에서 편집 후 서버로 파일 전송하는 워크플로우. 순수 구현 방식 — 신규 스택에서는 빌더 UI가 통째로 대체하며, 이 에디터가 노출하던 **편집 필드 집합**이 UI 설계의 선례가 된다.
 
 7. **모든 `*` 명령은 감사 로그된다**. `process_cmd`가 디스패치 직전 `if(str[0][0]=='*') log_dmcmd("%s : %s :", name, fullstr)`를 호출해 `LOGPATH/log_dmcmd`에 `누가 : 원문 :`을 append한다(`command1.c:630`). 실패한 명령도 시도 시점 기록. 신규 스택에서 admin action audit trail의 이식 요구사항.
 
@@ -154,7 +154,7 @@ if(cmnd->str[0][0]=='*')
 
 ¹ `*force` 대상이 DM(12)이면 시전자도 DM이어야 함(`dm1:724`) — DM 간 권한 보호.
 ² `dm_gspells`(`dm4:315`)는 실제 마법 효과 공식(SVIGOR/SMENDW/SRESTO/SFHEAL/SBLESS/SPROTE…)을 재사용 — 공식 정본 [A6](a6-magic.md). GM 시전 패널로 대체하되 공식은 콘텐츠로 이미 이식됨.
-³ 조정 대상 파라미터의 **값 자체**는 밸런스 콘텐츠([A5](a5-combat.md)/[A7](a7-player-progression.md))이나, 런타임 튜닝 UI는 형상.
+³ 조정 대상 파라미터의 **값 자체**는 밸런스 콘텐츠([A5](a5-combat.md)/[A7](a7-player-progression.md))이나, 런타임 튜닝 UI는 구현 방식.
 ⁴ lockout 데이터(차단 IP)는 운영 설정. 파일 재로드 메커니즘은 드롭, 차단 정책은 대체(admin 설정 UI).
 ⁵ 오브젝트를 방 영구 비품으로 만드는 빌더 기능(§3와 경계). `OPERM2`/`OTEMPP` 플래그 의미는 [A8](a8-items-economy.md) 참조.
 ⁶ 카운트다운 값을 `Shutdown` 전역에 세팅할 뿐. 신규 스택에서는 프로세스 매니저·배포 계층 관심사(§7).
@@ -226,7 +226,7 @@ if(cmnd->str[0][0]=='*')
 - **디스크 파일 직접 편집**: `load_obj_from_file`/`save_obj_to_file`(`editor.c:214/246`), `load_rom_from_file`/`save_rom_to_file`(`editor.c:1038/1065`) 등이 서버를 거치지 않고 objmon 템플릿·방 파일을 직접 연다. 서버 실행 중 쓰면 캐시 불일치가 나므로 **오프라인 빌딩 툴**이다(인게임 `*set`이 DM 전용인 것과 상보적).
 - **직렬화 루틴 중복 사본**: `editor3.c`가 `read_obj`/`write_obj`/`read_crt`/`write_crt`/`read_rom`/`write_rom`을, `editor4.c`가 `*_to_mem`/`*_from_mem`을 갖는다 — 서버 `files1.c`/`files3.c`의 **복제본**이다. 두 곳을 따로 유지해야 했던 1993 구조의 흔적.
 - **크로스플랫폼 빌드**: `editor.exe`(Windows)·`editor`(Unix)·`editor.mak`/`editor.mdp`(Visual C++ 프로젝트)가 함께 있다. 빌더가 PC에서 편집 → 서버로 파일 전송하는 워크플로우.
-- **`compress.c`**: `util/ed`에도 LZW 압축 사본이 있으나, CLAUDE.md 확인대로 실제 세이브는 비압축이므로 **불필요**(형상이지 콘텐츠 아님).
+- **`compress.c`**: `util/ed`에도 LZW 압축 사본이 있으나, CLAUDE.md 확인대로 실제 세이브는 비압축이므로 **불필요**(구현 방식이지 콘텐츠 아님).
 
 **판단**: 프로그램 전체 **대체(드롭+재설계)**. 신규 스택에서는 웹 빌더 UI가 이 역할을 흡수한다. 다만 `edit_object`/`edit_monster`/`edit_room`/`edit_player`가 **노출하던 편집 필드 집합**은 빌더 UI가 제공해야 할 필드의 선례로 보존 가치가 있다(필드 의미론은 A4/A8/A9 정본, 편집 UX 명세는 이 에디터의 화면 구성 참조).
 
@@ -246,13 +246,13 @@ if(cmnd->str[0][0]=='*')
 
 ---
 
-## 6. 콘텐츠(이식) vs 형상(재설계) 분류
+## 6. 콘텐츠(이식) vs 구현 방식(재설계) 분류
 
 | 분류 | 대상 | 처리 |
 |---|---|---|
-| **콘텐츠(이식)** | `*gcast`가 재사용하는 마법 공식, `*떨어져라`/`*침공`의 오브젝트·몬스터 ID·방 범위·방송 대사, `*parameter`가 조정하는 밸런스 값, `*set` 권한 상승 방지 규칙 | 규칙·공식은 A5~A9로 이식됨. 이벤트 유지 시 시나리오 상수를 **데이터로 외부화**. |
-| **형상 — 대체** | 운영 명령(invis/send/purge/echo/force/spy/silence/broad/users/finger 등), 빌더 명령(create/monster/set_*/add_rom/link/name/append/replace/oname/cname), stat/inspection, `util/ed` 전체, 감사 로그 | 웹 admin/builder UI + API로 재설계. capability 유지, 표면 교체. |
-| **형상 — 드롭** | 디스크 캐시 명령(reload/save/flushrooms/flushcrtobj/사용자저장), `*shutdown` 타이머, `*notepad`/`*dmhelp` 편의, `util/ed`의 `compress.c`, 2계층 게이트의 CARETAKER/INVINCIBLE 이상현상 | 신규 아키텍처(MongoDB+메모리 그래프)에서 무의미하거나 RBAC로 흡수. |
+| **이식** | `*gcast`가 재사용하는 마법 공식, `*떨어져라`/`*침공`의 오브젝트·몬스터 ID·방 범위·방송 대사, `*parameter`가 조정하는 밸런스 값, `*set` 권한 상승 방지 규칙 | 규칙·공식은 A5~A9로 이식됨. 이벤트 유지 시 시나리오 상수를 **데이터로 외부화**. |
+| **재설계 — 대체** | 운영 명령(invis/send/purge/echo/force/spy/silence/broad/users/finger 등), 빌더 명령(create/monster/set_*/add_rom/link/name/append/replace/oname/cname), stat/inspection, `util/ed` 전체, 감사 로그 | 웹 admin/builder UI + API로 재설계. capability 유지, 표면 교체. |
+| **재설계 — 드롭** | 디스크 캐시 명령(reload/save/flushrooms/flushcrtobj/사용자저장), `*shutdown` 타이머, `*notepad`/`*dmhelp` 편의, `util/ed`의 `compress.c`, 2계층 게이트의 CARETAKER/INVINCIBLE 이상현상 | 신규 아키텍처(MongoDB+메모리 그래프)에서 무의미하거나 RBAC로 흡수. |
 
 ---
 

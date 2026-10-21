@@ -4,7 +4,7 @@
 
 ## 개요
 
-무한 포팅의 세션 계층이다. [`transport-protocol.md`](transport-protocol.md)(E3-1)가 확립한 transport-only WS(핸드셰이크·라우터·하트비트) 위에, ADR([`architecture.md`](architecture.md) D6 세션/인증)이 규정한 **Firebase Auth 위임 + 세션 쿠키 검증**을 구체화한다. 원작 무한의 이름+평문 비밀번호·identd는 **형상**으로 폐기하고(게임 분석 A12), `io->fn` **함수 포인터 상태머신**은 상태 enum + 핸들러 맵으로 재설계하되, **접속 라이프사이클 의미**(상태 전이 순서·캐릭터 선택→생성→입장 흐름)는 **콘텐츠**로 충실 재현한다.
+무한 포팅의 세션 계층이다. [`transport-protocol.md`](transport-protocol.md)(E3-1)가 확립한 transport-only WS(핸드셰이크·라우터·하트비트) 위에, ADR([`architecture.md`](architecture.md) D6 세션/인증)이 규정한 **Firebase Auth 위임 + 세션 쿠키 검증**을 구체화한다. 원작 무한의 이름+평문 비밀번호·identd는 **구현 방식**으로 분류해 폐기하고(게임 분석 A12), `io->fn` **함수 포인터 상태머신**은 상태 enum + 핸들러 맵으로 재설계하되, **접속 라이프사이클 의미**(상태 전이 순서·캐릭터 선택→생성→입장 흐름)는 **콘텐츠**로 충실 재현한다.
 
 계층 경계는 세 가지다.
 
