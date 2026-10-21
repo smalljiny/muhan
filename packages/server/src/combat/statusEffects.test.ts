@@ -22,10 +22,10 @@ import { F_ISSET, PPOISN, PDISEA, PBLIND, PSILNC, PFEARS } from '../world/hexFla
 
 /**
  * statusEffects — 명명 상태이상(Story 1 characterSchema.statusEffects)의 부여·만료 순수 헬퍼와
- * 명명 필드 → combat flag hex 뷰 투영.
+ * 명명 필드 → combat flag hex 뷰 변환.
  *
  * 만료 관례: until은 절대-틱(잔여-틱 아님). `until < now`이면 비활성, `until >= now`이면 활성.
- * 투영: Character에는 flags 필드가 없으므로(flags는 PlayerCombatState 소관) 병합 대상이 없다 —
+ * 변환: Character에는 flags 필드가 없으므로(flags는 PlayerCombatState 담당) 병합 대상이 없다 —
  * ZERO_FLAGS에서 활성 비트만 F_SET한 fresh hex를 반환한다.
  */
 function makeCharacter(overrides: Partial<Character> = {}): Character {
@@ -121,7 +121,7 @@ describe('is*Active 만료 판정', () => {
   })
 })
 
-describe('projectStatusFlags 투영', () => {
+describe('projectStatusFlags 변환', () => {
   it('활성 poison → F_ISSET(hex, PPOISN)===true', () => {
     const c = grantPoison(makeCharacter(), 100, 6)
     const hex = projectStatusFlags(c, 50)
@@ -134,13 +134,13 @@ describe('projectStatusFlags 투영', () => {
     expect(F_ISSET(hex, PDISEA)).toBe(true)
   })
 
-  it('활성 blind → F_ISSET(hex, PBLIND)===true (combat 관용 판독 가능)', () => {
+  it('활성 blind → F_ISSET(hex, PBLIND)===true (combat 관용 읽기 가능)', () => {
     const c = grantBlind(makeCharacter(), 100)
     const hex = projectStatusFlags(c, 50)
     expect(F_ISSET(hex, PBLIND)).toBe(true)
   })
 
-  it('여러 활성 효과가 동시에 투영된다', () => {
+  it('여러 활성 효과가 동시에 변환된다', () => {
     const c = grantBlind(grantDisease(grantPoison(makeCharacter(), 100, 6), 100, 12), 100)
     const hex = projectStatusFlags(c, 50)
     expect(F_ISSET(hex, PPOISN)).toBe(true)
@@ -148,7 +148,7 @@ describe('projectStatusFlags 투영', () => {
     expect(F_ISSET(hex, PBLIND)).toBe(true)
   })
 
-  it('만료(until < now) 효과는 투영에서 제외된다', () => {
+  it('만료(until < now) 효과는 변환에서 제외된다', () => {
     const c = grantPoison(makeCharacter(), 100, 6)
     const hex = projectStatusFlags(c, 101)
     expect(F_ISSET(hex, PPOISN)).toBe(false)
@@ -204,8 +204,8 @@ describe('clear* 해제 헬퍼 (Story 10 cure 소비)', () => {
 })
 
 /**
- * 침묵·공포 헬퍼 — blind 대칭(간격 없음, until만). 시전 경로는 미배선이므로 이 헬퍼들은
- * 순수 함수 계약만 검증한다(debuffEffects의 플레이어 대상 유예 무변경).
+ * 침묵·공포 헬퍼 — blind 대칭(간격 없음, until만). 시전 경로는 미연결이므로 이 헬퍼들은
+ * 순수 함수 계약만 검증한다(debuffEffects의 플레이어 대상 보류 무변경).
  */
 describe('grantSilence/grantFear 부여 헬퍼', () => {
   it('grantSilence는 silence until만 세팅한다(간격 없음)', () => {
@@ -294,9 +294,9 @@ describe('clearSilence/clearFear 해제 헬퍼', () => {
   })
 })
 
-// 비트 번호(PSILNC 44·PFEARS 43) 자체의 고정은 소유 모듈 테스트(world/hexFlags.test.ts)가 맡는다 —
-// help/pflags 문서 값이 raw #define보다 +1인 off-by-one 함정이라 정본 모듈에서 pin한다.
-describe('projectStatusFlags — PSILNC·PFEARS 투영', () => {
+// 비트 번호(PSILNC 44·PFEARS 43) 자체의 고정은 담당 모듈 테스트(world/hexFlags.test.ts)가 맡는다 —
+// help/pflags 문서 값이 raw #define보다 +1인 off-by-one 함정이라 기준 모듈에서 pin한다.
+describe('projectStatusFlags — PSILNC·PFEARS 변환', () => {
   it('활성 silence → F_ISSET(hex, PSILNC)===true (비트 44)', () => {
     const hex = projectStatusFlags(grantSilence(makeCharacter(), 100), 50)
     expect(F_ISSET(hex, PSILNC)).toBe(true)
@@ -307,7 +307,7 @@ describe('projectStatusFlags — PSILNC·PFEARS 투영', () => {
     expect(F_ISSET(hex, PFEARS)).toBe(true)
   })
 
-  it('만료(until < now)된 silence·fear는 투영에서 제외된다', () => {
+  it('만료(until < now)된 silence·fear는 변환에서 제외된다', () => {
     const c = grantFear(grantSilence(makeCharacter(), 100), 100)
     const hex = projectStatusFlags(c, 101)
     expect(F_ISSET(hex, PSILNC)).toBe(false)

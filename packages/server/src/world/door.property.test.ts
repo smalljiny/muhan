@@ -23,9 +23,9 @@ import {
  *
  * 비-vacuity 설계(advisor 지침):
  *   - totality: 임의 flags·key·now에서 항상 함수를 호출하므로 구조적으로 비-vacuous
- *     (모든 실행이 SUT를 구동, boolean 반환·무예외를 단정).
+ *     (모든 실행이 SUT를 실행, boolean 반환·무예외를 단정).
  *   - lock 성공 사후조건: lock은 XLOCKS ∧ XCLOSD ∧ keyMatch 3중 결합에서만 true라
- *     완전 임의 입력이면 거의 발화하지 않는다(vacuous 함정). 성공-적격 fixture를
+ *     완전 임의 입력이면 거의 실행되지 않는다(vacuous 함정). 성공-적격 fixture를
  *     구성해 result===true를 **무조건** 단정 → 성공 분기를 항상 관측한다.
  *
  * in-place mutation 주의: 전이 함수는 exit.flags를 in-place 변경하므로 각 property 실행마다

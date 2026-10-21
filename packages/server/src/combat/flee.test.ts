@@ -6,7 +6,7 @@ import { PALADIN, FIGHTER } from './constants.js'
 
 /**
  * flee — 플레이어 도주 결정(update.c:534~551)의 순수 함수 이식. boolean(도주 여부)만 반환하며 실 이동은
- * movement seam(#99) 유예다.
+ * movement seam(#99)으로 보류한다.
  *
  * PWIMPY: hpCurrent<=wimpyValue면 도주(굴림 없음). else-if PFEARS: ff 공식 굴림 후 ff<rng(1,100)면 도주.
  *

@@ -113,7 +113,7 @@ describe('toCaster(CreatureInstance)', () => {
     expect(caster.mpCurrent).toBe(40)
   })
 
-  it('knows는 creature.spells 비트셋을 F_ISSET으로 판독한다', () => {
+  it('knows는 creature.spells 비트셋을 F_ISSET으로 읽는다', () => {
     const creature = makeCreature({ spells: F_SET('0'.repeat(32), 6) })
     const caster = toCaster(creature)
     expect(caster.knows(6)).toBe(true)
@@ -152,7 +152,7 @@ describe('toCaster(PlayerCombatState)', () => {
     expect(caster.intBonus).toBe(bonusOf(14))
   })
 
-  it('knows는 state.spells 비트마스크를 isKnown으로 실판독한다(#85 — 더 이상 false 스텁 아님)', () => {
+  it('knows는 state.spells 비트마스크를 isKnown으로 실제로 읽는다(#85 — 더 이상 false 스텁 아님)', () => {
     const caster = toCaster(makePlayerState({ spells: setKnown(emptySpellStore(), 6) }))
     expect(caster.knows(6)).toBe(true)
     expect(caster.knows(7)).toBe(false)

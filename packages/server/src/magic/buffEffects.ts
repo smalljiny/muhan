@@ -28,19 +28,19 @@ import type { SpellDispatch } from './dispatch.js'
  *
  * ## 범위 (Story 7 = resistBuff 4주문 {SRFIRE, SRMAGI, SRCOLD, SSSHLD})
  * 각 effect는 대상(수혜 Character)의 buffs 필드에 `{until}`을 기록하고(G4 grantBuff 소비), 활성 버프를
- * P-flag hex로 투영한다(projectResistFlags). SBRWAT(수생술)는 catalog family=buff라 Story 9 소관이며
+ * P-flag hex로 변환한다(projectResistFlags). SBRWAT(수생술)는 catalog family=buff라 Story 9 담당이며
  * 이 모듈에 포함되지 않는다(결정 요약 #1 — G5는 정확히 4주문).
  *
- * ## 저항 플래그 이중 표현 (statusEffects 투영 계약 승계)
+ * ## 저항 플래그 이중 표현 (statusEffects 변환 계약 승계)
  * 오라클은 저항을 두 곳에 쓴다: F_SET(crt, PRFIRE)(플래그) + lasttime[LT_RFIRE].interval(타이머). 이 포트의
- * Character에는 combat flags 필드가 없으므로(flags는 라이브 PlayerCombatState 소관), 타이머는 buffs `{until}`로
- * 영속하고 플래그는 projectResistFlags가 활성 버프에서 fresh hex로 투영한다 — combat/statusEffects.ts의
+ * Character에는 combat flags 필드가 없으므로(flags는 라이브 PlayerCombatState 담당), 타이머는 buffs `{until}`로
+ * 영속하고 플래그는 projectResistFlags가 활성 버프에서 fresh hex로 변환한다 — combat/statusEffects.ts의
  * grant* + projectStatusFlags 계약을 그대로 승계한다. #84 저항 감산은 creature-only(MRMAGI intrinsic 비트)라
- * 플레이어 수혜자의 저항-read는 미배선(유예) — 이 모듈은 투영 표면만 노출한다.
+ * 플레이어 수혜자의 저항-read는 미연결(보류) — 이 모듈은 변환 인터페이스만 노출한다.
  *
- * ## dur = computeBuffDur (G4 표준 공식 소비, 마나·게이트는 gate.ts 소관)
+ * ## dur = computeBuffDur (G4 표준 공식 소비, 마나·게이트는 gate.ts 담당)
  * until = ctx.now + computeBuffDur(spellNo, {intBonus, level, casterClass, gated, rpmext}). 마나(A6 §2 =12)·
- * knowledge·spell_fail 게이트는 시전 진입(gate.ts S4)이 소유하므로 effect는 마나를 소비하지 않는다 —
+ * knowledge·spell_fail 게이트는 시전 진입(gate.ts S4)이 담당하므로 effect는 마나를 소비하지 않는다 —
  * offensiveSpell이 데미지 전용이듯 이 모듈은 effect 전용이다.
  *
  * ## 순수 함수·immutability
@@ -52,7 +52,7 @@ import type { SpellDispatch } from './dispatch.js'
 const ZERO_FLAGS = '0000000000000000'
 
 /**
- * resistBuff family 4주문 → 대응 저항 P-flag 비트(mtype.h 전사):
+ * resistBuff family 4주문 → 대응 저항 P-flag 비트(mtype.h에서 옮겨 적음):
  *   SRFIRE(22)→PRFIRE(30, magic5.c:607) · SRMAGI(24)→PRMAGI(32, magic6.c:49) ·
  *   SRCOLD(43)→PRCOLD(36, magic7.c:49) · SSSHLD(45)→PSSHLD(38, magic7.c:252).
  */
@@ -131,9 +131,9 @@ export function resistBuff(req: BuffEffectRequest, spellNo: number): Character {
 }
 
 /**
- * projectResistFlags — 활성(만료 안 된) 저항 버프 → combat flag hex 뷰 투영(projectStatusFlags 승계).
+ * projectResistFlags — 활성(만료 안 된) 저항 버프 → combat flag hex 뷰 변환(projectStatusFlags 승계).
  * 각 resistBuff 주문이 활성이면 대응 P-flag(PRFIRE/PRMAGI/PRCOLD/PSSHLD)를 세팅한다. 만료 버프는 제외한다.
- * 반환 hex는 F_ISSET로 판독 가능하다(#84 저항 감산 소비 관용 무파괴).
+ * 반환 hex는 F_ISSET로 읽을 수 있다(#84 저항 감산 소비 관용 무파괴).
  */
 export function projectResistFlags(character: Character, now: number): string {
   let hex = ZERO_FLAGS
@@ -156,7 +156,7 @@ export function registerResistBuffs(dispatch: SpellDispatch<BuffEffectHandler>):
 // ══ Story 9 (G7) — 타이머 보유 비-offensive 10주문(buff+detect+fly+light) ═════════
 
 /**
- * TimedBuffMeta — Story 9 주문의 투영 P-flag 비트 + dur 종류. 이 Map 하나가 (1) projectBuffFlags 비트
+ * TimedBuffMeta — Story 9 주문의 변환 P-flag 비트 + dur 종류. 이 Map 하나가 (1) projectBuffFlags 비트
  * (2) registerTimedBuffs 핸들러 선택 (3) TIMED_BUFF_SPELLS 파생 리스트의 **단일 출처**다 — resistBuff의
  * RESIST_FLAG_BY_SPELL 패턴을 승계해 세 파생 구조의 drift를 차단한다(Story 7 drift 교훈).
  *
@@ -164,7 +164,7 @@ export function registerResistBuffs(dispatch: SpellDispatch<BuffEffectHandler>):
  *   special=true : 표준 공식 예외(computeSpecialBuffDur, OpenQ #3-a/#3-b) → specialBuff.
  */
 interface TimedBuffMeta {
-  /** 활성 버프가 투영하는 P-flag 비트(mtype.h 전사, hexFlags.ts). */
+  /** 활성 버프가 변환하는 P-flag 비트(mtype.h에서 옮겨 적음, hexFlags.ts). */
   readonly flag: number
   /** true면 computeSpecialBuffDur(invis/levit/light), false면 computeBuffDur(표준 7주문). */
   readonly special: boolean
@@ -195,9 +195,9 @@ const TIMED_BUFF_META: ReadonlyMap<number, TimedBuffMeta> = new Map([
 export const TIMED_BUFF_SPELLS: readonly number[] = [...TIMED_BUFF_META.keys()]
 
 /**
- * projectBuffFlags — 활성(만료 안 된) Story 9 버프 → P-flag hex 투영(projectResistFlags 승계).
+ * projectBuffFlags — 활성(만료 안 된) Story 9 버프 → P-flag hex 변환(projectResistFlags 승계).
  * 각 주문이 활성이면 대응 P-flag(PBLESS/PPROTE/PINVIS/…)를 세팅한다. 만료 버프는 제외한다. 반환 hex는
- * F_ISSET로 판독 가능하다(감지·비행·발광 등 라이브 상태 read 소비 관용 무파괴).
+ * F_ISSET로 읽을 수 있다(감지·비행·발광 등 라이브 상태 read 소비 관용 무파괴).
  */
 export function projectBuffFlags(character: Character, now: number): string {
   let hex = ZERO_FLAGS

@@ -33,7 +33,7 @@ type RawRoom = {
  * 출구 문 재잠금/재닫힘 지연의 런타임 기본값(초). oracle a4 §111 `check_exits`는
  * `ltime + interval < now`이면 문을 자동 재잠금/재닫힘하지만 원본은 구체 interval 값을
  * 명시하지 않는다(디스크 라이브 상태에 기록될 뿐). 여기서 런타임 기본값으로 고정하고,
- * 후속 write-back(문 상태 영속화) 토픽에서 방별 값으로 이월한다. 코드·테스트가 이 상수를
+ * 후속 write-back(문 상태 영속화) 토픽에서 방별 값으로 바꾸도록 넘긴다. 코드·테스트가 이 상수를
  * 함께 참조해 값 불일치를 없앤다.
  */
 export const DEFAULT_EXIT_INTERVAL_SEC = 60
@@ -42,7 +42,7 @@ export const DEFAULT_EXIT_INTERVAL_SEC = 60
 // ltime은 문 상태 변경 시각으로 부팅 시 0(변경 없음), interval은 런타임 기본 주입값.
 // dangling 대상은 그대로 유지한다(해석은 Map.has 지연 조회).
 function toExitEdge(raw: RawExit): ExitEdge {
-  // flags는 복사한다 — 노드가 폐기될 raw 번들과 배열을 공유하지 않게(items deep-copy와 정합).
+  // flags는 복사한다 — 노드가 폐기될 raw 번들과 배열을 공유하지 않게(items deep-copy와 일치).
   return {
     name: raw.name,
     targetRoomId: raw.room,
@@ -63,12 +63,12 @@ function toItemInstance(raw: RawItem, roomId: number, path: string): ItemInstanc
     name: raw.name,
     description: raw.description,
     value: raw.value,
-    // flags는 scavenge 제외 판정용 hex string(D8). 합성 픽스처 등 raw.flags 부재 시 all-zero로
+    // flags는 scavenge 제외 판정용 hex string(D8). 합성 픽스처 등 raw.flags가 없으면 all-zero로
     // 기본값(플래그 없음=회수 가능)을 준다 — 타입은 항상 string 계약을 유지한다.
     flags: raw.flags ?? '0000000000000000',
-    // 이름 매칭용 별칭(Story 4). flags 선례처럼 합성 픽스처 등 raw.keys 부재 시 빈 배열로
+    // 이름 매칭용 별칭(Story 4). flags 선례처럼 합성 픽스처 등 raw.keys가 없으면 빈 배열로
     // 정규화한다 — 타입은 항상 string[] 계약을 유지한다(undefined 금지). 배열은 복사한다 —
-    // 노드가 폐기될 raw 번들과 공유하지 않게(exit flags·random 복사 관례와 정합).
+    // 노드가 폐기될 raw 번들과 공유하지 않게(exit flags·random 복사 관례와 일치).
     keys: [...(raw.keys ?? [])],
     contains: raw.contains.map((child, i) => toItemInstance(child, roomId, `${path}.${i}`)),
   }
@@ -81,8 +81,8 @@ function toPermMonSlot(raw: RawPermMon): PermMonSlot {
 }
 
 function toRoomNode(raw: RawRoom): RoomNode {
-  // embedded 몬스터를 라이브 크리처로 물질화한다(팩토리 (a) 경로, templateId=null — 템플릿
-  // 재인스턴스화가 아니라 방 파일 인라인 데이터로 물질화). 기본 결정적 rng로 순수성을 유지한다.
+  // embedded 몬스터를 라이브 크리처 인스턴스로 생성한다(팩토리 (a) 경로, templateId=null — 템플릿
+  // 재인스턴스화가 아니라 방 파일 인라인 데이터로 인스턴스 생성). 기본 결정적 rng로 순수성을 유지한다.
   const monsters = raw.monsters ?? []
   const creatures: CreatureInstance[] = monsters.map((m, i) => fromEmbedded(m, raw.id, i))
   return {
@@ -92,7 +92,7 @@ function toRoomNode(raw: RawRoom): RoomNode {
     longDesc: raw.long_desc,
     exits: raw.exits.map(toExitEdge),
     items: raw.items.map((item, i) => toItemInstance(item, raw.id, String(i))),
-    // flags는 64비트 raw 방 flags를 복사해 보존한다(exits/items deep-copy 관례와 정합, 불변).
+    // flags는 64비트 raw 방 flags를 복사해 보존한다(exits/items deep-copy 관례와 일치, 불변).
     flags: [...raw.flags],
     // occupants는 라이브 점유자 Set으로 부팅 시 빈 상태다(characterId가 이동 시 채워짐).
     occupants: new Set<string>(),
@@ -105,12 +105,12 @@ function toRoomNode(raw: RawRoom): RoomNode {
 }
 
 /**
- * 부팅 시 정본 방 번들을 인메모리 그래프로 로드한다.
+ * 부팅 시 기준 방 번들을 인메모리 그래프로 로드한다.
  *
  * rooms.json 배열을 한 번 읽어 `room.id`를 키로 하는 Map을 구성한다. 출구는 엣지로,
  * 바닥 아이템은 고유 id를 가진 ItemInstance로, 방 embedded 몬스터는 `CreatureInstance`로
- * 물질화하고 스폰 정의 필드(`permMon`·`random`·`traffic`)를 노드에 싣는다(E4-2 G1). objmon
- * 템플릿 번호 재인스턴스화·리스폰 스케줄은 하지 않는다(입장 lazy·tick 소관). 순수 함수 —
+ * 인스턴스를 생성하고 스폰 정의 필드(`permMon`·`random`·`traffic`)를 노드에 싣는다(E4-2 G1). objmon
+ * 템플릿 번호 재인스턴스화·리스폰 스케줄은 하지 않는다(입장 lazy·tick 담당). 순수 함수 —
  * 전역·부수효과 없이 Map만 반환한다.
  *
  * @param worldRoot data/world 루트 오버라이드(기본: 저장소 data/world) — 테스트 격리용

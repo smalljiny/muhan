@@ -31,9 +31,9 @@ import { computeDebuffDur } from './spellDuration.js'
  * ## pure-report DebuffOutcome (defer-write seam, realmGrowth 선례)
  * 핸들러는 순수 함수다 — target creature를 변형하지 않고 DebuffOutcome을 반환한다. 실 write
  * (instance.charmedUntil/befuddledUntil = now+dur, flags F_SET, experience -= loss)는 #99 라이브 조립이
- * 소비한다(offensiveSpell.realmGrowth가 성장량만 보고하고 realm write를 유예하는 것과 동형). 근거:
+ * 소비한다(offensiveSpell.realmGrowth가 성장량만 보고하고 realm write를 보류하는 것과 동형). 근거:
  * fear/silence/blind는 CreatureInstance에 대응 타이머 필드가 없고(charmedUntil/befuddledUntil만 존재),
- * charmedUntil/befuddledUntil의 라이브 writer도 아직 배선되지 않았다(autonomic이 read/scrub만 한다).
+ * charmedUntil/befuddledUntil의 라이브 writer도 아직 연결되지 않았다(autonomic이 read/scrub만 한다).
  * dur은 **상대 초**로 보고한다(ctx.now 비의존 — #99가 now+dur을 계산).
  *
  * ## dur 모델
@@ -52,11 +52,11 @@ import { computeDebuffDur } from './spellDuration.js'
  *   - fear: 대상 MPERMT면 완전 면역(applied=false, magic8.c:388).
  *
  * ## 범위 밖 (deferred — offensiveSpell의 "effect는 재게이트 안 함" 분리 승계)
- *   - MUNKIL 차단(5개 오라클 함수 공통) → 타깃팅 게이트 소관.
- *   - caster-class 게이트(silence/blind class<SUB_DM·drain_exp class<DM) → gate.ts 소관.
- *   - drain_exp lower_prof(무기 숙련 감소) → 유예(경험치 감소만, Story 본문).
- *   - befuddle 2차 봉쇄(LT_SPELL=MIN(9,dur)·PLAYER LT_ATTCK) → 라이브 배선 디테일 유예.
- *   - player 대상(PvP P-flag 계열) → offensiveSpell player-resist 분기처럼 전 계열 유예(applied=false).
+ *   - MUNKIL 차단(5개 오라클 함수 공통) → 타깃팅 게이트 담당.
+ *   - caster-class 게이트(silence/blind class<SUB_DM·drain_exp class<DM) → gate.ts 담당.
+ *   - drain_exp lower_prof(무기 숙련 감소) → 보류(경험치 감소만, Story 본문).
+ *   - befuddle 2차 봉쇄(LT_SPELL=MIN(9,dur)·PLAYER LT_ATTCK) → 라이브 연결 디테일 보류.
+ *   - player 대상(PvP P-flag 계열) → offensiveSpell player-resist 분기처럼 전 계열 보류(applied=false).
  */
 
 /**

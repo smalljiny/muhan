@@ -2,10 +2,10 @@ import type { CreatureInstance } from 'shared'
 import type { PlayerCombatState } from './playerState.js'
 
 /**
- * Combatant 어댑터 — 플레이어(세션 액터, PlayerCombatState)와 몬스터(방 물질화, CreatureInstance)를
+ * Combatant 어댑터 — 플레이어(세션 액터, PlayerCombatState)와 몬스터(방에서 인스턴스 생성, CreatureInstance)를
  * 명중·피해 계산이 소비할 단일 operand로 통일한다(플랜 G1/G2, T5.1).
  *
- * 공통 표면(hpCurrent/armor/thaco/dexterity/flags/kind)만으로 명중 임계(hitThreshold)가 kind 비대칭을
+ * 공통 인터페이스(hpCurrent/armor/thaco/dexterity/flags/kind)만으로 명중 임계(hitThreshold)가 kind 비대칭을
  * 흡수한다. flags는 양측 hex string으로 통일해 `F_ISSET(combatant.flags, bit)` 단일 관용을 성립시킨다
  * (원작에서 플레이어도 creature 구조체라 flags 표현이 동일).
  *
@@ -63,7 +63,7 @@ export function toCombatant(source: PlayerCombatState | CreatureInstance): Comba
 
 /**
  * Combatant의 라이브 현재 hp를 **원본 참조**에서 읽는다(스냅샷 `hpCurrent`가 아님 — 그건 어댑트 시점
- * 값이라 차감 후 stale). 근접(resolveAttack)·주문(offensiveSpell) 데미지가 공유하는 판독 seam으로,
+ * 값이라 차감 후 stale). 근접(resolveAttack)·주문(offensiveSpell) 데미지가 공유하는 읽기 seam으로,
  * kind-dispatch를 이 추상 소유지로 접어 소비자별 open-code 중복을 없앤다(파일 상단 주석의 예고 이행).
  */
 export function combatantHp(target: Combatant): number {

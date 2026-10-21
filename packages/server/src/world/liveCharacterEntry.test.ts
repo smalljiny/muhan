@@ -11,7 +11,7 @@ import {
 /**
  * liveCharacterEntry — hydrate(로드) / place(방 배치) / release(퇴장) 코어.
  *
- * hydrate는 부수효과 없는 로드(D-G 2)이고 place/release가 동기 배치·퇴장을 소유한다.
+ * hydrate는 부수효과 없는 로드(D-G 2)이고 place/release가 동기 배치·퇴장을 담당한다.
  * 재접속은 재로드하지 않는다(D-G 1) — 등록된 엔트리를 그대로 돌려줘 미영속 currentRoom을
  * 덮어쓰지 않는다. release의 occupants.delete는 onRoomLeft보다 반드시 선행한다(tryMove 미러).
  */
@@ -166,7 +166,7 @@ describe('createLiveCharacterEntry', () => {
     it('currentRoom이 orphan이면 DEFAULT_START_ROOM으로 교정하고 warn을 1회 호출한다', async () => {
       const character = makeCharacter('char-1', 9999) // resolveRoom가 undefined 반환
       h = makeHarness(character)
-      // orphan 방을 실제로 미해소로 만든다(생성자에서 9999 방을 넣었으므로 제거).
+      // orphan 방을 실제로 미해석으로 만든다(생성자에서 9999 방을 넣었으므로 제거).
       h.rooms.delete(9999)
 
       const entry = createLiveCharacterEntry(h.deps)
@@ -174,19 +174,19 @@ describe('createLiveCharacterEntry', () => {
 
       expect(result.character.currentRoom).toBe(DEFAULT_START_ROOM)
       expect(h.warn).toHaveBeenCalledTimes(1)
-      // 교정된 엔트리는 즉시 배치 가능해야 한다(fallback 방은 그래프에 해소됨 — invariant 5 end-to-end).
+      // 교정된 엔트리는 즉시 배치 가능해야 한다(fallback 방은 그래프에 해석됨 — invariant 5 end-to-end).
       expect(() => entry.place(result)).not.toThrow()
     })
   })
 
   /**
-   * 인벤토리 적재(T3.3) — hydrate의 세 반환 지점 각각에 대한 계약.
+   * 인벤토리 로드(T3.3) — hydrate의 세 반환 지점 각각에 대한 계약.
    *
    * 정상 경로·orphan 폴백은 `hydrateInventory` 결과를 싣고, 조기 반환(등록 엔트리)은 기존 인벤을
    * 보존하며 저장소를 다시 치지 않는다. 후자를 재로드하면 재접속마다 인벤이 디스크 스냅샷으로
    * 되돌아가 미영속 라이브 변경(연마로 소모된 비법서 등)이 되살아난다.
    */
-  describe('hydrate 인벤토리 적재', () => {
+  describe('hydrate 인벤토리 로드', () => {
     it('정상 경로는 hydrateInventory 결과를 순서대로 싣는다', async () => {
       const character = makeCharacter('char-1', 5)
       h = makeHarness(character, [makeObject('obj-a'), makeObject('obj-b')])
@@ -198,7 +198,7 @@ describe('createLiveCharacterEntry', () => {
       expect(h.hydrateInventory).toHaveBeenCalledWith('char-1')
     })
 
-    it('orphan 폴백 경로도 인벤토리를 싣는다(방 교정이 인벤 적재를 건너뛰지 않는다)', async () => {
+    it('orphan 폴백 경로도 인벤토리를 싣는다(방 교정이 인벤 로드를 건너뛰지 않는다)', async () => {
       const character = makeCharacter('char-1', 9999)
       h = makeHarness(character, [makeObject('obj-a')])
       h.rooms.delete(9999)
@@ -254,7 +254,7 @@ describe('createLiveCharacterEntry', () => {
    * pending 스냅샷 overlay(#124) — 재진입 hydrate가 write-behind 미영속 진행도를 잃지 않는지.
    *
    * 계약 순서는 peekPending(동기 선형화 지점) → findById → characterPatchSchema 검증 → overlay →
-   * 인벤 적재 → orphan 폴백이다. 검증 실패는 error 1건 후 저장소 문서로 폴백하고 throw하지 않는다.
+   * 인벤 로드 → orphan 폴백이다. 검증 실패는 error 1건 후 저장소 문서로 폴백하고 throw하지 않는다.
    */
   describe('hydrate pending overlay (#124)', () => {
     it('peekPending을 findById보다 먼저 호출한다(§8.5 선형화 지점)', async () => {
@@ -376,7 +376,7 @@ describe('createLiveCharacterEntry', () => {
      *
      * zod의 .partial()은 키가 존재하면 값이 undefined여도 출력에 남긴다. 그대로 spread하면
      * 타입은 number인데 런타임 값이 undefined인 캐릭터가 라이브 레지스트리에 들어가고, 이후
-     * 규칙이 NaN을 뿜으며 다음 flush가 그 undefined를 $set한다 — 전 구간이 무성 실패다.
+     * 규칙이 NaN을 뿜으며 다음 flush가 그 undefined를 $set한다 — 전 구간이 조용한 실패다.
      */
     it('값이 undefined인 pending 키는 저장소 값을 덮지 않는다', async () => {
       const character = makeCharacter('char-1', 5)
@@ -449,7 +449,7 @@ describe('createLiveCharacterEntry', () => {
 
   // 주석 문자열(오라클 근거·추적 임계·이슈 번호)을 readFileSync로 단언하는 테스트는 두지 않는다 —
   // 동작이 아니라 산문을 검증해 표기를 다듬으면 깨지고, 반대로 주석만 남고 동작이 사라져도 통과한다.
-  // divergence 추적은 CLAUDE.md '알려진 divergence' 절과 이슈 #142가 소유한다.
+  // divergence 추적은 CLAUDE.md '알려진 divergence' 절과 이슈 #142가 담당한다.
 
   describe('place', () => {
     it('occupants에 characterId를 추가하고 onRoomEntered를 add 이후에 호출한다(순서 계약)', () => {

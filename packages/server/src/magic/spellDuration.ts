@@ -9,7 +9,7 @@ import { MAGE } from '../combat/constants.js'
  * ## 범위 (Story 5 = dur 계산 + polling 만료 판정만, D3)
  * dur 스칼라·grant(buffs 필드 write)·isExpired 판정만 노출한다. 신규 event 발행 타이머 seam은
  * 도입하지 않는다 — 소비처(Story 7-9 effect·라이브 틱)가 `isExpired(until, tick)`로 polling 만료한다.
- * dur 메타(상수·클래스 보너스 대상·RPMEXT 양·굴림 계수)는 shared buffCatalog가 소유하고, 이 모듈은
+ * dur 메타(상수·클래스 보너스 대상·RPMEXT 양·굴림 계수)는 shared buffCatalog가 담당하고, 이 모듈은
  * 산술(MAX 하한·클래스 +60*L4·RPMEXT 가산·PRMAGI dur/2)만 담는다.
  *
  * ## 만료 관례 (statusEffects isActive와 정확히 일치)
@@ -78,7 +78,7 @@ function standardDurArith(
 
 /**
  * computeBuffDur — A6 §6 표준 버프 지속(초). base=1200 표준 산술을 standardDurArith에 위임한다.
- * 미등록 주문(invis/levit/light 등)은 throw한다 — 표준 공식이 아니다(Story 9 OpenQ 소관).
+ * 미등록 주문(invis/levit/light 등)은 throw한다 — 표준 공식이 아니다(Story 9 OpenQ 담당).
  */
 export function computeBuffDur(spellNo: number, input: BuffDurInput): number {
   const meta = BUFF_DUR_META.get(spellNo)
@@ -97,7 +97,7 @@ const LIGHT_PER_L4 = 300
 
 /**
  * computeSpecialBuffDur — A6 §6 **표준 공식 예외** 3주문(SINVIS·SLEVIT·SLIGHT)의 dur(초).
- * 이 셋은 computeBuffDur(BUFF_DUR_META)에 미등록이라 throw되므로 여기서 별도 산출한다(Story 9 소관).
+ * 이 셋은 computeBuffDur(BUFF_DUR_META)에 미등록이라 throw되므로 여기서 별도 산출한다(Story 9 담당).
  *
  * ## OpenQ #3-b — invisibility·levitate MAX(300) 하한 복원 (A6 §11-b)
  * 오라클(magic3.c:456 invis `1200+B*600`, magic5.c:515 levit `2400+B*600`)은 표준 버프와 달리 MAX(300)
@@ -146,12 +146,12 @@ export interface DebuffDurInput {
  *   대상 PRMAGI면 dur = trunc(dur/2) (무효화 아님, 절반 단축).
  *
  * rng는 mrand(1,rollDie) 굴림 seam이다(dice.ts CombatRng 관례). silence(rollDie=0)는 rng를 호출하지
- * 않는다. befuddle(dur=3/MAX(5) 저항 모델)·drain_exp/blind(타이머 없음)는 미등록 → throw(Story 8 소관).
+ * 않는다. befuddle(dur=3/MAX(5) 저항 모델)·drain_exp/blind(타이머 없음)는 미등록 → throw(Story 8 담당).
  *
  * 스코프: **CAST 전용**이다. fear/silence/charm은 오라클(magic8.c:328·466·689)상 SCROLL·WAND/POTION
  * delivery별로 상수·굴림·intMult가 다른 별도 dur 분기를 갖지만(예: silence SCROLL≈350 vs CAST 3600),
- * 아이템 delivery는 #86(스펙 §5 Non-goal)이라 본 함수는 CAST 분기만 전사한다. non-CAST 디버프 dur
- * 변형은 Story 8 디버프 delivery 배선 시점에 추가한다(버프측 gated/NON_CAST_BUFF_DUR 대응).
+ * 아이템 delivery는 #86(스펙 §5 Non-goal)이라 본 함수는 CAST 분기만 옮겨 적는다. non-CAST 디버프 dur
+ * 변형은 Story 8 디버프 delivery 연결 시점에 추가한다(버프측 gated/NON_CAST_BUFF_DUR 대응).
  */
 export function computeDebuffDur(spellNo: number, input: DebuffDurInput, rng: CombatRng): number {
   const meta = DEBUFF_DUR_META.get(spellNo)

@@ -5,9 +5,9 @@ import { SpellDispatch } from './dispatch.js'
 /**
  * 주문번호 → 핸들러 디스패치 테스트.
  *
- * 입력 키는 주문번호(spellNo)다 — 한글 주문명 해소는 command router 소관(본 토픽 밖).
+ * 입력 키는 주문번호(spellNo)다 — 한글 주문명 해석은 command router 담당(본 토픽 밖).
  * S6(#85 G7 enabler)부터 register/resolve는 family-agnostic다: offensive·비-offensive를 가리지
- * 않고 카탈로그 주문이면 등록·해소하고, 카탈로그 밖 주문만 register가 throw한다. 미등록은 undefined.
+ * 않고 카탈로그 주문이면 등록·해석하고, 카탈로그 밖 주문만 register가 throw한다. 미등록은 undefined.
  * 각 effect 모듈(S7~S10)은 자체 SpellDispatch<H> 인스턴스를 소유한다(핸들러 타입 이질성).
  */
 
@@ -15,19 +15,19 @@ import { SpellDispatch } from './dispatch.js'
 type StubHandler = () => string
 
 describe('SpellDispatch', () => {
-  it('등록된 offensive 주문번호를 핸들러 슬롯으로 해소한다', () => {
+  it('등록된 offensive 주문번호를 핸들러 슬롯으로 해석한다', () => {
     const dispatch = new SpellDispatch<StubHandler>()
     const handler: StubHandler = () => 'cast'
     dispatch.register(SPELL_NO.SHURTS, handler)
     expect(dispatch.resolve(SPELL_NO.SHURTS)).toBe(handler)
   })
 
-  it('미등록 offensive 주문번호는 undefined로 해소한다(등록 대기 슬롯)', () => {
+  it('미등록 offensive 주문번호는 undefined로 해석한다(등록 대기 슬롯)', () => {
     const dispatch = new SpellDispatch<StubHandler>()
     expect(dispatch.resolve(SPELL_NO.SHURTS)).toBeUndefined()
   })
 
-  it('등록된 비-offensive 주문번호를 핸들러 슬롯으로 해소한다(family-agnostic)', () => {
+  it('등록된 비-offensive 주문번호를 핸들러 슬롯으로 해석한다(family-agnostic)', () => {
     const dispatch = new SpellDispatch<StubHandler>()
     const handler: StubHandler = () => 'heal'
     // SVIGOR(회복)은 비-offensive지만 S6부터 등록 가능하다.
@@ -35,7 +35,7 @@ describe('SpellDispatch', () => {
     expect(dispatch.resolve(SPELL_NO.SVIGOR)).toBe(handler)
   })
 
-  it('미등록 비-offensive 주문번호는 undefined로 해소한다(미등록이면 offensive와 동일)', () => {
+  it('미등록 비-offensive 주문번호는 undefined로 해석한다(미등록이면 offensive와 동일)', () => {
     const dispatch = new SpellDispatch<StubHandler>()
     // SVIGOR(회복)·SFEARS(공포) 모두 비-offensive지만 미등록이면 undefined.
     expect(dispatch.resolve(SPELL_NO.SVIGOR)).toBeUndefined()
@@ -47,7 +47,7 @@ describe('SpellDispatch', () => {
     expect(() => dispatch.register(SPELL_NO.SVIGOR, () => 'x')).not.toThrow()
   })
 
-  it('카탈로그 밖 주문번호는 undefined로 해소한다', () => {
+  it('카탈로그 밖 주문번호는 undefined로 해석한다', () => {
     const dispatch = new SpellDispatch<StubHandler>()
     expect(dispatch.resolve(999)).toBeUndefined()
   })
@@ -57,7 +57,7 @@ describe('SpellDispatch', () => {
     expect(() => dispatch.register(999, () => 'x')).toThrow()
   })
 
-  it('선형 탐색 대신 Map 조회로 등록 순서와 무관하게 해소한다', () => {
+  it('선형 탐색 대신 Map 조회로 등록 순서와 무관하게 해석한다', () => {
     const dispatch = new SpellDispatch<StubHandler>()
     const a: StubHandler = () => 'a'
     const b: StubHandler = () => 'b'

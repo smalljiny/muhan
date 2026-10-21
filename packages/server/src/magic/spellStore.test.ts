@@ -5,10 +5,10 @@ import { approve, emptySpellStore, goldenFixtureSchema, isKnown, setKnown } from
 /**
  * spell store 골든 fixture approve — mtype.h:570-571 S_ISSET/S_SET 비트 레이아웃 대조.
  *
- * anti-tautology: fixture expected는 spellStoreFixture.ts의 mtype.h 독립 전사(oracleKnownAfterSet),
- * SUT는 shared/magic/spellStore.ts의 isKnown/setKnown 구현. 두 전사가 diff되면 approve가 throw한다.
+ * anti-tautology: fixture expected는 spellStoreFixture.ts의 mtype.h를 독립적으로 옮겨 적은 것(oracleKnownAfterSet),
+ * SUT는 shared/magic/spellStore.ts의 isKnown/setKnown 구현. 옮겨 적은 두 코드가 diff되면 approve가 throw한다.
  * 완료 기준 "server 테스트에서 approve"에 맞춰 server가 디스크 json을 읽어 shared SUT로 실행한다
- * (mprofic.json 선례 — fixture는 shared 소유, SUT 소비 approve는 server가 소유).
+ * (mprofic.json 선례 — fixture는 shared 소유, SUT 소비 approve는 server가 담당).
  */
 describe('체크인된 spellStore.json 골든 fixture', () => {
   const loadFixture = () => {

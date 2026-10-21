@@ -7,7 +7,7 @@ import type { SpawnTemplateIndex, InstanceIdAllocator } from './spawn.js'
 /**
  * 사망 라이프사이클 seam(플랜 G5·Story 5). E6 전투가 HP<1을 판정한 뒤 호출하는 진입점을 **정의만**
  * 한다 — E4-2에서는 전투 코드가 없어 어떤 호출부도 이 함수를 부르지 않는다(test-driven). Story 6·index.ts
- * 배선 대상도 아니다(전투는 E6). 여기서 소유하는 사망 처리 3단계:
+ * 연결 대상도 아니다(전투는 E6). 여기서 담당하는 사망 처리 3단계:
  *   1. perm 리스폰 타이머 리셋(die_perm_crt, creature.c:553) — MPERMT 크리처 사망 시 방 permMon[]에서
  *      동명·cooldown 미경과 슬롯의 ltime을 사망 시각으로 재시작한다.
  *   2. MSUMMO 소환(summon_crt, creature.c:821) — 사망 크리처의 special 몹번호로 부하 1마리를 소환한다.
@@ -17,9 +17,9 @@ import type { SpawnTemplateIndex, InstanceIdAllocator } from './spawn.js'
  * 원본에서 `special` 필드는 세 구조체가 각기 다른 의미로 재사용한다. 무한에는 범용 스크립팅 엔진이
  * 없으므로(A11) 이들을 하나의 "핸들러 레지스트리" 추상으로 통합하지 않는다 — 세 개의 독립 개념 seam이다:
  *   (1) creature.special = MSUMMO 사망 소환 몹번호 → **이 모듈의 onDeathSummon이 유일하게 구현**.
- *   (2) room.special     = 접근 게이트(가문 RONFML·결혼 RONMAR 진입 조건) → E5/E7 소관, 여기 미구현.
- *   (3) object.special   = 명령 디스패치(읽어/눌러/사용) → 명령 에픽 소관, 여기 미구현.
- * (2)·(3)은 별개 에픽이 각자의 dispatch point에서 소유한다. 이 모듈은 (1)만 안다.
+ *   (2) room.special     = 접근 게이트(가문 RONFML·결혼 RONMAR 진입 조건) → E5/E7 담당, 여기 미구현.
+ *   (3) object.special   = 명령 디스패치(읽어/눌러/사용) → 명령 에픽 담당, 여기 미구현.
+ * (2)·(3)은 별개 에픽이 각자의 dispatch point에서 담당한다. 이 모듈은 (1)만 안다.
  *
  * in-place 변형(permMon[i].ltime·room.creatures splice/push)은 tick 계층 carve-out 관례를 따른다
  * (creatureTick.applyResult·respawnPermCreatures 선례). `now`는 명시 인자로 받는다(Date.now 금지,
@@ -104,9 +104,9 @@ function resetPermRespawnTimer(dead: CreatureInstance, room: RoomNode, now: numb
 /**
  * 사망 처리 진입점 — perm 리셋 → MSUMMO 소환 → 방 creatures[] 제거 순으로 처리한다(die_perm_crt 시퀀스).
  *
- * 제거는 방 creatures[] splice로 충분하다 — activeSet은 방 단위(occupants 구동) 컬렉션이라 개별 크리처
+ * 제거는 방 creatures[] splice로 충분하다 — activeSet은 방 단위(occupants 기반) 컬렉션이라 개별 크리처
  * 멤버십이 없다. 방 배열에서 빠지면 creatureTick이 순회하지 않아 활성 시뮬레이션에서 이탈한다(wander-out
- * applyResult "활성집합은 방 단위라 별도 처리 불요" 선례와 정합). 참조 미존재(이미 제거)여도 안전하다.
+ * applyResult "활성집합은 방 단위라 별도 처리 불요" 선례와 일치). 참조 미존재(이미 제거)여도 안전하다.
  */
 export function onCreatureDeath(
   dead: CreatureInstance,

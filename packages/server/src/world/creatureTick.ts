@@ -20,7 +20,7 @@ import { F_ISSET, MAGGRE, MGAGGR, MEAGGR } from './hexFlags.js'
  *      크리처에 대해서만 `onCombatTick` seam을 호출한다(E4-2 기본 no-op, 전투·어그로는 E6).
  *   4. next-action을 `now+cadence`로 재스케줄한다.
  *
- * clock seam은 WorldClock이 소유하므로 이 슬롯은 tick 트리거를 알지 못한다(gameTime 선례). `now`는
+ * clock seam은 WorldClock이 담당하므로 이 슬롯은 tick 트리거를 알지 못한다(gameTime 선례). `now`는
  * WorldClock이 넘기는 tickSec다 — activeSet의 activatedAt도 동일 clock(tickSec) 기준으로 세팅돼야
  * 재생 소급 baseline 비교가 성립한다(Story 6 조립 지점이 activate()를 tickSec로 호출).
  */
@@ -35,7 +35,7 @@ export const defaultOnCombatTick: OnCombatTick = () => undefined
 export interface CreatureTickDeps {
   /** 활성 방·활성화 시각 조회 seam(activeSet). */
   readonly activeSet: Pick<ActiveSet, 'activeRooms' | 'activatedAt'>
-  /** scavenge/wander 확률 굴림 seam(기본 neverFireRng — 결정적 비발화). */
+  /** scavenge/wander 확률 굴림 seam(기본 neverFireRng — 결정적으로 실행되지 않음). */
   readonly rng?: AutonomicRng
   /** §3.5 게이트 통과 크리처 전투 디스패치(기본 no-op). */
   readonly onCombatTick?: OnCombatTick
@@ -47,7 +47,7 @@ function isAggressive(flags: string): boolean {
 }
 
 /**
- * autonomic 결과를 방 상태에 적용한다(carve-out — tick 계층이 소유하는 in-place 변형).
+ * autonomic 결과를 방 상태에 적용한다(carve-out — tick 계층이 담당하는 in-place 변형).
  * 원본(`original`) 크리처 객체를 방 배열에서 찾아 교체/제거한다.
  */
 function applyResult(room: RoomNode, original: CreatureInstance, result: AutonomicResult, now: number): void {

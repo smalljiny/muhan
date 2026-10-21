@@ -9,7 +9,7 @@ import { SCROLL } from '../items/taxonomy.js'
  * ## 범위 경계 — 순수 함수 + seam(라이브 라우팅 #106)
  * study/teach는 게이트를 평가하고 통과 시 spell store 비트를 set한 **새 store를 반환**한다. 입력
  * char/caster/target·book을 변형하지 않는다(immutability). 라이브 command 라우팅(cast/study/teach)·
- * 비법서 소멸(free_obj)·성향실패 시 방 낙하·전수 broadcast 메시지는 배선 계층(#106) 소관이다 — 이
+ * 비법서 소멸(free_obj)·성향실패 시 방 낙하·전수 broadcast 메시지는 연결 계층(#106) 담당이다 — 이
  * 모듈은 지식 획득 규칙만 이식한다.
  *
  * ## Caster 계약을 쓰지 않는 이유
@@ -34,7 +34,7 @@ import { SCROLL } from '../items/taxonomy.js'
  * spllv 3: class>=INVINCIBLE
  * spllv 4: class>=CARETAKER
  * spllv 5: class>=SUB_DM
- * spllv 1-5 밖이면 매칭 if가 없어 거부 미발화 → true(magic1.c 충실).
+ * spllv 1-5 밖이면 매칭 if가 없어 거부가 실행되지 않음 → true(magic1.c 충실).
  *
  * 이 함수는 spllv 체크만 담당한다 — teach base-class 게이트(CARETAKER/MAGE/CLERIC)는 teach()가 조합한다.
  */
@@ -100,13 +100,13 @@ export function study(char: StudyChar, book: SpellBook): StudyResult {
   if (book.ndice > char.level) return unchanged('level')
 
   // ④ 성향 — OGOODO인데 alignment<-100, 또는 OEVILO인데 alignment>100이면 실패(magic1.c:305).
-  //    원작은 이때 비법서를 방에 떨어뜨리지만, 그 소멸/이동은 배선 계층 소관(store만 불변 반환).
+  //    원작은 이때 비법서를 방에 떨어뜨리지만, 그 소멸/이동은 연결 계층 담당(store만 불변 반환).
   //
   //    known divergence — 현 alignment는 생성 인터뷰가 고른 1(선)|2(악) 스칼라이고 backfill 시드는
-  //    0(중립)이라, 값역이 [0,2]다. 따라서 아래 두 분기(<-100, >100)는 실 데이터에서 항상 거짓이며
-  //    OGOODO/OEVILO 게이트는 미발화한다 — 현재 어떤 캐릭터도 성향으로 연마를 거부당하지 않는다.
+  //    0(중립)이라, 값 범위가 [0,2]다. 따라서 아래 두 분기(<-100, >100)는 실 데이터에서 항상 거짓이며
+  //    OGOODO/OEVILO 게이트는 동작하지 않는다 — 현재 어떤 캐릭터도 성향으로 연마를 거부당하지 않는다.
   //    임계값은 오라클(-100/+100)을 그대로 이식해 두고, E6에서 -1000..+1000 성향 시스템을 도입해
-  //    alignment가 실제로 그 범위를 오르내리면 코드 변경 없이 발화한다. 임계값을 현 1|2 값역에
+  //    alignment가 실제로 그 범위를 오르내리면 코드 변경 없이 동작한다. 임계값을 현 1|2 값 범위에
   //    맞춰 재조정하지 않는다(오라클 상수 보존이 E6 확장 시 재해석을 불필요하게 만든다).
   if (
     (F_ISSET(book.flags, OGOODO) && char.alignment < -100) ||

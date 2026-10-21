@@ -391,7 +391,7 @@ describe('비-offensive 36주문 커버리지 — Story 7·8·9·10 union', () =
   })
 
   it('union이 SPELL_CATALOG 비-offensive 집합과 정확히 일치한다(누락·초과 0 — 커버리지 표 대조)', () => {
-    // 카탈로그 정본(family 필드)과 대조 — disjoint·중복뿐 아니라 "누락 없이" 절반을 닫는다.
+    // 카탈로그 기준(family 필드)과 대조 — disjoint·중복뿐 아니라 "누락 없이" 절반을 닫는다.
     const catalogNonOffensive = new Set(
       SPELL_CATALOG.filter((entry) => !entry.offensive).map((entry) => entry.spellNo),
     )

@@ -32,7 +32,7 @@ export const MBRWP2 = 29
 export const MENEDR = 30
 /** 질병 특수공격 — MDISEA(mtype.h). 근접 후 질병 부여 게이트 rng(1,100)<=10(update.c:387~480). */
 export const MDISEA = 34
-/** 장비용해 특수공격 — MDISIT(mtype.h). 근접 후 게이트 rng(1,100)<=15(update.c:387~480, 효과는 유예). */
+/** 장비용해 특수공격 — MDISIT(mtype.h). 근접 후 게이트 rng(1,100)<=15(update.c:387~480, 효과는 보류). */
 export const MDISIT = 35
 /** 실명 특수공격 — MBLNDR(mtype.h). 근접 후 실명 부여 게이트 rng(1,100)<=10(update.c:387~480). */
 export const MBLNDR = 45
@@ -78,8 +78,8 @@ export const MSUMMO = 61
 // ── 플레이어 P-flag 비트(mtype.h #define 검증) ───────────────────────────────
 // 원작 무한/Mordor는 플레이어도 creature 구조체라 P-flag는 creature flags와 동일 바이트 배열을
 // 같은 F_ISSET(0-index `flags[f/8]&(1<<(f%8))`)로 읽는다 — M-flag와 다른 오프셋 체계일 수 없다.
-// 비트 인덱스가 31을 넘으므로(42·43) 32비트 number bitfield로는 표현 불가 — hex string 표현이 정본.
-// help/pflags 문서 값(PBLIND 43·PFEARS 44)은 raw #define보다 +1이므로 mtype.h를 정본으로 채택한다.
+// 비트 인덱스가 31을 넘으므로(42·43) 32비트 number bitfield로는 표현 불가 — hex string 표현이 기준.
+// help/pflags 문서 값(PBLIND 43·PFEARS 44)은 raw #define보다 +1이므로 mtype.h를 기준으로 채택한다.
 /** 숨음(hidden) 상태 — PHIDDN(mtype.h:346). aggro 타깃선정 자격 제외(player.c:1327 lowest_piety, 1490 low_piety_alg). */
 export const PHIDDN = 1
 /** 투명(invisibility) 상태 — PINVIS(mtype.h:347). aggro 타깃선정 시 공격자 MDINVI 없으면 자격 제외(player.c:1328). */
@@ -113,7 +113,7 @@ export const PRCOLD = 36
 /**
  * 대지 저항(방어자) — PSSHLD(mtype.h:383 `#define PSSHLD 38`). earth_shield(지방호) 시전 시 F_SET
  * (magic7.c:252·286). resistBuff family 4주문 중 SSSHLD 대응 저항 플래그(PRFIRE/PRMAGI/PRCOLD와 동렬,
- * #85 G5). #84 저항-read 미배선(플레이어 저항 감산 유예) — 상수·투영만 보존한다.
+ * #85 G5). #84 저항-read 미연결(플레이어 저항 감산 보류) — 상수·변환만 보존한다.
  */
 export const PSSHLD = 38
 /** 패거리 가입자 — PFAMIL(mtype.h:400). 양측 PFAMIL이면 선악 게이트를 check_war로 게이팅(command5.c:183). */
@@ -122,7 +122,7 @@ export const PFAMIL = 55
 // ── 버프·감지 P-flag 비트(mtype.h #define, Story 9 G7 timed effect) ───────────
 // 원작은 P-flag를 creature flags와 같은 바이트 배열에 F_SET한다(예 bless: F_SET(ply,PBLESS)). 이 포트의
 // Character엔 flags 필드가 없어 타이머는 buffs `{until}`로 영속하고, 활성 버프를 projectBuffFlags가 fresh
-// P-flag hex로 투영한다(resistBuff의 projectResistFlags 계약 승계). 비트값은 mtype.h를 정본으로 전사한다.
+// P-flag hex로 변환한다(resistBuff의 projectResistFlags 계약 승계). 비트값은 mtype.h를 기준으로 옮겨 적는다.
 /** 축복(bless) — PBLESS(mtype.h:345 `#define PBLESS 0`). SBLESS 시전 시 F_SET(magic3.c). PINVIS 등과 같은 flags 배열, 플레이어 문맥 비트0. */
 export const PBLESS = 0
 /** 수호(protection) — PPROTE(mtype.h:353 `#define PPROTE 8`). SPROTE 시전 시 F_SET(magic2.c:373). */
@@ -145,7 +145,7 @@ export const PBRWAT = 37
 export const PUPDMG = 59
 /**
  * 마법 저항(플레이어) — PRMAGI(mtype.h:377). offensive_spell 데미지 감산 게이트(magic1.c:1113).
- * #84 미발동(플레이어 대상 저항은 piety store가 없어 #85 소관) — 상수만 보존한다.
+ * #84 미발동(플레이어 대상 저항은 piety store가 없어 #85 담당) — 상수만 보존한다.
  */
 export const PRMAGI = 32
 

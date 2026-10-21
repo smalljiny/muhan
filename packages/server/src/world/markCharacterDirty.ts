@@ -48,7 +48,7 @@ import type { Character } from 'shared'
  *
  * ## 전체 문서라서 함께 실리는 필드(호출처 주의)
  * 부분 스냅샷과 달리 `schemaVersion`도 매 flush마다 `$set`된다. 라이브 캐릭터는 load 시 backfill 체인으로
- * `schemaVersion=5`로 승격돼 있으므로, 첫 flush가 구버전 저장 문서를 v5로 영구 승격시킨다(migration-on-save).
+ * `schemaVersion=5`로 올라가 있으므로, 첫 flush가 구버전 저장 문서를 v5로 영구히 올린다(migration-on-save).
  *
  * ## optional 키 형태 보존
  * 스냅샷은 `updateById` patch로 `$set`에 실리므로, 원본에 없는 키를 `undefined`로 만들면 문서 형태가
@@ -144,7 +144,7 @@ function snapshotCharacter(character: Character): CharacterSnapshot {
  * 원시 markDirty seam을 characters 전용 seam으로 좁힌다.
  *
  * 반환 함수는 호출 시점의 전체 문서 스냅샷을 떠서 `markDirty('characters', id, snapshot)`으로 넘긴다.
- * 호출처는 스냅샷 복사를 직접 하지 않는다 — distinct 참조 책임은 이 헬퍼가 단독으로 소유한다.
+ * 호출처는 스냅샷 복사를 직접 하지 않는다 — distinct 참조 책임은 이 헬퍼가 단독으로 담당한다.
  */
 export function createMarkCharacterDirty(markDirty: RawMarkDirty): MarkCharacterDirty {
   return (id: string, character: Character): void => {

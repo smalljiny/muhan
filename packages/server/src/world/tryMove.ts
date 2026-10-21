@@ -14,12 +14,12 @@ import { evaluateMoveGates } from './moveGates.js'
  * 게이트 순서(콘텐츠)는 `moveGates.ts`가 보존한다. 여기서는 그 앞단인
  *   - gate 1(출구 존재) + XNOSEE 이름/방향 탐색 제외(6번째 강제 게이트)
  *   - 통과 후 부수효과(방송·재배치)
- * 만 담당한다. dangling(대상 방 부재)은 건틀릿 내부(danglingGate)가 처리하므로 미해석 target을
+ * 만 담당한다. dangling(대상 방 없음)은 건틀릿 내부(danglingGate)가 처리하므로 미해석 target을
  * 그대로 건틀릿에 넘긴다.
  *
  * 순수성/가변성 경계:
  *   출구 해석·게이트 평가는 부수효과가 없다. 통과 시에만 라이브 가변 carve-out으로
- *   `RoomNode.occupants` Set을 in-place 변경한다(worldGraph 타입 주석과 정합). 그 외 입력은 불변.
+ *   `RoomNode.occupants` Set을 in-place 변경한다(worldGraph 타입 주석과 일치). 그 외 입력은 불변.
  *
  * 범위 밖(구현하지 않음): 추종자(first_fol)·몬스터 추격·트랩 발동(A4 §5), 그리고 A4 §8이 경고한
  *   `F_ISSET(ext, 52)` 경계 밖 접근(비트 52는 4바이트 exit flags 범위 밖 → ltime 침범). 어떤
@@ -48,12 +48,12 @@ export type MoveMode = 'directional' | 'named' | 'flee' | 'sneak'
 /**
  * flee 출구 선택자(rng) seam. 가시 출구 목록에서 하나를 고른다. E4-1b 기본은 결정적 stub
  * (`defaultFleeRng`, 첫 출구)이라 단위 테스트가 결정적으로 통과한다. 실 확률(65%+dex 굴림)·
- * 시드 규약은 E8-2 RNG 규약과 정합해 이 seam에 주입한다.
+ * 시드 규약은 E8-2 RNG 규약과 일치시켜 이 seam에 주입한다.
  */
 export type FleeRng = (exits: readonly ExitEdge[]) => ExitEdge | undefined
 
 /**
- * tryMove 의존성 주입 seam(전역 금지 — 인자 주입). 실 배선은 워드 그래프·G2 게임시각·Story 5
+ * tryMove 의존성 주입 seam(전역 금지 — 인자 주입). 실 연결은 워드 그래프·G2 게임시각·Story 5
  * 채널 어댑터 경유이며, E4-1b는 fake 주입으로 검증한다.
  */
 export interface TryMoveDeps {
@@ -82,10 +82,10 @@ export interface TryMoveDeps {
   readonly rng: FleeRng
 }
 
-/** 결정적 기본 entry-hook — no-op. E4-2가 활성화·perm 리스폰 결선으로 대체 주입한다. */
+/** 결정적 기본 entry-hook — no-op. E4-2가 활성화·perm 리스폰 연결로 대체 주입한다. */
 export const noopOnRoomEntered = (_room: RoomNode, _actor: MoveActor): void => {}
 
-/** 결정적 기본 leave-hook — no-op. E4-2가 활성 집합 비활성화 결선으로 대체 주입한다. */
+/** 결정적 기본 leave-hook — no-op. E4-2가 활성 집합 비활성화 연결로 대체 주입한다. */
 export const noopOnRoomLeft = (_room: RoomNode, _actor: MoveActor): void => {}
 
 /** tryMove 결과. 통과면 arrivedRoom(도착 방), 거부면 reason(사유). MoveGateResult와 동형. */
@@ -130,7 +130,7 @@ function isVisible(exit: ExitEdge): boolean {
  *
  * directional/named/sneak 3개 mode는 이 seam에서 **의도적으로 동일한** 이름 탐색이다 —
  * 원본은 방향어(2/ㄴ→남)를 이름으로 정규화(A3 §2)하고, sneak의 은신 유지 판정은 §3.3 게이트 14
- * (은신, E5/E6 대기) stub 소관이라 출구 선택 단계에서는 갈리지 않는다. flee만 확률 선택으로 분기.
+ * (은신, E5/E6 대기) stub 담당이라 출구 선택 단계에서는 갈리지 않는다. flee만 확률 선택으로 분기.
  */
 function resolveExit(
   sourceRoom: RoomNode,
@@ -190,7 +190,7 @@ export function tryMove(
   if (targetRoom === undefined) return NO_EXIT
 
   // (5) 통과 — spec §3.3 순서. 라이브 가변 carve-out: occupants Set in-place 변경(worldGraph
-  //     타입 주석과 정합, 프로젝트 immutability 규칙의 승인된 예외).
+  //     타입 주석과 일치, 프로젝트 immutability 규칙의 승인된 예외).
   deps.broadcastLeave(sourceRoom, actor) // (5a) actor는 아직 출발 방 점유자
   sourceRoom.occupants.delete(actor.characterId) // (5b) 재배치
   deps.onRoomLeft(sourceRoom, actor) // (5b') leave-hook — 빈 방 비활성화(E4-2). delete 後여야 deactivate 성립

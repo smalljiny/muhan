@@ -9,7 +9,7 @@
  * RNG seam(CombatRng)은 범용 `(min,max)=>number`(mrand 관례)로 정의해 dice의 mrand(1,s)뿐 아니라
  * 크리티컬 배수 mrand(3,6)·명중 굴림 mrand(1,30)/(1,20) 등 전투 전역 굴림에 재사용된다. `rng`는 필수
  * 파라미터다 — 기본값을 두지 않아 프로덕션 호출이 결정적 최소 굴림으로 조용히 축소되는 사고를
- * 방지한다(결정적 stub은 test-only `dice.testutil.ts`가 소유). 실 seeded PRNG 배선은 후속 D1 팩토리 소관.
+ * 방지한다(결정적 stub은 test-only `dice.testutil.ts`가 담당). 실 seeded PRNG 연결은 후속 D1 팩토리 담당.
  */
 
 /**
@@ -50,11 +50,11 @@ export function mdice(entity: DiceSpec, rng: CombatRng): number {
  * 프로덕션 `CombatRng` 구현 — `[min, max]` 양끝 포함 균등 정수(오라클 `mrand(a,b)` 관례).
  *
  * 이 저장소에 프로덕션 **난수** 굴림 구현이 0건이라(결정적 stub `dice.testutil.ts`는 테스트 전용) 라이브
- * 배선이 주입할 것이 없었다. 그 빈자리를 채우는 최소 구현이며, 전투 모듈은 이것을 **직접 부르지
- * 않는다** — 순수 함수들은 여전히 `rng` 인자로만 굴림을 받고, 이 구현은 배선 계층이 주입 seam에
+ * 연결 계층이 주입할 것이 없었다. 그 빈자리를 채우는 최소 구현이며, 전투 모듈은 이것을 **직접 부르지
+ * 않는다** — 순수 함수들은 여전히 `rng` 인자로만 굴림을 받고, 이 구현은 연결 계층이 주입 seam에
  * 꽂아 넣는 값이다(모듈 순수성 유지).
  *
- * `Math.floor(Math.random() * (max - min + 1)) + min`은 `Math.random()`의 값역이 `[0, 1)`이라
+ * `Math.floor(Math.random() * (max - min + 1)) + min`은 `Math.random()`의 값 범위가 `[0, 1)`이라
  * 양끝을 포함한다. `max < min`이면 폭이 0 이하가 되어 `min`을 반환한다(굴림 없는 퇴화 구간).
  *
  * 재현 가능한 seeded PRNG는 이 seam을 그대로 대체하면 된다 — 소비자는 타입만 보므로 교체 비용이

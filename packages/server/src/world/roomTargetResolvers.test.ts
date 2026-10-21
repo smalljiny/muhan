@@ -5,14 +5,14 @@ import { PDMINV, PDINVI, MINVIS } from './hexFlags.js'
 import { resolveRoomCreature, createRoomPlayerResolver } from './roomTargetResolvers.js'
 
 /**
- * 방 스코프 해소자 2종 — 오라클 `creature.c:29-60 find_crt`의 가시성 게이트 + 순수 매처 위임.
+ * 방 스코프 리졸버 2종 — 오라클 `creature.c:29-60 find_crt`의 가시성 게이트 + 순수 매처 위임.
  *
  * 게이트가 `match++` **앞**에 있다는 것이 이 테스트 스위트의 핵심 단정이다 — 걸린 후보는 서수
  * 슬롯을 소모하지 않는다. 서수 케이스는 게이트를 mock으로 제거하지 않고 실제 게이트를 통과하는
  * 입력으로 구성한다(`.harness/rules/testing.md` 다층 guard 원칙).
  */
 
-/** CARETAKER(초인) 클래스 인덱스 — mtype.h:103. 테스트가 구현 상수를 재사용하지 않고 독립 전사한다. */
+/** CARETAKER(초인) 클래스 인덱스 — mtype.h:103. 테스트가 구현 상수를 재사용하지 않고 독립적으로 옮겨 적는다. */
 const CARETAKER_CLASS = 10
 
 function roomWithCreatures(...creatures: RoomNode['creatures']): RoomNode {
@@ -62,19 +62,19 @@ describe('resolveRoomCreature — DM 투명 게이트(class >= CARETAKER && PDMI
 })
 
 describe('resolveRoomCreature — MINVIS 게이트와 관찰자 PDINVI 예외', () => {
-  it('MINVIS 크리처는 PDINVI 미보유 관찰자에게 해소되지 않는다', () => {
+  it('MINVIS 크리처는 PDINVI 미보유 관찰자에게 해석되지 않는다', () => {
     const room = roomWithCreatures(makeCreature('c-invis', '유령', { flags: flagsHex(MINVIS) }))
 
     expect(resolveRoomCreature(room, '유령', NO_FLAGS)).toBeUndefined()
   })
 
-  it('MINVIS 크리처도 PDINVI 보유 관찰자에게는 해소된다', () => {
+  it('MINVIS 크리처도 PDINVI 보유 관찰자에게는 해석된다', () => {
     const room = roomWithCreatures(makeCreature('c-invis', '유령', { flags: flagsHex(MINVIS) }))
 
     expect(resolveRoomCreature(room, '유령', flagsHex(PDINVI))?.instanceId).toBe('c-invis')
   })
 
-  it('MINVIS 없는 크리처는 관찰자 flags와 무관하게 해소된다', () => {
+  it('MINVIS 없는 크리처는 관찰자 flags와 무관하게 해석된다', () => {
     const room = roomWithCreatures(makeCreature('c-plain', '유령'))
 
     expect(resolveRoomCreature(room, '유령', NO_FLAGS)?.instanceId).toBe('c-plain')
@@ -107,13 +107,13 @@ describe('resolveRoomCreature — 서수 × 가시성 교차', () => {
 })
 
 describe('resolveRoomCreature — 매칭 규칙은 순수 매처에 위임한다', () => {
-  it('별칭(keys)으로만 일치하는 후보도 해소된다', () => {
+  it('별칭(keys)으로만 일치하는 후보도 해석된다', () => {
     const room = roomWithCreatures(makeCreature('c-1', '작은 거미', { keys: ['거미'] }))
 
     expect(resolveRoomCreature(room, '거미', NO_FLAGS)?.instanceId).toBe('c-1')
   })
 
-  it('접두가 아니면 해소되지 않고, ordinal 기본값은 1이다', () => {
+  it('접두가 아니면 해석되지 않고, ordinal 기본값은 1이다', () => {
     const room = roomWithCreatures(makeCreature('c-1', '고블린'), makeCreature('c-2', '고블린'))
 
     expect(resolveRoomCreature(room, '오크', NO_FLAGS)).toBeUndefined()
@@ -133,7 +133,7 @@ describe('resolveRoomCreature — 매칭 규칙은 순수 매처에 위임한다
   })
 
   // 알려진 divergence(모듈 헤더 참조) — 오라클 `add_crt_rom`(room.c:246-261)은 first_mon에 strcmp
-  // 이름 정렬로 삽입하지만 이 포트의 스폰·리스폰·소환은 전부 `room.creatures.push`다. 해소자는 배열
+  // 이름 정렬로 삽입하지만 이 포트의 스폰·리스폰·소환은 전부 `room.creatures.push`다. 리졸버는 배열
   // 순서를 그대로 서수로 쓰며 정렬하지 않는다 — 누가 `.sort()`를 넣으면 이 테스트가 깨지고, 그때
   // EUC-KR collation 이식 여부를 의식적으로 결정하게 된다(#137). (플레이어 쪽은 아래 별도 케이스가 잡는다.)
   it('서수는 room.creatures 배열 순서를 따른다 — 오라클의 이름 정렬 삽입과 의도적으로 다르다', () => {
@@ -156,7 +156,7 @@ describe('createRoomPlayerResolver', () => {
   }
   const resolveName = (characterId: string): string | undefined => names[characterId]
 
-  it('occupants 이름 접두로 characterId를 해소한다', () => {
+  it('occupants 이름 접두로 characterId를 해석한다', () => {
     const resolve = createRoomPlayerResolver(resolveName)
     const room = makeRoom({ occupants: new Set(['char-1', 'char-2', 'char-3']) })
 
@@ -165,7 +165,7 @@ describe('createRoomPlayerResolver', () => {
     expect(resolve(room, '없는이름')).toBeUndefined()
   })
 
-  it('ordinal을 크리처 해소자와 동일 규칙으로 처리한다(도착 순서 = 서수 기준)', () => {
+  it('ordinal을 크리처 리졸버와 동일 규칙으로 처리한다(도착 순서 = 서수 기준)', () => {
     const resolve = createRoomPlayerResolver(resolveName)
     const room = makeRoom({ occupants: new Set(['char-1', 'char-2']) })
 
@@ -188,7 +188,7 @@ describe('createRoomPlayerResolver', () => {
     expect(resolve(room, '테', 2)).toBe('char-1')
   })
 
-  it('이름이 해소되지 않는 점유자는 후보에서 빠지고 서수 슬롯도 소모하지 않는다', () => {
+  it('이름이 해석되지 않는 점유자는 후보에서 빠지고 서수 슬롯도 소모하지 않는다', () => {
     const resolve = createRoomPlayerResolver(resolveName)
     const room = makeRoom({ occupants: new Set(['ghost', 'char-1', 'char-2']) })
 
@@ -204,7 +204,7 @@ describe('createRoomPlayerResolver', () => {
     expect(resolve(room, '테')).toBe('char-1')
   })
 
-  it('주입된 이름 해소자에만 위임한다(자체 조회 경로 없음)', () => {
+  it('주입된 이름 리졸버에만 위임한다(자체 조회 경로 없음)', () => {
     const spy = vi.fn((characterId: string) => names[characterId])
     const resolve = createRoomPlayerResolver(spy)
     const room = makeRoom({ occupants: new Set(['char-1']) })

@@ -67,7 +67,7 @@ describe('createCreatureTick — 슬롯 계약', () => {
   })
 })
 
-describe('next-action 도래 게이트 (FakeClock 구동)', () => {
+describe('next-action 도래 게이트 (FakeClock 기반)', () => {
   it('도래 크리처만 처리하고 비도래는 건드리지 않는다', () => {
     const clock = new FakeClock()
     const world = new WorldClock({ clock })

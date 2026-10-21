@@ -9,13 +9,13 @@ import type { ExitEdge } from 'shared'
  *
  * 가변성(immutability) carve-out — 프로젝트 CRITICAL immutability 규칙의 의도된 예외:
  *   전이 함수는 라이브 문 상태(`exit.flags` 바이트 + `exit.ltime`)를 in-place로 변경한다.
- *   worldGraph 타입 주석(ExitEdge.flags+ltime은 라이브 가변)과 정합하는 설계다.
+ *   worldGraph 타입 주석(ExitEdge.flags+ltime은 라이브 가변)과 일치하는 설계다.
  *   그 외 어떤 입력도 변형하지 않는다(unlock의 key.shotscur 감소는 별도 carve-out, 해당 위치 주석 참조).
  *
- * 범위 경계: WS 명령 배선·인벤토리 조회·picklock(도둑 전용)은 호출자 seam이다.
+ * 범위 경계: WS 명령 연결·인벤토리 조회·picklock(도둑 전용)은 호출자 seam이다.
  *   전이 함수는 문 상태(flags+ltime)만 변경하고, `now`(현재 실초)는 인자 주입 seam이다.
  *
- * 이 파일은 문 상태머신과 함께 **출구 플래그 어휘 전체 + `number[]` 비트 헬퍼**를 소유한다
+ * 이 파일은 문 상태머신과 함께 **출구 플래그 어휘 전체 + `number[]` 비트 헬퍼**를 담당한다
  * (크리처·오브젝트·플레이어 비트 어휘가 hexFlags.ts에 모인 것과 대칭). 따라서 전이 함수가 읽지
  * 않는 표시 전용 비트(XSECRT·XINVIS)도 여기 산다 — 소비자는 roomView·tryMove 등 다른 모듈이다.
  */
@@ -46,7 +46,7 @@ export const KEY = 11
 /**
  * 열쇠 오브젝트의 door 로컬 최소 shape.
  *
- * 실 인벤토리/오브젝트 배선은 후속 토픽 소관이므로 shared ObjectInstance를 import하지 않고
+ * 실 인벤토리/오브젝트 연결은 후속 토픽 담당이므로 shared ObjectInstance를 import하지 않고
  * (shotscur는 인스턴스·ndice는 템플릿이라 실 조회 seam이 아직 없음) 매칭·소모에 필요한
  * 최소 필드만 로컬 타입으로 둔다. 여기선 문 상태머신의 매칭 규칙만 다룬다.
  */
@@ -157,7 +157,7 @@ export function unlock(exit: ExitEdge, key: KeyLike, now: number): boolean {
   if (!keyMatch(key, exit)) return false
   clearFlag(exit.flags, XLOCKD)
   // carve-out(별도): 열쇠 사용 횟수 소모는 flags/ltime과 구분되는 의도된 mutation이다.
-  // 실 인벤토리 배선(0 소진 시 파괴)은 호출자 seam이고, 여기선 소모만 반영한다.
+  // 실 인벤토리 연결(0 소진 시 파괴)은 호출자 seam이고, 여기선 소모만 반영한다.
   key.shotscur -= 1
   exit.ltime = now // 타이머 리셋
   return true

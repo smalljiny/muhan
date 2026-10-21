@@ -4,9 +4,9 @@ import type { Character, ObjectInstance } from 'shared'
  * 라이브 캐릭터 상태 레지스트리 — character._id 키의 인메모리 저장소.
  *
  * 이 레지스트리는 combatRegistry와 **분리한다**(결정 D-A). 이 토픽은 장비·유효 스탯을 다루지
- * 않으므로 `PlayerCombatState`(유효 스탯 컨텍스트·장비 해소를 요구)를 파생할 수 없고,
+ * 않으므로 `PlayerCombatState`(유효 스탯 컨텍스트·장비 해석을 요구)를 파생할 수 없고,
  * combatRegistry는 현재 런타임 caller가 0건(dormant)이라 지금 통합해도 이득이 없다. 후속 전투
- * 배선 토픽이 `LiveCharacter.character`에서 `PlayerCombatState`를 필요 시점에 파생해
+ * 연결 토픽이 `LiveCharacter.character`에서 `PlayerCombatState`를 필요 시점에 파생해
  * combatRegistry에 등록하면 되므로, 지금의 분리가 후속 재설계를 강제하지 않는다. 이 모듈은
  * `combat/`에서 아무것도 import하지 않는다.
  */
@@ -21,7 +21,7 @@ import type { Character, ObjectInstance } from 'shared'
  * in-place 갱신하고 HP/MP/spells/realm 등 나머지 필드는 로드되나 dormant다.
  *
  * `inventory`는 소유 오브젝트 인스턴스의 라이브 사본이다. **필수 필드로 둔다** — optional이면
- * 적재를 빠뜨린 엔트리가 조용히 "빈 인벤"으로 관측되어, 소지품이 있는 캐릭터가 아무것도 못 찾는
+ * 로드를 빠뜨린 엔트리가 조용히 "빈 인벤"으로 관측되어, 소지품이 있는 캐릭터가 아무것도 못 찾는
  * 상태가 타입 검사를 통과한다. 필수로 두면 엔트리를 만드는 모든 경로가 인벤 출처를 진술하게 된다.
  *
  * 인스턴스만 담고 템플릿(objmon 스탯·이름)은 담지 않는다 — 결합은 `items/objectPairing`이

@@ -16,7 +16,7 @@
  * (그룹킬 `+exp/10` 항은 realm 성장에 대응물이 없다 — base expdiv에만 동형). m=피해(기여), exp=몬스터
  * experience, hpmax=몬스터 최대 hp. deathDistribution이 exp delta(number)만 반환하듯 이 함수도 성장량
  * 스칼라만 반환한다 — PvE 가드(`crt->type != PLAYER`)는 호출자(offensiveSpell hook), realm 슬롯 적용
- * (`realm[osp.realm-1] += growth`)·영속 write는 #99 라이브 조립(markDirty seam, OpenQ #2) 소관이다.
+ * (`realm[osp.realm-1] += growth`)·영속 write는 #99 라이브 조립(markDirty seam, OpenQ #2) 담당이다.
  *
  * @param m     준 피해(저항 後·오버킬 캡, offensiveSpell의 m=MIN(hpBefore,dmg)).
  * @param exp   대상 몬스터 experience(성장 상한 겸 비례 상수).

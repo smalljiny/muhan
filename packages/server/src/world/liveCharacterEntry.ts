@@ -4,7 +4,7 @@ import type { LiveCharacter, LiveCharacterRegistry } from './liveCharacterRegist
 import type { MoveActor } from './tryMove.js'
 
 /**
- * 라이브 캐릭터 진입 코어 — hydrate(로드) / place(방 배치) / release(퇴장)를 소유한다.
+ * 라이브 캐릭터 진입 코어 — hydrate(로드) / place(방 배치) / release(퇴장)를 담당한다.
  *
  * 책임 분리(D-G):
  *  - hydrate는 **부수효과 없는 비동기 로드**다(D-G 2). 레지스트리 등록·occupants 변경을 하지 않고
@@ -17,7 +17,7 @@ import type { MoveActor } from './tryMove.js'
  *
  * 모든 의존성은 파라미터로 주입한다(T3.5 — 전역 조회 없음).
  *
- * ## 인벤토리 적재 — 세션 진입에서 1회
+ * ## 인벤토리 로드 — 세션 진입에서 1회
  * hydrate가 `characterRepo.hydrateInventory`를 함께 호출해 소유 오브젝트 인스턴스를 라이브 엔트리에
  * 싣는다. 진입에서 한 번 다 읽어 두는 이유는 **명령 핸들러의 동기 계약을 지키기 위해서**다
  * (`ws/router.ts`의 `CommandHandler`는 `ServerEvent | undefined`를 동기 반환한다). 핸들러가 인벤을
@@ -78,7 +78,7 @@ export interface EntryLogger {
 
 export interface LiveCharacterEntryDeps {
   /**
-   * 캐릭터 문서·인벤토리 로더. 두 메서드만 요구한다(최소 표면) — `hydrateInventory`는
+   * 캐릭터 문서·인벤토리 로더. 두 메서드만 요구한다(최소 인터페이스) — `hydrateInventory`는
    * `object.owner` 역참조로 소유 인스턴스를 파생하는 조회 경로다(단일 소유권의 출처는 owner다).
    */
   readonly characterRepo: {
@@ -91,10 +91,10 @@ export interface LiveCharacterEntryDeps {
   readonly onRoomLeft: (room: RoomNode, actor: MoveActor) => void
   /**
    * 미영속(write-behind) 캐릭터 스냅샷 조회 seam — `SaveEngine.peekPending('characters', id)`을
-   * 배선 지점에서 1회 좁힌 것이다. 보유하지 않으면 `undefined`.
+   * 연결 지점에서 1회 좁힌 것이다. 보유하지 않으면 `undefined`.
    *
    * **필수 필드다**(optional 아님). 미주입이면 hydrate가 DB 문서만 읽어 아직 flush되지 않은 진행도를
-   * 되돌리는데(#124), 그 실패는 예외도 로그도 남기지 않는다 — 배선 누락을 타입으로 차단한다.
+   * 되돌리는데(#124), 그 실패는 예외도 로그도 남기지 않는다 — 연결 누락을 타입으로 차단한다.
    *
    * 반환값은 tracker가 보관한 **라이브 참조일 수 있다**. 읽기만 하고 mutate하지 않는다.
    */
@@ -116,7 +116,7 @@ export interface LiveCharacterEntry {
  * 남긴 뒤 저장소 문서로 폴백한다: 진행도 일부를 잃는 것이 진입 자체를 막는 것보다 낫다.
  *
  * `_id`는 항상 요청한 `characterId`로 고정한다. `peekPending`이 이미 `_id`를 벗겨 주지만, 스냅샷이
- * 엉뚱한 `_id`를 들고 있을 때 라이브 엔트리의 신원이 바뀌면 이후 모든 마킹·해소가 잘못된 키로 간다.
+ * 엉뚱한 `_id`를 들고 있을 때 라이브 엔트리의 신원이 바뀌면 이후 모든 마킹·해석이 잘못된 키로 간다.
  */
 function overlayPendingCharacter(
   stored: Character,
@@ -138,7 +138,7 @@ function overlayPendingCharacter(
   // 값이 undefined인 키를 떨군다. zod의 .partial()은 키가 존재하면 값이 undefined여도 출력에
   // 남기므로, 그대로 spread하면 `{ gold: undefined }` 같은 patch가 stored의 필수 필드를 지운다.
   // 타입은 number인데 런타임 값이 undefined인 캐릭터가 라이브 레지스트리에 들어가고, 이후 전투·
-  // 경제 규칙이 NaN을 뿜으며 다음 flush가 그 undefined를 $set한다 — 전 구간이 무성 실패다.
+  // 경제 규칙이 NaN을 뿜으며 다음 flush가 그 undefined를 $set한다 — 전 구간이 조용한 실패다.
   //
   // 현재 producer(`snapshotCharacter`)는 그런 키를 만들지 않는다고 자기 파일에 명시하지만,
   // 원시 `markDirty` seam이 열려 있어 신규 호출처가 그 계약 밖의 값을 넣을 수 있다.
@@ -185,13 +185,13 @@ export function createLiveCharacterEntry(deps: LiveCharacterEntryDeps): LiveChar
       // 것이 orphan이면, 순서가 뒤집힐 경우 멀쩡한 위치를 버리고 시작 방으로 되돌린다.
       const character = overlayPendingCharacter(stored, pending, characterId, deps.logger)
 
-      // 인벤 적재 — 진입당 정확히 1회(OQ3 상한). findById 뒤에 두어 미존재 캐릭터에는 조회하지
+      // 인벤 로드 — 진입당 정확히 1회(OQ3 상한). findById 뒤에 두어 미존재 캐릭터에는 조회하지
       // 않는다(순차 왕복 2회). 아래 두 반환 지점이 이 결과를 공유하므로 orphan 폴백도 인벤을 싣는다.
       const inventory = await deps.characterRepo.hydrateInventory(characterId)
 
-      // T3.2 orphan 폴백 — currentRoom이 미해소면 DEFAULT_START_ROOM으로 교정한다.
+      // T3.2 orphan 폴백 — currentRoom이 미해석이면 DEFAULT_START_ROOM으로 교정한다.
       // 라이브 엔트리의 단일 출처(currentRoom)가 처음부터 유효하도록 불변 교체한다.
-      // 전제: DEFAULT_START_ROOM은 월드 그래프에 항상 해소된다(정본 시작 방). 이 전제가 place()의
+      // 전제: DEFAULT_START_ROOM은 월드 그래프에 항상 해석된다(기준 시작 방). 이 전제가 place()의
       // "hydrate가 유효 방을 보장" 계약을 성립시킨다 — 전제가 깨지면 place가 room-not-resolved로 던진다.
       if (deps.resolveRoom(character.currentRoom) === undefined) {
         deps.logger.warn(
@@ -209,7 +209,7 @@ export function createLiveCharacterEntry(deps: LiveCharacterEntryDeps): LiveChar
       const room = deps.resolveRoom(live.character.currentRoom)
       if (room === undefined) {
         // TOCTOU 가드: hydrate(async)가 유효 방을 보장하지만 place(later-sync)까지 사이에 월드 그래프가
-        // 바뀌어(방 제거) 미해소가 될 수 있다. 정상 경로에선 도달하지 않으나 죽은 코드가 아니다 — 계약
+        // 바뀌어(방 제거) 미해석이 될 수 있다. 정상 경로에선 도달하지 않으나 죽은 코드가 아니다 — 계약
         // 위반을 조용히 삼키지 않고 크게 던진다(tryMove의 soft NO_EXIT과 달리 여긴 배치 계약 경계다).
         throw new Error(`place: room not resolved: ${live.character.currentRoom}`)
       }

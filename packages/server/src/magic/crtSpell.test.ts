@@ -18,7 +18,7 @@ import { seqRng } from '../combat/dice.testutil.js'
  *   - spells 16바이트를 비트 순서로 훑어 아는 주문 최대 10개 수집 → 한 번만 pick(재추첨 없음).
  *   - 빈 경우 spl=SHURTS(1)이나 몬스터가 SHURTS를 모르므로 knowledge 게이트가 항상 막는다 → 'none'.
  *   - offensive는 mana→class(tier5 MAGE 전용)→knowledge 게이트 후 시전 → 'cast'.
- *   - 비-offensive(치유 self 포함)는 #85 유예 → 'none'(근접 진행).
+ *   - 비-offensive(치유 self 포함)는 #85 보류 → 'none'(근접 진행).
  */
 
 // 주문번호 상수(mtype.h) — 테스트가 비트 위치·분기를 이름으로 참조한다.
@@ -220,8 +220,8 @@ describe('crtSpell — CastSpellSeam 어댑트', () => {
     expect(creature.mpcur).toBe(30) // knowledge 실패 → 마나 미소비
   })
 
-  it('시전 피해가 치명이면 death seam 1회 발화(cast→데미지→사망 end-to-end)', () => {
-    // hp=1 플레이어에 SHURTS 시전 → 주문 피해로 사망 → firePlayerDeath 1회. crtSpell이 소유한
+  it('시전 피해가 치명이면 death seam 1회 실행(cast→데미지→사망 end-to-end)', () => {
+    // hp=1 플레이어에 SHURTS 시전 → 주문 피해로 사망 → firePlayerDeath 1회. crtSpell이 담당하는
     // cast→데미지→사망 체인을 직접 검증한다(#82 death seam 재사용).
     const creature = makeCreature({ spells: spellsWith(SHURTS), mpcur: 30, class: 0 })
     const target = makePlayer({ hpCurrent: 1 })
