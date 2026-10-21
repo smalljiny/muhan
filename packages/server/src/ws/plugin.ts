@@ -113,7 +113,7 @@ function frameToText(data: RawData): string {
  * 직렬화해 그 바이트 수를 bufferedAmount에 더한 값(`bufferedAmount + payloadBytes`)이 상한을 넘으면 느린
  * 소비자로 판정해 1013(Try Again Later)로 close하고 전송하지 않는다. enqueue 직전에 대기 중인 payload 크기까지
  * 회계에 넣는 hard cap이라, 단일 이벤트가 큐를 상한 너머로 밀어넣고도 살아남는 one-message overshoot가 없다.
- * 권위적 이벤트 push 서버라 프레임을 드롭·유예하면 상태가 어긋나므로 close가 유일하게 안전한 응답이다. 상한은
+ * 서버가 상태를 결정해 이벤트를 push하는 구조라 프레임을 드롭·유예하면 상태가 어긋나므로 close가 유일하게 안전한 응답이다. 상한은
  * getConfig()로 호출 시점에 조회해 테스트가 env를 덮어쓸 수 있게 한다(팩토리 생성 시점 캡처 금지). payload는
  * 여기서 한 번만 직렬화해 send에 재사용한다(이중 직렬화 없음). (3) 콜백형 send — 비동기 전송 오류는 콜백으로
  * 받아 로깅하고 codeless close로 잘라낸다(backpressure의 1013과 달리 transport 실패이므로 코드 없이 닫는다,
@@ -572,7 +572,7 @@ export function registerWebsocket(
                   // 재로그인 evict·grace 만료·shutdown 수렴)의 teardown은 transport만 정리하고(cleanupConnection +
                   // sock.close) 옛 ctx의 `state`·`boundCharacterId`는 되돌리지 않으며, `ctx.closed`도 소켓 'close'
                   // 이벤트(별개 리스너, 다음 tick)에서야 true가 된다. 그 창에서 이미 버퍼된 프레임의 'message'가
-                  // 발화하면 승계된 옛 소켓이 command 상태·바인딩 키를 그대로 쥔 채 dispatch에 도달하고,
+                  // 발화하면 밀려난 옛 소켓이 command 상태·바인딩 키를 그대로 쥔 채 dispatch에 도달하고,
                   // 라이브 레지스트리는 characterId 키라 그 명령이 **새 세션의** 엔트리를 변이한다(이동·gold 소비).
                   // 따라서 이 ctx가 여전히 그 캐릭터의 현재 live 바인딩일 때만 명령을 실행한다.
                   const binding = registry.get(actor.characterId)
@@ -580,7 +580,7 @@ export function registerWebsocket(
                     binding !== undefined && binding.connection === ctx && binding.link === 'live'
                   if (!isCurrentBinding || ctx.closed) {
                     // 조용히 무시한다 — 이 소켓은 이미 종결 중이라 safeSend가 OPEN 가드로 no-op이 될 공산이 크고,
-                    // 승계된 연결에 응답을 돌려줄 계약도 없다. idle 재-arm도 하지 않는다(무효 명령이 새 세션의
+                    // 밀려난 연결에 응답을 돌려줄 계약도 없다. idle 재-arm도 하지 않는다(무효 명령이 새 세션의
                     // 무입력 창을 연장하지 못하게 한다 — rejected flood를 재-arm하지 않는 아래 규칙과 같은 이유).
                     break
                   }

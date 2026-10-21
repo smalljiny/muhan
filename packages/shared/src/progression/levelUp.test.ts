@@ -12,7 +12,7 @@ import type { Character } from '../schema/character.js'
  * upLevel/downLevel(레벨업·강등 순수 변이) 테스트.
  *
  * 성장 게이트 newLevel%4==0, 슬롯 index=(newLevel-2)%10, enum→stats 매핑 v-1을 고정한다.
- * 최대치는 매 레벨 폐형 재동기화(D3), hpCurrent는 미상승·클램프다운(D4 발산)만 검증한다.
+ * 최대치는 매 레벨 폐형 재동기화(D3), hpCurrent는 미상승·클램프다운(D4 차이)만 검증한다.
  */
 
 /** class·level·stats만 관심사인 최소 유효 Character. 나머지 required 필드는 더미로 채운다. */

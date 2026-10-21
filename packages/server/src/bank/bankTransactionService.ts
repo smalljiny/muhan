@@ -43,7 +43,7 @@ import { DocumentNotFoundError } from '../repo/types.js'
  * "gold를 dirty로 마킹하는 caller가 없다"는 이전 전제는 더 이상 참이 아니다.
  *
  * 충돌 자체는 아직 미도달이다 — 반대편인 은행 직접 write는 여전히 dormant다(`clientCommandSchema`에
- * 은행 명령 variant가 없고, 이 서비스의 non-test caller가 0건이다). 한쪽만 무장된 상태다.
+ * 은행 명령 variant가 없고, 이 서비스의 non-test caller가 0건이다). 한쪽 경로만 활성화된 상태다.
  *
  * **blocking 계약: #43(evict/quiesce 또는 gold write-behind 배제)을 해소하기 전에는 은행 명령을
  * 배선하지 않는다.** 배선하는 순간 커밋된 입출금이 다음 이동·연마·종료 flush에 무성 revert된다.

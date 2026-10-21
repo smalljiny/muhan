@@ -14,7 +14,7 @@ import { MAGE } from '../combat/constants.js'
  *
  * ## 만료 관례 (statusEffects isActive와 정확히 일치)
  * combat/statusEffects.ts의 `isActive(effect, now) = until >= now`(활성)와 동일 절대-틱 관례다.
- * 그 대우가 만료 판정이다: `isExpired(until, tick) = tick > until`. 경계 tick==until은 아직 활성(만료
+ * 그 부정이 만료 판정이다: `isExpired(until, tick) = tick > until`. 경계 tick==until은 아직 활성(만료
  * 아님)이다 — statusEffects·befuddledUntil/charmedUntil과 동일하게 `>` 경계를 쓴다(`>=` 아님).
  *
  * ## 표준 공식 한정 (invis/levit/light 제외)
@@ -179,7 +179,7 @@ export function grantBuff(character: Character, spellNo: number, until: number):
 }
 
 /**
- * isExpired — 절대-틱 만료 판정. statusEffects isActive(`until >= now`=활성)의 대우:
+ * isExpired — 절대-틱 만료 판정. statusEffects isActive(`until >= now`=활성)의 부정:
  * `tick > until`이면 만료. 경계 tick==until은 활성(만료 false).
  */
 export function isExpired(until: number, tick: number): boolean {

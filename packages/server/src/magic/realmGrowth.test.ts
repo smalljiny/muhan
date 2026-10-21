@@ -21,7 +21,7 @@ describe('realmGrowthAmount — realm 성장량 공식', () => {
     expect(realmGrowthAmount(15, 100, 30)).toBe(50)
   })
 
-  it('trunc 절삭(정수 나눗셈)', () => {
+  it('trunc 버림(정수 나눗셈)', () => {
     // m=7, exp=10, hpmax=30 → 2.33 → trunc 2.
     expect(realmGrowthAmount(7, 10, 30)).toBe(2)
   })

@@ -19,8 +19,8 @@ export { writeFixtureFile }
  * 형태를 깨지 않고 네 함수를 한 fixture에 담을 수 있다.
  *
  * ## anti-tautology: SUT와 독립 표현
- * SUT(`priceConfig.ts`)는 `PRICE_CONFIG` 상수를 판독하고 `Math.trunc`로 절삭한다. 이 참조는
- * **인라인 리터럴**(`10`·`100000`·`/2`·`/4`)을 직접 쓰고 절삭은 `Math.floor`로 표현한다
+ * SUT(`priceConfig.ts`)는 `PRICE_CONFIG` 상수를 판독하고 `Math.trunc`로 버린다. 이 참조는
+ * **인라인 리터럴**(`10`·`100000`·`/2`·`/4`)을 직접 쓰고 버림은 `Math.floor`로 표현한다
  * (value 비음수라 값은 동일, 표현만 다름). 참조는 SUT를 import·호출하지 않는다.
  *
  * ## 재생성 (수동 트리거)
@@ -50,7 +50,7 @@ export type PriceInput = { fn: 'buy' | 'mobBuy' | 'sell' | 'repair'; value: numb
  * 가격 참조 구현 — 네 공식을 `input.fn`으로 디스패치한다.
  *
  * SUT(`priceConfig.ts`)와 표현을 분리한다: 여기선 `PRICE_CONFIG`를 참조하지 않고 상수를
- * 인라인 리터럴로 박고, 정수 절삭을 `Math.floor`로 표현한다(SUT는 `Math.trunc`).
+ * 인라인 리터럴로 박고, 정수 버림을 `Math.floor`로 표현한다(SUT는 `Math.trunc`).
  */
 export function referencePrice(input: PriceInput): number {
   switch (input.fn) {

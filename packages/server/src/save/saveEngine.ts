@@ -259,7 +259,7 @@ export class SaveEngine {
       await adapter(id, snapshot)
     } catch (error) {
       // 실패는 rethrow하되(fail-loud), 관측용 reason을 담아 기록한다 — 즉시 저장(로그아웃·거래
-      // 등 치명 경로)의 유실을 호출자와 로그 양쪽에서 인지할 수 있게 한다.
+      // 등 중요 경로)의 유실을 호출자와 로그 양쪽에서 인지할 수 있게 한다.
       this.logger.error({ collection, id, reason, err: error }, 'saveNow: 즉시 저장 실패')
       throw error
     }

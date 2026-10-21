@@ -20,7 +20,7 @@ import type { WorldTickSlot } from '../world/worldClock.js'
  * ## RHEALR /=3 케이던스 가속 미구현 (D5)
  * 원본은 RHEALR(회복실) 방에서 `lasttime[LT_HEALS].interval /= 3`으로 재생 케이던스를 가속한다.
  * 본 이식은 이 /3 가속을 구현하지 않는다 — WorldClock 슬롯의 intervalSec는 정수·전 플레이어 공유
- * 상수라 방별 케이던스 분기를 얹을 수 없다(단일 슬롯 제약). RHEALR의 +100 진폭만 재현하고 케이던스는
+ * 상수라 방별 케이던스 분기를 얹을 수 없다(단일 슬롯 제약). RHEALR의 +100 가산만 재현하고 케이던스는
  * 고정 5초로 둔다. 방별 재생 주기 차등은 per-player 스케줄러를 도입하는 후속 토픽에서 다룬다.
  *
  * ## immutability
@@ -40,7 +40,7 @@ import type { WorldTickSlot } from '../world/worldClock.js'
  * 함께 배선 토픽 소유)이다. seam이 미배선인 현재는 도달 불가하다.
  */
 
-/** RHEALR(회복실) 방 플래그 비트(mtype.h). +100 재생 진폭 트리거. */
+/** RHEALR(회복실) 방 플래그 비트(mtype.h). +100 재생 가산 트리거. */
 export const RHEALR = 13
 
 /** BARBARIAN(권법가) class 인덱스(mtype.h:92-105). HP 재생에 +2 보너스. */
@@ -49,7 +49,7 @@ export const BARBARIAN = 2
 /** MAGE(도술사) class 인덱스(mtype.h:92-105). MP 재생에 +2 보너스. */
 export const MAGE = 5
 
-/** RHEALR 방의 HP/MP 재생 가산 진폭(player.c:592-593). */
+/** RHEALR 방의 HP/MP 재생 가산량(player.c:592-593). */
 const HEALER_ROOM_BONUS = 100
 
 /** 재생 최소 바닥(player.c:589-590 MAX(4,…)). */
@@ -80,7 +80,7 @@ export function regenVitals(char: Character, room: { flags: number[] }): Charact
   let hp = char.hpCurrent + hpGain
   let mp = char.mpCurrent + mpGain
 
-  // player.c:592-596 RHEALR 방: +100 진폭(/=3 케이던스 가속은 미구현 — 상단 D5 주석).
+  // player.c:592-596 RHEALR 방: +100 가산(/=3 케이던스 가속은 미구현 — 상단 D5 주석).
   if (hasFlag(room.flags, RHEALR)) {
     hp += HEALER_ROOM_BONUS
     mp += HEALER_ROOM_BONUS

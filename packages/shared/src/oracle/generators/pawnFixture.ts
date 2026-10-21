@@ -24,8 +24,8 @@ export { writeFixtureFile }
  * 단일 `rng(1,250)===9` 굴림으로 대체한다 — 확률 1/250(콘텐츠)은 보존, `===9`는 오라클 상수를 반향한다.
  *
  * ## anti-tautology: SUT와 독립 표현
- * SUT(`priceConfig.sellPrice`)는 `PRICE_CONFIG` 상수를 판독하고 `Math.trunc`로 절삭한다. 이 참조는
- * **인라인 리터럴**(`2`·`100000`·타입 상수)을 직접 쓰고 절삭은 `Math.floor`로 표현한다(value 비음수라
+ * SUT(`priceConfig.sellPrice`)는 `PRICE_CONFIG` 상수를 판독하고 `Math.trunc`로 버린다. 이 참조는
+ * **인라인 리터럴**(`2`·`100000`·타입 상수)을 직접 쓰고 버림은 `Math.floor`로 표현한다(value 비음수라
  * 값 동일, 표현만 다름). 참조는 SUT(sellPrice·sell)를 import·호출하지 않는다.
  *
  * ## 재생성 (수동 트리거)
@@ -69,7 +69,7 @@ export type PawnExpected = { rejectReason: string | null; payout: number }
  * 전당포 판매 참조 구현 — command7.c sell 게이트를 인라인 리터럴로 옮긴다.
  *
  * SUT(`sellPrice`·`sell`)와 표현을 분리한다: 여기선 `PRICE_CONFIG`를 참조하지 않고 상수를 인라인
- * 리터럴로 박고, 정수 절삭을 `Math.floor`로 표현한다(SUT는 `Math.trunc`). 거부 순서는 오라클과
+ * 리터럴로 박고, 정수 버림을 `Math.floor`로 표현한다(SUT는 `Math.trunc`). 거부 순서는 오라클과
  * 동일해야 정확한 expected가 나오므로 cascade 순서는 유지하되 산술 표현만 독립시킨다.
  * 이중 지급은 오라클의 pay-twice(`+= sell`)를 그대로 표현한다(`sell * 2`가 아니라 `sell + sell`).
  */

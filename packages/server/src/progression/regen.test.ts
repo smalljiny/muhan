@@ -101,7 +101,7 @@ describe('regenVitals — 정상 방 재생량', () => {
   })
 })
 
-describe('regenVitals — RHEALR 방 +100 진폭', () => {
+describe('regenVitals — RHEALR 방 +100 가산', () => {
   it('RHEALR(bit 13) 방: 정상재생 후 hp/mp 각 +100', () => {
     expect(RHEALR).toBe(13)
     // 무적(class 9) level 20: hpMax=438, mpMax=288(둘 다 +100 후에도 여유). hpGain=5, mpGain=5.

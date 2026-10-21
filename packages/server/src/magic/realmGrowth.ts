@@ -6,7 +6,7 @@
  *
  * ```
  * m = MIN(crt_ptr->hpcur, dmg);                                  // 저항 後·차감 前 오버킬 캡
- * addrealm = (m * crt_ptr->experience) / MAX(1, crt_ptr->hpmax); // 정수 절삭
+ * addrealm = (m * crt_ptr->experience) / MAX(1, crt_ptr->hpmax); // 정수 버림
  * addrealm = MIN(addrealm, crt_ptr->experience);                 // 몬스터 exp 캡
  * if(crt_ptr->type != PLAYER) ply_ptr->realm[osp->realm-1] += addrealm;   // PvP는 성장 없음
  * ```

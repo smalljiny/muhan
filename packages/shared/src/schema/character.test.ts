@@ -172,7 +172,7 @@ describe('characterSchema', () => {
   })
 
   it('hpCurrent·mpCurrent·level이 없으면 거부한다 (전투 필수 영속 필드)', () => {
-    // D3 발산: gender/weapon/alignment는 선택이지만 이 3필드는 전투가 값을 요구해 required다.
+    // D3 차이: gender/weapon/alignment는 선택이지만 이 3필드는 전투가 값을 요구해 required다.
     const base = validCharacter() as Partial<Character>
     delete base.hpCurrent
     delete base.mpCurrent
@@ -318,7 +318,7 @@ describe('characterSchema', () => {
   })
 
   it('spells가 없으면 거부한다 (지식 비트마스크 필수 영속 필드)', () => {
-    // D1 발산: hpCurrent/experience와 동렬 — v4 문서는 load 직전 backfillCharacterV5가 승격한다.
+    // D1 차이: hpCurrent/experience와 동렬 — v4 문서는 load 직전 backfillCharacterV5가 승격한다.
     const doc = validCharacter() as Partial<Character>
     delete doc.spells
     expect(characterSchema.safeParse(doc).success).toBe(false)

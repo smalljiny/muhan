@@ -60,7 +60,7 @@ export class CharacterRepository implements IRepository<Character> {
    * 이 단일 구조로 차단한다.
    *
    * 스텝별 책임(어느 버전이 무엇을 시딩하는지)은 `characterBackfill.ts` 모듈 헤더가 정본이다 —
-   * 여기서 재전사하면 버전이 오를 때마다 두 서사가 어긋난다.
+   * 여기서 재전사하면 버전이 오를 때마다 두 설명이 어긋난다.
    */
   private parseCharacterDoc(doc: Record<string, unknown>): Character {
     return characterSchema.parse(

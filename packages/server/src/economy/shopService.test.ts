@@ -388,7 +388,7 @@ function dispatchPawn(input: PawnCaseInput): { rejectReason: string | null; payo
 /**
  * 아이템 수리 순수 함수 단위 테스트 — repair(A8 §8 RREPAI, command8.c)는 수리비 선차감 후
  * piety 보정 실패 굴림을 던진다. 실패 시 환불(net 0)+파괴, 성공 시 내구도 복원(shotsmax*mrand(5,9)/10,
- * 곱 위에서 절삭). RNG 순서: broke(1,100) 먼저, 성공 시에만 durability(5,9). 실패는 굴림 1회, 성공은 2회.
+ * 곱한 뒤 버림). RNG 순서: broke(1,100) 먼저, 성공 시에만 durability(5,9). 실패는 굴림 1회, 성공은 2회.
  */
 describe('shopService.repair', () => {
   const makeItem = (overrides: Partial<RepairItem> = {}): RepairItem => ({
