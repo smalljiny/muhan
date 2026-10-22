@@ -133,7 +133,7 @@ if(mrand(1,30) >= n) { …명중… }            // 주석 "원래값 20" — d2
 - 무기 내구도: `!mrand(0,3)`(25%)이면 `shotscur--`.
 - `crt->hpcur -= n`을 적용한다.
 - 대상이 몬스터면 `add_enm_dmg`로 기여 피해를 누적하고, 무기 숙련 `addprof = MIN(m*experience/MAX(hpmax,1), experience)`를 얻는다.
-- `hpcur<1`이면 `die(crt, ply)`(§7) 후 `return(1)`한다. 아니면 `check_for_flee`(죽은 코드, §13)를 호출한다.
+- `hpcur<1`이면 `die(crt, ply)`(§7) 후 `return(1)`한다. 아니면 `check_for_flee`(죽은 코드, §9)를 호출한다.
 - 빗나가면 "허공을 쳤습니다"를 출력한다.
 
 **실측 근거**(data/world 몬스터 672): thaco는 중앙값 5, p90 18(min −30 max 100)이다. armor는 중앙값 0, p90 90(min −127 max 127)이다. 따라서 저레벨 몬스터에서 명중 임계값 `thaco − armor/8`은 대체로 한 자릿수라 `mrand(1,30)`이 쉽게 넘는다. 즉 대부분의 전투에서는 기본적으로 명중하고, armor가 높은 방어형 몬스터에서만 회피가 의미 있어진다.

@@ -753,7 +753,7 @@
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">E2 영속화 기반 ★</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/31">#31</a></div>
             <div class="kv"><span class="k">토픽</span><span class="v"><code>persistence</code>(#39) · <code>save-policy</code>(#40) — 부팅 전량 로드 · dirty-flag write-behind · 금화 가드</span></div>
-            <div class="kv rest"><span class="k">부채</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/43">#43</a> 은행 트랜잭션 ↔ write-behind 조정 · <a href="https://github.com/smalljiny/muhan/issues/124">#124</a> 재접속 re-hydrate 조용한 revert</span></div>
+            <div class="kv rest"><span class="k">부채</span><span class="v"><a href="https://github.com/smalljiny/muhan/issues/43">#43</a> 은행 트랜잭션 ↔ write-behind 조정 · <a href="https://github.com/smalljiny/muhan/issues/124">#124</a> 재접속 re-hydrate 조용한 revert (08-19 해소)</span></div>
           </div>
           <div class="card d">
             <div class="card-top"><span class="chip d">완료</span><span class="card-title">E3 전송·세션 계층</span>
@@ -896,11 +896,11 @@
             <div class="kv"><span class="k">증상</span><span class="v">README 절차(<code>docker compose up</code> → <code>pnpm --filter client e2e</code>)를 깨끗한 환경에서 그대로 따르면 G1에서 <code>hydrate: character not found: dev-char-1</code>로 실패. <strong>문서화된 진입 경로가 지금 막혀 있습니다</strong></span></div>
             <div class="kv rest"><span class="k">원인</span><span class="v">dev 시드 캐릭터가 <code>InMemorySessionAuthAdapter</code> 목록에만 있고 Mongo <code>characters</code>에 없음. compose mongo는 볼륨이 없어 시작할 때마다 빈 DB. <code>e2e</code>가 turbo·CI 어디에도 없어 회귀를 잡지 못함</span></div>
           </div>
-          <div class="card t">
-            <div class="card-top"><span class="chip t">HIGH</span><span class="card-title">재접속 진행도 조용한 revert</span>
+          <div class="card d">
+            <div class="card-top"><span class="chip d">완료</span><span class="card-title">재접속 진행도 조용한 revert</span>
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/124">#124</a></div>
-            <div class="kv"><span class="k">경로</span><span class="v">grace(30초)가 flush 주기(120초)보다 짧음 → 재접속 시 <code>hydrate</code>가 DirtyTracker의 pending을 보지 않고 저장소를 다시 읽음 → stale 스냅샷이 LWW로 이김</span></div>
-            <div class="kv rest"><span class="k">긴급</span><span class="v"><code>train</code>이 이미 라이브라 <strong>실사용 데이터가 지금 노출됨</strong>. level·gold·experience·vitals·stats 전체 소실</span></div>
+            <div class="kv"><span class="k">원인</span><span class="v">grace(30초)가 flush 주기(120초)보다 짧음 → 재접속 시 <code>hydrate</code>가 DirtyTracker의 pending을 보지 않고 저장소를 다시 읽음 → stale 스냅샷이 LWW로 이김</span></div>
+            <div class="kv rest"><span class="k">머지</span><span class="v">PR #146 (08-19) — <code>hydrate</code>가 DirtyTracker의 pending 스냅샷을 DB 문서 위에 덮어써(overlay) stale 스냅샷이 더 이상 이기지 않는다</span></div>
           </div>
         </div>
       </div>
@@ -921,11 +921,11 @@
           <span class="gate ok">✓ E11 월드 뷰 (#60 · PR #128)</span>
           <span class="gate ok">✓ 검증 게이트 신뢰성 (#126 · PR #136)</span>
           <span class="gate open">#116 이동 leave/join 방송</span>
-          <span class="gate open">HIGH #124 진행도 조용한 revert</span>
+          <span class="gate ok">✓ 진행도 조용한 revert (#124 · PR #146)</span>
           <span class="gate open">HIGH #138 깨끗한 DB e2e 통과 불가</span>
           <span class="gate open">릴리스 + <code>develop</code> → <code>main</code> 병합</span>
         </div>
-        <p class="cp-foot"><b>게이트 9개 중 6개가 닫혔고, 남은 셋은 서로 독립입니다.</b> #60이 머지되면서 방 설명을 읽고 출구 버튼으로 이동하는 경로가 실제로 동작합니다. 이제 CP1의 "걸어 다니는 것"을 직접 확인할 수 있습니다. 08-11 이후 CP1 게이트에는 변화가 없습니다. #120은 M6 항목이라 이 체크포인트에 영향을 주지 않습니다. 남은 것은 <strong>같은 방 사람의 입·퇴장이 보이지 않는 문제</strong>(#116)와, 겉으로 드러나지 않는 결함 두 개입니다. <strong>#124를 닫지 않고 이 체크포인트를 통과하면 안 됩니다.</strong> 진행도가 사라지는 세계에 사람을 초대할 수는 없고, <code>train</code>이 이미 라이브라 지금도 데이터가 노출돼 있기 때문입니다. #138은 성격이 다릅니다. 코드 결함이 아니라 시드 데이터가 빠진 문제입니다. 하지만 첫 릴리스 후 다른 사람이 README를 따라 서버를 띄우면 바로 부딪히는 문제라 CP1 안에 둡니다.<br><br><b>브랜치 상태 —</b> 원격에는 현재 <code>develop</code> 하나만 있고 기본 브랜치도 <code>develop</code>입니다. <code>main</code>은 <strong>이 체크포인트에서 처음 생깁니다</strong>. <code>.harness/rules/git-workflow.md</code>의 <code>main</code>=production 전략은 문서 쪽이 맞고, 원격이 아직 그 전략을 따르지 않는 상태입니다.</p>
+        <p class="cp-foot"><b>게이트 9개 중 7개가 닫혔고, 남은 #116·#138 둘은 서로 독립입니다.</b> #60이 머지되면서 방 설명을 읽고 출구 버튼으로 이동하는 경로가 실제로 동작합니다. 이제 CP1의 "걸어 다니는 것"을 직접 확인할 수 있습니다. 08-19에 #124(재접속 진행도 revert)가 PR #146으로 닫혔습니다. #120은 M6 항목이라 이 체크포인트에 영향을 주지 않습니다. 남은 것은 <strong>같은 방 사람의 입·퇴장이 보이지 않는 문제</strong>(#116)와 #138입니다. #138은 코드 결함이 아니라 시드 데이터가 빠진 문제입니다. 하지만 첫 릴리스 후 다른 사람이 README를 따라 서버를 띄우면 바로 부딪히는 문제라 CP1 안에 둡니다.<br><br><b>브랜치 상태 —</b> 원격에는 현재 <code>develop</code> 하나만 있고 기본 브랜치도 <code>develop</code>입니다. <code>main</code>은 <strong>이 체크포인트에서 처음 생깁니다</strong>. <code>.harness/rules/git-workflow.md</code>의 <code>main</code>=production 전략은 문서 쪽이 맞고, 원격이 아직 그 전략을 따르지 않는 상태입니다.</p>
       </div>
 
       <div class="ms">

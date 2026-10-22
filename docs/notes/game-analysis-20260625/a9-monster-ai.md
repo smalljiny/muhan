@@ -16,7 +16,7 @@
 >
 > **전투·경제 공식은 다시 유도하지 않는다**: 몬스터 명중(`thaco − armor/8`), 데미지(`mdice`), 경험치 분배, gold 드롭은 [[a5-combat]]와 [[a8-items-economy]]에서 확정했다. 이 노트는 몬스터가 그 공식을 *언제, 어떤 조건에서* 발동하는지(AI 결정)만 다루고, 수치 유도는 해당 노트를 참조한다. 방 입장과 이동 규칙은 [[a4-movement-rooms]]가 담당한다.
 >
-> **이동과 연동된 행동은 a4 담당**: MFOLLO(공격자 추종), MBLOCK(출구 차단), MPGUAR(수동 출구 감시)는 몬스터 행동이다. 하지만 `update_active` AI 틱이 아니라 플레이어 이동 코드에서 트리거되므로 [[a4-movement-rooms]]에서 다룬다. 이 노트에서 "배회"는 스폰 진입(wander-in)과 확률 퇴장(wander-out, §10)을 뜻한다. 몬스터가 스스로 방을 옮기는 동작은 데드 코드인 `check_for_flee`(§6)를 빼면 없다.
+> **이동과 연동된 행동은 a4 담당**: MFOLLO(공격자 추종), MBLOCK(출구 차단), MPGUAR(수동 출구 감시)는 몬스터 행동이다. 하지만 `update_active` AI 틱이 아니라 플레이어 이동 코드에서 트리거되므로 [[a4-movement-rooms]]에서 다룬다. 이 노트에서 "배회"는 스폰 진입(wander-in)과 확률 퇴장(wander-out, §3.4)을 뜻한다. 몬스터가 스스로 방을 옮기는 동작은 데드 코드인 `check_for_flee`(§6)를 빼면 없다.
 
 ## 개요
 
@@ -128,7 +128,7 @@
 1. 각 `perm_mon[i]`에 대해 `ltime + interval > 현재시각`이면 건너뛴다(아직 리스폰 대기 중).
 2. 같은 `misc`(몬스터 번호)를 가진 슬롯을 세어 스폰해야 할 총수 `n`을 구한다.
 3. 지금 방에 살아 있는 같은 이름의 MPERMT 몬스터 수 `m`을 세어, **`n − m`마리만** 더 스폰한다(중복 방지).
-4. 한 마리씩 스폰할 때마다 `carry[]` 아이템 랜덤화(§17)와 gold 랜덤화를 하고, `F_SET(MPERMT)` → `add_crt_rom`을 거친 뒤, 방에 플레이어가 있으면 `add_active`한다.
+4. 한 마리씩 스폰할 때마다 `carry[]` 아이템 랜덤화(핵심 발견 #17)와 gold 랜덤화를 하고, `F_SET(MPERMT)` → `add_crt_rom`을 거친 뒤, 방에 플레이어가 있으면 `add_active`한다.
 
 **사망 시 리스폰 타이머 리셋**: `die_perm_crt`(creature.c:553)가 죽은 몬스터가 있던 방의 `perm_mon[]`에서 이름이 같은 슬롯을 찾아 `ltime = 현재시각`으로 설정한다. 그 뒤 `interval`이 지나야 다시 스폰할 수 있다.
 
@@ -141,9 +141,9 @@
 2. `mrand(1,100) > traffic`이면 건너뛴다. 즉 **traffic이 곧 진입 확률**(%)이다.
 3. `random[mrand(0,9)]` 후보 중 하나를 고르고, 비어 있으면 건너뛴다. 그다음 `load_crt`.
 4. **그룹 크기**: `RPLWAN`(방 플래그 23)이 설정돼 있으면 `mrand(1, 방 플레이어수)`, 아니면 몬스터의 `numwander>1`일 때 `mrand(1, numwander)`, 둘 다 아니면 1이다.
-5. 한 마리마다 공격/scavenge/wander 타이머를 현재 시각으로 초기화하고(민첩<20이면 interval 3, 아니면 2), `carry[]` 아이템 랜덤화(§17)와 gold 랜덤화를 한 뒤 `add_crt_rom` + `add_active`한다.
+5. 한 마리마다 공격/scavenge/wander 타이머를 현재 시각으로 초기화하고(민첩<20이면 interval 3, 아니면 2), `carry[]` 아이템 랜덤화(핵심 발견 #17)와 gold 랜덤화를 한 뒤 `add_crt_rom` + `add_active`한다.
 
-배회 몬스터는 §10의 wander-out으로 자연스럽게 퇴장한다. 따라서 traffic은 진입 확률과 퇴장 확률 양쪽에 쓰이며, 방에 몬스터가 얼마나 자주 드나드는지를 나타낸다.
+배회 몬스터는 §3.4의 wander-out으로 자연스럽게 퇴장한다. 따라서 traffic은 진입 확률과 퇴장 확률 양쪽에 쓰이며, 방에 몬스터가 얼마나 자주 드나드는지를 나타낸다.
 
 ### 2.3 invasion: 하드코딩 폴링 이벤트 (update_monster / _two, update.c:755·784)
 
