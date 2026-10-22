@@ -140,7 +140,7 @@ describe('CharacterRepository (integration)', () => {
     await expect(repo.insert(invalid)).rejects.toThrow()
   })
 
-  it('hydrateInventory는 캐릭터가 소유한 오브젝트만 반환한다', async () => {
+  it('hydrateInventory는 캐릭터가 소유한 아이템만 반환한다', async () => {
     const char = makeCharacter({ _id: 'char-A' })
     await repo.insert(char)
 

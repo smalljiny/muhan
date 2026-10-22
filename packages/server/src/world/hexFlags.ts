@@ -1,15 +1,15 @@
 /**
- * hex string 비트 헬퍼 — 크리처/오브젝트 flags(8바이트 = 16자 hex string)의 비트 조회·세팅·클리어.
+ * hex string 비트 헬퍼 — 몬스터/아이템 flags(8바이트 = 16자 hex string)의 비트 조회·세팅·클리어.
  *
  * 원본 `F_ISSET(p,f) = flags[f/8] & (1<<(f%8))`(mtype.h) 이식. door.ts `hasFlag`는 바이트당 한
  * 원소인 number[]용이라 여기 hex string 표현(creatures.json·objects.json·rooms.json의 flags 필드)에는
  * 부적합하다. 이 모듈은 hex string을 그대로 다뤄 별도 디코딩 없이 비트를 판정한다.
  *
- * F_SET/F_CLR은 in-place 변형 대신 새 문자열을 반환한다 — autonomic(순수 함수)이 새 크리처 상태를
+ * F_SET/F_CLR은 in-place 변형 대신 새 문자열을 반환한다 — autonomic(순수 함수)이 새 몬스터 상태를
  * 만들 때 flags를 교체하는 용도다(입력 flags 불변).
  */
 
-// ── 크리처 M-flag 비트(mtype.h 검증) ─────────────────────────────────────────
+// ── 몬스터 M-flag 비트(mtype.h 검증) ─────────────────────────────────────────
 /** 고정 몬스터(입장 리스폰 대상). */
 export const MPERMT = 0
 /** 숨음(hidden) 상태 — MHIDDN(mtype.h). 방 표시 루틴이 목록에서 제외(room.c 방 표시 + creature 나열). */
@@ -50,7 +50,7 @@ export const MMGONL = 20
 export const MENONL = 22
 /** 절대 해칠 수 없음 — MUNKIL(mtype.h:435). 전투 대상 무적 무조건 거부(command5.c:146). */
 export const MUNKIL = 24
-/** 마법 저항(크리처) — MRMAGI(mtype.h:438). offensive_spell 데미지 감산 게이트(magic1.c:1113). */
+/** 마법 저항(몬스터) — MRMAGI(mtype.h:438). offensive_spell 데미지 감산 게이트(magic1.c:1113). */
 export const MRMAGI = 27
 /** 혼동(befuddle) 저항 — MRBEFD(mtype.h:454 "Monster resists stun only"). 혼동술 dur=3 단축(magic3.c:775). */
 export const MRBEFD = 43
@@ -62,9 +62,9 @@ export const MSILNC = 48
 export const MBLIND = 49
 /** 매혹 불가 — MNOCHA(mtype.h:473 "Monster cannot be charmed"). charm 완전 반탄 조건(magic8.c:751). */
 export const MNOCHA = 62
-/** 선한 유저 공격형(성향 alg=-1). */
+/** 선한 플레이어 공격형(성향 alg=-1). */
 export const MGAGGR = 39
-/** 악한 유저 공격형(성향 alg=1). */
+/** 악한 플레이어 공격형(성향 alg=1). */
 export const MEAGGR = 40
 /** DM 추종 몬스터(wander-out 제외 조건). */
 export const MDMFOL = 46
@@ -188,7 +188,7 @@ function byteAt(hex: string, bit: number): number {
  * 입력이 대상 바이트 오프셋보다 짧으면(예: 빈 문자열에 고비트 세팅) 대상 오프셋까지 '0'으로
  * 채운 뒤 교체한다 — zero-pad가 없으면 substring이 짧은 문자열 전체를 반환해 고바이트 비트를
  * 낮은 바이트에 잘못 기록한다(플레이어 flags '' + PFEARS=44 경로). 16자 full-width 입력에는
- * padEnd가 no-op이라 기존 크리처/오브젝트 flags 동작은 불변.
+ * padEnd가 no-op이라 기존 몬스터/아이템 flags 동작은 불변.
  */
 function withByte(hex: string, byteIdx: number, value: number): string {
   const i = byteIdx * 2

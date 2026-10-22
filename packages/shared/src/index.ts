@@ -22,7 +22,7 @@ export type {
 // 방 출구를 기본 6방향 vs 명명/대각으로 분리하는 파생 순수 함수.
 export { getDirectionHints } from './worldGraph.js'
 
-// 영속 스키마 + z.infer 파생 도메인 타입(캐릭터·오브젝트·은행·방 상태).
+// 영속 스키마 + z.infer 파생 도메인 타입(캐릭터·아이템·은행·방 상태).
 export * from './schema/index.js'
 
 // 와이어 프로토콜 계약 + z.infer 파생 타입(명령·이벤트 봉투·payload building block).
@@ -43,7 +43,7 @@ export { assertInRange, assertMonotonic } from './property/invariants.js'
 // 전투·경제·레벨링 정적 룩업 테이블 + 유효 능력치 합성 + 파생 스탯 resolver(단일 배럴 출처).
 export * from './stats/index.js'
 
-// 경제 가격 배수(A8 §8) — 구매·몹구매·판매·수리 순수 함수 + 선언적 상수 테이블(단일 배럴 출처).
+// 경제 가격 배수(A8 §8) — 구매·몬스터 구매·판매·수리 순수 함수 + 선언적 상수 테이블(단일 배럴 출처).
 export * from './economy/index.js'
 
 // 레벨링 exp 곡선 룩업(neededExp)·역함수(expToLevel) 순수 함수. 원시 needed_exp 테이블·MAXALVL은

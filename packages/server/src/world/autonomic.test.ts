@@ -63,7 +63,7 @@ const ctx = (over: { now?: number; activatedAt?: number; room?: RoomNode; rng?: 
 })
 
 describe('runAutonomic — 순수 함수(입력 미변형)', () => {
-  it('입력 크리처를 in-place 변형하지 않고 새 상태를 반환한다', () => {
+  it('입력 몬스터를 in-place 변형하지 않고 새 상태를 반환한다', () => {
     const c = makeCreature({ hpcur: 10, lastRegenAt: 0 })
     const result = runAutonomic(c, ctx({ now: 1000 }))
     expect(c.hpcur).toBe(10) // 입력 불변
@@ -191,7 +191,7 @@ describe('§3.3 scavenge — MSCAVE·20초↑·15%·바닥 첫 회수가능 아�
   })
 })
 
-describe('§3.4 wander-out — 배회 크리처·적 없음·확률=traffic·소멸', () => {
+describe('§3.4 wander-out — 배회 몬스터·적 없음·확률=traffic·소멸', () => {
   it('!MHASSC·!MPERMT·!MDMFOL·20초↑·rng≤traffic·적 없음이면 wanderOut', () => {
     const room = makeRoom({ traffic: 100 })
     const c = makeCreature({ lastWanderAt: 0 })

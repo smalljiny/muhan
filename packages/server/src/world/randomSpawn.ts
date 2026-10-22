@@ -6,7 +6,7 @@ import { hasFlag } from './door.js'
 import type { SpawnTemplate, SpawnTemplateIndex, InstanceIdAllocator } from './spawn.js'
 
 /**
- * random 배회 진입 슬롯 — 20초 폴링으로 플레이어 점유 방에 확률적으로 몹을 진입시킨다
+ * random 배회 진입 슬롯 — 20초 폴링으로 플레이어 점유 방에 확률적으로 몬스터를 진입시킨다
  * (플랜 T4.2, A9 §2.2 update_random update.c:114).
  *
  * 원본 update_random 충실:
@@ -53,7 +53,7 @@ export const defaultSpawnRng: SpawnRng = {
 export interface RandomSpawnDeps {
   /** 플레이어 점유 방(중복 제거) 조회 seam — activeSet.activeRooms 주입. */
   rooms(): RoomNode[]
-  /** 몹번호 → 템플릿 인덱스(팩토리 (b) 조회 + numwander 그룹 크기). */
+  /** 몬스터 번호 → 템플릿 인덱스(팩토리 (b) 조회 + numwander 그룹 크기). */
   readonly templates: SpawnTemplateIndex
   /** 방별 monotonic idx 발급기(D7). */
   readonly alloc: InstanceIdAllocator

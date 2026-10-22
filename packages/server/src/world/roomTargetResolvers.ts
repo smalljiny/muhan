@@ -2,7 +2,7 @@ import { matchTarget, type CreatureInstance, type RoomNode } from 'shared'
 import { F_ISSET, MINVIS, PDMINV, PDINVI } from './hexFlags.js'
 
 /**
- * 방 스코프 대상 리졸버 — 오라클 `creature.c:29-60 find_crt`의 가시성 게이트를 얹어 방 안 크리처·
+ * 방 스코프 대상 리졸버 — 오라클 `creature.c:29-60 find_crt`의 가시성 게이트를 얹어 방 안 몬스터·
  * 플레이어를 한글 이름으로 지목한다. 매칭 규칙 자체(4필드 순수 접두 + 서수)는 순수 매처
  * `shared/naming/matchTarget`이 담당하고 이 모듈은 **후보 선별**만 한다.
  *
@@ -51,7 +51,7 @@ import { F_ISSET, MINVIS, PDMINV, PDINVI } from './hexFlags.js'
  *
  * 생존 게이트(`hpcur > 0`)도 두지 않는다 — `find_crt`에 없고, 사망 개체 제거는 `creatureDeath`가 담당한다
  * (표시 경로 `roomView.ts`가 별도로 거르는 것과 의도된 비대칭이다). 같은 이유로 `MHIDDN`(은신) 게이트도
- * 없다 — `roomView.isCreatureHidden`은 `MHIDDN`을 거르지만 `find_crt`에는 없어서, **숨은 크리처는 방
+ * 없다 — `roomView.isCreatureHidden`은 `MHIDDN`을 거르지만 `find_crt`에는 없어서, **숨은 몬스터는 방
  * 목록에 안 보여도 이름으로는 지목된다**. 오라클 그대로이므로 여기서 맞추지 않는다.
  *
  * ## ⚠ 알려진 divergence — 서수 기준 순서
@@ -59,7 +59,7 @@ import { F_ISSET, MINVIS, PDMINV, PDINVI } from './hexFlags.js'
  * (`room.c:17-19` 주석 "alphabetically", `add_ply_rom` room.c:58-72, `add_crt_rom` room.c:246-261).
  * 즉 오라클 서수는 이름 사전순이고, 동률 이름은 나중 진입이 뒤에 온다(`> 0`에서만 break).
  *
- * 이 포트는 도착 순서를 쓴다 — 플레이어는 `room.occupants`(Set) 삽입 순서, 크리처는 `room.creatures`
+ * 이 포트는 도착 순서를 쓴다 — 플레이어는 `room.occupants`(Set) 삽입 순서, 몬스터는 `room.creatures`
  * push 순서다(초기 방 로드는 `read_rom` 파일 순서와 일치하지만 런타임 스폰·리스폰·소환은 전부 push다).
  * 정렬을 넣지 않는 이유: `strcmp`는 EUC-KR 바이트 비교인데 KS X 1001 완성형 배열과 Unicode Hangul
  * Syllables 배열이 달라 JS 문자열 비교로 재현되지 않는다 — collation 테이블 없이는 이식이 불가능하다.
@@ -85,7 +85,7 @@ export type RoomPlayerResolver = (
 ) => string | undefined
 
 /**
- * 방 스코프 크리처 리졸버 — 질의·관찰자 flags·서수로 방 안 크리처를 고른다.
+ * 방 스코프 크리처 리졸버 — 질의·관찰자 flags·서수로 방 안 몬스터를 고른다.
  * `RoomPlayerResolver`와 대칭인 명시 계약이다(구현 시그니처에 종속되는 `typeof` 대신).
  */
 export type RoomCreatureResolver = (
@@ -98,18 +98,18 @@ export type RoomCreatureResolver = (
 /**
  * `find_crt` 가시성 게이트 — 후보 자격이 있으면 true.
  *
- * ① DM 투명: `class >= CARETAKER`와 비트 10의 **결합(AND)**이다. 어느 한쪽만 참인 크리처는 후보로 남는다
+ * ① DM 투명: `class >= CARETAKER`와 비트 10의 **결합(AND)**이다. 어느 한쪽만 참인 몬스터는 후보로 남는다
  *    — `creatures.json` 실측으로 `class >= 10`은 52마리, 비트 10은 50마리지만 교집합은 0건이라
  *    `class` 단독으로 축약하면 52마리가 잘못 스킵된다.
  *
  *    **비트 10의 정체 주의**: C `F_ISSET(p,f)`(mtype.h:566)는 구조체 무관 매크로라 오라클도 몬스터
  *    리스트 순회에서 `F_ISSET(cp->crt, PDMINV)`를 그대로 호출한다. 그런데 `PDMINV`(mtype.h:355)는
- *    P-flag 공간의 "DM Invisibility"이고, 크리처 flags(M-flag 공간)의 같은 비트 10은 `MFLEER`
+ *    P-flag 공간의 "DM Invisibility"이고, 몬스터 flags(M-flag 공간)의 같은 비트 10은 `MFLEER`
  *    (mtype.h:421, "Monster flees")다. 즉 위 "50마리"는 DM 투명이 아니라 `MFLEER` 보유 몬스터다.
  *    `MFLEER`는 C 소스에 `F_SET` 경로가 없고(빌더·DM 도구가 세팅) 읽기만 두 곳에 있다 —
  *    `creature.c:632`(직전 무조건 `return`으로 사실상 죽은 코드)와 `dm2.c:398`(DM 플래그 표시).
  *    이 비트 겹침은 오라클의 성질이므로 그대로 이식한다.
- * ② 투명: 관찰자가 `PDINVI`(투명 감지)를 들면 무조건 통과, 아니면 크리처의 `MINVIS`가 없어야 한다.
+ * ② 투명: 관찰자가 `PDINVI`(투명 감지)를 들면 무조건 통과, 아니면 몬스터의 `MINVIS`가 없어야 한다.
  */
 function isCreatureTargetable(creature: CreatureInstance, observerFlags: string): boolean {
   if (creature.class >= CARETAKER && F_ISSET(creature.flags, PDMINV)) return false
@@ -118,7 +118,7 @@ function isCreatureTargetable(creature: CreatureInstance, observerFlags: string)
 }
 
 /**
- * 방 안 크리처를 이름(별칭 포함)·서수로 해석한다. 게이트에 걸린 후보를 **먼저** 제외한 배열을
+ * 방 안 몬스터를 이름(별칭 포함)·서수로 해석한다. 게이트에 걸린 후보를 **먼저** 제외한 배열을
  * `matchTarget`에 넘긴다(선언 순서 보존 = 서수 기준).
  *
  * 순수 함수다 — `room`과 그 하위 배열·객체를 변형하지 않고 새 배열만 만든다.

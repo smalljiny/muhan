@@ -1414,7 +1414,7 @@ function makeRoomNode(roomId: number, exitNames: string[] = []): RoomNode {
 /**
  * roomSummary 페이크가 돌려줄 world:room 페이로드 픽스처 — 확장 계약 전 필드를 한 곳에서 채운다.
  * `makeRoomNode`가 만드는 방을 실 변환(projectRoomView)한 결과와 같은 값을 낸다(이름 `방-<id>`, 빈 설명,
- * 점유자·아이템·크리처 없음). FSM은 이 페이로드를 그대로 스프레드해 발생시킬 뿐 해석하지 않는다.
+ * 점유자·아이템·몬스터 없음). FSM은 이 페이로드를 그대로 스프레드해 발생시킬 뿐 해석하지 않는다.
  */
 function makeRoomView(
   roomId: number,

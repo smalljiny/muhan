@@ -32,7 +32,7 @@ import type { WorldTickSlot } from '../world/worldClock.js'
  * regen은 재생 후 최종 Character 스냅샷 전체를 markDirty로 흘린다. dirtyTracker는 키당 full 스냅샷
  * last-write-wins 교체이고 SaveEngine은 characters를 patch(`$set`)로 적용하므로, 이 스냅샷은 hp/mp만이
  * 아니라 라이브 char의 전 필드(gold·currentRoom·status 등)를 함께 쓴다. 라이브 인메모리 객체가
- * 권위 소스인 현 모델에서는 정합적이지만(스냅샷=최신 라이브 상태), bank 직접 write나 #82 이중 홈(X3)
+ * 기준 소스인 현 모델에서는 정합적이지만(스냅샷=최신 라이브 상태), bank 직접 write나 #82 이중 홈(X3)
  * 같은 out-of-band DB write가 라이브 객체를 우회하면, 이후 regen flush가 그 write를 조용한 revert할 수
  * 있다. regen은 5초 주기 **반복** writer라 일단 라이브 디스패처에 연결되면 이 위험 창이 상시화된다.
  * 부분 스냅샷({hpCurrent,mpCurrent})은 해가 아니다 — last-write-wins 교체가 형제 writer의 full

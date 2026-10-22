@@ -5,8 +5,8 @@ import { F_ISSET, OHIDDN, OSCENE, OINVIS, MHIDDN, MINVIS } from './hexFlags.js'
 /**
  * 방 표시 변환 — `RoomNode`(라이브 그래프 노드)를 클라이언트 표시용 뷰로 거르는 순수 함수.
  *
- * oracle `legacy/muhan/src/room.c` 방 표시 루틴 + `object.c:174 list_obj` 이식: 방을 볼 때
- * 숨김 아이템(OHIDDN·OSCENE·OINVIS)·숨김 크리처(MHIDDN·MINVIS)·죽은 개체·비밀 출구
+ * 오라클 `legacy/muhan/src/room.c` 방 표시 루틴 + `object.c:174 list_obj` 이식: 방을 볼 때
+ * 숨김 아이템(OHIDDN·OSCENE·OINVIS)·숨김 몬스터(MHIDDN·MINVIS)·죽은 개체·비밀 출구
  * (XSECRT·XINVIS·XNOSEE)는 목록에 나오지 않는다.
  *
  * **표시 필터 ≠ 통행 게이트(의도된 비대칭)**: 여기서 제외한 XSECRT/XINVIS 출구도 `tryMove`의
@@ -25,7 +25,7 @@ import { F_ISSET, OHIDDN, OSCENE, OINVIS, MHIDDN, MINVIS } from './hexFlags.js'
  *
  * 1. **점유자 은신·투명 필터 없음** — `room.c:637` 표시 루틴은 `PHIDDN`(은신)·`PINVIS`(투명, PDINVI
  *    보유자는 예외 통과)·`PDMINV`(DM 투명) 플레이어를 제외한다. 이 함수의 `occupants`는 이름이
- *    해석되면 무조건 싣는다. 아이템(`isItemHidden`)·크리처(`isCreatureHidden`)에 대칭 필터가 있는
+ *    해석되면 무조건 싣는다. 아이템(`isItemHidden`)·몬스터(`isCreatureHidden`)에 대칭 필터가 있는
  *    것과 달리 점유자에만 없다는 점이 함정이다. 현재 도달 불가인 근거: `PHIDDN`·`PDMINV`는
  *    `character/flags.ts`의 파티션 표상 영속 경로가 없어 `composeCharacterFlags`가 영원히 0을
  *    돌려주고, `PINVIS`는 `buffs`(SINVIS)에서 파생되나 `magic/`이 `ws/`·부트스트랩 어디에서도
@@ -39,7 +39,7 @@ import { F_ISSET, OHIDDN, OSCENE, OINVIS, MHIDDN, MINVIS } from './hexFlags.js'
  * 두 게이트 모두 관찰자 캐릭터를 변환 인자로 요구하므로, 여는 순간 `world:room`이 방 단위 fan-out
  * 캐시가 아니라 수신자별 페이로드가 된다 — 연결 전에 설계 결정이 선행돼야 한다.
  *
- * 두 flags 표현이 섞인다: 출구는 바이트당 한 원소인 `number[]`라 `door.hasFlag`, 아이템·크리처는
+ * 두 flags 표현이 섞인다: 출구는 바이트당 한 원소인 `number[]`라 `door.hasFlag`, 아이템·몬스터는
  * 16자 hex string이라 `hexFlags.F_ISSET`을 쓴다.
  */
 
@@ -55,12 +55,12 @@ function isExitHidden(flags: number[]): boolean {
   return hasFlag(flags, XSECRT) || hasFlag(flags, XINVIS) || hasFlag(flags, XNOSEE)
 }
 
-/** 방 바닥 목록에서 감추는 아이템 비트(OHIDDN·OSCENE·OINVIS — oracle object.c:174 list_obj). */
+/** 방 바닥 목록에서 감추는 아이템 비트(OHIDDN·OSCENE·OINVIS — 오라클 object.c:174 list_obj). */
 function isItemHidden(flags: string): boolean {
   return F_ISSET(flags, OHIDDN) || F_ISSET(flags, OSCENE) || F_ISSET(flags, OINVIS)
 }
 
-/** 방 표시에서 감추는 크리처 비트(MHIDDN·MINVIS). 생존 판정(hpcur)은 별개라 여기 넣지 않는다. */
+/** 방 표시에서 감추는 몬스터 비트(MHIDDN·MINVIS). 생존 판정(hpcur)은 별개라 여기 넣지 않는다. */
 function isCreatureHidden(flags: string): boolean {
   return F_ISSET(flags, MHIDDN) || F_ISSET(flags, MINVIS)
 }
@@ -90,7 +90,7 @@ export function projectRoomView(
     longDesc: room.longDesc,
     exits: room.exits.filter((exit) => !isExitHidden(exit.flags)).map((exit) => exit.name),
     occupants,
-    // `contains`(컨테이너 중첩 아이템)로 재귀하지 않는다 — 오라클 방 표시는 바닥 오브젝트만 나열한다.
+    // `contains`(컨테이너 중첩 아이템)로 재귀하지 않는다 — 오라클 방 표시는 바닥 아이템만 나열한다.
     items: room.items
       .filter((item) => !isItemHidden(item.flags))
       .map((item) => ({ instanceId: item.instanceId, name: item.name })),

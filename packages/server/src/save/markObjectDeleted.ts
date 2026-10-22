@@ -1,5 +1,5 @@
 /**
- * objectDeletions 컬렉션 markDirty의 단일 계약 지점 — 영속 오브젝트 1건의 **삭제 의도**를 기록한다.
+ * objectDeletions 컬렉션 markDirty의 단일 계약 지점 — 영속 아이템 1건의 **삭제 의도**를 기록한다.
  *
  * ## 왜 별도 seam인가
  * 원시 seam `SaveEngine.markDirty(collection, id, snapshot: unknown)`은 collection·snapshot이 모두

@@ -292,7 +292,7 @@ describe('serverEventSchema (server→client 봉투)', () => {
       }
     })
 
-    it('확장 필드 전량(이름·설명·출구·점유자·아이템·크리처)이 있으면 통과한다', () => {
+    it('확장 필드 전량(이름·설명·출구·점유자·아이템·몬스터)이 있으면 통과한다', () => {
       const parsed = serverEventSchema.safeParse({
         ...baseRoom,
         roomId: 5,
@@ -352,7 +352,7 @@ describe('serverEventSchema (server→client 봉투)', () => {
     })
 
     // 표시 이름 최소길이는 occupants에만 요구한다 — 빈 이름이 "미해석 점유자" 신호로 쓰여
-    // projectRoomView가 그 항목을 목록에서 빼기 때문이다. 아이템·크리처엔 그 신호가 없다.
+    // projectRoomView가 그 항목을 목록에서 빼기 때문이다. 아이템·몬스터엔 그 신호가 없다.
     it('items[].name·creatures[].name은 빈 문자열도 허용한다 (미해석 신호가 없는 필드)', () => {
       expect(
         serverEventSchema.safeParse({

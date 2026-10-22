@@ -6,14 +6,14 @@ import {
 } from './hexFlags.js'
 
 /**
- * autonomic 순수 함수 — active 크리처 한 마리의 한 "행동 기회"에서 비전투 자율 행동을 계산한다(플랜 T3.2).
+ * autonomic 순수 함수 — active 몬스터 한 마리의 한 "행동 기회"에서 비전투 자율 행동을 계산한다(플랜 T3.2).
  *
  * 원본 update.c:229 update_active의 §3.1(상태이상 만료)·§3.2(재생)·§3.3(scavenge)·§3.4(wander-out)를
  * 이식한다. §3.0 공격 타이머 게이트(LT_ATTCK=nextActionAt)와 §3.5 조기종료·onCombatTick 디스패치는
  * tick 계층(creatureTick)이 담당한다.
  *
- * 순수성: 입력 크리처를 in-place로 변형하지 않고 새 `CreatureInstance`를 반환한다(flags·hpcur·mpcur·
- * 타이머 필드를 담은 새 객체). 방 아이템 이동(scavenge)·크리처 제거(wander-out)는 부수효과 서술자
+ * 순수성: 입력 몬스터를 in-place로 변형하지 않고 새 `CreatureInstance`를 반환한다(flags·hpcur·mpcur·
+ * 타이머 필드를 담은 새 객체). 방 아이템 이동(scavenge)·몬스터 제거(wander-out)는 부수효과 서술자
  * (`scavenge`·`wanderOut`)로 반환하고, 실제 방 상태 적용은 tick 계층의 carve-out이다.
  *
  * 확률 seam: scavenge 15%·wander-out traffic%는 주입 `rng`가 mrand(1,100) 굴림을 대신한다. 결정적
@@ -34,15 +34,15 @@ export interface AutonomicContext {
   readonly now: number
   /** 방 활성화(재진입) 실초 시각 — 재생 소급 baseline 클램프에 쓰인다(빈 방=시간 정지). */
   readonly activatedAt: number
-  /** 크리처가 속한 방(바닥 아이템·traffic 참조). */
+  /** 몬스터가 속한 방(바닥 아이템·traffic 참조). */
   readonly room: RoomNode
   /** 확률 굴림 seam. */
   readonly rng: AutonomicRng
 }
 
-/** autonomic 결과 — 새 크리처 상태 + 방 상태 적용 서술자(부수효과는 tick 계층이 적용). */
+/** autonomic 결과 — 새 몬스터 상태 + 방 상태 적용 서술자(부수효과는 tick 계층이 적용). */
 export interface AutonomicResult {
-  /** 갱신된 크리처 상태(입력과 다른 새 객체). */
+  /** 갱신된 몬스터 상태(입력과 다른 새 객체). */
   readonly creature: CreatureInstance
   /** scavenge로 회수할 방 아이템 인덱스(없으면 미회수). */
   readonly scavenge?: { readonly itemIndex: number }
@@ -119,7 +119,7 @@ export function runAutonomic(creature: CreatureInstance, ctx: AutonomicContext):
     }
   }
 
-  // §3.4 wander-out — 배회 크리처(!MHASSC·!MPERMT·!MDMFOL)·20초↑·rng≤traffic·적 없음이면 소멸.
+  // §3.4 wander-out — 배회 몬스터(!MHASSC·!MPERMT·!MDMFOL)·20초↑·rng≤traffic·적 없음이면 소멸.
   // "배회"는 양성 flag가 아니라 이 세 flag가 없는 상태다. scavenge로 방금 세팅된 MHASSC도 여기서 제외된다.
   let wanderOut = false
   const wanders = !F_ISSET(flags, MHASSC) && !F_ISSET(flags, MPERMT) && !F_ISSET(flags, MDMFOL)

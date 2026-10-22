@@ -5,8 +5,8 @@ import { PVP_COOLDOWN_INCREMENT, CARETAKER } from './constants.js'
 
 /**
  * 전투 개시 자격 게이트 — command5.c:146-201 오라클 충실 이식.
- *   - checkTargetImmunityPre: 플레이어→크리처 MUNKIL 판정(:146). registerEnemy **전** 거부(aggro 미등록).
- *   - checkTargetImmunityPost: 플레이어→크리처 MMGONL/MENONL 판정(:160-173). registerEnemy **후** 거부
+ *   - checkTargetImmunityPre: 플레이어→몬스터 MUNKIL 판정(:146). registerEnemy **전** 거부(aggro 미등록).
+ *   - checkTargetImmunityPost: 플레이어→몬스터 MMGONL/MENONL 판정(:160-173). registerEnemy **후** 거부
  *     (aggro 등록·물리 공격만 실패). 오라클 add_enm_crt(:153)가 MUNKIL 뒤·MMGONL/MENONL 앞이라 이 분해가
  *     인터리브를 재현한다(Story 10 T10.3).
  *   - checkPvpGate: 플레이어→플레이어 안전지대·선악·패거리 3중 게이트(:176-201).
@@ -26,7 +26,7 @@ export type CombatGateResult =
   | { readonly ok: true; readonly cooldownIncrement: number }
   | { readonly ok: false; readonly reason: string }
 
-/** 대상 무적 게이트 입력. attacker는 플레이어(class·무기), defender는 크리처(hex flags). */
+/** 대상 무적 게이트 입력. attacker는 플레이어(class·무기), defender는 몬스터(hex flags). */
 export interface TargetImmunityInput {
   readonly attacker: {
     /** 클래스 인덱스 — class<CARETAKER인 플레이어만 MENONL 대상 무적에 걸린다. */
@@ -34,7 +34,7 @@ export interface TargetImmunityInput {
     /** 착용 무기(미착용이면 null). MENONL은 adjustment>=1인 마법무기만 관통한다. */
     readonly weapon: { readonly adjustment: number } | null
   }
-  /** 대상 크리처 — hex string flags. */
+  /** 대상 몬스터 — hex string flags. */
   readonly defender: { readonly flags: string }
 }
 
@@ -55,8 +55,8 @@ export interface PvpGateInput {
 }
 
 /**
- * 대상 무적 게이트 pre-단계 — 플레이어→크리처 MUNKIL(command5.c:146). registerEnemy **전** 판정한다:
- * MUNKIL 크리처는 절대 해칠 수 없어 aggro 등록조차 하지 않는다(:148 이전). 통과 시 쿨다운 증분 0.
+ * 대상 무적 게이트 pre-단계 — 플레이어→몬스터 MUNKIL(command5.c:146). registerEnemy **전** 판정한다:
+ * MUNKIL 몬스터는 절대 해칠 수 없어 aggro 등록조차 하지 않는다(:148 이전). 통과 시 쿨다운 증분 0.
  */
 export function checkTargetImmunityPre(input: Pick<TargetImmunityInput, 'defender'>): CombatGateResult {
   if (F_ISSET(input.defender.flags, MUNKIL)) {
@@ -66,8 +66,8 @@ export function checkTargetImmunityPre(input: Pick<TargetImmunityInput, 'defende
 }
 
 /**
- * 대상 무적 게이트 post-단계 — 플레이어→크리처 MMGONL/MENONL(command5.c:160-173). registerEnemy **후**
- * 판정한다 — 오라클 add_enm_crt(:153)가 이 두 거부(:160/:167) 앞이라, MMGONL/MENONL 크리처를 물리 공격하면
+ * 대상 무적 게이트 post-단계 — 플레이어→몬스터 MMGONL/MENONL(command5.c:160-173). registerEnemy **후**
+ * 판정한다 — 오라클 add_enm_crt(:153)가 이 두 거부(:160/:167) 앞이라, MMGONL/MENONL 몬스터를 물리 공격하면
  * 타격은 거부돼도 aggro는 등록돼 몬스터가 이후 틱에 반격한다(criterion 3).
  *   1) MMGONL → 거부(마법만 유효).
  *   2) MENONL && class<CARETAKER → 무기 없음 || adjustment<1이면 거부(비마법무기 관통 불가).

@@ -5,7 +5,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * ospell 골든 옮겨 적기-diff fixture 생성기 — manual oracle.
+ * ospell 골든 옮겨 적기-diff fixture 생성기 — manual 오라클.
  *
  * 원본 `global.c:637-659`의 osp_t 20행을 **독립 리터럴**로 옮겨 적어(옮겨 적기 pass 2) 각 행을
  * spellNo 조회 케이스로 감싼다. SUT `ospellOf`는 `magic/catalog.ts`의 realm×tier 격자

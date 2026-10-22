@@ -94,7 +94,7 @@ export const serverEventSchema = z.discriminatedUnion('type', [
     characterId: z.string().min(1),
   }),
   // 방 통지 — 이동/입장 성공 시 본인에게 1회 발생하는 방 스냅샷. 방 id·이름·설명·출구 이름 목록에
-  // 더해 눈에 보이는 점유자·바닥 아이템·크리처를 싣는다(서버 `projectRoomView`가 오라클 방 표시 규칙으로
+  // 더해 눈에 보이는 점유자·바닥 아이템·몬스터를 싣는다(서버 `projectRoomView`가 오라클 방 표시 규칙으로
   // 숨김 개체·비밀 출구를 이미 걸러 낸다). 스냅샷이지 실시간 델타가 아니다 — 다른 사람의 입·퇴장은 다음
   // world:room까지 반영되지 않는다(#116).
   //
@@ -177,7 +177,7 @@ export const serverEventSchema = z.discriminatedUnion('type', [
   // progress:trained 선례대로 correlationId를 싣지 않는다(상태 이벤트 — 거부만 error로 상관 키를 반향한다).
   //
   // 대상은 instanceId와 표시 이름을 함께 싣는다 — world:room의 items·creatures가 쓰는 것과 같은
-  // 관용구다. 이름만으로는 짝지을 수 없다: 방에 같은 이름 크리처가 여럿일 수 있고(명령이 ordinal을
+  // 관용구다. 이름만으로는 짝지을 수 없다: 방에 같은 이름 몬스터가 여럿일 수 있고(명령이 ordinal을
   // 두는 이유가 그것이다), 그러면 클라이언트가 world:room 목록에서 어느 개체를 때렸는지 알 수 없다.
   // instanceId는 방별 monotonic 발급기(world/spawn.ts의 createInstanceIdAllocator)가 내주므로 사망·
   // 리스폰 뒤에도 재사용되지 않는다 — 프로세스 수명 동안 개체를 유일하게 가리킨다.

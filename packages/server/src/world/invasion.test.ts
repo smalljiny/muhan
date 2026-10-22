@@ -71,7 +71,7 @@ const EVENT2: InvasionEvent = {
   broadcast: '무적존 강탈',
 }
 
-/** min을 반환하는 결정적 rng — 방=roomRange.min, 몹=mobRange.min 선택. */
+/** min을 반환하는 결정적 rng — 방=roomRange.min, 몬스터=mobRange.min 선택. */
 const minRng = (min: number) => min
 
 function graphOf(...rooms: RoomNode[]): Map<number, RoomNode> {
@@ -154,7 +154,7 @@ describe('그래프에 없는 방 스킵', () => {
     expect(broadcast).toHaveBeenCalledWith('카오스 침공') // 방송은 실행 시 나간다
   })
 
-  it('알 수 없는 몹 템플릿은 스폰하지 않는다', () => {
+  it('알 수 없는 몬스터 템플릿은 스폰하지 않는다', () => {
     const room = makeRoom(8000)
     const [slot] = createInvasion({
       events: [EVENT1],
@@ -214,7 +214,7 @@ describe('WorldClock 통합(FakeClock 기반)', () => {
 })
 
 describe('loadInvasionEvents — data/world/events.json 스키마', () => {
-  it('events.json을 읽어 방 풀·몹 풀·주기·count·방송을 담는다', () => {
+  it('events.json을 읽어 방 풀·몬스터 풀·주기·count·방송을 담는다', () => {
     const events = loadInvasionEvents()
     expect(events.length).toBeGreaterThanOrEqual(2)
     const chaos = events.find((e) => e.id === 'chaos-invasion')

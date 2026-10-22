@@ -5,7 +5,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * thaco_list 골든 옮겨 적기-diff fixture 생성기 — manual oracle.
+ * thaco_list 골든 옮겨 적기-diff fixture 생성기 — manual 오라클.
  *
  * 원본 `global.c:105`의 클래스×레벨 THAC0 13×20 테이블을 **독립 리터럴**로 옮겨 적어(옮겨 적기 pass 2)
  * 각 셀을 조회 케이스로 감싼다. SUT `thacoOf`는 `stats/tables.ts`(옮겨 적기 pass 1)를 읽으므로,

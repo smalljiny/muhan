@@ -84,7 +84,7 @@ describe('fromEmbedded', () => {
   })
 
   it('소스에 keys가 없으면 빈 배열이다(undefined 아님 — 매처 분기 방지)', () => {
-    // thief 픽스처는 keys를 갖지 않는다. 기준 JSON은 별칭 없는 크리처도 []를 실어 이 분기를
+    // thief 픽스처는 keys를 갖지 않는다. 기준 JSON은 별칭 없는 몬스터도 []를 실어 이 분기를
     // 타지 않으므로, `?? []` 계약은 이 합성 소스가 유일한 방어선이다.
     expect(fromEmbedded(thief, 135, 0).keys).toEqual([])
   })

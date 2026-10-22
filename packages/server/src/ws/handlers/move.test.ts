@@ -86,7 +86,7 @@ function makeTryMoveDeps(rooms: RoomNode[]) {
 // 이름을 해석하지 못하는 기본 리졸버 — 점유자를 다루지 않는 케이스의 잡음을 없앤다.
 const noNames = (): undefined => undefined
 
-// 방 200 도착 시 world:room 완성 기대값 — 출발 100→도착 200(출구 '서'), 점유자·아이템·크리처 없음.
+// 방 200 도착 시 world:room 완성 기대값 — 출발 100→도착 200(출구 '서'), 점유자·아이템·몬스터 없음.
 const ROOM_200_ARRIVAL_EVENT = {
   type: 'world:room',
   roomId: 200,
@@ -141,7 +141,7 @@ describe('createMoveHandler', () => {
       expect(event).toEqual(ROOM_200_ARRIVAL_EVENT)
     })
 
-    it('도착 방의 이름·설명·아이템·크리처를 싣는다', () => {
+    it('도착 방의 이름·설명·아이템·몬스터를 싣는다', () => {
       const dest = makeRoom(200, [makeExitTo('서', 100)], [], {
         name: '어두운 동굴',
         longDesc: '축축한 동굴이다.',
@@ -161,7 +161,7 @@ describe('createMoveHandler', () => {
       })
     })
 
-    it('도착 방의 숨김 아이템·숨김 크리처·비밀 출구를 걸러 낸다', () => {
+    it('도착 방의 숨김 아이템·숨김 몬스터·비밀 출구를 걸러 낸다', () => {
       const dest = makeRoom(200, [makeExitTo('서', 100), makeExitTo('숨은문', 300, exitFlags(XSECRT))], [], {
         items: [makeItem('obj-1', '녹슨 검'), makeItem('obj-2', '숨은 열쇠', flagsHex(OHIDDN))],
         creatures: [

@@ -2,7 +2,7 @@
  * carry — 소지 한계(A8 §8/§13)의 순수 predicate 기준 구현.
  *
  * 원본은 무게 상한(`object.c` `weight_obj` 재귀 + `player.c:1099` `max_weight`)과 개수 상한
- * (구매 200 `command7.c`, 획득/증여/몹구매 150)을 각 명령 핸들러에 흩어 검사한다. 이 모듈은
+ * (구매 200 `command7.c`, 획득/증여/몬스터 구매 150)을 각 명령 핸들러에 흩어 검사한다. 이 모듈은
  * 그 두 판정을 순수 boolean predicate 하나(`canCarry`)로 모으고, 재귀 무게 합(`weightOf`)을
  * 별도 순수 함수로 노출한다. 예외는 던지지 않는다 — 거부 처리(ShopRejectError)는 server 담당.
  *
@@ -48,7 +48,7 @@ export function weightOf(node: WeightNode): number {
   return n
 }
 
-/** 소지 검사 맥락 — 구매(buy)는 개수 상한 200, 나머지(획득·증여·몹구매)는 150. */
+/** 소지 검사 맥락 — 구매(buy)는 개수 상한 200, 나머지(획득·증여·몬스터 구매)는 150. */
 export type CarryMode = 'buy' | 'get' | 'give' | 'purchase'
 
 /** 소지자 상태 — 현재 소지 무게·인벤토리 개수·최대 소지량 산출용 스탯 컨텍스트. */

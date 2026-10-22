@@ -9,7 +9,7 @@ const COLLECTION_NAME = 'objects'
 const objectPatchSchema = objectSchema.partial()
 
 /**
- * 영속 오브젝트 인스턴스 저장소.
+ * 영속 아이템 인스턴스 저장소.
  *
  * ObjectInstance의 `_id`(합성 문자열)를 Mongo `_id`로 그대로 매핑한다 — 별도 매핑 계층
  * 없이 Mongo 문서가 곧 ObjectInstance다. 단일 소유권은 `owner`(discriminated union)로
@@ -52,7 +52,7 @@ export class ObjectRepository implements IRepository<ObjectInstance> {
   }
 
   /**
-   * 소유 오브젝트 집합을 `_id` 오름차순으로 조회한다.
+   * 소유 아이템 집합을 `_id` 오름차순으로 조회한다.
    *
    * 이 정렬은 인벤 서수(`비법서 2 연마`)의 **계약**이다. 근거·오라클 divergence는
    * `world/liveCharacterEntry.ts` 헤더가 단독으로 담당한다.

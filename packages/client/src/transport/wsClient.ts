@@ -82,7 +82,7 @@ export type WsError =
  * 스냅샷(`room`)이고, **`session`**은 command 상태 도달까지의 진입 대화 서브상태다(`phase`·
  * `characterList`·`activePrompt`·`lastError`·`characterId` — 전부 핸드셰이크 산출물).
  * 후속 월드 상태(스탯·인벤·채팅)는 `session`이 아니라 최상위에 놓거나 최상위 `world` 그룹으로
- * 묶는다 — 진입 대화가 아니라 서버 권위 상태이기 때문이다.
+ * 묶는다 — 진입 대화가 아니라 서버가 기준인 상태이기 때문이다.
  */
 export interface WsClientSnapshot {
   status: ConnectionStatus

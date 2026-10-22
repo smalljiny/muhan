@@ -76,7 +76,7 @@ export const FILLER_B = 'revert-filler-b'
 
 /** 출발 방 — 시드 캐릭터 클래스의 훈련방이다(§8.2 train이 여기서 실행된다). */
 export const ROOM_TRAIN = 1
-/** 도착 방 — all-zero flags라 이동 게이트 건틀릿을 통과한다. */
+/** 도착 방 — all-zero flags라 이동 게이트 검사를 통과한다. */
 export const ROOM_DEST = 2
 /** 두 방을 잇는 출구 이름(플래그 없음 = 모든 게이트 통과). */
 export const EXIT_EAST = '동'

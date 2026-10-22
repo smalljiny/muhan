@@ -6,7 +6,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * 아이템 수리(repair) 골든 fixture 생성기 — manual oracle의 독립 참조 구현(A8 §8 RREPAI, command8.c).
+ * 아이템 수리(repair) 골든 fixture 생성기 — manual 오라클의 독립 참조 구현(A8 §8 RREPAI, command8.c).
  *
  * 원본 `command8.c` repair의 핵심 역학(piety 보정 실패 굴림 + 성공 시 내구도 복원)을 참조
  * 구현(`referenceRepair`)으로 옮기고, 손 계산으로 확정한 8개 케이스를 fixture로 감싸

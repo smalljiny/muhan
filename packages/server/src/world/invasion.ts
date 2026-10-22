@@ -5,16 +5,16 @@ import { fromTemplate, defaultCreatureRng, type CreatureRng } from './creatureFa
 import type { SpawnTemplateIndex, InstanceIdAllocator } from './spawn.js'
 
 /**
- * invasion 침공 슬롯 — 데이터 정의 이벤트로 방/몹 범위에 대량 스폰하고 전역 방송한다
+ * invasion 침공 슬롯 — 데이터 정의 이벤트로 방/몬스터 범위에 대량 스폰하고 전역 방송한다
  * (플랜 T4.3·T4.4, A9 §2.3 update_monster/_two update.c:755·784, 결정 D2).
  *
- * 원본은 방/몹 번호 범위를 소스에 하드코딩(방 8000~8300·3601~3630, 몹 732~755·265~299, 4000·5000초)
+ * 원본은 방/몬스터 번호 범위를 소스에 하드코딩(방 8000~8300·3601~3630, 몬스터 732~755·265~299, 4000·5000초)
  * 했다 — 이것은 원작의 구현 방식이므로 신규 스택에서 `data/world/events.json`(hand-authored, converter 산출물
- * 아님) 데이터 정의로 독립시킨다. 침공이라는 게임 이벤트 자체(주기적 몹 물결 + 전역 알림)는 콘텐츠다.
+ * 아님) 데이터 정의로 독립시킨다. 침공이라는 게임 이벤트 자체(주기적 몬스터 물결 + 전역 알림)는 콘텐츠다.
  *
  * 이벤트마다 `intervalSec=periodSec`인 `WorldTickSlot` 하나를 만들어 반환한다 — 서로 다른 주기의
  * 멀티플렉싱은 WorldClock이 슬롯별 `tickSec % intervalSec` 게이트로 이미 담당하므로(worldClock.ts
- * 프레임워크 책임) 슬롯 내부에서 gcd·재게이팅을 재구현하지 않는다. 실행 시 count회 반복하며 방/몹을
+ * 프레임워크 책임) 슬롯 내부에서 gcd·재게이팅을 재구현하지 않는다. 실행 시 count회 반복하며 방/몬스터를
  * mrand로 뽑아(주입 seam) 팩토리 (b)로 인스턴스를 생성하고, 선택 방이 그래프에 없으면 스킵한다. 방송은 전역
  * 방송 실 연결(E7 미연결) 대신 주입 seam(기본 로컬 no-op)으로 넘긴다.
  */
@@ -27,7 +27,7 @@ export interface InvasionEvent {
   readonly periodSec: number
   /** 스폰 대상 방 번호 범위(mrand 선택). */
   readonly roomRange: { readonly min: number; readonly max: number }
-  /** 스폰 몹 번호 범위(mrand 선택). */
+  /** 스폰 몬스터 번호 범위(mrand 선택). */
   readonly mobRange: { readonly min: number; readonly max: number }
   /** 실행당 스폰 반복 횟수. */
   readonly count: number
@@ -40,7 +40,7 @@ export function loadInvasionEvents(worldRoot?: string): InvasionEvent[] {
   return loadWorldFile<InvasionEvent[]>('events.json', worldRoot)
 }
 
-/** 침공 방/몹 선택 mrand(min,max) seam. */
+/** 침공 방/몬스터 선택 mrand(min,max) seam. */
 export type InvasionRng = (min: number, max: number) => number
 
 /** 결정적 기본 rng — 항상 범위 최솟값을 고른다(단위 테스트 결정적 통과). */
@@ -58,11 +58,11 @@ export interface InvasionDeps {
   readonly events: readonly InvasionEvent[]
   /** 방 번호 → 방 노드 조회(그래프에 없으면 undefined → 스킵). */
   resolveRoom(roomId: number): RoomNode | undefined
-  /** 몹번호 → 템플릿 인덱스(팩토리 (b) 조회). */
+  /** 몬스터 번호 → 템플릿 인덱스(팩토리 (b) 조회). */
   readonly templates: SpawnTemplateIndex
   /** 방별 monotonic idx 발급기(D7). */
   readonly alloc: InstanceIdAllocator
-  /** 방/몹 선택 mrand seam(기본 min 선택). */
+  /** 방/몬스터 선택 mrand seam(기본 min 선택). */
   readonly rng?: InvasionRng
   /** carry/gold 랜덤화 seam(기본 결정적 identity). */
   readonly creatureRng?: CreatureRng

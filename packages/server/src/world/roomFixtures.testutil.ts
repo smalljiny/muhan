@@ -3,12 +3,12 @@ import { setFlag } from './door.js'
 import { F_SET } from './hexFlags.js'
 
 /**
- * 방·출구·아이템·크리처 픽스처 팩토리 — test-only.
+ * 방·출구·아이템·몬스터 픽스처 팩토리 — test-only.
  *
  * `projectRoomView`(roomView.test.ts)·`buildRoomSummary`(liveWorldBinding.test.ts)·
  * `createMoveHandler`(handlers/move.test.ts)·`liveWorldWiring.test.ts`가 각자 복사해 두던 동일
  * 픽스처 헬퍼를 여기 하나로 모은다. 두 flags 표현이 섞인다 — 출구는 바이트당 한 원소인
- * number[](door.ts hasFlag, `RoomNode`/`ExitEdge` 기준 폭 8바이트), 아이템·크리처는 16자 hex
+ * number[](door.ts hasFlag, `RoomNode`/`ExitEdge` 기준 폭 8바이트), 아이템·몬스터는 16자 hex
  * string(hexFlags.ts F_ISSET). 픽스처는 손으로 비트를 계산하지 않고 setFlag·F_SET 헬퍼로 만든다 —
  * 바이트 오프셋 실수를 원천 차단한다.
  *
@@ -23,7 +23,7 @@ export function exitFlags(...bits: number[]): number[] {
   return flags
 }
 
-/** 지정 비트들을 세팅한 아이템/크리처 flags(16자 hex string)를 만든다. */
+/** 지정 비트들을 세팅한 아이템/몬스터 flags(16자 hex string)를 만든다. */
 export function flagsHex(...bits: number[]): string {
   return bits.reduce((hex, bit) => F_SET(hex, bit), '0'.repeat(16))
 }
@@ -54,7 +54,7 @@ export function makeItem(
   return { instanceId, name, description: '', value: 0, flags, contains }
 }
 
-/** 크리처 픽스처. 기본 level=3 — 다른 값이 필요하면 overrides로 명시한다. */
+/** 몬스터 픽스처. 기본 level=3 — 다른 값이 필요하면 overrides로 명시한다. */
 export function makeCreature(
   instanceId: string,
   name: string,

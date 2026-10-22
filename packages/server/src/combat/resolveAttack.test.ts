@@ -441,7 +441,7 @@ describe('resolveAttack — 다중공격(초인 PUPDMG count 루프)', () => {
 })
 
 describe('resolveAttack — 이미 사망한 defender 진입 가드(stale/재진입 방어)', () => {
-  it('HP<1 크리처 defender: 굴림·피해·death seam·ledger 없이 no-op', () => {
+  it('HP<1 몬스터 defender: 굴림·피해·death seam·ledger 없이 no-op', () => {
     const player = makePlayer()
     const creature = makeCreature({ hpcur: -2, enemies: ['char-1'] }) // 이전 오버킬로 음수 HP
     // seqRng([]) — 어떤 굴림이든 시도하면 throw. 가드가 굴림 전에 차단해야 통과.

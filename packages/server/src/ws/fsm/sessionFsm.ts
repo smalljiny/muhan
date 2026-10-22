@@ -93,7 +93,7 @@ export const CREATE_PROMPT_IDS = {
 /** create 대화의 서브상태 단계. CREATE_PROMPT_IDS 키와 1:1 대응한다. */
 export type CreateStep = keyof typeof CREATE_PROMPT_IDS
 
-/** create 진행 중 누적되는 필드(서버 권위 — 클라 reply로 왕복시키지 않는다). */
+/** create 진행 중 누적되는 필드(서버가 기준 — 클라 reply로 왕복시키지 않는다). */
 export interface CreateCollected {
   name?: string
   gender?: number
@@ -175,7 +175,7 @@ export interface SessionLiveWorld {
   hydrate(characterId: string): Promise<LiveCharacter>
   place(live: LiveCharacter): void
   /**
-   * 방 뷰 파생 — world:room이 싣는 필드 전량(id·이름·설명·출구·점유자·아이템·크리처)을 돌려준다.
+   * 방 뷰 파생 — world:room이 싣는 필드 전량(id·이름·설명·출구·점유자·아이템·몬스터)을 돌려준다.
    * 반환 타입을 shared 와이어 계약에서 파생해 FSM이 셸 모듈 타입(`world/roomView.ts`)에 의존하지 않는다
    * (3층 경계 유지). 셸측 구현(`buildRoomSummary`)이 같은 계약에서 파생한 `RoomView`를 돌려 구조적으로 맞물린다.
    */

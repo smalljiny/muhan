@@ -5,7 +5,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * spell_fail 골든 옮겨 적기-diff fixture 생성기 — manual oracle.
+ * spell_fail 골든 옮겨 적기-diff fixture 생성기 — manual 오라클.
  *
  * 원본 `magic8.c:791-897`의 클래스별 chance switch를 **독립 리터럴**로 옮겨 적어(옮겨 적기 pass 2) 결정적
  * 굴림 n과 함께 성공/실패(boolean) 케이스로 감싼다. SUT `spellFail`(server/magic)은 spellFail.ts의

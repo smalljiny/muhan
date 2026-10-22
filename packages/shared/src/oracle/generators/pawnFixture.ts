@@ -5,7 +5,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * 전당포 판매(pawn/sell) 골든 fixture 생성기 — manual oracle의 독립 참조 구현(A8 §8, command7.c sell).
+ * 전당포 판매(pawn/sell) 골든 fixture 생성기 — manual 오라클의 독립 참조 구현(A8 §8, command7.c sell).
  *
  * 원본 `command7.c`의 판매 게이트(거부 매트릭스 + 1/250 이중 지급)를 참조 구현(`referencePawn`)으로
  * 옮기고, 손 계산으로 확정한 13개 케이스를 fixture로 감싸 `fixtures/pawn.json`에 기록한다. 판매가

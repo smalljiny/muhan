@@ -99,7 +99,7 @@ describe('buffDurationFixture — writeFixtureFile', () => {
 })
 
 describe('체크인된 buff/debuff_duration.json fixture', () => {
-  it('두 fixture가 goldenFixtureSchema를 통과하고 manual oracle이다', () => {
+  it('두 fixture가 goldenFixtureSchema를 통과하고 manual 오라클이다', () => {
     for (const name of ['buff_duration.json', 'debuff_duration.json']) {
       const url = new URL(`../fixtures/${name}`, import.meta.url)
       const parsed: unknown = JSON.parse(readFileSync(url, 'utf8'))

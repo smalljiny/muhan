@@ -16,7 +16,7 @@ import type { MarkCharacterDirty } from '../world/markCharacterDirty.js'
  *
  * ## 처리 순서가 load-bearing이다
  * `fireCreatureDeath`는 다음 순서를 지킨다:
- *   1. `ledgers.for(dead.instanceId)`로 이 크리처 원장을 읽어 `distributeCreatureDeath`에 넘긴다.
+ *   1. `ledgers.for(dead.instanceId)`로 이 몬스터 원장을 읽어 `distributeCreatureDeath`에 넘긴다.
  *   2. 기여자 경험치를 라이브 레지스트리에 적립한다.
  *   3. `onCreatureDeath`로 방에서 제거하고 리스폰 타이머를 리셋한다.
  *   4. `ledgers.discard(dead.instanceId)`로 원장을 버린다.
@@ -60,7 +60,7 @@ export interface DeathSeamLogger {
 /**
  * 사망 seam 조립 의존성(전역 금지 — 인자 주입).
  *
- * `liveRegistry`는 기여자 조회·교체 등록에 쓰는 두 메서드만 요구한다(최소 인터페이스). `ledgers`는 크리처별
+ * `liveRegistry`는 기여자 조회·교체 등록에 쓰는 두 메서드만 요구한다(최소 인터페이스). `ledgers`는 몬스터별
  * 원장 라우터로, 공격 누적에 쓴 것과 **같은 인스턴스**여야 한다 — 다른 인스턴스를 주면 원장이 비어
  * 보상이 0이 된다. `creatureDeathDeps`는 `onCreatureDeath`가 소유하는 템플릿·id 발급기·rng seam이다.
  */
@@ -106,7 +106,7 @@ export function assembleDeathSeams(deps: DeathSeamDeps): DeathSeams {
 
   return {
     fireCreatureDeath(dead, room, now) {
-      // (1) 이 크리처에 스코핑된 원장으로 보상을 계산한다. deps 슬롯이 빈 인터페이스라 `{}`를 넘긴다.
+      // (1) 이 몬스터에 스코핑된 원장으로 보상을 계산한다. deps 슬롯이 빈 인터페이스라 `{}`를 넘긴다.
       const distribution = distributeCreatureDeath(
         dead,
         room,

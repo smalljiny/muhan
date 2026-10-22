@@ -5,10 +5,10 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * 가격 배수 골든 fixture 생성기 — manual oracle의 독립 참조 구현(A8 §8).
+ * 가격 배수 골든 fixture 생성기 — manual 오라클의 독립 참조 구현(A8 §8).
  *
  * 원본 `command7.c:169`(구매)·`command7.c:258`(판매)·`command8.c:249`(수리)·
- * `command10.c:573`(몹구매)의 네 가격 공식을 참조 구현(`referencePrice`)으로 옮기고,
+ * `command10.c:573`(몬스터 구매)의 네 가격 공식을 참조 구현(`referencePrice`)으로 옮기고,
  * 손 계산으로 확정한 12개 케이스를 fixture로 감싸 `fixtures/price.json`에 기록한다.
  * 산술 기준은 런타임 `economy/priceConfig.ts`의 네 함수(직접 SUT 산술)에 둔다.
  *
@@ -77,7 +77,7 @@ type PriceCaseDraft = Omit<PriceCase, 'expected'>
  * 골든 케이스 12개를 구성한다. expected는 생성기 정상 경로대로 `referencePrice`로 채운다.
  * (테스트 측 Layer B 앵커는 이와 독립적으로 손 계산 하드 리터럴을 사용해 tautology를 차단한다.)
  *
- * 경계 커버리지: value<40(39)·판매 상한(200000 경계·250000 초과)·몹구매 하한(5·0)·중간값(100).
+ * 경계 커버리지: value<40(39)·판매 상한(200000 경계·250000 초과)·몬스터 구매 하한(5·0)·중간값(100).
  */
 export function buildCases(): PriceCase[] {
   const inputs: PriceCaseDraft[] = [

@@ -5,7 +5,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * spell store 직렬화 골든 fixture 생성기 — manual oracle.
+ * spell store 직렬화 골든 fixture 생성기 — manual 오라클.
  *
  * 원본 `mtype.h:570-571`의 S_ISSET/S_SET 비트 레이아웃을 **독립 리터럴로 옮겨 적어**(옮겨 적기 pass 2)
  * {setBits[], queryBit} → boolean 왕복 케이스로 감싼다. SUT `isKnown`/`setKnown`(shared/magic)은

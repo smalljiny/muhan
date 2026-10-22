@@ -1,7 +1,7 @@
 import type { CreatureInstance } from 'shared'
 
 /**
- * 크리처 인스턴스 팩토리 — 크리처 템플릿/embedded 몬스터를 라이브 `CreatureInstance`를 생성한다.
+ * 크리처 인스턴스 팩토리 — 몬스터 템플릿/embedded 몬스터를 라이브 `CreatureInstance`를 생성한다.
  *
  * 두 출처(spec §2, 플랜 T2.2):
  *   (a) `fromEmbedded` — 방 파일에 박힌 완전한 creature 구조체(빌더 커스터마이즈, `templateId=null`).
@@ -14,7 +14,7 @@ import type { CreatureInstance } from 'shared'
 
 /**
  * 인스턴스 생성 입력 소스의 최소 shape. 방 embedded 몬스터(rooms.json `monsters[]`, T2.0 전체 필드)와
- * 크리처 템플릿(creatures.json 엔트리)이 모두 구조적으로 이 타입을 만족한다(추가 필드 무시).
+ * 몬스터 템플릿(creatures.json 엔트리)이 모두 구조적으로 이 타입을 만족한다(추가 필드 무시).
  *
  * `CreatureInstance`와 겹치는 8개 스탯 필드는 `Pick`으로 파생해 자동 동기화한다 — 인스턴스 쪽
  * 필드 이름/타입이 바뀌면 이 입력 타입도 함께 이동해 구조적 호환 계약이 컴파일 시점에 유지된다.

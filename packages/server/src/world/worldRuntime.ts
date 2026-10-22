@@ -62,13 +62,13 @@ export interface WorldRuntimeDeps {
    */
   readonly spawnRng?: SpawnRng
   /**
-   * invasion 방/몹 선택 mrand seam. 미주입 시 `defaultInvasionRng`(항상 범위 min)이라 결정적으로
+   * invasion 방/몬스터 선택 mrand seam. 미주입 시 `defaultInvasionRng`(항상 범위 min)이라 결정적으로
    * **동일 방에 집중**된다 — 실 확률은 E8-2 RNG가 이 seam으로 주입해 범위 전역에 분산한다. invasion
    * 슬롯의 무조건 주기 스폰 특성상 이 seam이 결정적 stub이면 고정 방 누적이 발생한다(§Non-goals
    * forward note — E6 정리·E8-2 분산 전까지 상한 미도입).
    */
   readonly invasionRng?: InvasionRng
-  /** §3.5 게이트 통과 크리처 전투 디스패치(기본 no-op, E6이 대체). */
+  /** §3.5 게이트 통과 몬스터 전투 디스패치(기본 no-op, E6이 대체). */
   readonly onCombatTick?: OnCombatTick
   /** invasion 방송 seam(기본 no-op, E7이 전역 방송으로 대체). */
   readonly broadcast?: SpawnBroadcast
@@ -86,8 +86,8 @@ export interface WorldRuntime {
   readonly activeSet: ActiveSet
   /**
    * 방별 monotonic idx 발급기(D7). perm·random·invasion 3경로가 이미 공유하며, E6이 전투 사망을
-   * 연결할 때 `onCreatureDeath`/`onDeathSummon`이 **이 동일 인스턴스**를 재사용해야 소환 크리처
-   * instanceId가 스폰 크리처와 충돌하지 않는다(별도 발급기 생성 시 방별 `n`부터 중복 발급). D7 4경로
+   * 연결할 때 `onCreatureDeath`/`onDeathSummon`이 **이 동일 인스턴스**를 재사용해야 소환 몬스터
+   * instanceId가 스폰 몬스터와 충돌하지 않는다(별도 발급기 생성 시 방별 `n`부터 중복 발급). D7 4경로
    * 공유 계약을 조립 지점에서 닫기 위해 노출한다.
    */
   readonly alloc: InstanceIdAllocator

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { objectSchema, type ObjectInstance } from './index.js'
 
-// 유효한 오브젝트 인스턴스 문서 (캐릭터 소유).
+// 유효한 아이템 인스턴스 문서 (캐릭터 소유).
 function validObject(): ObjectInstance {
   return {
     _id: 'obj-1',

@@ -5,7 +5,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * spllv 전수등급 골든 fixture 생성기 — manual oracle.
+ * spllv 전수등급 골든 fixture 생성기 — manual 오라클.
  *
  * 원본 `magic1.c:212-235`의 spllv별 전수 권한 5-if 체인을 **독립 리터럴로 옮겨 적어**(옮겨 적기 pass 2)
  * {class, spllv} → boolean(전수 가능 여부) 케이스로 감싼다. SUT `canTeachSpllv`(server/magic/learning)는

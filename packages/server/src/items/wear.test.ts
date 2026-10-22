@@ -92,7 +92,7 @@ describe('wearGate', () => {
   it('wearflag===WIELD이면 rejected (무기는 wear 대상 아님)', () => {
     expect(wearGate({ ...baseParams(), wearflag: WIELD }).kind).toBe('rejected')
   })
-  it('wearflag===HELD이면 rejected (든 물건은 wear 대상 아님)', () => {
+  it('wearflag===HELD이면 rejected (든 아이템은 wear 대상 아님)', () => {
     expect(wearGate({ ...baseParams(), wearflag: HELD }).kind).toBe('rejected')
   })
 
@@ -575,7 +575,7 @@ describe('readyGate — 오라클 command3.c:691~ 순서', () => {
   })
 
   // ── ⑫ ONEWEV 귀속 ──────────────────────────────────────────────────────────
-  it('⑫ ONEWEV + isBoundOwner=false면 rejected (다른 사람의 물건)', () => {
+  it('⑫ ONEWEV + isBoundOwner=false면 rejected (다른 사람의 아이템)', () => {
     const p = { ...baseReadyParams(), flags: F_SET('', ONEWEV), isBoundOwner: false }
     expect(readyGate(p).kind).toBe('rejected')
   })

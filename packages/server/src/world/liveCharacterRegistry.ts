@@ -20,7 +20,7 @@ import type { Character, ObjectInstance } from 'shared'
  * 분기하는 것을 구조적으로 막는다). `character`는 라이브 가변 문서로, 이 토픽은 `currentRoom`만
  * in-place 갱신하고 HP/MP/spells/realm 등 나머지 필드는 로드되나 dormant다.
  *
- * `inventory`는 소유 오브젝트 인스턴스의 라이브 사본이다. **필수 필드로 둔다** — optional이면
+ * `inventory`는 소유 아이템 인스턴스의 라이브 사본이다. **필수 필드로 둔다** — optional이면
  * 로드를 빠뜨린 엔트리가 조용히 "빈 인벤"으로 관측되어, 소지품이 있는 캐릭터가 아무것도 못 찾는
  * 상태가 타입 검사를 통과한다. 필수로 두면 엔트리를 만드는 모든 경로가 인벤 출처를 진술하게 된다.
  *

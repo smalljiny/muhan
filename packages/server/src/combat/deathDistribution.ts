@@ -44,13 +44,13 @@ import { F_ISSET, MTRADE } from '../world/hexFlags.js'
  *  8. 인벤토리 드롭: dead.inventory의 각 ItemInstance를 기존 instanceId 유지한 채 담는다(MTRADE면 제외).
  *
  * ## ★ ledger 스코핑 전제 (#121 라우팅 · #99 타입 스코핑)
- * 이 resolver는 `ledger.get(playerId)`를 **이 죽은 크리처(dead)에 가해진** 데미지로 가정하나, 검증하지
+ * 이 resolver는 `ledger.get(playerId)`를 **이 죽은 몬스터(dead)에 가해진** 데미지로 가정하나, 검증하지
  * 않는다. 그러나 현재 `DamageLedger = Map<attackerId, number>`(enmity.ts)는 **attackerId만 키이고
- * defender-agnostic**이다 — resolveAttack이 모든 크리처 defender에 대해 이 단일 ledger에 누적하므로,
+ * defender-agnostic**이다 — resolveAttack이 모든 몬스터 defender에 대해 이 단일 ledger에 누적하므로,
  * 플레이어가 몬스터 B에 준 데미지가 attackerId 단일 키로 합산돼 몬스터 A 사망 보상(exp·alignment·
  * groupkill 카운트)을 부풀린다(multi-monster 전투에서 관측). 따라서 호출자는 반드시
- * **per-creature ledger를 라우팅**해야 한다 — 아니면 한 크리처 사망이 다른 크리처에 가한 데미지로
- * 보상을 인플레한다. 이 라우팅은 `combat/creatureLedgers.ts`(#121)가 담당한다 — 크리처 instanceId별
+ * **per-creature ledger를 라우팅**해야 한다 — 아니면 한 몬스터 사망이 다른 몬스터에 가한 데미지로
+ * 보상을 인플레한다. 이 라우팅은 `combat/creatureLedgers.ts`(#121)가 담당한다 — 몬스터 instanceId별
  * `DamageLedger`를 캐시해 `for(instanceId)`로 내주고 사망 시 `discard`한다. 반면 ledger 타입 자체를
  * defender-scoped로 바꾸는 것은 enmity.ts·resolveAttack·combatTick 파급의 인프라 변경이라 여전히
  * #99 담당이다. 아래 계약 테스트(`ledger 스코핑 계약`)가 이 전제를 실행 가능한 형태로 드러낸다.
@@ -59,7 +59,7 @@ import { F_ISSET, MTRADE } from '../world/hexFlags.js'
  *  - MPERMT 리스폰·MSUMMO 소환은 world/creatureDeath.ts onCreatureDeath 담당(중복 구현 금지).
  *  - exp/alignment 실 누적·±1000 클램프·drops의 room.items push·라이브 조립은 #99.
  *  - ledger 타입의 defender 스코핑은 #99 — 위 "ledger 스코핑 전제" 참조. 이 resolver는 주어진
- *    ledger를 이 크리처 데미지로 신뢰만 하며, 스코핑 라우팅은 `combat/creatureLedgers.ts`가 담당한다.
+ *    ledger를 이 몬스터 데미지로 신뢰만 하며, 스코핑 라우팅은 `combat/creatureLedgers.ts`가 담당한다.
  */
 
 /** 개별 기여자 exp/alignment 보상(누적 미적용 — delta만). */
@@ -105,7 +105,7 @@ function makeGoldDrop(dead: CreatureInstance): ItemInstance {
  * 몬스터 사망 시 exp 분배·전리품 드롭을 계산해 반환한다(무변형). ledger는 명시 파라미터로 수령하며
  * fireCreatureDeath 시그니처는 무변경이다(Q2 — 라이브 조립 #99 보류).
  *
- * ★ 전제: 전달된 ledger는 **이 죽은 크리처에 스코핑된** 데미지여야 한다(위 "ledger 스코핑 전제" 참조).
+ * ★ 전제: 전달된 ledger는 **이 죽은 몬스터에 스코핑된** 데미지여야 한다(위 "ledger 스코핑 전제" 참조).
  * 현재 DamageLedger는 attackerId-only라 defender-agnostic이므로, 호출자가 `createCreatureLedgers`로
  * per-creature ledger를 라우팅하지 않으면 multi-monster 전투에서 보상이 인플레된다. resolver는 검증
  * 없이 신뢰만 한다.

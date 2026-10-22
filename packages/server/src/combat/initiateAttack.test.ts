@@ -130,7 +130,7 @@ function roomWith(...bits: number[]): RoomNode {
 }
 
 describe('initiateAttack — 게이트 거부(개시 차단)', () => {
-  it('무적 게이트 거부: MUNKIL 크리처면 resolveAttack 미호출 + 부수효과 불변', () => {
+  it('무적 게이트 거부: MUNKIL 몬스터면 resolveAttack 미호출 + 부수효과 불변', () => {
     const attacker = toCombatant(makePlayer())
     const defender = makeCreature({ flags: F_SET('', MUNKIL) })
     // seqRng([]) — resolveAttack가 굴림을 시도하면 즉시 throw.
@@ -161,7 +161,7 @@ describe('initiateAttack — 게이트 거부(개시 차단)', () => {
 })
 
 describe('initiateAttack — 게이트 통과(개시 성공)', () => {
-  it('크리처 defender 통과: resolveAttack 1회 + 적대 등록 + cooldownIncrement 0', () => {
+  it('몬스터 defender 통과: resolveAttack 1회 + 적대 등록 + cooldownIncrement 0', () => {
     const attacker = toCombatant(makePlayer())
     const defender = makeCreature({ hpcur: 30 })
     // seq: hit=20, mdice=5, crit=50(p=0 미크리), fumble=50, durability=2
@@ -242,11 +242,11 @@ describe('initiateAttack — 게이트 통과(개시 성공)', () => {
 
 /**
  * Story 10(T10.1 ripple) — resolveAttack가 fire-free가 되면서 initiateAttack이 death 실행 책임을 진다.
- * 오프너가 크리처를 죽이면 initiateAttack이 스스로 `if(outcome.died) fireDeath`를 호출해야 하며,
+ * 오프너가 몬스터를 죽이면 initiateAttack이 스스로 `if(outcome.died) fireDeath`를 호출해야 하며,
  * 안 그러면 오프너 킬이 loot/exp/death를 silently 드롭한다. 단타 semantics는 관측상 즉시 실행으로 동일하다.
  */
 describe('initiateAttack — 오프너 킬 death 실행 (T10.1 ripple)', () => {
-  it('오프너가 크리처를 죽이면 fireCreatureDeath 정확히 1회 + died=true', () => {
+  it('오프너가 몬스터를 죽이면 fireCreatureDeath 정확히 1회 + died=true', () => {
     const attacker = toCombatant(makePlayer())
     const defender = makeCreature({ hpcur: 3 })
     const room = makeRoom({ creatures: [] })
@@ -286,13 +286,13 @@ describe('initiateAttack — 오프너 킬 death 실행 (T10.1 ripple)', () => {
 
 /**
  * Story 10(T10.3) — 무적 게이트 분해. 오라클 command5.c는 add_enm_crt(:153, 적대 등록)를 MUNKIL 거부(:148)
- * 뒤·MMGONL(:160)·MENONL(:167) 거부 앞에 두어, MMGONL/MENONL 크리처를 물리 공격하면 타격은 거부돼도
+ * 뒤·MMGONL(:160)·MENONL(:167) 거부 앞에 두어, MMGONL/MENONL 몬스터를 물리 공격하면 타격은 거부돼도
  * aggro는 등록돼 몬스터가 이후 틱에 반격한다. 게이트를 2단계로 분해한다:
  *   - MUNKIL = pre-registerEnemy 거부(aggro 미등록).
  *   - MMGONL·MENONL = post-registerEnemy 거부(aggro 등록·물리 공격만 실패).
  */
 describe('initiateAttack — 무적 게이트 분해 (T10.3)', () => {
-  it('MMGONL 크리처: 물리 공격 실패하나 registerEnemy로 aggro는 등록된다', () => {
+  it('MMGONL 몬스터: 물리 공격 실패하나 registerEnemy로 aggro는 등록된다', () => {
     const attacker = toCombatant(makePlayer())
     const defender = makeCreature({ flags: F_SET('', MMGONL) })
     // seqRng([]) — resolveAttack가 굴림을 시도하면 throw(post-gate가 공격 전 차단해야 통과).
@@ -308,7 +308,7 @@ describe('initiateAttack — 무적 게이트 분해 (T10.3)', () => {
     expect(creatureDeaths).toHaveLength(0)
   })
 
-  it('MENONL 크리처 + 비마법무기(class<CARETAKER): 공격 실패하나 aggro 등록', () => {
+  it('MENONL 몬스터 + 비마법무기(class<CARETAKER): 공격 실패하나 aggro 등록', () => {
     // class=4(<CARETAKER=10), weapon adjustment=0(비마법) → MENONL 관통 불가.
     const attacker = toCombatant(makePlayer({ class: 4, weapon: { ndice: 1, sdice: 6, pdice: 0, adjustment: 0, proficiency: 0 } }))
     const defender = makeCreature({ flags: F_SET('', MENONL) })
@@ -321,7 +321,7 @@ describe('initiateAttack — 무적 게이트 분해 (T10.3)', () => {
     expect(defender.enemies).toContain('char-1') // aggro 등록
   })
 
-  it('MUNKIL 크리처: pre-거부라 registerEnemy도 하지 않는다 (aggro 미등록)', () => {
+  it('MUNKIL 몬스터: pre-거부라 registerEnemy도 하지 않는다 (aggro 미등록)', () => {
     const attacker = toCombatant(makePlayer())
     const defender = makeCreature({ flags: F_SET('', MUNKIL) })
     const { ctx } = makeCtx([])

@@ -94,7 +94,7 @@ function resolveWieldedWeapon(paired: readonly EquippedPair[]): WeaponDamage | n
 /**
  * 라이브 캐릭터에서 전투상태를 조립한다. 입력을 변형하지 않고 새 객체를 반환한다.
  *
- * @param live 라이브 캐릭터 엔트리(캐릭터 문서 + 소유 오브젝트 인스턴스).
+ * @param live 라이브 캐릭터 엔트리(캐릭터 문서 + 소유 아이템 인스턴스).
  * @param objectTemplates objnum → 템플릿 인덱스. 미해석 인스턴스는 조용히 빠진다(`pairObjects` 정책).
  * @param flags P-flag hex 스냅샷. 연결 계층이 `composeCharacterFlags(character, now)`로 합성해 주입한다.
  * @param carry 넘겨줄 가변 3필드. 최초 조립에는 생략한다(캐릭터 문서 HP/MP + nextAttackAt 0).

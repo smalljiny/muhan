@@ -5,7 +5,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * mprofic 골든 옮겨 적기-diff fixture 생성기 — manual oracle.
+ * mprofic 골든 옮겨 적기-diff fixture 생성기 — manual 오라클.
  *
  * 원본 `player.c:1204-1261`의 클래스별 prof_array[12] 임계 테이블 + 십분위 보간을 **독립 리터럴**로
  * 옮겨 적어(옮겨 적기 pass 2) {class, realm[], index} 조회 케이스로 감싼다. SUT `mprofic`(server/magic)은

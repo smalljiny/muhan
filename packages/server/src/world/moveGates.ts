@@ -2,9 +2,9 @@ import type { ExitEdge, RoomNode } from 'shared'
 import { hasFlag, XLOCKD, XCLOSD } from './door.js'
 
 /**
- * 이동 게이트 건틀릿 — A4 §1의 순차 거부 검사를 순수 predicate 배열로 이식한다.
+ * 이동 게이트 검사 — A4 §1의 순차 거부 검사를 순수 predicate 배열로 이식한다.
  *
- * oracle `docs/notes/game-analysis-20260625/a4-movement-rooms.md` §1 + spec §3.3:
+ * 오라클 `docs/notes/game-analysis-20260625/a4-movement-rooms.md` §1 + spec §3.3:
  *   원본 `move()`(command2.c:284)는 정규화된 출구명 이후 ~20단 게이트를 순서대로 평가하고,
  *   하나라도 걸리면 즉시 거부·이동 취소한다. 본 이식은 그 순서(콘텐츠)를 보존하되 각 게이트를
  *   부수효과 없는 순수 predicate로 만든다. 강제 게이트는 실 거부하고, 입력 에픽 대기 게이트는
@@ -51,7 +51,7 @@ export type MoveGateActor = {
 }
 
 /**
- * 게이트 건틀릿 입력. exit·targetRoom은 이미 해석된 상태로 주입된다(출구 선택·대상 해석은
+ * 게이트 검사 입력. exit·targetRoom은 이미 해석된 상태로 주입된다(출구 선택·대상 해석은
  * tryMove의 mode 분기 담당). currentHour는 G2 gameTime.currentHour() 주입값(0~23)이다.
  * targetRoom이 undefined면 dangling(대상 방 없음)이다.
  */
@@ -118,7 +118,7 @@ export function timeGate(input: MoveGateInput): MoveGateResult {
  * 근사한다. 투명 플레이어가 방에 있으면 원본보다 빨리 만원 판정될 수 있다 — E5 가시성
  * 필터 도입 후 정정한다.
  *
- * targetRoom undefined는 dangling 게이트가 선행 거부하므로 건틀릿 경로에선 도달 불가다.
+ * targetRoom undefined는 dangling 게이트가 선행 거부하므로 게이트 검사 경로에선 도달 불가다.
  * 직접 호출 시의 방어로 undefined면 통과한다(없음을 만원으로 오판하지 않는다).
  */
 export function capacityGate(input: MoveGateInput): MoveGateResult {
@@ -140,7 +140,7 @@ export function capacityGate(input: MoveGateInput): MoveGateResult {
  */
 const passStub = (): MoveGateResult => PASS
 
-// ── 건틀릿 배열 (spec §3.3 순서) ──────────────────────────────────────────────
+// ── 게이트 검사 배열 (spec §3.3 순서) ──────────────────────────────────────────────
 
 /** 이름 붙은 게이트. name은 §3.3 행 식별자로 순서 검증에 노출된다. */
 interface MoveGate {
@@ -149,7 +149,7 @@ interface MoveGate {
 }
 
 /**
- * 게이트 건틀릿 — spec §3.3 표 순서(1b~20)를 배열 순서로 인코딩한다. 각 stub 항목의 주석은
+ * 게이트 검사 — spec §3.3 표 순서(1b~20)를 배열 순서로 인코딩한다. 각 stub 항목의 주석은
  * 실 강제를 붙일 대기 에픽이다. 시간(7·8)·성별(10·11)·레벨(15·16)·패거리결혼(18·19·20)은
  * §3.3가 묶은 행 단위로 한 항목씩 배치한다.
  */
@@ -171,11 +171,11 @@ const MOVE_GATE_GAUNTLET: readonly MoveGate[] = [
   { name: '패거리결혼', evaluate: passStub }, // 18·19·20 RFAMIL/RONFML/RONMAR — E5/E7
 ]
 
-/** 건틀릿 게이트 이름을 §3.3 순서대로 나열한다 — 순서 검증 테스트에 노출한다. */
+/** 게이트 검사의 게이트 이름을 §3.3 순서대로 나열한다 — 순서 검증 테스트에 노출한다. */
 export const MOVE_GATE_ORDER: readonly string[] = MOVE_GATE_GAUNTLET.map((gate) => gate.name)
 
 /**
- * 이동 게이트 건틀릿을 순차 평가한다. §3.3 순서대로 각 게이트를 호출하고, 첫 거부에서
+ * 이동 게이트 검사를 순차 평가한다. §3.3 순서대로 각 게이트를 호출하고, 첫 거부에서
  * 즉시 정지해 그 거부 결과를 반환한다. 모든 게이트를 통과하면 { ok: true }를 반환한다.
  * 순수 함수 — 입력을 변형하지 않는다.
  */

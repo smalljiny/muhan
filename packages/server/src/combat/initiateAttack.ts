@@ -8,7 +8,7 @@ import { registerEnemy } from './enmity.js'
  *
  * 오프너 = 개시 게이트(Story 6) → resolveAttack 1회(Story 5/8) → 적대 등록(Story 7)의 순수 합성이다.
  * 자체 스탯/피해/게이트 재구현 없이 세 하위 모듈을 소비한다. 게이트가 막으면 resolveAttack를 호출하지
- * 않고, 통과하면 근접 1타를 굴린 뒤 대상 크리처가 공격자를 적으로 등록한다(다음 틱부터 combatTick 반격
+ * 않고, 통과하면 근접 1타를 굴린 뒤 대상 몬스터가 공격자를 적으로 등록한다(다음 틱부터 combatTick 반격
  * 실행, add_enm_crt).
  *
  * attacker를 PlayerCombatant로 타입 고정한다 — 오라클 attack 명령은 플레이어 전용이고, 몬스터 개시는
@@ -32,7 +32,7 @@ export type InitiateResult =
 /**
  * 플레이어 오프너 — 개시 게이트 → resolveAttack 1회 → death 실행(fire-free ripple) → 적대 등록.
  *
- * defender가 크리처면 무적 게이트를 pre/post 2단계로 적용한다(Story 10 T10.3): MUNKIL(pre)은 registerEnemy
+ * defender가 몬스터면 무적 게이트를 pre/post 2단계로 적용한다(Story 10 T10.3): MUNKIL(pre)은 registerEnemy
  * 전에 거부(aggro 미등록), MMGONL/MENONL(post)은 registerEnemy 후에 거부(aggro 등록·물리 공격만 실패).
  * defender가 플레이어면 checkPvpGate(3중 게이트)를 적용한다. 게이트 통과 시 근접 1타를 굴린다.
  *
@@ -61,7 +61,7 @@ export function initiateAttack(
     return { ok: true, outcome, cooldownIncrement: gate.cooldownIncrement }
   }
 
-  // 크리처 경로 — 무적 게이트 2단계 분해(T10.3).
+  // 몬스터 경로 — 무적 게이트 2단계 분해(T10.3).
   //
   // pre-단계(MUNKIL): registerEnemy 전에 거부한다 — 절대 해칠 수 없는 대상은 aggro조차 등록하지 않는다
   // (오라클 command5.c:146, add_enm_crt(:153) 이전).
@@ -70,11 +70,11 @@ export function initiateAttack(
 
   // 적대 등록을 피해 해석보다 먼저 수행한다 — 오라클 순서(add_enm_crt command5.c:153 → 다중공격/피해
   // :207+)를 복원한다. resolveAttack은 `enemies`를 읽지 않으므로(HP·flags·스탯·ledger만) 순서 이동은
-  // 행위 불변이다. 대상 크리처가 공격자를 적으로 등록해 다음 틱부터 combatTick이 반격을 실행한다.
+  // 행위 불변이다. 대상 몬스터가 공격자를 적으로 등록해 다음 틱부터 combatTick이 반격을 실행한다.
   registerEnemy(defender.instance, attacker.state.characterId)
 
   // post-단계(MMGONL/MENONL): registerEnemy 후에 거부한다 — 오라클 add_enm_crt(:153)가 MMGONL(:160)·
-  // MENONL(:167) 거부 앞이라, MMGONL/MENONL 크리처를 물리 공격하면 타격은 거부돼도 aggro는 등록돼
+  // MENONL(:167) 거부 앞이라, MMGONL/MENONL 몬스터를 물리 공격하면 타격은 거부돼도 aggro는 등록돼
   // 몬스터가 이후 틱에 반격한다(criterion 3). Story 6의 단일 번들 게이트가 못 하던 인터리브를 재현한다.
   const post = checkTargetImmunityPost({
     attacker: { class: attacker.state.class, weapon: attacker.state.weapon },

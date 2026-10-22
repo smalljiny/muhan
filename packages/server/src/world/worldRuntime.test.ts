@@ -254,7 +254,7 @@ describe('createWorldRuntime — boot 통합(기존 슬롯 회귀 + creatureTick
   it('runtime 슬롯이 gameTime·checkExits와 한 클록에 공존하고 creatureTick이 활성 방을 처리한다', async () => {
     const { createGameTime } = await import('./gameTime.js')
     const room = makeRoom({ roomId: 70, occupants: new Set(['p1']) })
-    // 도래(nextActionAt 미설정) 크리처 1마리 — creatureTick이 처리하면 nextActionAt이 세팅된다.
+    // 도래(nextActionAt 미설정) 몬스터 1마리 — creatureTick이 처리하면 nextActionAt이 세팅된다.
     room.creatures.push({
       instanceId: '70:c0',
       templateId: null,
@@ -301,7 +301,7 @@ describe('createWorldRuntime — boot 통합(기존 슬롯 회귀 + creatureTick
     runtime.onRoomEntered(room, { characterId: 'p1', currentRoomId: 70 })
     expect(runtime.activeSet.activatedAt(70)).toBe(3)
 
-    // 다음 tick에 creatureTick이 활성 방의 도래 크리처를 처리해 nextActionAt을 세팅한다.
+    // 다음 tick에 creatureTick이 활성 방의 도래 몬스터를 처리해 nextActionAt을 세팅한다.
     fake.tick(1) // tickSec=4
     expect(room.creatures[0]?.nextActionAt).toBe(4 + 3) // dex 14<20 → cadence 3
   })

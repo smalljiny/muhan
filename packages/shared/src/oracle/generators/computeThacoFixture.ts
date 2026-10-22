@@ -7,7 +7,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * compute_thaco(명중·THAC0) 골든 fixture 생성기 — manual oracle의 독립 참조 구현.
+ * compute_thaco(명중·THAC0) 골든 fixture 생성기 — manual 오라클의 독립 참조 구현.
  *
  * 원본 `player.c:1001`의 THAC0 공식을 참조 구현(`referenceComputeThaco`)으로 옮기고,
  * 손 계산으로 확정한 9개 케이스를 fixture로 감싸 `fixtures/compute_thaco.json`에 기록한다.

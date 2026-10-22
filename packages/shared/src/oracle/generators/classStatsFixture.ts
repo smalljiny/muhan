@@ -5,7 +5,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * class_stats 골든 옮겨 적기-diff fixture 생성기 — manual oracle.
+ * class_stats 골든 옮겨 적기-diff fixture 생성기 — manual 오라클.
  *
  * 원본 `global.c:37`의 클래스 성장 스탯 13×7 테이블을 **독립 리터럴**로 옮겨 적어(옮겨 적기 pass 2)
  * 각 셀을 조회 케이스로 감싼다. SUT `classStatOf`는 `stats/tables.ts`(옮겨 적기 pass 1)를 읽으므로,

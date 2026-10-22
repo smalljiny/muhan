@@ -6,11 +6,11 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * compute_ac(방어도) 골든 fixture 생성기 — manual oracle.
+ * compute_ac(방어도) 골든 fixture 생성기 — manual 오라클.
  *
  * 원본 `player.c:971`의 방어도 공식을 참조 구현(`referenceComputeAc`)으로 옮기고,
  * 손 계산으로 확정한 7개 케이스를 fixture로 감싸 `fixtures/compute_ac.json`에 기록한다.
- * oracle 출처는 `player.c:971`(분석 노트 `a5-combat.md:184`).
+ * 오라클 출처는 `player.c:971`(분석 노트 `a5-combat.md:184`).
  *
  * ## 재생성 (수동 트리거)
  * `expected`·`generatedAt`은 체크인 후 frozen이며, 회귀 테스트 중 자동 재생성은 없다.

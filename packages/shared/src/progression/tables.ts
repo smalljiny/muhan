@@ -1,11 +1,11 @@
 /**
  * progression/tables — 무한 레벨링 exp 곡선의 정적 룩업 테이블 단일 물리 출처.
  *
- * 원본 C 전역 상수 `global.c:129`의 `long needed_exp[]`(128칸)를 32비트 oracle에서
+ * 원본 C 전역 상수 `global.c:129`의 `long needed_exp[]`(128칸)를 32비트 오라클에서
  * 그대로 옮겨 적는다. 순수 데이터 모듈이며 런타임 I/O import(`node:fs` 등)를 절대 포함하지
  * 않는다 — 서버·클라이언트 어느 쪽에서도 안전하게 import된다.
  *
- * ## oracle 출처
+ * ## 오라클 출처
  * - `needed_exp[128]` — `global.c:129` (레벨 승급 누적 exp 임계). `neededExp`/`expToLevel`이
  *   재사용한다.
  * - `level_cycle[13][10]` — `global.c:78` (레벨업 능력치 성장 대상 순환). `upLevel`/`downLevel`이

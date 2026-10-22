@@ -5,7 +5,7 @@ import type { WorldTickSlot } from './worldClock.js'
 /**
  * check_exits 스윕 — 출구 타이머 자동 재잠금/재닫힘을 WorldClock 슬롯으로 이식한 순수 팩토리.
  *
- * oracle `docs/notes/game-analysis-20260625/a4-movement-rooms.md` §3(room.c:469) 이식:
+ * 오라클 `docs/notes/game-analysis-20260625/a4-movement-rooms.md` §3(room.c:469) 이식:
  *   `check_exits()`는 `XLOCKS`/`XCLOSS`(능력) 출구가 `ltime + interval < now`이면 자동으로
  *   `XLOCKD`/`XCLOSD`(상태)를 재설정한다. 즉 열고 들어간 문은 interval초 후 다시 닫히고
  *   잠긴다 — 출구의 `ltime`이 이 타이밍을 인코딩한다(A1 lasttime 모델과 동형).

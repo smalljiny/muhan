@@ -68,7 +68,7 @@ describe('createCreatureTick — 슬롯 계약', () => {
 })
 
 describe('next-action 도래 게이트 (FakeClock 기반)', () => {
-  it('도래 크리처만 처리하고 비도래는 건드리지 않는다', () => {
+  it('도래 몬스터만 처리하고 비도래는 건드리지 않는다', () => {
     const clock = new FakeClock()
     const world = new WorldClock({ clock })
     const activeSet = createActiveSet()
@@ -83,9 +83,9 @@ describe('next-action 도래 게이트 (FakeClock 기반)', () => {
 
     const c0 = room.creatures.find((c) => c.instanceId === '1:c0')
     const c1 = room.creatures.find((c) => c.instanceId === '1:c1')
-    // 도래 크리처는 재스케줄되어 nextActionAt이 미래로 이동한다(dex14 → +3).
+    // 도래 몬스터는 재스케줄되어 nextActionAt이 미래로 이동한다(dex14 → +3).
     expect(c0?.nextActionAt).toBeGreaterThan(2)
-    // 비도래 크리처는 그대로다.
+    // 비도래 몬스터는 그대로다.
     expect(c1?.nextActionAt).toBe(1000)
   })
 
@@ -107,7 +107,7 @@ describe('next-action 도래 게이트 (FakeClock 기반)', () => {
 })
 
 describe('autonomic 상태 적용', () => {
-  it('재생 결과가 방 크리처에 반영된다(활성 내내)', () => {
+  it('재생 결과가 방 몬스터에 반영된다(활성 내내)', () => {
     const activeSet = createActiveSet()
     const c = makeCreature({ hpcur: 1, hpmax: 100, lastRegenAt: 0, nextActionAt: 0 })
     const room = makeRoom({ creatures: [c] })
@@ -132,7 +132,7 @@ describe('autonomic 상태 적용', () => {
     expect(room.creatures[0]?.hpcur).toBe(11) // 소급되면 훨씬 큼
   })
 
-  it('scavenge가 방 아이템을 크리처 인벤토리로 옮기고 방에서 제거한다', () => {
+  it('scavenge가 방 아이템을 몬스터 인벤토리로 옮기고 방에서 제거한다', () => {
     const activeSet = createActiveSet()
     const item = makeItem('금화', '0000000000000000')
     const c = makeCreature({ flags: F_SET('0000000000000000', MSCAVE), lastScavengeAt: 0, nextActionAt: 0 })
@@ -146,7 +146,7 @@ describe('autonomic 상태 적용', () => {
     expect(F_ISSET(room.creatures[0]?.flags ?? '', MHASSC)).toBe(true)
   })
 
-  it('wander-out은 크리처를 방에서 제거하고 onCombatTick을 호출하지 않는다', () => {
+  it('wander-out은 몬스터를 방에서 제거하고 onCombatTick을 호출하지 않는다', () => {
     const activeSet = createActiveSet()
     const onCombatTick = vi.fn()
     const c = makeCreature({ lastWanderAt: 0, nextActionAt: 0 })

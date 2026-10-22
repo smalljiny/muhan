@@ -172,7 +172,7 @@ describe('onCreatureDeath — perm 리스폰 타이머 리셋', () => {
 })
 
 describe('onCreatureDeath — 활성 집합·방 creatures[] 제거', () => {
-  it('죽은 크리처를 room.creatures에서 제거한다', () => {
+  it('죽은 몬스터를 room.creatures에서 제거한다', () => {
     const dead = creature({ instanceId: '50:c1', name: '고정몹' })
     const survivor = creature({ instanceId: '50:c0', name: '생존몹' })
     const room = makeRoom({ creatures: [survivor, dead] })
@@ -184,7 +184,7 @@ describe('onCreatureDeath — 활성 집합·방 creatures[] 제거', () => {
     expect(room.creatures.includes(dead)).toBe(false)
   })
 
-  it('room.creatures에 없는 크리처(이미 제거됨)여도 안전하다', () => {
+  it('room.creatures에 없는 몬스터(이미 제거됨)여도 안전하다', () => {
     const dead = creature({ instanceId: '50:c9' })
     const room = makeRoom({ creatures: [] })
 
@@ -194,7 +194,7 @@ describe('onCreatureDeath — 활성 집합·방 creatures[] 제거', () => {
 })
 
 describe('onDeathSummon — MSUMMO 소환', () => {
-  it('MSUMMO 크리처 사망 시 special 몹번호로 1마리 소환한다', () => {
+  it('MSUMMO 몬스터 사망 시 special 몬스터 번호로 1마리 소환한다', () => {
     const room = makeRoom({ creatures: [] })
     const dead = creature({ flags: F_SET(EMPTY_FLAGS, MSUMMO), special: 123 })
     const summoned = onDeathSummon(dead, room, 700, deps())
@@ -205,7 +205,7 @@ describe('onDeathSummon — MSUMMO 소환', () => {
     expect(room.creatures[0]?.templateId).toBe(123)
   })
 
-  it('소환 크리처 타이머를 소환 시각(now) 기준으로 초기화한다', () => {
+  it('소환 몬스터 타이머를 소환 시각(now) 기준으로 초기화한다', () => {
     const room = makeRoom({ creatures: [] })
     const dead = creature({ flags: F_SET(EMPTY_FLAGS, MSUMMO), special: 123 })
     onDeathSummon(dead, room, 700, deps())
@@ -264,7 +264,7 @@ describe('onDeathSummon — MSUMMO 소환', () => {
       alloc: createInstanceIdAllocator([room]), // seed=1(embedded 개수)
     })
 
-    // 소환 크리처는 방 배열 끝(index 1)에 push되고 idx=1로 발급된다.
+    // 소환 몬스터는 방 배열 끝(index 1)에 push되고 idx=1로 발급된다.
     expect(room.creatures[1]?.instanceId).toBe('50:c1')
   })
 })
@@ -284,7 +284,7 @@ describe('onCreatureDeath — 통합(perm 리셋 + 소환 + 제거)', () => {
 
     // perm ltime 리셋(dead가 MPERMT·동명이므로).
     expect(room.permMon[0]?.ltime).toBe(800)
-    // 소환된 크리처(templateId=123)가 방에 남고, 죽은 크리처(templateId=null)는 제거됐다.
+    // 소환된 몬스터(templateId=123)가 방에 남고, 죽은 몬스터(templateId=null)는 제거됐다.
     expect(room.creatures.includes(dead)).toBe(false)
     expect(room.creatures).toHaveLength(1)
     expect(room.creatures[0]?.templateId).toBe(123)

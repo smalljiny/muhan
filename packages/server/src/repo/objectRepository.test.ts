@@ -53,7 +53,7 @@ describe('ObjectRepository (integration)', () => {
     expect(found).toBeNull()
   })
 
-  it('findByOwner는 소유자별로 오브젝트 집합을 분할한다', async () => {
+  it('findByOwner는 소유자별로 아이템 집합을 분할한다', async () => {
     const charA1 = makeObject({ _id: 'a1', owner: { type: 'character', id: 'char-A' } })
     const charA2 = makeObject({ _id: 'a2', owner: { type: 'character', id: 'char-A' } })
     const charB = makeObject({ _id: 'b1', owner: { type: 'character', id: 'char-B' } })

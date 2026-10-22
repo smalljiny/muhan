@@ -4,7 +4,7 @@ import { computeAc } from './computeAc.js'
 import { computeAcInputArb, intInRangeArb } from '../property/arbitraries.testutil.js'
 import { assertInRange, assertMonotonic } from '../property/invariants.js'
 
-// compute_ac(방어도) oracle에 property 프레임워크를 shared 축에서 시연한다.
+// compute_ac(방어도) 오라클에 property 프레임워크를 shared 축에서 시연한다.
 // 재사용 arbitraries(computeAcInputArb·intInRangeArb)와 invariants(assertInRange·
 // assertMonotonic)를 소비해, 특정 값 골든이 아니라 전 입력 도메인에 걸친 계약
 // (범위·단조성)을 실제 SUT(computeAc)로 검증한다.

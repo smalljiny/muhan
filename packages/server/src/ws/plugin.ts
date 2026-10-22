@@ -506,7 +506,7 @@ export function registerWebsocket(
           heartbeat.notePong()
         })
 
-        // 연결 직후 서버 버전을 알리는 system:hello를 push한다. 버전은 per-connection 권위인
+        // 연결 직후 서버 버전을 알리는 system:hello를 push한다. 버전은 per-connection 기준인
         // ctx.protocolVersion을 단일 출처로 쓴다(핸드셰이크 대조와 같은 값). 동기 push는 injectWS
         // 클라이언트가 message 리스너를 붙이기 전에 발생해 프레임이 드롭되는 레이스를 만든다 — setImmediate로
         // 지연시켜 클라이언트의 promise 기반 리스너 부착(process.nextTick보다 늦음) 뒤에 나가게 한다.
@@ -552,7 +552,7 @@ export function registerWebsocket(
                 break
               case 'reload':
                 // reload 프레임을 먼저 보내고 다음 tick에 close한다 — 같은 tick 내 close가 프레임 플러시를
-                // 앞질러 클라이언트가 reload를 못 받는 injectWS 특이 동작을 피한다(서버 권위 종료).
+                // 앞질러 클라이언트가 reload를 못 받는 injectWS 특이 동작을 피한다(서버 주도 종료).
                 safeSend(socket, result.event)
                 setImmediate(() => {
                   if (socket.readyState === socket.OPEN) socket.close()

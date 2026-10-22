@@ -5,7 +5,7 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * mod_profic 골든 옮겨 적기-diff fixture 생성기 — manual oracle.
+ * mod_profic 골든 옮겨 적기-diff fixture 생성기 — manual 오라클.
  *
  * 원본 `player.c:1032`의 클래스→숙련도 나눗수 switch를 인덱스 0-12 **독립 리터럴**로
  * 옮겨 적어(옮겨 적기 pass 2) 각 클래스를 조회 케이스로 감싼다. SUT `proficDivisorOf`는

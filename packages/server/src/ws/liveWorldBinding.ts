@@ -25,7 +25,7 @@ export interface LiveWorldBinding {
 }
 
 /**
- * roomId → world:room 방 뷰 파생기를 만든다. 변환 규칙(숨김 아이템·크리처·비밀 출구 제외, 점유자 이름
+ * roomId → world:room 방 뷰 파생기를 만든다. 변환 규칙(숨김 아이템·몬스터·비밀 출구 제외, 점유자 이름
  * 해석)은 전부 `projectRoomView`가 담당하고 이 함수는 방 해석만 얹는다 — 이동 경로(handlers/move.ts)가
  * 같은 변환을 직접 호출하므로 진입·이동 페이로드가 구조적으로 같다.
  *
