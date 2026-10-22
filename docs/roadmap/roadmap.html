@@ -530,11 +530,12 @@
 
 <div class="wrap">
   <header>
-    <p class="eyebrow">muhan · github issues → roadmap · 2026-08-19 · <strong>develop 6920540</strong></p>
+    <p class="eyebrow">muhan · github issues → roadmap · 2026-10-22 · <strong>develop fc02753</strong></p>
     <h1>지금 어디에 있나 — 무한 포팅 진행 궤도</h1>
     <p class="lede">1991–93년 Mordor에서 파생된 한국어 MUD "무한"을 Node.js와 웹으로 재구현하는 프로젝트입니다. 이 페이지는 에픽 E1~E13과 토픽·부채 이슈를 바탕으로 현황을 정리합니다. <strong>규칙 엔진의 순수 레이어(전투·마법·진행·스탯·아이템·경제)는 전부 닫혔습니다.</strong> 지금 남은 것은 그 규칙을 살아 있는 세션에 잇는 "연결"입니다. 크리티컬 패스는 여전히 라이브 명령 연결 체인입니다. 다만 체인의 첫 이슈였던 <a href="https://github.com/smalljiny/muhan/issues/118">#118</a>이 08-10에 닫히면서 체인의 모든 이슈에 착수할 수 있게 됐습니다. 이제 병목은 선행 이슈가 아니라 각 토픽 내부의 설계 결정입니다.</p>
+    <p class="lede" style="margin-top:8px"><strong>10-22 기준</strong> — 08-20 이후 기능 개발은 진척이 없습니다. 진행 궤도, CP1 잔여(<a href="https://github.com/smalljiny/muhan/issues/116">#116</a>·<a href="https://github.com/smalljiny/muhan/issues/138">#138</a>), 크리티컬 패스는 08-20과 같습니다. 그사이에는 저장소를 정리했습니다. Windows에서 체크아웃이 실패하던 파일을 지웠고(PR #150), 문서와 코드 주석의 용어·문장을 다듬었습니다(PR #151~#168). 이때 정한 한국어 용어 기준은 <code>docs/glossary.md</code>에 있습니다. 새 이슈는 두 건입니다. <a href="https://github.com/smalljiny/muhan/issues/149">#149</a>는 <a href="https://github.com/smalljiny/muhan/issues/138">#138</a>에서 분리한 e2e CI 편입이고, <a href="https://github.com/smalljiny/muhan/issues/154">#154</a>는 A2 명령 카탈로그에서 빠진 명령 4개입니다.</p>
     <p class="lede" style="margin-top:8px"><strong>08-20 기준</strong> — 08-19 이후 <a href="https://github.com/smalljiny/muhan/issues/121">#121</a>이 닫혔습니다(PR #148). 이제 <strong>플레이어가 몬스터를 때릴 수 있습니다</strong>. 대상 지목, 전투 판정, 사망, 경험치 획득까지 한 바퀴가 라이브 세션에서 돕니다. 테스트가 아닌 코드에서 <code>initiateAttack</code>을 호출하는 곳이 0건이던 문제가 해소됐습니다. <code>combatRegistry</code>, 장비 해석 파이프, 몬스터별 데미지 원장, 사망 확장 지점(seam)도 함께 만들어졌습니다. 프로토콜도 바뀝니다. <code>PROTOCOL_VERSION</code>이 5→6으로 올라가고, <code>ClientCommand</code>는 10종, <code>ServerEvent</code>는 14종이 됩니다. <code>combat:attack</code> 명령과 <code>combat:attacked</code>·<code>character:stats</code> 이벤트가 새로 생겼습니다. 이로써 <a href="https://github.com/smalljiny/muhan/issues/61">#61</a>(E12)의 게이트가 열렸고, <a href="https://github.com/smalljiny/muhan/issues/122">#122</a>(cast)의 유일한 선행 이슈가 사라졌습니다. CP1 잔여는 그대로 <a href="https://github.com/smalljiny/muhan/issues/116">#116</a>·<a href="https://github.com/smalljiny/muhan/issues/138">#138</a> 두 건입니다. 새 부채 <a href="https://github.com/smalljiny/muhan/issues/147">#147</a>(사망하지 않은 몬스터의 원장 미회수)이 발행됐습니다.</p>
-    <p class="lede" style="margin-top:8px"><strong>릴리스 계획</strong> — <strong>CP1이 첫 릴리스 지점</strong>입니다. CP1을 통과하면 릴리스를 내고 <code>develop</code>을 <code>main</code>에 병합합니다. 그때까지는 원격에 <code>develop</code> 하나만 있는 것이 정상입니다.</p>
+    <p class="lede" style="margin-top:8px"><strong>릴리스 계획</strong> — <strong>CP1이 첫 릴리스 지점</strong>입니다. CP1을 통과하면 릴리스를 내고 <code>develop</code>을 <code>main</code>에 병합합니다. 원격 <code>main</code>은 10-20에 git flow 초기화로 먼저 만들어졌지만 아직 릴리스를 담지 않았습니다(<code>310fe7e</code>, <code>develop</code>보다 커밋 33개 뒤).</p>
 
     <!-- ══ HERO 다이어그램 ══ -->
     <div class="orbit">
@@ -925,7 +926,7 @@
           <span class="gate open">HIGH #138 깨끗한 DB e2e 통과 불가</span>
           <span class="gate open">릴리스 + <code>develop</code> → <code>main</code> 병합</span>
         </div>
-        <p class="cp-foot"><b>게이트 9개 중 7개가 닫혔고, 남은 #116·#138 둘은 서로 독립입니다.</b> #60이 머지되면서 방 설명을 읽고 출구 버튼으로 이동하는 경로가 실제로 동작합니다. 이제 CP1의 "걸어 다니는 것"을 직접 확인할 수 있습니다. 08-19에 #124(재접속 진행도 revert)가 PR #146으로 닫혔습니다. #120은 M6 항목이라 이 체크포인트에 영향을 주지 않습니다. 남은 것은 <strong>같은 방 사람의 입·퇴장이 보이지 않는 문제</strong>(#116)와 #138입니다. #138은 코드 결함이 아니라 시드 데이터가 빠진 문제입니다. 하지만 첫 릴리스 후 다른 사람이 README를 따라 서버를 띄우면 바로 부딪히는 문제라 CP1 안에 둡니다.<br><br><b>브랜치 상태 —</b> 원격에는 현재 <code>develop</code> 하나만 있고 기본 브랜치도 <code>develop</code>입니다. <code>main</code>은 <strong>이 체크포인트에서 처음 생깁니다</strong>. <code>.harness/rules/git-workflow.md</code>의 <code>main</code>=production 전략은 문서 쪽이 맞고, 원격이 아직 그 전략을 따르지 않는 상태입니다.</p>
+        <p class="cp-foot"><b>게이트 9개 중 7개가 닫혔고, 남은 #116·#138 둘은 서로 독립입니다.</b> #60이 머지되면서 방 설명을 읽고 출구 버튼으로 이동하는 경로가 실제로 동작합니다. 이제 CP1의 "걸어 다니는 것"을 직접 확인할 수 있습니다. 08-19에 #124(재접속 진행도 revert)가 PR #146으로 닫혔습니다. #120은 M6 항목이라 이 체크포인트에 영향을 주지 않습니다. 남은 것은 <strong>같은 방 사람의 입·퇴장이 보이지 않는 문제</strong>(#116)와 #138입니다. #138은 코드 결함이 아니라 시드 데이터가 빠진 문제입니다. 하지만 첫 릴리스 후 다른 사람이 README를 따라 서버를 띄우면 바로 부딪히는 문제라 CP1 안에 둡니다.<br><br><b>브랜치 상태 —</b> 기본 브랜치는 <code>develop</code>입니다. 원격 <code>main</code>은 10-20에 git flow 초기화로 만들어졌지만 <strong>아직 릴리스를 담지 않았습니다</strong>. 이 체크포인트에서 첫 릴리스를 내며 <code>develop</code>을 <code>main</code>에 병합하고, 그때부터 <code>main</code>=production 전략을 따릅니다.</p>
       </div>
 
       <div class="ms">
@@ -1071,7 +1072,7 @@
         <div class="debt-top"><span class="sev high">HIGH</span><span class="debt-title">깨끗한 DB에서 전송 왕복 e2e 통과 불가</span>
           <a class="debt-num" href="https://github.com/smalljiny/muhan/issues/138">#138</a></div>
         <div class="debt-body">dev 시드 캐릭터 <code>dev-char-1</code>이 <code>InMemorySessionAuthAdapter</code> 목록에만 있고 Mongo <code>characters</code> 컬렉션에 없습니다. 인증 목록과 <code>hydrate</code>가 서로 다른 저장소를 봅니다. compose의 mongo에는 볼륨이 없어 시작할 때마다 빈 DB로 뜹니다. 그리고 문서를 넣어 주는 경로가 부팅, compose, e2e 어디에도 없습니다. <strong>전송·인증 구현 자체는 정상</strong>이고(문서를 직접 넣으면 G1~G3 모두 통과), 빠진 것은 시드 데이터뿐입니다. <code>e2e</code>가 <code>turbo.json</code>에도 CI에도 없어서 수동으로 실행할 때만 문제가 드러납니다.</div>
-        <div class="debt-gate">▸ CP1 게이트 · 문서화된 진입 경로가 막힘</div>
+        <div class="debt-gate">▸ CP1 게이트 · 문서화된 진입 경로가 막힘 · CI 편입은 <a href="https://github.com/smalljiny/muhan/issues/149">#149</a>로 분리(08-21)</div>
       </div>
       <div class="debt-card">
         <div class="debt-top"><span class="sev">divergence</span><span class="debt-title">이름 서수 기준 — 방·인벤 3집합 (#142 통합)</span>
@@ -1157,9 +1158,9 @@
   </section>
 
   <footer>
-    <span>출처: GitHub 이슈 #1~#148 · PR ~#148 (2026-08-20)</span>
+    <span>출처: GitHub 이슈 #1~#168 · PR ~#168 (2026-10-22)</span>
     <span>설계 기준: docs/specs/architecture.md (ADR #14)</span>
-    <span>구현 명세: docs/specs/ 30개 문서</span>
+    <span>구현 명세: docs/specs/ 30개 문서 · 용어 기준: docs/glossary.md</span>
     <span>SoT는 GitHub 이슈·PR·docs/specs/ — 이 페이지는 그 내용을 정리한 요약이고, M0~M7·CP1~CP3은 이슈 의존 관계에서 도출한 그룹핑입니다</span>
   </footer>
 </div>
