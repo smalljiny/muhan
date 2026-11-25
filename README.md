@@ -165,7 +165,7 @@ docker compose down
 
 용어 위계: **에픽**(서브시스템 단위 작업 묶음) → **토픽**(spec 1개·PR 1개 단위) → **Story**(단일 커밋 단위). 
 
-토픽은 별도 git worktree와 cmux 작업 공간에서 진행한다. 시작·스펙 작성·PR·정리 절차는 [`docs/workflow.md`](docs/workflow.md)를 따른다.
+토픽은 `/flow-*` 하네스로 진행한다. 스펙은 주 worktree에서 확정하고, 계획부터 PR까지는 토픽별 git worktree에서 진행한다. 절차는 [`docs/workflow.md`](docs/workflow.md)를 따른다.
 
 ---
 

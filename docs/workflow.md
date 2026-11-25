@@ -1,98 +1,48 @@
-# 작업 흐름 — 토픽 worktree
+# 작업 흐름 — 하네스 토픽 worktree
 
-토픽 하나를 별도 git worktree와 cmux 작업 공간에서 새 Claude 세션으로 진행한다. 여러 토픽을 서로 간섭 없이 병렬로 진행하고, 주 worktree는 늘 `develop`에 둔다.
+토픽은 `/flow-*` 하네스로 진행한다. 스펙은 주 worktree에서 확정하고, 계획부터 PR까지는 토픽마다 격리된 git worktree의 별도 Claude 세션에서 진행한다. 주 worktree는 늘 `develop`에 둔다.
 
-용어는 README의 위계(**에픽** → **토픽** → Story)를 따른다. 토픽 1개 = 이슈 1개 = 스펙 1개 = PR 1개다.
+용어는 README의 위계(**에픽** → **토픽** → Story)를 따른다. 토픽 1개 = 이슈 1개 = PR 1개다.
 
-## 역할
+## 하네스 설치
 
-| 자리 | 위치 | 하는 일 |
-|---|---|---|
-| **주 worktree** (조정 세션) | `/Users/mario/Workspace/mario/muhan`, 항상 `develop` | 다음 토픽 선정, 토픽 시작, 병합 뒤 정리, 로드맵 갱신 |
-| **토픽 worktree** (토픽 세션) | `<주 worktree>-<짧은 이름>`, 토픽 브랜치 | 스펙 작성, 구현, 검증, PR |
-
-주 worktree에서는 코드를 고치지 않는다. 문서만 바꾸는 작업도 토픽으로 시작한다.
-
-## 이름 규칙
-
-| 대상 | 형식 | 예 |
-|---|---|---|
-| 브랜치 | `<type>/<짧은 이름>` | `feature/dev-seed-character` |
-| worktree | `<주 worktree 경로>-<짧은 이름>` (type 접두사를 뗀다) | `/Users/mario/Workspace/mario/muhan-dev-seed-character` |
-| cmux 작업 공간 | 이름 `<짧은 이름>`, 설명 `#<이슈> · <브랜치>` | `dev-seed-character` |
-
-- `type`은 `feature`·`fix`·`chore` 중 하나다.
-- 짧은 이름은 `^[a-z0-9]+(-[a-z0-9]+)*$`에 맞고 40자 이하다.
-- worktree 이름에서 type을 떼므로, 짧은 이름은 type이 달라도 겹치면 안 된다. 시작 스크립트가 겹치는 이름을 거부한다.
-
-## 토픽 시작 (주 worktree)
+하네스(`.claude/`, `.harness/`, `.codex/`, `AGENTS.md`, `CLAUDE.md`)는 이 저장소가 추적하지 않는다(`.gitignore`). 하네스 저장소의 배포 스크립트로 주 worktree에 설치하거나 갱신한다.
 
 ```bash
-scripts/topic-start.sh <type> <짧은 이름> [이슈 번호]
-# 예
-scripts/topic-start.sh feature dev-seed-character 138
+<하네스 저장소>/scripts/deploy-harness.sh /Users/mario/Workspace/mario/muhan
 ```
 
-스크립트가 하는 일:
+- 설치 뒤 한 번: `/flow-init`(CLAUDE.md·AGENTS.md의 프로젝트 섹션), `/flow-setup git`(원격·기준 브랜치 `develop`)
+- 커밋 scope 목록은 `.harness/commit-scopes.md`에 있고, 재배포해도 덮어쓰지 않는다.
+- 토픽 worktree에는 `/flow-worktree`가 하네스를 주입한다(`.claude` 등은 링크, `.harness`·`docs/_local`은 복사). worktree에서 따로 설치하지 않는다.
 
-1. 이슈가 열려 있는지 확인한다.
-2. `origin/develop`을 가져와 그 위에 브랜치와 worktree를 만든다.
-3. 무시된 로컬 env 파일(`.env*`, `packages/*/.env*`)을 새 worktree로 복사한다.
-4. 호출한 cmux 작업 공간이 속한 그룹("무한대전")에 새 작업 공간을 만든다. 그룹 이름은 `CMUX_TOPIC_GROUP`으로 바꿀 수 있다.
-5. 새 작업 공간에서 `pnpm install --frozen-lockfile`을 실행한 뒤, `claude`를 "docs/workflow.md를 읽고 이슈 #N 토픽을 시작해"라는 첫 프롬프트와 함께 띄운다.
+## 흐름
 
-cmux 밖에서 실행하면 worktree까지만 만들고 수동 실행 명령을 출력한다.
+| 단계 | 위치 | 명령 | 산출물 |
+|---|---|---|---|
+| 1. 스펙 | 주 worktree | `/flow-spec <토픽>` | `docs/_local/backlog/<토픽>/spec.md` (추적 안 함), Codex 스펙 리뷰 → 확정 |
+| 2. worktree 시작 | 주 worktree | `/flow-worktree <토픽>` | `muhan.worktrees/<토픽>`, 브랜치 `feature/<토픽>`, cmux 새 칸에서 worktree 세션 |
+| 3. 계획 | 토픽 worktree | `/flow-plan` | Task 단위 구현 계획, Codex 계획 리뷰 |
+| 4. 구현 | 토픽 worktree | `/flow-impl` (반복) | Task별 커밋 |
+| 5. 리뷰·검증 | 토픽 worktree | `/flow-review`, `/flow-verify` | 코드 리뷰, 빌드·테스트·보안 검증 |
+| 6. 문서 | 토픽 worktree | `/flow-docs` | 스펙을 구현에 맞추고 `docs/specs/`에 반영해 커밋 |
+| 7. PR | 토픽 worktree | `/flow-pr` → 사용자 병합 → `/flow-done` | `develop` 대상 PR, 토픽 산출물 아카이브 |
+| 8. 정리 | 주 worktree | `/flow-worktree teardown <토픽> --delete-branch` | 문서 sync-back, worktree·브랜치 삭제 |
 
-## 토픽 진행 (토픽 세션)
+- 토픽 이름은 `^[a-zA-Z0-9_-]+$`이고, 이슈를 다루는 토픽은 이슈 번호를 스펙에 남긴다. PR 본문에는 `Closes #<이슈>`를 적는다.
+- 주 worktree는 `/flow-spec`과 `/flow-worktree`(시작·정리)만 맡는다. 토픽의 다른 `/flow-*`를 주 worktree에서 실행하면 토픽 상태(`docs/_local/dev-context.json`)의 격리가 깨진다.
+- 언제든 `/flow-topic`으로 현재 토픽의 단계를 확인한다.
 
-### 1. 파악
+## 스펙의 두 단계
 
-- 이슈 본문의 문제, 할 일, 완료 기준을 읽는다. 이슈가 **무엇을 왜** 하는지의 기준이다.
-- 관련 스펙(`docs/specs/`), 분석 노트(`docs/notes/`), 원본 오라클(`legacy/muhan/src`)을 확인한다. 오라클은 읽기만 한다.
-- 이슈가 결정을 요구하면(예: 선택지 1·2·3) 스펙을 쓰기 전에 사용자와 정한다.
+- **토픽 스펙** — `docs/_local/backlog/<토픽>/spec.md`. 작업 중 계약을 담는 초안이고 추적하지 않는다. 확정 뒤 worktree로 복사되고, 끝나면 `docs/_local/done/`에 보관된다.
+- **기준 스펙** — `docs/specs/*.md`. 프로젝트 최종 상태와 항상 일치하는 문서다. `/flow-docs`가 구현을 마친 시점에 토픽 스펙을 반영하므로 코드와 같은 PR로 병합된다.
 
-### 2. 스펙 — 토픽 브랜치의 첫 커밋
+## 이 저장소의 규칙
 
-- 새 서브시스템이면 `docs/specs/<토픽>.md`를 만들고, 기존 서브시스템을 넓히면 그 스펙을 고친다.
-- 스펙에는 목표와 범위(Non-goals 포함), 계약(프로토콜·스키마·seam), 오라클 대조 근거, 완료 기준과 검증 방법, 유예 항목과 그 추적 이슈를 적는다. 기존 스펙의 구성과 `docs/glossary.md`의 용어를 따른다.
-- `docs(specs): …` 커밋으로 남기고, **사용자 확인을 받은 뒤** 구현을 시작한다.
-
-스펙을 토픽 브랜치에서 쓰는 이유: `docs/specs/`는 프로젝트 최종 상태와 항상 일치해야 한다. 스펙과 코드를 한 PR로 리뷰하고 병합하면 `develop`의 스펙이 코드보다 앞서거나 뒤처지는 기간이 생기지 않는다.
-
-### 3. 구현
-
-- Story(단일 커밋) 단위로 커밋한다. 제목은 Conventional Commits 형식에 한국어 요약이다. 예: `feat(server): 부팅 시 dev 시드 캐릭터를 upsert한다`
-- 구현 중 스펙과 달라지는 결정은 스펙에도 바로 반영한다.
-- 범위 밖에서 찾은 결함은 고치지 않고 새 이슈로 남긴다. PR 본문 `Refs`에 적는다.
-
-### 4. 검증
-
-```bash
-pnpm build && pnpm type-check && pnpm lint && pnpm test
-```
-
-전송·세션 경로를 바꿨으면 README의 e2e 절차도 실행한다. 실행하지 않은 검증은 PR에 그 사실과 이유를 적는다.
-
-### 5. 마무리와 PR
-
-- 스펙을 최종 구현 상태에 맞추고, 새 스펙이면 README의 문서 안내 표와 스펙 개수를 갱신한다.
-- `git push -u origin <브랜치>` 후 `develop`을 대상으로 PR을 연다. 본문은 기존 기능 PR(예: #148)의 구성(변경사항·목적·영향 범위·테스트·알려진 범위 경계·관련 이슈)을 따르고, `Closes #<이슈>`와 `Refs #…`를 적는다.
 - **로드맵(`docs/roadmap/roadmap.html`)은 토픽 PR에서 고치지 않는다.** 여러 토픽이 동시에 고치면 충돌하므로, 병합 뒤 주 worktree가 한꺼번에 갱신한다.
-- 병합은 사용자가 GitHub에서 한다.
-
-## 병합 뒤 정리 (주 worktree)
-
-```bash
-scripts/topic-cleanup.sh <짧은 이름>
-```
-
-브랜치가 `origin/develop`에 병합됐고 worktree에 커밋하지 않은 파일이 없을 때만 다음을 한다.
-
-1. 그 worktree를 작업 디렉터리로 쓰는 cmux 작업 공간을 닫는다.
-2. worktree와 로컬 브랜치를 지운다.
-3. `develop`을 fast-forward한다.
-
-조건이 하나라도 맞지 않으면 아무것도 지우지 않는다. 원격 브랜치 삭제는 GitHub에 맡긴다.
+- 범위 밖에서 찾은 결함은 고치지 않고 새 이슈로 남긴다. 만들기 전에 같은 내용의 열린 이슈가 있는지 확인한다.
+- 원본 오라클(`legacy/muhan`)은 읽기만 한다.
 
 ## 병렬 토픽의 주의점
 

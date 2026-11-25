@@ -31,11 +31,6 @@ legacy/muhan_1.3_ubuntu_ed.tar.gz
 .env
 .env.*
 
-# BEGIN harness local ignores
-.harness-backups/
-docs/_local/
-# END harness local ignores
-
 # 하네스/도구 로컬 인프라 — 이 저장소에 커밋하지 않음
 .claude/
 .codex/
@@ -46,3 +41,12 @@ AGENTS.md
 CLAUDE.md
 .agents
 skills-lock.json
+
+# BEGIN harness local ignores
+.harness-backups/
+.claude/sessions/
+.claude/checkpoints.log
+.claude/settings.local.json
+.harness/.deploy-manifest.json
+docs/_local/
+# END harness local ignores
