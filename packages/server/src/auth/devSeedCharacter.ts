@@ -22,6 +22,7 @@ import {
   seedSpellStore,
   seedVitals,
 } from '../repo/characterBackfill.js'
+import type { CharacterRepository } from '../repo/characterRepository.js'
 
 /** dev 기본 능력치. 생성 인터뷰를 거치지 않는 시드 고정값이며 비밀이 아니다. */
 const DEV_SEED_STATS: Readonly<Character['stats']> = [16, 18, 12, 10, 14]
@@ -52,4 +53,46 @@ export function buildDevSeedCharacterDoc(accountId: string): Character {
     stats: [...DEV_SEED_STATS],
     alignment: DEV_SEED_ALIGNMENT,
   }
+}
+
+/** seedDevCharacter가 쓰는 저장소 표면 — 삽입(없을 때만)과 정규화 조회만 필요하다. */
+export type DevSeedCharacterRepo = Pick<CharacterRepository, 'insertIfAbsent' | 'findById'>
+
+/**
+ * 기존 시드 문서가 기대 계정 소유의 활성 캐릭터인지 확인하고, 어긋나면 해결 방법을 담은 오류를
+ * 던진다. status는 findById 정규화 결과를 쓰므로 필드가 없는 옛 문서는 active다.
+ */
+function assertSeedConsistent(existing: Character | null, accountId: string): void {
+  const id = DEV_SEED_CHARACTER.characterId
+  if (existing === null) {
+    throw new Error(
+      `dev 시드 캐릭터 정합 실패: ${id} 문서를 삽입하지 않았는데 조회되지 않는다. 동시 삭제 여부를 확인하고 다시 부팅하라`,
+    )
+  }
+  if (existing.accountId !== accountId) {
+    throw new Error(
+      `dev 시드 캐릭터 정합 실패: ${id} 문서의 소유 계정이 다르다 (기대 accountId: ${accountId}, 실제 accountId: ${existing.accountId}). ` +
+        `characters 컬렉션에서 ${id} 문서를 삭제하거나 DEV_SEED_ACCOUNT_ID를 ${existing.accountId}로 수정하라`,
+    )
+  }
+  if (existing.status !== 'active') {
+    throw new Error(
+      `dev 시드 캐릭터 정합 실패: ${id} 문서의 status가 '${existing.status}'이다. 되살리지 않는다. ` +
+        `characters 컬렉션에서 ${id} 문서를 삭제한 뒤 다시 부팅하라`,
+    )
+  }
+}
+
+/**
+ * dev 시드 캐릭터 문서를 없을 때만 삽입한다. 이미 있으면 덮어쓰거나 되살리지 않고 정합만 확인한다 —
+ * 정합하면 'kept'(진행 상태 보존), 어긋나면 throw해 부팅을 실패시킨다. 이름 충돌(E11000)은 삼키지 않는다.
+ */
+export async function seedDevCharacter(
+  repo: DevSeedCharacterRepo,
+  accountId: string,
+): Promise<'inserted' | 'kept'> {
+  if (await repo.insertIfAbsent(buildDevSeedCharacterDoc(accountId))) return 'inserted'
+
+  assertSeedConsistent(await repo.findById(DEV_SEED_CHARACTER.characterId), accountId)
+  return 'kept'
 }

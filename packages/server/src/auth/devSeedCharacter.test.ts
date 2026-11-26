@@ -1,6 +1,10 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { characterSchema } from 'shared'
-import { buildDevSeedCharacterDoc } from './devSeedCharacter.js'
+import {
+  buildDevSeedCharacterDoc,
+  seedDevCharacter,
+  type DevSeedCharacterRepo,
+} from './devSeedCharacter.js'
 import { DEV_SEED_CHARACTER } from './devSeedSessionAuth.js'
 import { START_ROOM, STARTING_GOLD } from './characterStartDefaults.js'
 import {
@@ -74,5 +78,17 @@ describe('buildDevSeedCharacterDoc', () => {
     expect(a.stats).not.toBe(b.stats)
     expect(a.spells).not.toBe(b.spells)
     expect(a).toEqual(b)
+  })
+})
+
+describe('seedDevCharacter', () => {
+  it('삽입하지 않았는데 기존 문서가 조회되지 않으면 kept로 넘기지 않고 reject한다', async () => {
+    const repo: DevSeedCharacterRepo = {
+      insertIfAbsent: vi.fn().mockResolvedValue(false),
+      findById: vi.fn().mockResolvedValue(null),
+    }
+
+    await expect(seedDevCharacter(repo, ACCOUNT_ID)).rejects.toThrow(DEV_SEED_CHARACTER.characterId)
+    expect(repo.findById).toHaveBeenCalledWith(DEV_SEED_CHARACTER.characterId)
   })
 })
