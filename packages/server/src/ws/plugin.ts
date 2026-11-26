@@ -27,6 +27,7 @@ import { buildSessionLiveWorld, type LiveWorldBinding } from './liveWorldBinding
 import {
   createLiveWorldWiring,
   assembleRoomChannelPort,
+  createSendToCharacter,
   type LiveWorldWiringBundle,
 } from './liveWorldWiring.js'
 import { createSessionRegistry, type SessionRegistry } from './sessionRegistry.js'
@@ -298,6 +299,8 @@ export function gameAuthPreValidation(
  * 세운다. 포트 우선순위는 **explicit-param > bundle-derived > default-noop**이다 — 명시 인자(테스트 스파이 등)가
  * 주어지면 묶음 파생이 덮지 않는다. transport 결합(sendTo)은 `assembleRoomChannelPort`에 격리하고, registry·
  * connections·safeSend를 그 조립 지점에서만 캡처한다(순수 팩토리는 transport 미접촉).
+ * presence 전송은 같은 registry·safeSend로 만든 `createSendToCharacter` 결과를 `createLiveWorldWiring`의
+ * 전송 인자로 넘겨 결합한다.
  */
 export function registerWebsocket(
   app: FastifyInstance,
@@ -318,9 +321,22 @@ export function registerWebsocket(
   // 캡처해 멤버 소켓을 역참조하므로, createCommandRegistry가 채널 포트를 받기 전에 존재해야 한다. per-connection이
   // 아니라 registerWebsocket 1회 인스턴스다(재연결이 이전 소켓의 바인딩을 찾으려면 하나의 색인이어야 한다).
   const registry = createSessionRegistry()
+  // presence 전송과 방 채팅 포트가 같은 소켓 역참조를 공유한다(하나의 결합 지점).
+  const resolveSocket = (connection: ConnectionContext): WebSocket | undefined =>
+    socketForContext(connections, connection)
 
   // 라이브 월드 의존 묶음이 주입되면 순수 팩토리로 진입·이동·수명 seam과 방 리졸버를 파생한다(미주입이면 undefined).
-  const wiring = liveWorldDeps === undefined ? undefined : createLiveWorldWiring(liveWorldDeps)
+  // presence 전송은 방 채팅 포트와 같은 registry·safeSend로 만든 sendToCharacter를 팩토리에 넘겨 결합한다.
+  const wiring =
+    liveWorldDeps === undefined
+      ? undefined
+      : createLiveWorldWiring(liveWorldDeps, {
+          sendToCharacter: createSendToCharacter<WebSocket>({
+            registry,
+            resolveSocket,
+            safeSend,
+          }),
+        })
 
   // 채널 포트 우선순위(explicit > bundle-derived > noop). 묶음 파생 채널은 transport 결합 sendTo가 필요하므로
   // assembleRoomChannelPort에 registry·connections·safeSend를 넘겨 이 지점에서만 조립한다(순수 팩토리 밖 격리).
@@ -331,7 +347,7 @@ export function registerWebsocket(
       : assembleRoomChannelPort<WebSocket>({
           resolveRoom: wiring.resolveRoom,
           registry,
-          resolveSocket: (connection) => socketForContext(connections, connection),
+          resolveSocket,
           safeSend,
         }))
 
