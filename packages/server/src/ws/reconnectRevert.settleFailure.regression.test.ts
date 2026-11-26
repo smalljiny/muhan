@@ -6,6 +6,7 @@ import { SaveScheduler } from '../save/saveScheduler.js'
 import { FakeClock } from '../util/clock.testutil.js'
 import { createLiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
 import { createLiveCharacterEntry } from '../world/liveCharacterEntry.js'
+import { noopBroadcastJoin, noopBroadcastLeave } from '../world/presence.js'
 import { CHARACTERS_COLLECTION, createMarkCharacterDirty } from '../world/markCharacterDirty.js'
 import { makeRoom } from '../world/roomFixtures.testutil.js'
 import {
@@ -85,6 +86,8 @@ describe('§8.8 완료 통지 실패로 잔류한 스냅샷의 hydrate 측 귀�
       resolveRoom: (roomId) => (roomId === ROOM_TRAIN ? room : undefined),
       onRoomEntered: vi.fn(),
       onRoomLeft: vi.fn(),
+      broadcastJoin: noopBroadcastJoin,
+      broadcastLeave: noopBroadcastLeave,
       // SaveEngine.peekPending과 같은 정규화(`stripImmutableId`)를 적용한 조회 seam.
       peekPendingCharacter: (id) =>
         stripImmutableId(tracker.peek(CHARACTERS_COLLECTION, id)?.snapshot),

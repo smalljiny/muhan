@@ -11,6 +11,7 @@ import {
   type LiveCharacter,
 } from '../../world/liveCharacterRegistry.js'
 import { createLiveCharacterEntry } from '../../world/liveCharacterEntry.js'
+import { noopBroadcastJoin, noopBroadcastLeave } from '../../world/presence.js'
 import {
   ConnectionState,
   SELECT_CHARACTER_PROMPT_ID,
@@ -1493,6 +1494,8 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
       resolveRoom: (id) => rooms.get(id),
       onRoomEntered,
       onRoomLeft,
+      broadcastJoin: noopBroadcastJoin,
+      broadcastLeave: noopBroadcastLeave,
       peekPendingCharacter: () => undefined,
       logger: { warn: vi.fn(), error: vi.fn() },
     })
@@ -1561,6 +1564,8 @@ describe('월드 진입 seam (Story 4 — liveWorld hydrate/place/world:room)', 
       resolveRoom: (id) => rooms.get(id),
       onRoomEntered,
       onRoomLeft: vi.fn(),
+      broadcastJoin: noopBroadcastJoin,
+      broadcastLeave: noopBroadcastLeave,
       peekPendingCharacter: () => undefined,
       logger: { warn: vi.fn(), error: vi.fn() },
     })

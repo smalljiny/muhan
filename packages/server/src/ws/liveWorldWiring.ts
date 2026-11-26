@@ -24,6 +24,7 @@ import {
   type RoomPlayerResolver,
 } from '../world/roomTargetResolvers.js'
 import { defaultFleeRng, type MoveActor, type TryMoveDeps } from '../world/tryMove.js'
+import { noopBroadcastJoin, noopBroadcastLeave } from '../world/presence.js'
 import { createMarkObjectDeleted } from '../save/markObjectDeleted.js'
 import type { MoveHandlerDeps } from './handlers/move.js'
 import type { TrainHandlerDeps } from './handlers/train.js'
@@ -218,6 +219,9 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     resolveRoom: resolveRoomById,
     onRoomEntered: bundle.onRoomEntered,
     onRoomLeft: bundle.onRoomLeft,
+    // 전송 미연결 — 진입·종료 통지는 무전송(no-op). 실제 방송기 연결은 후속 Story가 맡는다.
+    broadcastJoin: noopBroadcastJoin,
+    broadcastLeave: noopBroadcastLeave,
     peekPendingCharacter,
     logger: bundle.logger,
   })
@@ -286,14 +290,13 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     resolveCharacterName,
   }
 
-  // 이동 방송 seam은 Story 8이 채널 어댑터로 연결한다(이동 통지). 이 토픽은 no-op으로 두어 tryMove 계약만
-  // 충족한다 — 방 채팅 전파(#6)는 채널 포트가, 이동 leave/join 통지는 후속 토픽이 담당한다.
-  const noopBroadcast = (_room: RoomNode, _actor: MoveActor): void => {}
+  // 이동 방송 seam은 아직 무전송(no-op)이다 — 입·퇴장 문맥을 받는 presence 방송기 연결은 후속 Story가
+  // 맡는다. 방 채팅 전파(#6)는 채널 포트가 담당한다.
   const tryMoveDeps: TryMoveDeps = {
     resolveRoom: resolveRoomById,
     currentHour: bundle.currentHour,
-    broadcastLeave: noopBroadcast,
-    broadcastJoin: noopBroadcast,
+    broadcastLeave: noopBroadcastLeave,
+    broadcastJoin: noopBroadcastJoin,
     onRoomEntered: bundle.onRoomEntered,
     onRoomLeft: bundle.onRoomLeft,
     rng: defaultFleeRng,

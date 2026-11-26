@@ -1,6 +1,8 @@
 import type { ExitEdge, RoomNode } from 'shared'
 import { hasFlag, XNOSEE } from './door.js'
 import { evaluateMoveGates } from './moveGates.js'
+// type-only import라 presence.ts와의 순환은 컴파일 시 지워진다.
+import type { PresenceJoinContext, PresenceLeaveContext } from './presence.js'
 
 /**
  * 통합 이동 경로 — 원본 A4 §8의 4중 복제 이동 코드를 단일 `tryMove`로 통합한다.
@@ -61,10 +63,16 @@ export interface TryMoveDeps {
   readonly resolveRoom: (roomId: number) => RoomNode | undefined
   /** 현재 게임시각(0~23) — G2 gameTime.currentHour() 주입. 시간 게이트가 소비. */
   readonly currentHour: () => number
-  /** 출발 방 leave 방송 seam — actor가 아직 출발 방 점유자일 때 호출된다. */
-  readonly broadcastLeave: (room: RoomNode, actor: MoveActor) => void
-  /** 도착 방 join 방송 seam — actor가 이미 도착 방 점유자가 된 뒤 호출된다. */
-  readonly broadcastJoin: (room: RoomNode, actor: MoveActor) => void
+  /**
+   * 출발 방 leave 방송 seam — actor가 아직 출발 방 점유자일 때 호출된다.
+   * 이동 경로는 `moved-out` 문맥(mode·선택 출구)을 넘긴다. 접속 종료(`exited`)는 진입 코어가 부른다.
+   */
+  readonly broadcastLeave: (room: RoomNode, actor: MoveActor, ctx: PresenceLeaveContext) => void
+  /**
+   * 도착 방 join 방송 seam — actor가 이미 도착 방 점유자가 된 뒤 호출된다.
+   * 이동 경로는 `moved-in` 문맥(mode·선택 출구)을 넘긴다. 접속 진입(`entered`)은 진입 코어가 부른다.
+   */
+  readonly broadcastJoin: (room: RoomNode, actor: MoveActor, ctx: PresenceJoinContext) => void
   /**
    * 방 진입 entry-hook seam — actor가 도착 방 점유자가 된 뒤(join 방송 직후) 호출된다.
    * E4-2가 활성 집합 활성화 + perm 리스폰 검사(Story 4)를 이 훅에 건다. E4-1b/기본 주입은
@@ -191,11 +199,11 @@ export function tryMove(
 
   // (5) 통과 — spec §3.3 순서. 라이브 가변 carve-out: occupants Set in-place 변경(worldGraph
   //     타입 주석과 일치, 프로젝트 immutability 규칙의 승인된 예외).
-  deps.broadcastLeave(sourceRoom, actor) // (5a) actor는 아직 출발 방 점유자
+  deps.broadcastLeave(sourceRoom, actor, { change: 'moved-out', mode, exit }) // (5a) actor는 아직 출발 방 점유자
   sourceRoom.occupants.delete(actor.characterId) // (5b) 재배치
   deps.onRoomLeft(sourceRoom, actor) // (5b') leave-hook — 빈 방 비활성화(E4-2). delete 後여야 deactivate 성립
   targetRoom.occupants.add(actor.characterId)
-  deps.broadcastJoin(targetRoom, actor) // (5c) actor는 이미 도착 방 점유자
+  deps.broadcastJoin(targetRoom, actor, { change: 'moved-in', mode, exit }) // (5c) actor는 이미 도착 방 점유자
   deps.onRoomEntered(targetRoom, actor) // (5d) entry-hook — 활성화·perm 리스폰(E4-2 Story 4)
 
   return { ok: true, arrivedRoom: targetRoom }
