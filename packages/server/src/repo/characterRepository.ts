@@ -93,6 +93,22 @@ export class CharacterRepository implements IRepository<Character> {
     await this.collection.insertOne(validated)
   }
 
+  /**
+   * 없을 때만 삽입 — 부팅 시 멱등 시딩 용도다. 같은 `_id` 문서가 이미 있으면 기존 문서는 바꾸지 않는다.
+   * 새로 삽입했으면 true, 기존 문서가 있어 건너뛰었으면 false를 반환한다.
+   * 다른 `_id`가 같은 name을 가지면 E11000을 잡지 않고 전파해 호출자(부팅)를 실패시킨다.
+   */
+  async insertIfAbsent(doc: Character): Promise<boolean> {
+    const validated = characterSchema.parse(doc)
+    const { _id, ...rest } = validated
+    const result = await this.collection.updateOne(
+      { _id },
+      { $setOnInsert: rest },
+      { upsert: true },
+    )
+    return result.upsertedCount === 1
+  }
+
   async updateById(id: string, patch: Partial<Omit<Character, '_id'>>): Promise<void> {
     const validated = characterPatchSchema.parse(patch)
     // matchedCount로 판정 — 멱등 갱신(matched=1, modified=0)은 성공, 0건 매칭은 fail-loud.
