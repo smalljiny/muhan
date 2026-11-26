@@ -26,9 +26,10 @@
 
 `shared`의 기존 `schema/`(영속·도메인)와는 **별개 모듈**이다. 프로토콜은 와이어 메시지 계약이고, `schema/`는 저장 도메인 모델이다. 모든 TS 타입은 `z.infer`로만 파생하며 병렬로 손으로 쓴 타입을 두지 않는다. `index.ts` 배럴이 스키마, 타입, `PROTOCOL_VERSION`을 함께 재노출하고, `shared/src/index.ts`가 이를 `export *`로 상위에 노출한다. 파생 타입 이름은 DOM 전역(`Event`·`Command`)과 충돌하지 않도록 `ClientCommand`·`ServerEvent`로 한정한다.
 
-**`version.ts`** — `PROTOCOL_VERSION = 6`. 계약이 하위 비호환으로 바뀔 때마다 1씩 단조 증가시키는 정수다. semver는 쓰지 않는다. 와이어 호환성만 판단하면 되므로 정수 동등 비교가 더 단순하기 때문이다. 핸드셰이크가 이 값을 실어 보내, client와 server가 같은 계약 세대를 쓰는지 대조한다.
+**`version.ts`** — `PROTOCOL_VERSION = 7`. 계약이 하위 비호환으로 바뀔 때마다 1씩 단조 증가시키는 정수다. semver는 쓰지 않는다. 와이어 호환성만 판단하면 되므로 정수 동등 비교가 더 단순하기 때문이다. 핸드셰이크가 이 값을 실어 보내, client와 server가 같은 계약 세대를 쓰는지 대조한다.
 
-- 직전 bump(5 → 6)는 #121의 `combat:attack` 명령과 `combat:attacked`·`character:stats` 이벤트 신설이다. 판별 union에 variant를 더하면 구버전 서버가 신규 `type`을 `unknown_type`으로 거부하기 때문에 올렸다.
+- 직전 bump(6 → 7)는 `world:presence` 이벤트 신설이다. 같은 방 점유자에게 다른 사람의 입·퇴장 델타를 보내는 variant라, 구버전 클라가 신규 `type`을 `unknown_type`으로 거부하지 않도록 올렸다.
+- 그 전 bump(5 → 6)는 #121의 `combat:attack` 명령과 `combat:attacked`·`character:stats` 이벤트 신설이다. 판별 union에 variant를 더하면 구버전 서버가 신규 `type`을 `unknown_type`으로 거부하기 때문에 올렸다.
 - 그 전 bump는 #120의 `progress:study` 명령·`progress:studied` 이벤트 신설(4 → 5)이었다.
 - 그 전은 E11(#60)의 `world:room` 페이로드 확장이었다. 기존 variant가 `z.strictObject`라 required 필드를 추가하면 구버전 클라의 `safeParse`가 깨진다.
 
@@ -95,6 +96,12 @@
   - `occupants`는 **본인을 포함**하며, 본인을 빼는 것은 클라이언트 책임이다. 수신자마다 다른 페이로드를 만들면 방 단위 fan-out 캐시를 쓸 수 없기 때문이다.
   - `shortDesc`는 싣지 않는다(2341방 중 2327방이 빈 문자열).
   - 서버가 싣는 목록은 오라클 방 표시 규칙으로 걸러진 것이다. [`movement-rooms.md`](movement-rooms.md) §방 표시 가시성 필터를 참조한다. 기준은 [`live-world-foundation.md`](live-world-foundation.md)다.
+- `{ type: 'world:presence', roomId: int(min 0), subject: {kind: 'player', characterId: string(min 1), name: string(min 1)}, change: ... }` — 방 입·퇴장 델타. 같은 방의 **다른** 점유자가 들어오거나 나갈 때 그 방에 남은(또는 도착 시점에 있는) 수신자에게 보낸다. `roomId`는 통지가 일어난 방이다.
+  - `change`는 `change` 키로 판별하는 유니온이다: `moved-out`(이동 퇴장, `direction: string(min 1)` 필수) · `moved-in`(이동 도착) · `entered`(접속 진입) · `exited`(세션 종료). 앞 셋은 `announce: boolean`을 싣고, `exited`는 `announce: false` 리터럴만 허용한다(원본이 접속 종료를 알리지 않는다). 방향 필수·`exited` 무음 규칙은 `refine` 없이 strict 판별 유니온이 파싱 단계에서 강제하므로, 다른 변화에 `direction`이 붙으면 거부된다.
+  - `announce`는 원본 문장을 출력할지 여부다. 은신·투명 억제는 이벤트를 막지 않고 `announce`만 `false`로 만든다 — 점유자 목록 갱신은 항상 일어난다. 판정은 이동자 플래그만 보며 수신자별로 달라지지 않는다([`character-flags.md`](character-flags.md)).
+  - `subject.kind`는 확장용 판별자다(지금은 `'player'`뿐). `subject.name`은 `world:room`의 `occupants[].name`과 같은 출처다. 이름을 해석하지 못하면 서버가 이벤트를 생략한다.
+  - `world:room` 선례를 따라 **`correlationId`를 싣지 않는다**(상태 이벤트). 이동자 본인에게는 보내지 않는다.
+  - 기준은 [`movement-rooms.md`](movement-rooms.md)·[`live-world-foundation.md`](live-world-foundation.md)다.
 - `{ type: 'chat:said', channel: 'say'|'yell'|'broadcast'|'emote', speakerCharacterId: string(min 1), text: string(min 1, max 512), target?: string(min 1, max 64) }` — 채널 fan-out을 받는 쪽에 보내는 통지. `ChannelDeliveryContext`와 1:1로 매핑되며, 발화자는 `speakerCharacterId`로 평탄화한다. 인바운드 `chat:message`와 이름을 다르게 해(said vs message) 방향을 구분한다. 길이 상한은 인바운드 chat 명령과 같은 값을 아웃바운드에도 적용한다.
 - `{ type: 'progress:trained', level: int(min 1), levelsGained: int(min 0), experience: int(min 0), gold: int(min 0), hpCurrent: int(min 0), mpCurrent: int(min 0), stats: [int×5], prestige: 'invincible'|'caretaker'|'none' }` — 연마 성공 통지. `train()`이 확정한 성장 결과 스냅샷을 본인에게 1회 보낸다.
   - `world:room` 선례를 따라 **`correlationId`를 싣지 않는다**. 상태 이벤트이기 때문이다. 거부할 때만 `error`로 상관 키를 돌려준다.
@@ -308,12 +315,13 @@ E3 하드닝(#54)은 자원 한도 필드 3개(`WS_MAX_CONNECTIONS`·`WS_MAX_CON
 - **`debug:echo`는 무권한 노출** — 진단과 파이프라인 검증 전용이다. 프로덕션 빌드에서 제거할지, 플래그로 게이트할지는 후속 하드닝에서 다시 검토한다.
 - **`WS_HEARTBEAT_PONG_TIMEOUT_MS`는 미소비 예약 seam** — 현재 단일 인터벌 모델에서 pong별 실질 마감은 `PING_INTERVAL`이다. 이 필드를 낮춰도 종료 타이밍은 바뀌지 않는다.
 - **TLS는 TLS-ready pass-through만** — `buildApp`이 `https` 서버 옵션을 Fastify로 그대로 넘겨 `wss`를 지원한다. dev는 평문 loopback `ws`를 쓴다. 프로덕션 TLS 종단 지점(Fastify https vs 리버스 프록시)과 하트비트 인터벌 확정값(프록시 idle timeout 75% 규칙)은 배포/인프라 토픽에서 다시 조정한다.
-- **`protocolVersion` bump 정책 미확정** — 형식은 단조 증가 정수로 확정했다(현재 `6`). 지금까지의 변경 이력은 다음과 같다.
+- **`protocolVersion` bump 정책 미확정** — 형식은 단조 증가 정수로 확정했다(현재 `7`). 지금까지의 변경 이력은 다음과 같다.
   - 1→2: 라이브 월드 foundation의 `world:move`·`world:room`·`chat:said` 신설
   - 2→3: `progress:train` 명령·`progress:trained` 이벤트 신설
   - 3→4: E11 `world:room` 페이로드 확장
   - 4→5: #120 `progress:study` 명령·`progress:studied` 이벤트 신설
   - 5→6: #121 `combat:attack` 명령과 `combat:attacked`·`character:stats` 이벤트 신설
+  - 6→7: `world:presence` 이벤트 신설
 
   *언제* 올리는가(호환 불가 변경의 기준과 문서화)는 프로토콜이 커질 때 따로 정한다. 지금까지의 실제 관행은 "`strictObject` variant에 required 필드가 늘거나 variant가 신설되면 올린다"이다.
 - **한글 자유 텍스트 파서 없음** — E3-4가 자유채팅 입력을 `ChannelPort`로 넘기는 seam을 더했다([`freechat-permission-seam.md`](freechat-permission-seam.md)). 라이브 월드 foundation이 실제 방 채널 어댑터를 연결해, 같은 방 안 전파는 동작한다([`live-world-foundation.md`](live-world-foundation.md)). 나머지는 다른 토픽이 맡는다.

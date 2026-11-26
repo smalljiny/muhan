@@ -72,6 +72,8 @@ export function getDirectionHints(room: RoomNode): DirectionHints
 4. 공유 게이트 검사 `evaluateMoveGates` 실행. 거부면 이동 취소(재배치·방송 없음).
 5. 통과 시 순서: `broadcastLeave`(actor가 아직 출발 방 점유자) → `occupants` 재배치(`source.delete`/`target.add`) → `broadcastJoin`(actor가 이미 도착 방 점유자).
 
+방송 seam 시그니처는 `broadcastLeave(room, actor, ctx)`·`broadcastJoin(room, actor, ctx)`다. `ctx`는 변화 문맥이다 — 이동 퇴장은 `{ change: 'moved-out', mode, exit }`, 이동 도착은 `{ change: 'moved-in', mode, exit }`로 사용한 mode와 출구를 싣는다(`world/presence.ts`의 `PresenceLeaveContext`·`PresenceJoinContext`). 같은 seam을 세션 진입(`entered`)·종료(`exited`)도 쓰며 이때 ctx는 `change`만 갖는다. 종료의 `exited`는 `release`가 **실제로 점유를 해제했을 때만** 방송한다. 프로덕션 연결은 `ws/presenceBroadcaster.ts`가 이를 `world:presence`로 바꿔 이동자를 제외한 방 점유자에게 보낸다([`live-world-foundation.md`](live-world-foundation.md)). 전송이 연결되지 않은 호출자의 기본값은 no-op이다.
+
 `flee` 확률 선택은 `FleeRng` seam에 위임한다. E4-1b 기본 `defaultFleeRng`는 첫 가시 출구를 고르는 결정적 stub이라 단위 테스트가 결정적으로 통과한다. 실 확률(65%+dex 굴림)·시드 규약은 E8-2 RNG 규약과 일치하도록 맞춰 이 seam에 주입한다. `directional/named/sneak`는 출구 선택 단계에서 의도적으로 동일한 이름 탐색이다 — 은신 유지 판정은 게이트 14(stub) 담당이라 선택 단계에서 갈리지 않는다.
 
 ### 게이트 검사 (`moveGates.ts`)
@@ -163,7 +165,7 @@ gate 1(출구 존재)과 `XNOSEE` 이름 탐색 제외는 `tryMove`가 담당한
 - **강제 게이트 6종만 실 거부** — 출구 존재+`XNOSEE`·dangling·`XLOCKD`·`XCLOSD`·시간·정원. 나머지 15종(진영·레벨·전투·경비 등)은 순서-유지 pass-through stub이며 입력 에픽(E4-2/E5/E6/E7) 대기다.
 - **정원 게이트 근사** — 전 점유자 카운트로 판정한다(가시 플레이어 필터 `PINVIS`는 E5 입력). 투명 플레이어가 있으면 원본보다 빨리 만원 판정될 수 있다.
 - **문 명령·인벤토리·picklock 미연결** — 전이 함수·`keyMatch` predicate만 제공한다. 플레이어 WS 명령(openexit/lock 등)·열쇠 아이템 실 조회·picklock(도둑 클래스·쿨다운·dex)은 호출자 seam(명령/인벤토리 에픽·E5).
-- **이동 leave/join 방송 미연결** — `broadcastLeave`/`broadcastJoin`은 프로덕션 연결에서 no-op이다. 방 채팅 전파는 채널 포트가 담당하고, 이동 통지(누가 들어왔다/나갔다)는 후속 토픽 몫이다.
+- **이동 통지는 `world:presence`로 연결됨, 수신자별 가시성은 없다** — `broadcastLeave`/`broadcastJoin`은 프로덕션에서 presence 방송기에 연결돼 `world:presence`를 보낸다. `announce` 판정은 이동자 플래그만 보고 수신자를 보지 않으므로, 관찰자별 가시성은 #129 몫이다. 방 채팅 전파는 여전히 채널 포트가 담당한다.
 - **라이브 상태만 — write-back 없음** — 방 점유자·문 상태는 인메모리 라이브 상태다. 영속화(write-back)는 seam이며 재부팅 시 문 상태는 기본값(`ltime=0`·`interval=60`)으로 복귀한다.
 - **좌표 없음** — 서버가 기준으로 삼는 것은 그래프+방향 힌트뿐이다. automap 좌표 합성·렌더는 클라 파생(E11에서도 미구현 — 현재 방만 렌더한다).
 - **방 표시 가시성 필터가 관찰자 비의존** — 점유자 은신(`PHIDDN`/`PINVIS`/`PDMINV`)·광원/실명 게이트를 구현하지 않는다. 지금은 해당 상태를 세울 라이브 경로가 없어 누출이 없으나, `magic/`·`combat/` 연결 또는 광원 이식이 이 전제를 깬다(위 §방 표시 가시성 필터).
