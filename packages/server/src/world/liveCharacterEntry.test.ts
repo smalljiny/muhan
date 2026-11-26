@@ -75,6 +75,8 @@ type Harness = {
   hydrateInventory: ReturnType<typeof vi.fn>
   onRoomEntered: ReturnType<typeof vi.fn>
   onRoomLeft: ReturnType<typeof vi.fn>
+  broadcastJoin: ReturnType<typeof vi.fn>
+  broadcastLeave: ReturnType<typeof vi.fn>
   warn: ReturnType<typeof vi.fn>
   error: ReturnType<typeof vi.fn>
   peekPendingCharacter: ReturnType<typeof vi.fn>
@@ -93,6 +95,8 @@ function makeHarness(character: Character | null, inventory: ObjectInstance[] = 
   const hydrateInventory = vi.fn((_id: string) => Promise.resolve([...inventory]))
   const onRoomEntered = vi.fn()
   const onRoomLeft = vi.fn()
+  const broadcastJoin = vi.fn()
+  const broadcastLeave = vi.fn()
   const warn = vi.fn()
   const error = vi.fn()
   // 기본값은 "미영속 스냅샷 없음" — 기존 케이스의 의미를 바꾸지 않는다(#8.12 회귀 없음).
@@ -104,6 +108,8 @@ function makeHarness(character: Character | null, inventory: ObjectInstance[] = 
     resolveRoom: (roomId: number) => rooms.get(roomId),
     onRoomEntered,
     onRoomLeft,
+    broadcastJoin,
+    broadcastLeave,
     peekPendingCharacter,
     logger: { warn, error },
   }
@@ -113,6 +119,8 @@ function makeHarness(character: Character | null, inventory: ObjectInstance[] = 
     hydrateInventory,
     onRoomEntered,
     onRoomLeft,
+    broadcastJoin,
+    broadcastLeave,
     warn,
     error,
     peekPendingCharacter,
@@ -484,6 +492,49 @@ describe('createLiveCharacterEntry', () => {
       expect(room.occupants.size).toBe(1)
       expect(h.onRoomEntered).toHaveBeenCalledTimes(1)
     })
+
+    it('신규 추가 시 broadcastJoin을 entered 문맥으로 add 뒤·onRoomEntered 앞에 1회 호출한다', () => {
+      const character = makeCharacter('char-1', 5)
+      h = makeHarness(character)
+      const room = h.rooms.get(5)!
+      const entry = createLiveCharacterEntry(h.deps)
+
+      const order: string[] = []
+      let presentAtBroadcast = false
+      let registeredAtBroadcast = false
+      h.broadcastJoin.mockImplementation(() => {
+        order.push('broadcastJoin')
+        presentAtBroadcast = room.occupants.has('char-1')
+        registeredAtBroadcast = h.registry.has('char-1')
+      })
+      h.onRoomEntered.mockImplementation(() => {
+        order.push('onRoomEntered')
+      })
+
+      entry.place({ character, inventory: [] })
+
+      expect(h.broadcastJoin).toHaveBeenCalledTimes(1)
+      expect(h.broadcastJoin).toHaveBeenCalledWith(
+        room,
+        { characterId: 'char-1', currentRoomId: 5 },
+        { change: 'entered' },
+      )
+      expect(presentAtBroadcast).toBe(true) // add가 방송보다 선행
+      expect(registeredAtBroadcast).toBe(true) // 등록이 방송보다 선행
+      expect(order).toEqual(['broadcastJoin', 'onRoomEntered'])
+    })
+
+    it('재접속(이미 점유자)이면 broadcastJoin을 다시 호출하지 않는다', () => {
+      const character = makeCharacter('char-1', 5)
+      h = makeHarness(character)
+      const entry = createLiveCharacterEntry(h.deps)
+
+      entry.place({ character, inventory: [] })
+      entry.place({ character, inventory: [] })
+
+      expect(h.broadcastJoin).toHaveBeenCalledTimes(1)
+      expect(h.broadcastLeave).not.toHaveBeenCalled()
+    })
   })
 
   describe('release', () => {
@@ -513,6 +564,73 @@ describe('createLiveCharacterEntry', () => {
       const entry = createLiveCharacterEntry(h.deps)
       expect(() => entry.release('unknown')).not.toThrow()
       expect(h.onRoomLeft).not.toHaveBeenCalled()
+      expect(h.broadcastLeave).not.toHaveBeenCalled()
+    })
+
+    it('broadcastLeave를 exited 문맥으로 delete 앞에 1회 호출한다(순서 broadcastLeave → delete → onRoomLeft)', () => {
+      const character = makeCharacter('char-1', 5)
+      h = makeHarness(character)
+      const room = h.rooms.get(5)!
+      const entry = createLiveCharacterEntry(h.deps)
+      entry.place({ character, inventory: [] })
+
+      const order: string[] = []
+      let presentAtBroadcast = false
+      let registeredAtBroadcast = false
+      let presentAtHook = true
+      h.broadcastLeave.mockImplementation(() => {
+        order.push('broadcastLeave')
+        presentAtBroadcast = room.occupants.has('char-1')
+        registeredAtBroadcast = h.registry.has('char-1')
+      })
+      h.onRoomLeft.mockImplementation(() => {
+        order.push('onRoomLeft')
+        presentAtHook = room.occupants.has('char-1')
+      })
+
+      entry.release('char-1')
+
+      expect(h.broadcastLeave).toHaveBeenCalledTimes(1)
+      expect(h.broadcastLeave).toHaveBeenCalledWith(
+        room,
+        { characterId: 'char-1', currentRoomId: 5 },
+        { change: 'exited' },
+      )
+      expect(presentAtBroadcast).toBe(true) // 방송 시점엔 아직 점유자
+      expect(registeredAtBroadcast).toBe(true) // 방송 시점엔 아직 레지스트리에 있음
+      expect(presentAtHook).toBe(false) // delete가 onRoomLeft보다 선행(기존 계약 보존)
+      expect(order).toEqual(['broadcastLeave', 'onRoomLeft'])
+      expect(h.registry.has('char-1')).toBe(false)
+    })
+
+    it('방이 해석되지 않으면 broadcastLeave를 호출하지 않고 레지스트리에서만 제거한다', () => {
+      h = makeHarness(null)
+      // 그래프에 없는 방(999)을 currentRoom으로 가진 라이브 엔트리를 직접 등록한다.
+      h.registry.register({ character: makeCharacter('char-9', 999), inventory: [] })
+      const entry = createLiveCharacterEntry(h.deps)
+
+      entry.release('char-9')
+
+      expect(h.broadcastLeave).not.toHaveBeenCalled()
+      expect(h.onRoomLeft).not.toHaveBeenCalled()
+      expect(h.registry.has('char-9')).toBe(false)
+    })
+
+    it('레지스트리엔 있지만 방 점유 집합에 없으면 broadcastLeave 없이 기존 정리만 수행한다', () => {
+      const character = makeCharacter('char-1', 5)
+      h = makeHarness(character)
+      const room = h.rooms.get(5)!
+      // place를 거치지 않고 등록만 한다 — 점유 집합에는 없다.
+      h.registry.register({ character, inventory: [] })
+      const entry = createLiveCharacterEntry(h.deps)
+
+      entry.release('char-1')
+
+      expect(h.broadcastLeave).not.toHaveBeenCalled()
+      expect(h.onRoomLeft).toHaveBeenCalledTimes(1)
+      expect(h.onRoomLeft).toHaveBeenCalledWith(room, { characterId: 'char-1', currentRoomId: 5 })
+      expect(room.occupants.has('char-1')).toBe(false)
+      expect(h.registry.has('char-1')).toBe(false)
     })
   })
 })

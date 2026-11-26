@@ -69,6 +69,8 @@ WsClientSnapshot
 3. `App`이 `phase === 'entered' | 'resumed'` 분기에서 `snapshot.room !== null`일 때만 `RoomPanel`을 `EventLog` **위에** 렌더한다.
 4. 출구 버튼 클릭 → `WsClient.move(direction)` → `clientCommandSchema` 검증 → `world:move{direction}` 송신. 검증 실패 시 프레임을 보내지 않고 `false`를 돌려준다.
 5. 서버가 응답 `world:room`을 보내면 1번으로 돌아가 패널이 갱신된다.
+6. `world:presence`는 `transport/presence.ts`의 `applyPresence`가 현재 방 상태에 불변 반영한다. `roomId`가 현재 방과 다르거나 `room === null`이면 무시한다. 점유자 목록은 `announce`와 무관하게 항상 갱신하고(`moved-in`·`entered`는 없을 때만 추가, `moved-out`·`exited`는 제거), `announce: true`인 변화만 원본 문장을 `RoomState.notices`에 덧붙여 최근 `NOTICE_LIMIT`(20)개만 남긴다. 문장은 `<이름>님이 <방향>쪽으로 갔습니다.`(`moved-out`)와 `<이름>님이 도착하였습니다.`(`moved-in`·`entered`)다. 원본이 항상 `님`을 붙이므로 조사를 계산하지 않고, `exited`는 문장이 없다.
+7. `notices`는 같은 방을 가리키는 `world:room`(재조회)에서는 유지하고, 다른 방이면 비운다. `RoomPanel`이 알림 목록을 렌더한다.
 
 출구 이름은 **가공 없이 그대로** 보낸다 — `world:move.direction`은 방 그래프 출구 이름과 정확 일치할 최종 문자열이며 방향 별칭 해석이 불필요하다.
 
@@ -105,7 +107,7 @@ WsClientSnapshot
 
 ## 제약사항
 
-- **`occupants`는 스냅샷이지 델타가 아니다** — 발생 시점이 진입·이동 성공 두 곳뿐이라, 내가 가만히 있는 동안 다른 사람이 들어와도 목록이 갱신되지 않는다. 실시간 입·퇴장 통지는 **#116** 담당이다.
+- **`occupants`는 스냅샷 + `world:presence` 델타다** — `world:room`은 진입·이동 성공 두 곳에서만 발생하지만, 다른 사람의 입·퇴장은 `world:presence`가 목록을 갱신하고 `notices`에 알림 문장을 남긴다. `notices`는 최근 20개 상한의 방 상태 필드이며 같은 방 스냅샷에서 유지된다. 몬스터·아이템은 여전히 델타가 없다. 알림은 관찰자와 무관한 이동자 플래그로만 억제된다(수신자별 가시성은 #129).
 - **`creatures`는 정적** — 몬스터 실시간 이동·전투(**#99**) 미연결. `name`·`level`만 싣는다(hp·전투 스탯은 E12 **#61**).
 - **몬스터 표시 문구가 근사** — 오라클 방 표시는 몬스터를 `description`으로 출력하고 동명 개체를 `(xN)`으로 묶는다. 이 계층은 `name`을 쓴다 — `CreatureInstance`에 `description` 필드가 없어 월드 로더·타입 변경이 동반되기 때문이다. 오라클 이식이 아니라 근사다.
 - **`items`는 표시 전용** — 집기·버리기는 **#120**.

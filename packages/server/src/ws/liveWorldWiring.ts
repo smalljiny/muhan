@@ -29,6 +29,7 @@ import type { MoveHandlerDeps } from './handlers/move.js'
 import type { TrainHandlerDeps } from './handlers/train.js'
 import type { StudyHandlerDeps } from './handlers/study.js'
 import { createRoomChannelAdapter } from './roomChannelAdapter.js'
+import { createPresenceBroadcaster } from './presenceBroadcaster.js'
 import { createLiveSessionLifecycleAdapter } from './liveSessionLifecycleAdapter.js'
 import { assembleDeathSeams } from './assembleDeathSeams.js'
 import type { AttackHandlerDeps } from './handlers/attack.js'
@@ -44,8 +45,13 @@ import type { ConnectionContext } from './connection.js'
  * 방 리졸버(resolveRoom)로 파생한다.
  *
  * index.ts boot는 커버리지 제외 연결 코드라, 이 파생 로직을 테스트 가능한 순수 팩토리로 추출하고 index.ts는
- * 묶음 조립·전달만 남긴다(worldRuntime.ts 관례 미러). 팩토리는 transport(소켓·safeSend)를 만지지 않아
- * fake 없이 단위 테스트된다 — transport 결합은 `assembleRoomChannelPort`의 sendTo 클로저 하나에 격리한다.
+ * 묶음 조립·전달만 남긴다(worldRuntime.ts 관례 미러). 팩토리는 소켓·safeSend를 직접 만지지 않아
+ * fake 없이 단위 테스트된다 — 소켓 역참조는 `createSendToCharacter` 하나에 격리하고, 팩토리는 그 결과인
+ * `sendToCharacter`(characterId → 이벤트 전송)만 선택 인자(`LiveWorldTransport`)로 받는다.
+ *
+ * presence 방송기(`createPresenceBroadcaster`)는 1회 생성해 진입 코어(진입 `entered`·종료 `exited`)와
+ * 이동 seam(`moved-out`·`moved-in`)에 같은 참조를 넣는다 — 경로마다 방송기를 따로 만들면 이름·플래그
+ * 해석이나 전송 대상이 경로별로 갈릴 수 있다.
  *
  * 단일 공유 불변식(#3): entry(진입 코어)·liveRegistry는 hydrate/place(liveWorldBinding)·이동(moveDeps)·
  * 종료 정리(lifecyclePort.release)·발화자 방 해석(resolveRoom)이 **동일 인스턴스**를 배후에 둬야 상태가
@@ -132,6 +138,18 @@ export interface LiveWorldWiringBundle {
   readonly logger: LiveWorldLogger
 }
 
+/**
+ * 팩토리의 전송 인자 — registerWebsocket이 `createSendToCharacter`로 만든 함수를 넘긴다.
+ * 주지 않으면(단위 테스트·재접속 회귀 하네스 등) presence 방송기는 아무것도 보내지 않는다.
+ */
+export interface LiveWorldTransport {
+  /** 한 캐릭터에게 서버 이벤트 전송. 바인딩·소켓이 없으면 조용히 건너뛴다. */
+  readonly sendToCharacter: (characterId: string, event: ServerEvent) => void
+}
+
+/** 전송 인자가 없을 때의 sendToCharacter — 아무것도 보내지 않는다. */
+const sendNothing = (_characterId: string, _event: ServerEvent): void => {}
+
 /** 팩토리 산출물 — registerWebsocket이 소비할 파생 seam 묶음. */
 export interface LiveWorldWiring {
   /** 세션 진입 seam(hydrate/place/roomSummary 파생용 진입 코어 + roomId 리졸버). */
@@ -182,13 +200,17 @@ export interface LiveWorldWiring {
 }
 
 /**
- * 라이브 월드 의존 묶음을 파생 seam으로 조립한다(순수 — transport 미접촉).
+ * 라이브 월드 의존 묶음을 파생 seam으로 조립한다(소켓 미접촉 — 전송은 `transport.sendToCharacter`로만).
  *
  * entry를 1회 생성해 liveWorldBinding·lifecyclePort가 공유하고(#3), roomId 리졸버(worldGraph.get)를
- * liveWorldBinding·tryMove가 공유한다. 이동 방송(broadcastLeave/broadcastJoin)은 Story 8 몫이라 여기서는
- * no-op으로 채운다 — 방 채팅과 달리 이동 통지는 이 토픽 완료 기준 밖이다.
+ * liveWorldBinding·tryMove가 공유한다. presence 방송기도 1회 생성해 진입 코어의 broadcastJoin/broadcastLeave와
+ * tryMoveDeps의 broadcastLeave/broadcastJoin에 같은 참조로 넣는다. `transport`가 없으면 방송기는 아무것도
+ * 보내지 않는다.
  */
-export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldWiring {
+export function createLiveWorldWiring(
+  bundle: LiveWorldWiringBundle,
+  transport?: LiveWorldTransport,
+): LiveWorldWiring {
   const resolveRoomById = (roomId: number): RoomNode | undefined => bundle.worldGraph.get(roomId)
 
   // characters 스냅샷 seam — 1회 생성해 moveDeps·lifecyclePort가 같은 인스턴스를 공유한다(계약 단일화).
@@ -211,6 +233,28 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
   // 라이브 전투상태 레지스트리 — **1회** 생성해 진입(place)·공격 핸들러·세션 종료가 공유한다(#3).
   const combatRegistry = createCombatRegistry()
 
+  // 점유자 이름 리졸버 — **1회 생성**해 진입 seam(liveWorldBinding)·이동 seam(moveDeps)·presence 방송기가
+  // 같은 참조를 공유한다(#3). 두 번 만들면 발생 경로마다 서로 다른 클로저를 쓰게 되어 나중에 해석 규칙이
+  // 갈릴 수 있다. 방송기가 진입 코어보다 먼저 만들어져야 하므로 그 앞에 선언한다.
+  const resolveCharacterName = (characterId: string): string | undefined =>
+    bundle.liveRegistry.get(characterId)?.character.name
+
+  // 이동자 플래그 — 라이브 레지스트리 문서로 P-flag를 합성한다(전투상태 조립과 같은 tick seam). 미등록이면
+  // 빈 hex(억제 없음)다. 방송기는 이 값으로 PHIDDN·PDMINV 억제(announce)를 판정한다.
+  const resolveActorFlags = (characterId: string): string => {
+    const live = bundle.liveRegistry.get(characterId)
+    return live === undefined ? '' : composeCharacterFlags(live.character, bundle.now())
+  }
+
+  // presence 방송기 — **1회** 생성해 진입 코어(entered·exited)와 이동 seam(moved-out·moved-in)이 같은
+  // 참조를 쓴다. 방송기는 예외를 밖으로 던지지 않으므로 점유 상태 갱신 경로를 끊지 않는다.
+  const presence = createPresenceBroadcaster({
+    resolveCharacterName,
+    resolveActorFlags,
+    sendToCharacter: transport?.sendToCharacter ?? sendNothing,
+    logger: bundle.logger,
+  })
+
   // 진입 코어 — 단일 인스턴스로 생성해 liveWorldBinding·lifecyclePort가 공유한다(#3).
   const entryCore = createLiveCharacterEntry({
     characterRepo: bundle.characterRepo,
@@ -218,6 +262,8 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     resolveRoom: resolveRoomById,
     onRoomEntered: bundle.onRoomEntered,
     onRoomLeft: bundle.onRoomLeft,
+    broadcastJoin: presence.broadcastJoin,
+    broadcastLeave: presence.broadcastLeave,
     peekPendingCharacter,
     logger: bundle.logger,
   })
@@ -271,11 +317,6 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     },
   }
 
-  // 점유자 이름 리졸버 — **1회 생성**해 진입 seam(liveWorldBinding)과 이동 seam(moveDeps)이 같은 참조를
-  // 공유한다(#3). 두 번 만들면 두 발생 경로가 서로 다른 클로저를 쓰게 되어 나중에 해석 규칙이 갈릴 수 있다.
-  const resolveCharacterName = (characterId: string): string | undefined =>
-    bundle.liveRegistry.get(characterId)?.character.name
-
   // 방 스코프 플레이어 리졸버 — 위 이름 리졸버를 감싸 **1회 생성**한다(#3의 확장). 지목 경로가 표시
   // 경로(world:room 두 생산자)와 같은 클로저를 배후에 둬야 "보이는 이름"과 "지목되는 이름"이 갈리지 않는다.
   const resolveRoomPlayer = createRoomPlayerResolver(resolveCharacterName)
@@ -286,14 +327,13 @@ export function createLiveWorldWiring(bundle: LiveWorldWiringBundle): LiveWorldW
     resolveCharacterName,
   }
 
-  // 이동 방송 seam은 Story 8이 채널 어댑터로 연결한다(이동 통지). 이 토픽은 no-op으로 두어 tryMove 계약만
-  // 충족한다 — 방 채팅 전파(#6)는 채널 포트가, 이동 leave/join 통지는 후속 토픽이 담당한다.
-  const noopBroadcast = (_room: RoomNode, _actor: MoveActor): void => {}
+  // 이동 방송 seam — 진입 코어와 같은 presence 방송기 인스턴스를 넣는다(moved-out·moved-in).
+  // 방 채팅 전파(#6)는 채널 포트가 담당한다.
   const tryMoveDeps: TryMoveDeps = {
     resolveRoom: resolveRoomById,
     currentHour: bundle.currentHour,
-    broadcastLeave: noopBroadcast,
-    broadcastJoin: noopBroadcast,
+    broadcastLeave: presence.broadcastLeave,
+    broadcastJoin: presence.broadcastJoin,
     onRoomEntered: bundle.onRoomEntered,
     onRoomLeft: bundle.onRoomLeft,
     rng: defaultFleeRng,
@@ -402,28 +442,42 @@ export interface RoomChannelPortDeps<Socket> {
 }
 
 /**
- * 방 채널 포트를 조립한다 — 유일한 transport 결합 지점(sendTo).
+ * characterId → 소켓 전송 함수를 만든다 — 방 채팅(`assembleRoomChannelPort`)과 presence 전송
+ * (`LiveWorldTransport.sendToCharacter`)이 공유하는 transport 결합 지점이다.
  *
- * 방 fan-out 대상 결정은 `createRoomChannelAdapter`(방 occupants 전 멤버, 발화자 자신 제외 안 함)에 위임하고,
- * 이 함수는 멤버 한 명을 실제 소켓으로 보내는 sendTo만 조립한다. sendTo는 세션 색인으로 바인딩을 찾고 소켓을
- * 역참조해 `chat:said`(ChannelDeliveryContext 평탄화)를 safeSend로 내보낸다. 미등록 멤버(색인 없음)·정리된
- * 소켓(역참조 undefined)은 조용히 스킵한다. Socket 타입을 제네릭으로 열어 소켓 구현(ws.WebSocket)에 결합하지
- * 않아 fake 소켓으로 단위 테스트된다.
+ * 세션 색인으로 바인딩을 찾고 소켓을 역참조해 받은 이벤트를 그대로 safeSend로 1회 내보낸다. 미등록
+ * 캐릭터(색인 없음)·정리된 소켓(역참조 undefined)은 조용히 건너뛴다. Socket 타입을 제네릭으로 열어 소켓
+ * 구현(ws.WebSocket)에 결합하지 않아 fake 소켓으로 단위 테스트된다.
  */
-export function assembleRoomChannelPort<Socket>(deps: RoomChannelPortDeps<Socket>): ChannelPort {
-  const sendTo = (characterId: string, ctx: ChannelDeliveryContext): void => {
+export function createSendToCharacter<Socket>(
+  deps: Pick<RoomChannelPortDeps<Socket>, 'registry' | 'resolveSocket' | 'safeSend'>,
+): (characterId: string, event: ServerEvent) => void {
+  return (characterId, event) => {
     const binding = deps.registry.get(characterId)
     if (binding === undefined) return
     const socket = deps.resolveSocket(binding.connection)
     if (socket === undefined) return
-    const event: ServerEvent = {
+    deps.safeSend(socket, event)
+  }
+}
+
+/**
+ * 방 채널 포트를 조립한다.
+ *
+ * 방 fan-out 대상 결정은 `createRoomChannelAdapter`(방 occupants 전 멤버, 발화자 자신 제외 안 함)에 위임하고,
+ * 이 함수는 멤버 한 명에게 `chat:said`(ChannelDeliveryContext 평탄화)를 보내는 sendTo만 조립한다. 실제
+ * 소켓 역참조·전송은 `createSendToCharacter`가 맡는다(미등록 멤버·정리된 소켓은 조용히 스킵).
+ */
+export function assembleRoomChannelPort<Socket>(deps: RoomChannelPortDeps<Socket>): ChannelPort {
+  const sendToCharacter = createSendToCharacter(deps)
+  const sendTo = (characterId: string, ctx: ChannelDeliveryContext): void => {
+    sendToCharacter(characterId, {
       type: 'chat:said',
       channel: ctx.channel,
       speakerCharacterId: ctx.speaker.characterId,
       text: ctx.text,
       ...(ctx.target !== undefined ? { target: ctx.target } : {}),
-    }
-    deps.safeSend(socket, event)
+    })
   }
   return createRoomChannelAdapter({ resolveRoom: deps.resolveRoom, sendTo })
 }

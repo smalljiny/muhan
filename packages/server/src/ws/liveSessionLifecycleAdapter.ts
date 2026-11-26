@@ -71,8 +71,9 @@ import type { CombatRegistry } from '../combat/combatRegistry.js'
  *
  * ── Story 3 release 코어 재사용(T6.2) ──────────────────────────────
  * 점유 해제는 Story 3의 `createLiveCharacterEntry(...).release`를 그대로 주입받아 쓴다(중복 구현 금지).
- * release는 occupants.delete → onRoomLeft(delete-before-hook) → registry.remove 순서를 담당하며
- * 미등록 id에 no-op이다.
+ * release는 (점유 시) broadcastLeave(exited) → occupants.delete → onRoomLeft(delete-before-hook) →
+ * registry.remove 순서를 담당하며 미등록 id에 no-op이다. registry.remove가 방송보다 뒤여야 방송기가
+ * 이동자 이름을 레지스트리에서 해석할 수 있다.
  *
  * ── 기본 연결은 그대로(T6.5) ────────────────────────────────────────
  * Story 6은 plugin.ts의 기본 lifecyclePort를 바꾸지 않는다 — 기본은 여전히 no-op 어댑터다. 이 라이브
@@ -86,7 +87,7 @@ import type { CombatRegistry } from '../combat/combatRegistry.js'
 export interface LiveSessionLifecycleAdapterDeps {
   /** 라이브 엔트리 조회(read-only). 종료 시점 currentRoom을 읽는 데만 쓴다. */
   readonly liveRegistry: Pick<LiveCharacterRegistry, 'get' | 'register'>
-  /** Story 3의 release 코어(occupants.delete → onRoomLeft → registry.remove). 미등록 id에 no-op. */
+  /** Story 3의 release 코어(broadcastLeave(exited) → occupants.delete → onRoomLeft → registry.remove). 미등록 id에 no-op. */
   readonly release: (characterId: string) => void
   /**
    * characters 변경 기록 seam(타입 좁힘 — 전체 Character 문서만 수용). 실 flush는 저장 스케줄러가
@@ -136,7 +137,7 @@ export function createLiveSessionLifecycleAdapter(
       // (3) dirty-before-release(D-A1/T6.3): release가 엔트리를 제거하기 전에 종료 시점 문서를 스냅샷한다.
       deps.markCharacterDirty(ctx.characterId, character)
 
-      // (4) Story 3 release 코어 재사용(T6.2): occupants.delete → onRoomLeft → registry.remove.
+      // (4) Story 3 release 코어 재사용(T6.2): broadcastLeave(exited) → occupants.delete → onRoomLeft → registry.remove.
       //     **전투상태 제거도 여기서 일어난다** — 조립 팩토리가 `place`(등록)와 `release`(제거)를
       //     같은 래퍼에 대칭으로 뒀기 때문이다. 이 어댑터가 따로 제거하면 담당자가 둘이 된다.
       deps.release(ctx.characterId)

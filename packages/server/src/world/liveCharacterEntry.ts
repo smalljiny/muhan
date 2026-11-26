@@ -1,6 +1,7 @@
 import type { Character, ObjectInstance, RoomNode } from 'shared'
 import { characterPatchSchema } from '../repo/characterSchemas.js'
 import type { LiveCharacter, LiveCharacterRegistry } from './liveCharacterRegistry.js'
+import type { PresenceJoinContext, PresenceLeaveContext } from './presence.js'
 import type { MoveActor } from './tryMove.js'
 
 /**
@@ -12,8 +13,9 @@ import type { MoveActor } from './tryMove.js'
  *  - 재접속은 재로드하지 않는다(D-G 1). 이미 등록된 엔트리는 findById 없이 그대로 반환해,
  *    아직 영속되지 않은 currentRoom(라이브 in-place 갱신값)을 디스크 문서로 덮어쓰지 않는다.
  *  - place/release는 동기이며 occupants Set을 in-place 변경한다(worldGraph 승인 carve-out).
- *    release의 순서 계약은 tryMove.ts:195-199를 미러한다 — occupants.delete가 onRoomLeft보다
- *    반드시 선행한다(leave-hook은 빈 방을 전제로 비활성화한다).
+ *    release의 순서 계약은 tryMove 통과 경로 (5a)~(5b')를 미러한다 — (점유 시) broadcastLeave(exited)
+ *    → occupants.delete → onRoomLeft. delete가 onRoomLeft보다 반드시 선행한다(leave-hook은 빈 방을
+ *    전제로 비활성화한다).
  *
  * 모든 의존성은 파라미터로 주입한다(T3.5 — 전역 조회 없음).
  *
@@ -89,6 +91,22 @@ export interface LiveCharacterEntryDeps {
   readonly resolveRoom: (roomId: number) => RoomNode | undefined
   readonly onRoomEntered: (room: RoomNode, actor: MoveActor) => void
   readonly onRoomLeft: (room: RoomNode, actor: MoveActor) => void
+  /**
+   * 접속 진입 방송 seam — place가 **새로** 점유자를 추가한 직후(onRoomEntered 앞) `entered` 문맥으로
+   * 부른다. 재접속 멱등 경로에서는 부르지 않는다.
+   *
+   * **필수 필드다**(optional 아님). 이동 경로(`TryMoveDeps.broadcastJoin`)와 같은 방송기를 연결해야
+   * 진입이 같은 방 점유자에게 통지된다 — 연결 누락을 타입으로 차단한다. 전송이 없는 호출자는
+   * `noopBroadcastJoin`을 넘긴다.
+   */
+  readonly broadcastJoin: (room: RoomNode, actor: MoveActor, ctx: PresenceJoinContext) => void
+  /**
+   * 접속 종료 방송 seam — release가 실제 점유를 해제할 때만(방 해석 + 점유 집합에 있음) delete 직전에
+   * `exited` 문맥으로 부른다. 호출 시점에 actor는 아직 점유자이고 레지스트리에도 남아 있다.
+   *
+   * **필수 필드다**. 전송이 없는 호출자는 `noopBroadcastLeave`를 넘긴다.
+   */
+  readonly broadcastLeave: (room: RoomNode, actor: MoveActor, ctx: PresenceLeaveContext) => void
   /**
    * 미영속(write-behind) 캐릭터 스냅샷 조회 seam — `SaveEngine.peekPending('characters', id)`을
    * 연결 지점에서 1회 좁힌 것이다. 보유하지 않으면 `undefined`.
@@ -219,7 +237,10 @@ export function createLiveCharacterEntry(deps: LiveCharacterEntryDeps): LiveChar
 
       deps.liveRegistry.register(live)
       room.occupants.add(characterId)
-      deps.onRoomEntered(room, toActor(live.character))
+      const actor = toActor(live.character)
+      // 진입 방송은 add 뒤(actor가 이미 점유자) · entry-hook 앞 — tryMove의 join → onRoomEntered 미러.
+      deps.broadcastJoin(room, actor, { change: 'entered' })
+      deps.onRoomEntered(room, actor)
     },
 
     release(characterId) {
@@ -229,7 +250,12 @@ export function createLiveCharacterEntry(deps: LiveCharacterEntryDeps): LiveChar
       const actor = toActor(live.character)
       const room = deps.resolveRoom(live.character.currentRoom)
       if (room !== undefined) {
-        // 순서 계약(tryMove.ts:195-199 미러): delete가 onRoomLeft보다 선행한다.
+        // 실제 점유 해제에만 통지한다 — 점유 집합에 없으면(배치 전 등록 등) 방송하지 않는다.
+        // 방송은 delete 직전(actor가 아직 점유자)이다(tryMove의 broadcastLeave 시점 미러).
+        if (room.occupants.has(characterId)) {
+          deps.broadcastLeave(room, actor, { change: 'exited' })
+        }
+        // 순서 계약(tryMove 통과 경로 미러): delete가 onRoomLeft보다 선행한다.
         room.occupants.delete(characterId)
         deps.onRoomLeft(room, actor)
       }

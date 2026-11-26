@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import type { Character, RoomNode } from 'shared'
 import { createLiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
 import { createLiveCharacterEntry } from '../world/liveCharacterEntry.js'
+import { noopBroadcastJoin, noopBroadcastLeave } from '../world/presence.js'
 import { createMarkCharacterDirty } from '../world/markCharacterDirty.js'
 import { createCombatRegistry } from '../combat/combatRegistry.js'
 import { createLiveSessionLifecycleAdapter } from './liveSessionLifecycleAdapter.js'
@@ -74,6 +75,8 @@ function setup(loadRoom: number) {
     resolveRoom: (id: number) => rooms.get(id),
     onRoomEntered,
     onRoomLeft,
+    broadcastJoin: noopBroadcastJoin,
+    broadcastLeave: noopBroadcastLeave,
     peekPendingCharacter: () => undefined,
     logger: { warn: vi.fn(), error: vi.fn() },
   })

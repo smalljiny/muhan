@@ -394,6 +394,89 @@ describe('serverEventSchema (server→client 봉투)', () => {
     })
   })
 
+  describe('world:presence', () => {
+    /** 최소 유효 페이로드 — 케이스별로 필요한 필드만 덮어쓴다. */
+    const basePresence = {
+      type: 'world:presence',
+      roomId: 0,
+      subject: { kind: 'player', characterId: 'char-1', name: '타이' },
+      change: { change: 'entered', announce: true },
+    }
+
+    it('moved-out은 roomId·subject·direction을 그대로 싣고 통과한다', () => {
+      const parsed = serverEventSchema.parse({
+        ...basePresence,
+        roomId: 5,
+        change: { change: 'moved-out', direction: '북', announce: true },
+      })
+      expect(parsed).toEqual({
+        type: 'world:presence',
+        roomId: 5,
+        subject: { kind: 'player', characterId: 'char-1', name: '타이' },
+        change: { change: 'moved-out', direction: '북', announce: true },
+      })
+    })
+
+    it.each([
+      ['moved-in (direction 없음)', { change: 'moved-in', announce: false }],
+      ['entered announce true', { change: 'entered', announce: true }],
+      ['entered announce false', { change: 'entered', announce: false }],
+      ['exited announce false', { change: 'exited', announce: false }],
+    ])('%s는 통과한다', (_label, change) => {
+      expect(serverEventSchema.parse({ ...basePresence, change })).toEqual({
+        ...basePresence,
+        change,
+      })
+    })
+
+    // change 판별 유니온이 조합 규칙을 파싱 단계에서 강제한다 — refine 없이 거부되어야 한다.
+    it.each([
+      ['direction 없는 moved-out', { change: 'moved-out', announce: true }],
+      ['빈 문자열 direction의 moved-out', { change: 'moved-out', direction: '', announce: true }],
+      ['direction이 붙은 moved-in', { change: 'moved-in', direction: '북', announce: true }],
+      ['direction이 붙은 entered', { change: 'entered', direction: '북', announce: true }],
+      ['direction이 붙은 exited', { change: 'exited', direction: '북', announce: false }],
+      ['announce: true인 exited', { change: 'exited', announce: true }],
+      ['알 수 없는 change', { change: 'teleported', announce: true }],
+      ['announce 없는 entered', { change: 'entered' }],
+      ['change 내부의 알 수 없는 필드', { change: 'entered', announce: true, extra: 1 }],
+      [
+        'moved-out 내부의 알 수 없는 필드',
+        { change: 'moved-out', direction: '북', announce: true, extra: 1 },
+      ],
+      ['boolean이 아닌 announce', { change: 'entered', announce: 'yes' }],
+      ['string이 아닌 direction', { change: 'moved-out', direction: 1, announce: true }],
+    ])('%s를 거부한다', (_label, change) => {
+      expect(serverEventSchema.safeParse({ ...basePresence, change }).success).toBe(false)
+    })
+
+    it.each([
+      ['subject.kind가 creature', { kind: 'creature', characterId: 'char-1', name: '타이' }],
+      ['subject.kind 누락', { characterId: 'char-1', name: '타이' }],
+      ['빈 characterId', { kind: 'player', characterId: '', name: '타이' }],
+      ['빈 name', { kind: 'player', characterId: 'char-1', name: '' }],
+      [
+        'subject의 알 수 없는 필드',
+        { kind: 'player', characterId: 'char-1', name: '타이', extra: 1 },
+      ],
+    ])('%s를 거부한다', (_label, subject) => {
+      expect(serverEventSchema.safeParse({ ...basePresence, subject }).success).toBe(false)
+    })
+
+    it.each([-1, 1.5])('roomId %s를 거부한다 (음수·비정수)', (roomId) => {
+      expect(serverEventSchema.safeParse({ ...basePresence, roomId }).success).toBe(false)
+    })
+
+    it('최상위의 알 수 없는 키를 거부한다 (strict)', () => {
+      expect(serverEventSchema.safeParse({ ...basePresence, extra: 1 }).success).toBe(false)
+    })
+
+    it.each(['roomId', 'subject', 'change'] as const)('%s가 없으면 거부한다 (required)', (key) => {
+      const { [key]: _omitted, ...without } = basePresence
+      expect(serverEventSchema.safeParse(without).success).toBe(false)
+    })
+  })
+
   describe('chat:said', () => {
     it('모든 필드가 있으면 통과한다', () => {
       const parsed = serverEventSchema.safeParse({

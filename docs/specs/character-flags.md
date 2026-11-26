@@ -153,7 +153,9 @@ toPlayerCombatState(character, effectiveContext, weaponDamage, flags: string): P
 | `combat/resolveAttack.ts`의 `multiAttackCount` | `PUPDMG` | 초인 다중공격이 **연결된 순간부터 항상 1타**다. 값이 틀린 게 아니라 입력이 없다. 와이어 `combat:attacked.attacks`는 배열 형태를 유지해 영속화가 붙는 날 프로토콜을 다시 올리지 않게 한다 |
 | `combat/pvp.ts`의 `checkPvpGate` | `PCHAOS`·`PFAMIL` | PvP 동의 게이트가 **영구 거부**된다. #121은 이 게이트에 닿기 전에 사람 대상을 무조건 거부하는 fail-closed 설계를 택했다 — 깨진 동의 게이트를 유일 출처로 연결하면 거부가 조용히 굳고 회귀 테스트에도 잡히지 않는다 |
 
-두 경우 모두 **동작을 바꾸지 않고 소비 지점에 기록만 남겼다.** 6종 영속화는 별도 이슈가 담당하며, 붙는 시점에 두 규칙이 함께 살아난다.
+`world:presence`의 `announce` 판정(`world/presence.ts`의 `isPresenceAnnounced`)도 `PHIDDN`·`PDMINV`를 읽는 소비 지점이다. 이동자 플래그는 `ws/liveWorldWiring.ts`의 `resolveActorFlags`가 라이브 레지스트리 문서에 `composeCharacterFlags`를 적용해 넘기며(미등록이면 빈 hex), 이 경계 밖에서 플래그를 따로 합성하지 않는다. 두 비트는 영속 경로가 없어 항상 0이므로 현재 이동(`moved-out`·`moved-in`)과 진입(`entered`)은 **항상 announce**된다. `exited`는 원본이 알리지 않아 두 비트와 무관하게 항상 `announce: false`다. 영속화가 붙으면 `moved-out`은 `PDMINV`, `moved-in`·`entered`는 `PDMINV` 또는 `PHIDDN`일 때 억제된다(퇴장은 은신을 억제하지 않는 원본 비대칭). 단 억제되는 것은 `announce`뿐이다 — 이벤트는 여전히 `subject`를 싣고 클라이언트는 그 사람을 점유자 목록에 넣으므로, 영속화와 함께 `projectRoomView`의 점유자 필터를 열 때 presence 방송도 함께 수신자별로 걸러야 한다(#129).
+
+위 표의 두 경우 모두 **동작을 바꾸지 않고 소비 지점에 기록만 남겼다.** 6종 영속화는 별도 이슈가 담당하며, 붙는 시점에 두 규칙이 함께 살아난다.
 
 ### `ActorContext.flags` 타입
 

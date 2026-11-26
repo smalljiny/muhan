@@ -26,6 +26,7 @@ import type { ActorContext } from './actorContext.js'
 import {
   createLiveWorldWiring,
   assembleRoomChannelPort,
+  createSendToCharacter,
   type LiveWorldWiringBundle,
 } from './liveWorldWiring.js'
 
@@ -135,6 +136,205 @@ function makeBundle(worldGraph: Map<number, RoomNode>, character?: Character): B
     objectTemplates,
   }
 }
+
+/**
+ * presence 방송기 연결 — 팩토리가 방송기를 **한 번** 만들어 이동(tryMoveDeps)·진입(entry.place)·
+ * 종료(entry.release) 세 경로에 같은 인스턴스를 넣는지를, 전송 인자로 준 하나의 `sendToCharacter`
+ * 스파이에 세 종류 통지가 모두 도달하는 것으로 확인한다.
+ */
+describe('createLiveWorldWiring — presence 방송기 연결', () => {
+  type SendSpy = ReturnType<typeof vi.fn<(characterId: string, event: ServerEvent) => void>>
+
+  /** 수신자별 presence 이벤트만 골라 낸다. */
+  function presenceTo(spy: SendSpy, characterId: string): ServerEvent[] {
+    return spy.mock.calls
+      .filter(([to, event]) => to === characterId && event.type === 'world:presence')
+      .map(([, event]) => event)
+  }
+
+  /** 출발 방 100(char-1 이동자·char-2 관찰자) —'동'→ 도착 방 200(char-3 관찰자). */
+  function makePresenceWorld(): {
+    h: BundleHarness
+    roomFrom: RoomNode
+    roomTo: RoomNode
+  } {
+    const roomFrom = makeRoom(100, ['char-1', 'char-2'], [{ name: '동', targetRoomId: 200 }])
+    const roomTo = makeRoom(200, ['char-3'], [{ name: '서', targetRoomId: 100 }])
+    const h = makeBundle(
+      new Map<number, RoomNode>([
+        [100, roomFrom],
+        [200, roomTo],
+      ]),
+    )
+    h.liveRegistry.register({ character: makeCharacter('char-1', 100), inventory: [] })
+    h.liveRegistry.register({ character: makeCharacter('char-2', 100), inventory: [] })
+    h.liveRegistry.register({ character: makeCharacter('char-3', 200), inventory: [] })
+    return { h, roomFrom, roomTo }
+  }
+
+  it('전송 인자를 주면 이동 시 출발 방 점유자에게 moved-out, 도착 방 점유자에게 moved-in을 보낸다', () => {
+    const { h } = makePresenceWorld()
+    const sendToCharacter: SendSpy = vi.fn()
+
+    const wiring = createLiveWorldWiring(h.bundle, { sendToCharacter })
+    createMoveHandler(wiring.moveDeps)(
+      { type: 'world:move', direction: '동' },
+      { accountId: 'acct-1', characterId: 'char-1' },
+    )
+
+    expect(presenceTo(sendToCharacter, 'char-2')).toEqual([
+      {
+        type: 'world:presence',
+        roomId: 100,
+        subject: { kind: 'player', characterId: 'char-1', name: '테스토스' },
+        change: { change: 'moved-out', direction: '동', announce: true },
+      },
+    ])
+    expect(presenceTo(sendToCharacter, 'char-3')).toEqual([
+      {
+        type: 'world:presence',
+        roomId: 200,
+        subject: { kind: 'player', characterId: 'char-1', name: '테스토스' },
+        change: { change: 'moved-in', announce: true },
+      },
+    ])
+    // 이동자 자신은 자기 통지를 받지 않는다.
+    expect(presenceTo(sendToCharacter, 'char-1')).toEqual([])
+  })
+
+  it('같은 sendToCharacter로 진입(entry.place)은 entered, 종료(lifecyclePort)는 exited를 보낸다', () => {
+    const { h } = makePresenceWorld()
+    const sendToCharacter: SendSpy = vi.fn()
+    const newcomer = makeCharacter('char-9', 100)
+
+    const wiring = createLiveWorldWiring(h.bundle, { sendToCharacter })
+    wiring.liveWorldBinding.entry.place({ character: newcomer, inventory: [] })
+
+    const subject = { kind: 'player', characterId: 'char-9', name: '테스토스' }
+    expect(presenceTo(sendToCharacter, 'char-2')).toEqual([
+      {
+        type: 'world:presence',
+        roomId: 100,
+        subject,
+        change: { change: 'entered', announce: true },
+      },
+    ])
+
+    sendToCharacter.mockClear()
+    wiring.lifecyclePort.onSessionEnd({
+      accountId: 'acct-1',
+      characterId: 'char-9',
+      reason: 'shutdown',
+    })
+
+    expect(presenceTo(sendToCharacter, 'char-2')).toEqual([
+      {
+        type: 'world:presence',
+        roomId: 100,
+        subject,
+        change: { change: 'exited', announce: false },
+      },
+    ])
+    // 다른 방(200) 점유자에게는 가지 않는다.
+    expect(presenceTo(sendToCharacter, 'char-3')).toEqual([])
+  })
+
+  it('전송 인자가 없으면 이동·진입·종료가 예외 없이 끝나고 점유 상태가 갱신된다', () => {
+    const { h, roomFrom, roomTo } = makePresenceWorld()
+
+    const wiring = createLiveWorldWiring(h.bundle)
+
+    expect(() =>
+      createMoveHandler(wiring.moveDeps)(
+        { type: 'world:move', direction: '동' },
+        { accountId: 'acct-1', characterId: 'char-1' },
+      ),
+    ).not.toThrow()
+    expect(roomTo.occupants.has('char-1')).toBe(true)
+    expect(roomFrom.occupants.has('char-1')).toBe(false)
+
+    expect(() =>
+      wiring.liveWorldBinding.entry.place({ character: makeCharacter('char-9', 100), inventory: [] }),
+    ).not.toThrow()
+    expect(roomFrom.occupants.has('char-9')).toBe(true)
+
+    expect(() =>
+      wiring.lifecyclePort.onSessionEnd({
+        accountId: 'acct-1',
+        characterId: 'char-9',
+        reason: 'shutdown',
+      }),
+    ).not.toThrow()
+    expect(roomFrom.occupants.has('char-9')).toBe(false)
+  })
+})
+
+describe('createSendToCharacter (characterId → 소켓 전송)', () => {
+  type FakeSocket = { readonly id: string }
+  const event: ServerEvent = {
+    type: 'world:presence',
+    roomId: 1,
+    subject: { kind: 'player', characterId: 'char-x', name: '테스토스' },
+    change: { change: 'entered', announce: true },
+  }
+
+  function makeLookup(): {
+    sessionRegistry: ReturnType<typeof createSessionRegistry>
+    socketByCtx: Map<ConnectionContext, FakeSocket>
+    safeSend: ReturnType<typeof vi.fn<(socket: FakeSocket, event: ServerEvent) => void>>
+  } {
+    return {
+      sessionRegistry: createSessionRegistry(),
+      socketByCtx: new Map<ConnectionContext, FakeSocket>(),
+      safeSend: vi.fn<(socket: FakeSocket, event: ServerEvent) => void>(),
+    }
+  }
+
+  it('바인딩이 없는 characterId에는 safeSend를 부르지 않는다', () => {
+    const { sessionRegistry, socketByCtx, safeSend } = makeLookup()
+    const send = createSendToCharacter<FakeSocket>({
+      registry: sessionRegistry,
+      resolveSocket: (c) => socketByCtx.get(c),
+      safeSend,
+    })
+
+    send('char-none', event)
+
+    expect(safeSend).not.toHaveBeenCalled()
+  })
+
+  it('소켓 역참조가 undefined인 바인딩에는 safeSend를 부르지 않는다', () => {
+    const { sessionRegistry, socketByCtx, safeSend } = makeLookup()
+    sessionRegistry.register('char-dropped', 'acct-1', createConnectionContext(), () => {})
+    const send = createSendToCharacter<FakeSocket>({
+      registry: sessionRegistry,
+      resolveSocket: (c) => socketByCtx.get(c),
+      safeSend,
+    })
+
+    send('char-dropped', event)
+
+    expect(safeSend).not.toHaveBeenCalled()
+  })
+
+  it('바인딩과 소켓이 모두 있으면 받은 이벤트를 그대로 1회 safeSend한다', () => {
+    const { sessionRegistry, socketByCtx, safeSend } = makeLookup()
+    const ctx = createConnectionContext()
+    sessionRegistry.register('char-live', 'acct-1', ctx, () => {})
+    const socket: FakeSocket = { id: 'sock-char-live' }
+    socketByCtx.set(ctx, socket)
+    const send = createSendToCharacter<FakeSocket>({
+      registry: sessionRegistry,
+      resolveSocket: (c) => socketByCtx.get(c),
+      safeSend,
+    })
+
+    send('char-live', event)
+
+    expect(safeSend).toHaveBeenCalledTimes(1)
+    expect(safeSend).toHaveBeenCalledWith(socket, event)
+  })
+})
 
 describe('createLiveWorldWiring (순수 팩토리)', () => {
   it('liveWorldBinding.resolveRoom은 roomId로 월드 그래프 방을 해석한다', () => {

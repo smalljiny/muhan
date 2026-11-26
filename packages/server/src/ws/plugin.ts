@@ -27,6 +27,7 @@ import { buildSessionLiveWorld, type LiveWorldBinding } from './liveWorldBinding
 import {
   createLiveWorldWiring,
   assembleRoomChannelPort,
+  createSendToCharacter,
   type LiveWorldWiringBundle,
 } from './liveWorldWiring.js'
 import { createSessionRegistry, type SessionRegistry } from './sessionRegistry.js'
@@ -296,8 +297,10 @@ export function gameAuthPreValidation(
  * seam·세션 수명 어댑터·방 리졸버를 파생한다. 파생 결과로 (a) `channelPort`를 실 방 채널 어댑터로,
  * (b) `lifecyclePort`를 라이브 세션 수명 어댑터로, (c) `liveWorld`(진입 바인딩)를, (d) `world:move` 연결을
  * 세운다. 포트 우선순위는 **explicit-param > bundle-derived > default-noop**이다 — 명시 인자(테스트 스파이 등)가
- * 주어지면 묶음 파생이 덮지 않는다. transport 결합(sendTo)은 `assembleRoomChannelPort`에 격리하고, registry·
- * connections·safeSend를 그 조립 지점에서만 캡처한다(순수 팩토리는 transport 미접촉).
+ * 주어지면 묶음 파생이 덮지 않는다. transport 결합 로직은 `createSendToCharacter` 하나이고, presence 전송
+ * (`createLiveWorldWiring`의 전송 인자)과 방 채널 포트(`assembleRoomChannelPort` 내부)가 같은 registry·
+ * resolveSocket·safeSend로 이 함수를 각각 호출한다. registry·connections·safeSend는 registerWebsocket에서만
+ * 캡처한다(순수 팩토리는 transport 미접촉).
  */
 export function registerWebsocket(
   app: FastifyInstance,
@@ -318,12 +321,25 @@ export function registerWebsocket(
   // 캡처해 멤버 소켓을 역참조하므로, createCommandRegistry가 채널 포트를 받기 전에 존재해야 한다. per-connection이
   // 아니라 registerWebsocket 1회 인스턴스다(재연결이 이전 소켓의 바인딩을 찾으려면 하나의 색인이어야 한다).
   const registry = createSessionRegistry()
+  // presence 전송과 방 채팅 포트가 같은 소켓 역참조를 공유한다(하나의 결합 지점).
+  const resolveSocket = (connection: ConnectionContext): WebSocket | undefined =>
+    socketForContext(connections, connection)
 
   // 라이브 월드 의존 묶음이 주입되면 순수 팩토리로 진입·이동·수명 seam과 방 리졸버를 파생한다(미주입이면 undefined).
-  const wiring = liveWorldDeps === undefined ? undefined : createLiveWorldWiring(liveWorldDeps)
+  // presence 전송은 방 채팅 포트와 같은 registry·safeSend로 만든 sendToCharacter를 팩토리에 넘겨 결합한다.
+  const wiring =
+    liveWorldDeps === undefined
+      ? undefined
+      : createLiveWorldWiring(liveWorldDeps, {
+          sendToCharacter: createSendToCharacter<WebSocket>({
+            registry,
+            resolveSocket,
+            safeSend,
+          }),
+        })
 
   // 채널 포트 우선순위(explicit > bundle-derived > noop). 묶음 파생 채널은 transport 결합 sendTo가 필요하므로
-  // assembleRoomChannelPort에 registry·connections·safeSend를 넘겨 이 지점에서만 조립한다(순수 팩토리 밖 격리).
+  // assembleRoomChannelPort에 registry·resolveSocket·safeSend를 넘긴다(위 presence 전송과 같은 결합 함수 사용).
   const effectiveChannelPort =
     channelPort ??
     (wiring === undefined
@@ -331,7 +347,7 @@ export function registerWebsocket(
       : assembleRoomChannelPort<WebSocket>({
           resolveRoom: wiring.resolveRoom,
           registry,
-          resolveSocket: (connection) => socketForContext(connections, connection),
+          resolveSocket,
           safeSend,
         }))
 

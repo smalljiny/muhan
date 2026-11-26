@@ -357,6 +357,13 @@ describe('라이브 월드 end-to-end (실 소켓 2세션)', () => {
     expect(h.roomStart.occupants.has(CHAR_B)).toBe(true)
 
     // ── 3) 방 채팅 전파(co-located 긍정) — A가 시작 방에서 발화하면 A·B 모두 chat:said를 받는다. ──
+    // B가 A의 방에 진입했으므로 A는 채팅 전에 B의 entered 통지를 먼저 받는다 — 명시적으로 소비한다.
+    const aSawBEnter = await a.reader.next()
+    expect(aSawBEnter).toMatchObject({
+      type: 'world:presence',
+      subject: { characterId: CHAR_B },
+      change: { change: 'entered' },
+    })
     clientA.send(JSON.stringify({ type: 'chat:message', channel: 'say', text: '안녕', id: 'a1' }))
     const aHeardOwn = await a.reader.next()
     expect(aHeardOwn).toMatchObject({
