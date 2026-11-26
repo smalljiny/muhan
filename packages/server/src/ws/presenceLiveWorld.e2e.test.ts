@@ -140,8 +140,14 @@ function buildHarness(): PresenceHarness {
   return { app, roomStart, roomDest }
 }
 
-/** connect→hello→ready→characterList→prompt→selectCharacter→entered→world:room까지 왕복한다. */
-async function enterWorld(client: WebSocket, characterId: string): Promise<MessageReader> {
+/**
+ * connect→hello→ready→characterList→prompt→selectCharacter→entered→world:room까지 왕복한다.
+ * 진입 프레임(session:entered 또는 session:resumed)을 함께 돌려줘 호출자가 진입 경로를 단언하게 한다.
+ */
+async function enterWorldWithFrame(
+  client: WebSocket,
+  characterId: string,
+): Promise<{ reader: MessageReader; entered: ServerEvent }> {
   const reader = createMessageReader(client)
   await waitForOpen(client)
   await reader.next() // system:hello
@@ -149,9 +155,13 @@ async function enterWorld(client: WebSocket, characterId: string): Promise<Messa
   await reader.next() // session:characterList
   await reader.next() // session:prompt(selectCharacter)
   client.send(JSON.stringify({ type: 'session:selectCharacter', characterId }))
-  await reader.next() // session:entered
+  const entered = await reader.next() // session:entered | session:resumed
   await reader.next() // world:room(배치 통지)
-  return reader
+  return { reader, entered }
+}
+
+async function enterWorld(client: WebSocket, characterId: string): Promise<MessageReader> {
+  return (await enterWorldWithFrame(client, characterId)).reader
 }
 
 /**
@@ -266,5 +276,126 @@ describe('world:presence end-to-end (실 소켓 2세션)', () => {
     sayMarker(clientA, 'a-after')
     const aFrames = [aFirst, ...(await collectUntilChatMarker(a, 'a-after'))]
     expect(presenceOf(aFrames, CHAR_A)).toHaveLength(0)
+  })
+
+  it('② B가 있는 방에 A가 진입하면 B는 entered(announce true)를 정확히 1건 받는다', async () => {
+    const h = buildHarness()
+    const url = await startTracked(h.app)
+
+    // B 먼저 진입하고 초기 프레임을 표식까지 소비한다.
+    const clientB = trackedClient(url, COOKIE_B)
+    const b = await enterWorld(clientB, CHAR_B)
+    sayMarker(clientB, 'b-init')
+    await collectUntilChatMarker(b, 'b-init')
+
+    // A 진입 — 새 연결이 session:entered를 받아 진입 완료를 확인한 뒤에 B가 표식을 보낸다.
+    const clientA = trackedClient(url, COOKIE_A)
+    const { entered } = await enterWorldWithFrame(clientA, CHAR_A)
+    expect(entered).toMatchObject({ type: 'session:entered', characterId: CHAR_A })
+
+    sayMarker(clientB, 'b-after')
+    const bPresence = presenceOf(await collectUntilChatMarker(b, 'b-after'))
+    expect(bPresence).toHaveLength(1)
+    expect(bPresence[0]).toMatchObject({
+      type: 'world:presence',
+      roomId: ROOM_START,
+      subject: { kind: 'player', characterId: CHAR_A, name: NAME_A },
+      change: { change: 'entered', announce: true },
+    })
+  })
+
+  /** A·B를 시작 방에 배치하고, B가 받은 A의 entered 등 초기 프레임을 표식까지 소비한다. */
+  async function placeBoth(
+    url: string,
+  ): Promise<{ clientA: WebSocket; clientB: WebSocket; b: MessageReader }> {
+    const clientB = trackedClient(url, COOKIE_B)
+    const b = await enterWorld(clientB, CHAR_B)
+    const clientA = trackedClient(url, COOKIE_A)
+    await enterWorld(clientA, CHAR_A)
+    sayMarker(clientB, 'b-init')
+    await collectUntilChatMarker(b, 'b-init')
+    return { clientA, clientB, b }
+  }
+
+  it('③ A 소켓이 끊겨 link-dead 유예 중이면 B는 presence를 받지 않고 A는 방에 남는다', async () => {
+    const h = buildHarness()
+    const url = await startTracked(h.app)
+    const { clientA, clientB, b } = await placeBoth(url)
+
+    clientA.close()
+    await waitFor(() => h.app.wsSessionRegistry.get(CHAR_A)?.link === 'link-dead')
+
+    sayMarker(clientB, 'b-after')
+    expect(presenceOf(await collectUntilChatMarker(b, 'b-after'))).toHaveLength(0)
+    expect(h.roomStart.occupants.has(CHAR_A)).toBe(true)
+  })
+
+  it('④ 유예 중 같은 쿠키로 재접속(resumed)해도 B는 presence를 받지 않는다', async () => {
+    const h = buildHarness()
+    const url = await startTracked(h.app)
+    const { clientA, clientB, b } = await placeBoth(url)
+
+    clientA.close()
+    await waitFor(() => h.app.wsSessionRegistry.get(CHAR_A)?.link === 'link-dead')
+
+    const clientA2 = trackedClient(url, COOKIE_A)
+    const { entered } = await enterWorldWithFrame(clientA2, CHAR_A)
+    expect(entered).toMatchObject({ type: 'session:resumed', characterId: CHAR_A })
+
+    sayMarker(clientB, 'b-after')
+    expect(presenceOf(await collectUntilChatMarker(b, 'b-after'))).toHaveLength(0)
+    expect(h.roomStart.occupants.has(CHAR_A)).toBe(true)
+  })
+
+  it('⑤ 유예가 만료되면 B는 A의 무음 exited만 정확히 1건 받는다', async () => {
+    // grace를 스키마 최소값(1ms)으로 낮춘다 — env를 먼저 바꾸고 설정 캐시를 비운 뒤 app을 만든다.
+    // afterEach가 env와 설정 캐시를 복원해 다른 it()에 새지 않는다.
+    process.env.WS_RECONNECT_GRACE_MS = '1'
+    resetConfigForTests()
+
+    const h = buildHarness()
+    const url = await startTracked(h.app)
+    const { clientA, clientB, b } = await placeBoth(url)
+
+    clientA.close()
+    await waitFor(() => !h.roomStart.occupants.has(CHAR_A))
+
+    sayMarker(clientB, 'b-after')
+    const aPresence = presenceOf(await collectUntilChatMarker(b, 'b-after'), CHAR_A)
+    // subject A의 presence 전체가 무음 exited 1건뿐이어야 한다 — 다른 변화가 섞여도 실패한다.
+    expect(aPresence).toHaveLength(1)
+    expect(aPresence[0]).toMatchObject({
+      type: 'world:presence',
+      roomId: ROOM_START,
+      subject: { kind: 'player', characterId: CHAR_A, name: NAME_A },
+      change: { change: 'exited', announce: false },
+    })
+  })
+
+  it('⑥ 같은 캐릭터로 새 로그인해 세션이 교체되면 B는 exited → entered 2건을 순서대로 받는다', async () => {
+    const h = buildHarness()
+    const url = await startTracked(h.app)
+    const { clientB, b } = await placeBoth(url)
+
+    // A가 live인 상태에서 같은 쿠키의 새 클라이언트로 같은 캐릭터를 선택한다(register evict → release → place).
+    expect(h.app.wsSessionRegistry.get(CHAR_A)?.link).toBe('live')
+    const clientA2 = trackedClient(url, COOKIE_A)
+    const { entered } = await enterWorldWithFrame(clientA2, CHAR_A)
+    expect(entered).toMatchObject({ type: 'session:entered', characterId: CHAR_A })
+
+    sayMarker(clientB, 'b-after')
+    const bPresence = presenceOf(await collectUntilChatMarker(b, 'b-after'))
+    expect(bPresence).toHaveLength(2)
+    expect(bPresence[0]).toMatchObject({
+      roomId: ROOM_START,
+      subject: { kind: 'player', characterId: CHAR_A, name: NAME_A },
+      change: { change: 'exited', announce: false },
+    })
+    expect(bPresence[1]).toMatchObject({
+      roomId: ROOM_START,
+      subject: { kind: 'player', characterId: CHAR_A, name: NAME_A },
+      change: { change: 'entered', announce: true },
+    })
+    expect(h.roomStart.occupants.has(CHAR_A)).toBe(true)
   })
 })
