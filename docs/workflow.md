@@ -14,20 +14,31 @@
 
 - 설치 뒤 한 번: `/flow-init`(CLAUDE.md·AGENTS.md의 프로젝트 섹션), `/flow-setup git`(원격·기준 브랜치 `develop`)
 - 커밋 scope 목록은 `.harness/commit-scopes.md`에 있고, 재배포해도 덮어쓰지 않는다.
-- 토픽 worktree에는 `/flow-worktree`가 하네스를 주입한다(`.claude` 등은 링크, `.harness`·`docs/_local`은 복사). worktree에서 따로 설치하지 않는다.
+- 토픽 worktree에는 `/flow-worktree`가 하네스를 주입한다(`.claude` 등은 링크, `CLAUDE.md`·`.harness`·`docs/_local`은 복사). worktree에서 따로 설치하지 않는다.
+
+### 로컬 하네스 수정 (재배포 시 다시 적용)
+
+이 저장소에 설치한 하네스는 아래 두 가지를 로컬에서 고쳐 쓴다. 하네스 저장소에 반영되기 전에는 `deploy-harness.sh`로 다시 배포하면 원래대로 덮어써지므로, 재배포한 뒤 다시 적용한다.
+
+| 대상 파일 | 수정 | 하네스 이슈 |
+|---|---|---|
+| `.claude/skills/wf-worktree-context/scripts/provision.sh` | `CLAUDE.md`를 링크 대신 복사하고 공용 exclude에 등록한다. 링크로 두면 `@.harness/...` import가 주 worktree의 `.harness`로 풀려, 세션 시작 때 외부 import 확인이 뜨고 worktree의 `.harness` 복사본을 읽지 않는다 | yoshi-saddle#45 |
+| `.claude/skills/flow-worktree/SKILL.md` | 토픽 세션을 현재 작업 공간 오른쪽 칸 대신, 현재 작업 공간이 속한 cmux 그룹 아래의 새 작업 공간(이름 `<토픽>`)에서 띄운다. teardown은 작업 디렉터리가 그 worktree인 작업 공간을 닫는다 | yoshi-saddle#46 |
+
+수정한 곳에는 "로컬 임시 수정" 주석이 있다. 하네스에 반영되면 이 절을 지운다.
 
 ## 흐름
 
 | 단계 | 위치 | 명령 | 산출물 |
 |---|---|---|---|
 | 1. 스펙 | 주 worktree | `/flow-spec <토픽>` | `docs/_local/backlog/<토픽>/spec.md` (추적 안 함), Codex 스펙 리뷰 → 확정 |
-| 2. worktree 시작 | 주 worktree | `/flow-worktree <토픽>` | `muhan.worktrees/<토픽>`, 브랜치 `feature/<토픽>`, cmux 새 칸에서 worktree 세션 |
+| 2. worktree 시작 | 주 worktree | `/flow-worktree <토픽>` | `muhan.worktrees/<토픽>`, 브랜치 `feature/<토픽>`, 현재 작업 공간의 cmux 그룹 아래 새 작업 공간 `<토픽>`에서 worktree 세션 |
 | 3. 계획 | 토픽 worktree | `/flow-plan` | Task 단위 구현 계획, Codex 계획 리뷰 |
 | 4. 구현 | 토픽 worktree | `/flow-impl` (반복) | Task별 커밋 |
 | 5. 리뷰·검증 | 토픽 worktree | `/flow-review`, `/flow-verify` | 코드 리뷰, 빌드·테스트·보안 검증 |
 | 6. 문서 | 토픽 worktree | `/flow-docs` | 스펙을 구현에 맞추고 `docs/specs/`에 반영해 커밋 |
 | 7. PR | 토픽 worktree | `/flow-pr` → 사용자 병합 → `/flow-done` | `develop` 대상 PR, 토픽 산출물 아카이브 |
-| 8. 정리 | 주 worktree | `/flow-worktree teardown <토픽> --delete-branch` | 문서 sync-back, worktree·브랜치 삭제 |
+| 8. 정리 | 주 worktree | `/flow-worktree teardown <토픽> --delete-branch` | 토픽 작업 공간 닫기, 문서 sync-back, worktree·브랜치 삭제 |
 
 - 토픽 이름은 `^[a-zA-Z0-9_-]+$`이고, 이슈를 다루는 토픽은 이슈 번호를 스펙에 남긴다. PR 본문에는 `Closes #<이슈>`를 적는다.
 - 주 worktree는 `/flow-spec`과 `/flow-worktree`(시작·정리)만 맡는다. 토픽의 다른 `/flow-*`를 주 worktree에서 실행하면 토픽 상태(`docs/_local/dev-context.json`)의 격리가 깨진다.
