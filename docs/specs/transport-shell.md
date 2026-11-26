@@ -29,7 +29,10 @@
 - `devSeedSessionAuth.ts` — `createDevSeedAuthAdapter(cookie, accountId)`(순수 팩토리)와 `createDevSeedAuthAdapterFromEnv(config)`(env 래퍼). 시드 쿠키→accountId 매핑과 고정 캐릭터 1개(`DEV_SEED_CHARACTER`)를 담은 `InMemorySessionAuthAdapter`를 조립한다.
 - `config/env.ts` — `DEV_LOGIN_ENABLED`(`z.enum(['true','false']).default('false').transform(...)`)·`DEV_SEED_COOKIE`·`DEV_SEED_ACCOUNT_ID` 필드와, `getConfig()` 내부의 `NODE_ENV` fail-closed 2차 게이트.
 - `app.ts` — `buildApp(deps)`가 `deps.devLoginSeedCookie`가 주어질 때만 `registerDevLoginRoute`를 호출한다(미주입 시 라우트 없음).
-- `index.ts` — 부팅이 `config.DEV_LOGIN_ENABLED`가 true일 때만 `sessionAuth`·`devLoginSeedCookie`를 `buildApp`에 주입한다.
+- `devSeedCharacter.ts` — `buildDevSeedCharacterDoc(accountId)`(순수 함수)는 `DEV_SEED_CHARACTER`에 대응하는 영속 `Character` 문서를 만든다. 식별·요약 필드는 `DEV_SEED_CHARACTER`, vitals·spell store·`schemaVersion`은 생성 경로와 같은 `seedVitals`·`seedSpellStore`·`CURRENT_CHARACTER_SCHEMA_VERSION`(`repo/characterBackfill.ts`), 시작 방·소지금은 `characterStartDefaults.ts`에서 가져온다. `experience`·`status`·`stats`·`alignment`만 시드 고정값이다. `seedDevCharacter(repo, accountId)`는 이 문서를 `insertIfAbsent`로 없을 때만 넣고(`'inserted'`), 이미 있으면 정합만 확인한다(`'kept'`).
+- `characterStartDefaults.ts` — 신규 캐릭터 시작 기본값 `START_ROOM`(1)·`STARTING_GOLD`(500). 생성 경로(`firebaseSessionAuthAdapter.ts`)와 dev 시드가 함께 쓴다.
+- `sessionAuthAssembly.ts` — `assembleSessionAuth(config, { accounts, characters, createVerifier })`가 세션 인증 분기를 맡는다. `DEV_LOGIN_ENABLED`가 false면 Firebase 어댑터를 조립하고(빈 `FIREBASE_PROJECT_ID` fail-fast), true면 dev 시드 어댑터를 조립한 뒤 시드 캐릭터를 보장해 `{ sessionAuth, devLoginSeedCookie, devSeedResult }`를 돌려준다. firebase-admin을 import하지 않도록 verifier 팩토리를 `createVerifier`로 주입받는다.
+- `index.ts` — 부팅이 `buildApp` 앞에서 `assembleSessionAuth`를 `await`하고, 돌려받은 `sessionAuth`·`devLoginSeedCookie`를 `buildApp`에 주입한다. `buildApp` 직후 `devSeedResult`가 있으면 `dev seed character dev-char-1: inserted|kept` info 로그를 남긴다.
 
 `WS_ALLOWED_ORIGINS`([`auth-session.md`](auth-session.md) E3-2 담당 필드)는 E9-1이 새로 정의하지 않지만, compose·Vite 설정이 이 값을 dev origin(`http://localhost:5173`)으로 채운다.
 
@@ -73,7 +76,19 @@ Vite 프록시(`vite.config.ts`)는 CSWSH를 브라우저 실제 Origin으로 �
 
 `docker compose up`이 `mongo`(healthcheck 통과 대기) 뒤에 `server`를 시작한다. 서버 컨테이너는 `MONGODB_URI=mongodb://mongo:27017`(외부 Atlas 비의존), `WS_ALLOWED_ORIGINS=http://localhost:5173`, `DEV_LOGIN_ENABLED=true` + 시드 값을 env로 받는다.
 
-Playwright e2e(`e2e/transport.spec.ts`)는 호스트에서 실행하며 compose(server+mongo)를 SUT로 삼는다 — `playwright.config.ts`의 `webServer`는 호스트 Vite(5173)만 실행하고, compose 스택은 caller가 `docker compose up -d --build`로 미리 띄운다. 각 테스트는 `beforeEach`에서 `/dev/login`으로 쿠키를 먼저 심은 뒤 앱을 로드하고(순서가 바뀌면 쿠키 없는 upgrade가 401난다), 캐릭터 목록이 도착하면 시드 캐릭터의 '선택' 버튼을 눌러(autoSelect 스텁 제거 후 진입은 사용자 조작 기반 — [`session-entry.md`](session-entry.md)) `연결 상태` 텍스트가 `ready`에 도달함(G1+G2)과 `이벤트 로그`에 `debug:echo:result`·에코 텍스트가 나타남(G3)을 web-first assertion(자동 재시도, 고정 sleep 없음)으로 단언한다.
+dev 로그인으로 부팅한 서버는 `buildApp`·listen 전에 시드 캐릭터 `dev-char-1`을 `characters` 컬렉션에 보장한다. 그래야 인메모리 인증 목록(`DEV_SEED_CHARACTER`)과 hydrate 소스(DB)가 같은 캐릭터를 본다. 순서는 dev 어댑터 조립(쿠키·계정 ID 검증) → 시드 → `buildApp`이라, 설정이 잘못되면 시드를 쓰기 전에 부팅이 멈춘다. 부팅 시 DB 상태별 결과는 다음과 같다.
+
+| 부팅 시 `dev-char-1` | 결과 |
+|---|---|
+| 없음 | 삽입, `inserted` 로그 |
+| 시드 계정 소유, 정규화한 `status`가 `active`(필드가 없는 옛 문서 포함) | 바꾸지 않음, `kept` 로그. 쌓인 진행 상태를 보존한다 |
+| 다른 계정 소유 | 부팅 실패. 오류에 문서 id, 기대·실제 `accountId`, 해결 방법(문서 삭제 또는 `DEV_SEED_ACCOUNT_ID` 수정)을 담는다 |
+| `status: 'deleted'` | 부팅 실패. 되살리지 않고 해결 방법(문서 삭제)을 담는다 |
+| 다른 `_id`가 시드 이름을 가짐 | `name` unique 인덱스의 E11000을 전파해 부팅 실패 |
+
+정합 실패 메시지는 `dev 시드 캐릭터 정합 실패:`로 시작한다. `assembleSessionAuth`는 `getConfig()`와 같은 `NODE_ENV`(development·test) 조건을 직접 확인해, 다른 경로로 만든 config로도 dev 경로가 열리지 않게 한다.
+
+Playwright e2e(`e2e/transport.spec.ts`)는 호스트에서 실행하며 compose(server+mongo)를 SUT로 삼는다 — `playwright.config.ts`의 `webServer`는 호스트 Vite(5173)만 실행하고, compose 스택은 caller가 `docker compose up -d --build`로 미리 띄운다. compose는 서버 listen을 기다리지 않으므로 README 절차의 2단계가 `/health`를 폴링해(전체 기한 60초, 요청마다 `--max-time 2`) `status`가 `ok`가 된 뒤에만 `pnpm --filter client e2e`를 실행한다. 시드가 listen 전에 끝나므로 `/health`가 `ok`라는 것은 시드도 끝났다는 뜻이다. 대기는 서브셸 안에서 돌아, 시간 초과(실제 최대 약 63초) 시 사용자의 셸을 닫지 않고 종료 코드 1로 끝나며 e2e는 실행되지 않는다. 각 테스트는 `beforeEach`에서 `/dev/login`으로 쿠키를 먼저 심은 뒤 앱을 로드하고(순서가 바뀌면 쿠키 없는 upgrade가 401난다), 캐릭터 목록이 도착하면 시드 캐릭터의 '선택' 버튼을 눌러(autoSelect 스텁 제거 후 진입은 사용자 조작 기반 — [`session-entry.md`](session-entry.md)) `연결 상태` 텍스트가 `ready`에 도달함(G1+G2)과 `이벤트 로그`에 `debug:echo:result`·에코 텍스트가 나타남(G3)을 web-first assertion(자동 재시도, 고정 sleep 없음)으로 단언한다.
 
 compose는 선택적 `test` profile로 `docker compose --profile test run --rm test`가 `shared`·`client`·`server`(mongodb-memory-server 통합 테스트 제외) 유닛 스위트를 클린 컨테이너에서 실행하는 도커 재현 경로를 제공한다. 기본 `up`에는 포함되지 않으며, 커버리지 게이트는 호스트/CI가 담당한다.
 

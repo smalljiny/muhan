@@ -139,7 +139,7 @@
   - `init()`은 `{'owner.type':1, 'owner.id':1, '_id':1}` 복합 인덱스를 만든다(멱등). `_id`를 뒤에 붙여 정렬을 인덱스가 직접 제공하게 한다. 없으면 IXSCAN 뒤에 blocking in-memory SORT 스테이지가 붙는다.
   - 구 2키 인덱스는 신 인덱스의 순수 prefix라 불필요하지만 **부팅 경로에서 드롭하지 않는다**. 피하려는 문제는 세 가지다: 롤링 배포 중 구·신 버전이 번갈아 인덱스를 만들고 지우는 thrash, 부팅 임계 경로의 컬렉션 락, 오퍼레이터가 만든 진단 인덱스의 무단 삭제. 정리는 1회성 마이그레이션이 담당한다.
   - 경계 검증: `insert` 직전과 `findById`/`findByOwner` 직후에 `objectSchema.parse`를 실행한다. `updateById`는 모듈 스코프 `objectSchema.partial()`로 부분 검증한다.
-- **`CharacterRepository`**(`characterRepository.ts`) — `IRepository<Character>` 구현. 생성자가 `Db`와 `ObjectRepository`(인벤토리 하이드레이션용)를 함께 주입받는다. `init()`은 `{name:1}` unique 인덱스를 만든다(원작의 FS 초성 샤딩을 대체). `hydrateInventory(characterId)`는 `objects.findByOwner({type:'character', id: characterId})`로 인벤토리 뷰를 파생한다. `updateById`의 부분 검증 스키마는 **자기 모듈이 아니라 `characterSchemas.ts`**에서 가져온다(아래).
+- **`CharacterRepository`**(`characterRepository.ts`) — `IRepository<Character>` 구현. 생성자가 `Db`와 `ObjectRepository`(인벤토리 하이드레이션용)를 함께 주입받는다. `init()`은 `{name:1}` unique 인덱스를 만든다(원작의 FS 초성 샤딩을 대체). `hydrateInventory(characterId)`는 `objects.findByOwner({type:'character', id: characterId})`로 인벤토리 뷰를 파생한다. `insertIfAbsent(doc)`는 `characterSchema.parse` 뒤 `updateOne({_id}, {$setOnInsert: _id를 뺀 나머지}, {upsert: true})`로 없을 때만 삽입하고 새로 넣었으면 `true`를 돌려준다. 같은 `_id` 문서가 있으면 아무 필드도 바꾸지 않고, 다른 `_id`가 같은 `name`을 가지면 E11000을 그대로 전파한다(dev 시드의 멱등 삽입, [transport-shell.md](transport-shell.md) §G4). `updateById`의 부분 검증 스키마는 **자기 모듈이 아니라 `characterSchemas.ts`**에서 가져온다(아래).
 - **`characterSchemas.ts`** — `characterPatchSchema`의 단일 출처이며, 의존이 0인 모듈이다. 이 스키마는 `characterSchema`에서 `status.removeDefault()`한 뒤 `.partial()`한 것이다.
   - 소비자가 둘이라 저장소 구현 모듈에서 분리했다. 영속 경로(`CharacterRepository.updateById`)와 재접속 hydrate의 pending overlay가 **같은 인스턴스**로 검증해야 한다([save-policy.md](save-policy.md) §미영속 스냅샷 조회). 그런데 후자는 `world/` 계층에 있다.
   - 저장소 구현에 두면 `world/`가 `repo/` 구현에 런타임 의존하게 된다. 그러면 이것이 이 서버에서 유일한 계층 역전 엣지가 된다(`world/`·`ws/`는 저장소를 구조적 타입으로만 받는다). 이 모듈은 `repo/types.ts`와 같은 지위다.
@@ -168,8 +168,9 @@ objmon 템플릿 카탈로그(`objects.json`/`creatures.json`) 로딩과 몬스�
 2. `connectMongo(config.MONGODB_URI, config.MONGODB_DB_NAME)` — 실패하면 throw하고, `boot().catch()`에서 에러 메시지만 콘솔에 출력한 뒤 `process.exit(1)`한다. URI 같은 자격증명이 로그로 새지 않도록 `err.message`만 출력한다.
 3. `ObjectRepository`/`CharacterRepository`/`BankRepository`를 `conn.db`로 생성한다(Character와 Bank에는 `objects`를 함께 주입). 그다음 `Promise.all([objects.init(), characters.init(), bank.init()])`로 프로덕션에 인덱스를 보장한다.
 4. `loadWorldGraph()` — 월드를 인메모리 그래프로 로드하고, boot 스코프 지역 변수 `world`에 보관한다.
-5. `buildApp({ pingDb: () => pingDb(conn.db) })` — ping을 `/health`의 진실 원천으로 주입한다.
-6. `app.listen({ port: config.PORT, host: '0.0.0.0' })` — 실패하면 `conn.close()` 후 `process.exit(1)`한다.
+5. `assembleSessionAuth(config, …)` — 세션 인증 어댑터를 조립한다. `DEV_LOGIN_ENABLED`가 true면 여기서 dev 시드 캐릭터를 `characters`에 보장하고, 정합 실패는 throw로 부팅을 멈춘다([transport-shell.md](transport-shell.md) §G4). `/health`가 `ok`면 시드도 끝났다.
+6. `buildApp({ pingDb: () => pingDb(conn.db), ... })` — ping을 `/health`의 진실 원천으로 주입하고, 5단계의 세션 인증 결과를 함께 넘긴다.
+7. `app.listen({ port: config.PORT, host: '0.0.0.0' })` — 실패하면 `conn.close()` 후 `process.exit(1)`한다.
 
 ## 제약사항
 

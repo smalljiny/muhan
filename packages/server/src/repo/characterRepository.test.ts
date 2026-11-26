@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import type { Db, Filter } from 'mongodb'
+import { ZodError } from 'zod'
 import { neededExp, type Character, type ObjectInstance } from 'shared'
 import { CharacterRepository } from './characterRepository.js'
 import { seedVitals } from './characterBackfill.js'
@@ -387,5 +388,49 @@ describe('CharacterRepository (integration)', () => {
     expect(found?.alignment).toBe(2) // 시딩 sentinel 0으로 덮어쓰지 않는다
     expect(found?.level).toBe(20)
     expect(found?.experience).toBe(123456)
+  })
+
+  describe('insertIfAbsent (멱등 시딩)', () => {
+    it('빈 컬렉션이면 문서를 삽입하고 true를 반환한다', async () => {
+      const doc = makeCharacter({ _id: 'seed-1', name: '시드' })
+
+      const inserted = await repo.insertIfAbsent(doc)
+
+      expect(inserted).toBe(true)
+      expect(await repo.findById(doc._id)).toEqual(doc)
+    })
+
+    it('같은 _id 문서가 이미 있으면 false를 반환하고 기존 문서를 바꾸지 않는다', async () => {
+      const existing = makeCharacter({ _id: 'seed-2', name: '기존', level: 7, gold: 999 })
+      await repo.insert(existing)
+
+      const inserted = await repo.insertIfAbsent(
+        makeCharacter({ _id: 'seed-2', name: '새시드', level: 1, gold: 100 }),
+      )
+
+      expect(inserted).toBe(false)
+      const raw = await db.collection<RawCharacterDoc>('characters').findOne({ _id: 'seed-2' })
+      expect(raw).toEqual(existing)
+    })
+
+    it('다른 _id가 같은 name을 가지면 E11000(code 11000)으로 reject하고 새 문서를 만들지 않는다', async () => {
+      await repo.insert(makeCharacter({ _id: 'owner-of-name', name: '충돌이름' }))
+
+      await expect(
+        repo.insertIfAbsent(makeCharacter({ _id: 'seed-3', name: '충돌이름' })),
+      ).rejects.toMatchObject({ code: 11000 })
+
+      const raw = await db.collection<RawCharacterDoc>('characters').findOne({ _id: 'seed-3' })
+      expect(raw).toBeNull()
+    })
+
+    it('스키마 위반 문서(stats 4원소)는 ZodError로 reject하고 컬렉션에 쓰지 않는다', async () => {
+      const invalid = makeCharacter({ _id: 'seed-4' })
+      const broken = { ...invalid, stats: [10, 10, 10, 10] } as unknown as Character
+
+      await expect(repo.insertIfAbsent(broken)).rejects.toBeInstanceOf(ZodError)
+
+      expect(await db.collection('characters').countDocuments({})).toBe(0)
+    })
   })
 })

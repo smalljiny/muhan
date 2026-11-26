@@ -47,7 +47,7 @@ export function createDevSeedAuthAdapter(
 
 /**
  * env 파생 값에서 시드 쿠키·계정을 읽어 어댑터를 조립하는 얇은 래퍼. 순수 팩토리를 재사용한다.
- * 부팅(index.ts)이 DEV_LOGIN_ENABLED가 true일 때 이 래퍼로 sessionAuth를 주입한다.
+ * 부팅 조립(sessionAuthAssembly의 assembleSessionAuth)이 DEV_LOGIN_ENABLED가 true일 때 이 래퍼로 sessionAuth를 만든다.
  */
 export function createDevSeedAuthAdapterFromEnv(config: {
   DEV_SEED_COOKIE: string
