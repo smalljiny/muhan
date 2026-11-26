@@ -36,6 +36,11 @@ import { F_ISSET, OHIDDN, OSCENE, OINVIS, MHIDDN, MINVIS } from './hexFlags.js'
  *    `PBLIND`는 `statusEffects`에서 파생되나 `combat/` 역시 라이브 연결이 없다. 광원 서브시스템을
  *    이식하는 토픽이 이 함수의 반환 계약(무조건 전량 노출)을 함께 재검토해야 한다.
  *
+ * **같은 전제에 기대는 두 번째 지점**: `ws/presenceBroadcaster.ts`의 `world:presence`도 `announce`가
+ * false여도 `subject`(characterId·name)를 싣고, 클라이언트는 announce와 무관하게 그 사람을 점유자
+ * 목록에 넣는다. 1번 게이트를 열 때 이 함수만 고치면 `world:room`에서 숨긴 사람이 presence 델타로 목록에
+ * 다시 나타난다 — 두 곳을 함께 열어야 한다(#129).
+ *
  * 두 게이트 모두 관찰자 캐릭터를 변환 인자로 요구하므로, 여는 순간 `world:room`이 방 단위 fan-out
  * 캐시가 아니라 수신자별 페이로드가 된다 — 연결 전에 설계 결정이 선행돼야 한다.
  *

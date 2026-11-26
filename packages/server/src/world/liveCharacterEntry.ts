@@ -13,8 +13,9 @@ import type { MoveActor } from './tryMove.js'
  *  - 재접속은 재로드하지 않는다(D-G 1). 이미 등록된 엔트리는 findById 없이 그대로 반환해,
  *    아직 영속되지 않은 currentRoom(라이브 in-place 갱신값)을 디스크 문서로 덮어쓰지 않는다.
  *  - place/release는 동기이며 occupants Set을 in-place 변경한다(worldGraph 승인 carve-out).
- *    release의 순서 계약은 tryMove.ts:195-199를 미러한다 — occupants.delete가 onRoomLeft보다
- *    반드시 선행한다(leave-hook은 빈 방을 전제로 비활성화한다).
+ *    release의 순서 계약은 tryMove 통과 경로 (5a)~(5b')를 미러한다 — (점유 시) broadcastLeave(exited)
+ *    → occupants.delete → onRoomLeft. delete가 onRoomLeft보다 반드시 선행한다(leave-hook은 빈 방을
+ *    전제로 비활성화한다).
  *
  * 모든 의존성은 파라미터로 주입한다(T3.5 — 전역 조회 없음).
  *

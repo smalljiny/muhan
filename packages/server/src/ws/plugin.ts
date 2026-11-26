@@ -297,10 +297,10 @@ export function gameAuthPreValidation(
  * seam·세션 수명 어댑터·방 리졸버를 파생한다. 파생 결과로 (a) `channelPort`를 실 방 채널 어댑터로,
  * (b) `lifecyclePort`를 라이브 세션 수명 어댑터로, (c) `liveWorld`(진입 바인딩)를, (d) `world:move` 연결을
  * 세운다. 포트 우선순위는 **explicit-param > bundle-derived > default-noop**이다 — 명시 인자(테스트 스파이 등)가
- * 주어지면 묶음 파생이 덮지 않는다. transport 결합(sendTo)은 `assembleRoomChannelPort`에 격리하고, registry·
- * connections·safeSend를 그 조립 지점에서만 캡처한다(순수 팩토리는 transport 미접촉).
- * presence 전송은 같은 registry·safeSend로 만든 `createSendToCharacter` 결과를 `createLiveWorldWiring`의
- * 전송 인자로 넘겨 결합한다.
+ * 주어지면 묶음 파생이 덮지 않는다. transport 결합 로직은 `createSendToCharacter` 하나이고, presence 전송
+ * (`createLiveWorldWiring`의 전송 인자)과 방 채널 포트(`assembleRoomChannelPort` 내부)가 같은 registry·
+ * resolveSocket·safeSend로 이 함수를 각각 호출한다. registry·connections·safeSend는 registerWebsocket에서만
+ * 캡처한다(순수 팩토리는 transport 미접촉).
  */
 export function registerWebsocket(
   app: FastifyInstance,
@@ -339,7 +339,7 @@ export function registerWebsocket(
         })
 
   // 채널 포트 우선순위(explicit > bundle-derived > noop). 묶음 파생 채널은 transport 결합 sendTo가 필요하므로
-  // assembleRoomChannelPort에 registry·connections·safeSend를 넘겨 이 지점에서만 조립한다(순수 팩토리 밖 격리).
+  // assembleRoomChannelPort에 registry·resolveSocket·safeSend를 넘긴다(위 presence 전송과 같은 결합 함수 사용).
   const effectiveChannelPort =
     channelPort ??
     (wiring === undefined

@@ -166,6 +166,7 @@ gate 1(출구 존재)과 `XNOSEE` 이름 탐색 제외는 `tryMove`가 담당한
 - **정원 게이트 근사** — 전 점유자 카운트로 판정한다(가시 플레이어 필터 `PINVIS`는 E5 입력). 투명 플레이어가 있으면 원본보다 빨리 만원 판정될 수 있다.
 - **문 명령·인벤토리·picklock 미연결** — 전이 함수·`keyMatch` predicate만 제공한다. 플레이어 WS 명령(openexit/lock 등)·열쇠 아이템 실 조회·picklock(도둑 클래스·쿨다운·dex)은 호출자 seam(명령/인벤토리 에픽·E5).
 - **이동 통지는 `world:presence`로 연결됨, 수신자별 가시성은 없다** — `broadcastLeave`/`broadcastJoin`은 프로덕션에서 presence 방송기에 연결돼 `world:presence`를 보낸다. `announce` 판정은 이동자 플래그만 보고 수신자를 보지 않으므로, 관찰자별 가시성은 #129 몫이다. 방 채팅 전파는 여전히 채널 포트가 담당한다.
+- **비밀·투명 출구 이름이 `moved-out` 방향으로 노출된다(as-shipped)** — `world:room`의 `exits`는 `XSECRT`·`XINVIS`·`XNOSEE` 출구를 숨기지만, `tryMove`는 `XSECRT`·`XINVIS` 출구도 통행시키고 그 출구로 나간 이동자의 `moved-out` 통지는 `direction`에 출구 이름(`ExitEdge.name`)을 그대로 싣는다. 원본 `command2.c` `move()`의 `"%M이 %s쪽으로 갔습니다."`도 같은 이름을 출력하므로 원본 동작을 유지했다. 숨은 출구 방향을 가리는 결정은 수신자별 가시성(#129)과 함께 다룬다.
 - **라이브 상태만 — write-back 없음** — 방 점유자·문 상태는 인메모리 라이브 상태다. 영속화(write-back)는 seam이며 재부팅 시 문 상태는 기본값(`ltime=0`·`interval=60`)으로 복귀한다.
 - **좌표 없음** — 서버가 기준으로 삼는 것은 그래프+방향 힌트뿐이다. automap 좌표 합성·렌더는 클라 파생(E11에서도 미구현 — 현재 방만 렌더한다).
 - **방 표시 가시성 필터가 관찰자 비의존** — 점유자 은신(`PHIDDN`/`PINVIS`/`PDMINV`)·광원/실명 게이트를 구현하지 않는다. 지금은 해당 상태를 세울 라이브 경로가 없어 누출이 없으나, `magic/`·`combat/` 연결 또는 광원 이식이 이 전제를 깬다(위 §방 표시 가시성 필터).
