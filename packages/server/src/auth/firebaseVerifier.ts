@@ -6,8 +6,8 @@ import type { SessionCookieVerifier } from './sessionCookieVerifier.js'
  * firebase-admin 기반 SessionCookieVerifier 팩토리 — 어댑터와 firebase-admin 사이의 유일한 결합점이다.
  *
  * FirebaseSessionAuthAdapter는 SessionCookieVerifier 함수 타입에만 의존하며 firebase-admin을 직접
- * import하지 않는다(firebase-agnostic 유지). 이 팩토리가 부팅 시점(index.ts)에서 실 verifier를 조립해
- * 어댑터에 주입한다 — firebase-admin import는 이 파일과 index.ts로만 국한한다.
+ * import하지 않는다(firebase-agnostic 유지). index.ts가 이 팩토리를 assembleSessionAuth에 주입하고, 거기서
+ * 실 verifier를 만들어 어댑터에 넘긴다 — firebase-admin import는 이 파일과 index.ts로만 국한한다.
  *
  * 초기화 멱등성: getApps().length 가드로 default app을 1회만 initializeApp한다(모듈 재평가·다중 조립 시
  * 이중 초기화 방지). 반환 함수는 getAuth().verifySessionCookie로 쿠키를 검증하고 uid만 뽑아 돌려준다.

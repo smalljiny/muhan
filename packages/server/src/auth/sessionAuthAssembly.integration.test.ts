@@ -131,6 +131,27 @@ describe('assembleSessionAuth (integration)', () => {
     },
   )
 
+  it.each([
+    ['production', { NODE_ENV: 'production' }],
+    ['미설정', {}],
+  ])(
+    '플래그 on인데 NODE_ENV가 %s이면 dev 경로를 조립하지 않고 시드를 쓰지 않는다',
+    async (_label, nodeEnv) => {
+      const { NODE_ENV: _dropped, ...devWithoutNodeEnv } = DEV_ENV
+      const config = parseConfig({ ...devWithoutNodeEnv, ...nodeEnv })
+
+      await expect(
+        assembleSessionAuth(config, {
+          accounts,
+          characters,
+          createVerifier: fakeCreateVerifier(),
+        }),
+      ).rejects.toThrow('DEV_LOGIN_ENABLED requires NODE_ENV=development or test')
+      expect(insertSpy).not.toHaveBeenCalled()
+      expect(await raw.countDocuments()).toBe(0)
+    },
+  )
+
   it('플래그 on인데 시드 쿠키가 비면 dev 어댑터 검증으로 reject하고 시드를 쓰지 않는다', async () => {
     const config = parseConfig({ ...DEV_ENV, DEV_SEED_COOKIE: '' })
 

@@ -13,7 +13,11 @@ import type { SessionCookieVerifier } from './sessionCookieVerifier.js'
 
 type SessionAuthAssemblyConfig = Pick<
   Env,
-  'DEV_LOGIN_ENABLED' | 'DEV_SEED_COOKIE' | 'DEV_SEED_ACCOUNT_ID' | 'FIREBASE_PROJECT_ID'
+  | 'NODE_ENV'
+  | 'DEV_LOGIN_ENABLED'
+  | 'DEV_SEED_COOKIE'
+  | 'DEV_SEED_ACCOUNT_ID'
+  | 'FIREBASE_PROJECT_ID'
 >
 
 type SessionAuthAssemblyDeps = {
@@ -53,8 +57,8 @@ function buildFirebaseSessionAuth(
  *   시드 캐릭터 문서를 보장한다(없으면 삽입, 있으면 정합 확인). 정합 실패는 호출자로 전파된다.
  * - false(프로덕션): Firebase 어댑터를 조립한다. 시드 쓰기는 일어나지 않는다.
  *
- * config는 getConfig()를 거친 값이어야 한다 — NODE_ENV 게이트(development·test 외 부팅 차단)는
- * getConfig()에만 있고 이 함수는 다시 검사하지 않는다.
+ * dev 경로는 NODE_ENV가 development·test일 때만 조립한다. getConfig()의 같은 게이트와 겹치지만,
+ * getConfig()를 거치지 않은 config로 호출돼도 시드 인증·시드 쓰기가 열리지 않게 여기서도 막는다.
  */
 export async function assembleSessionAuth(
   config: SessionAuthAssemblyConfig,
@@ -62,6 +66,9 @@ export async function assembleSessionAuth(
 ): Promise<SessionAuthAssembly> {
   if (!config.DEV_LOGIN_ENABLED) {
     return { sessionAuth: buildFirebaseSessionAuth(config, deps) }
+  }
+  if (config.NODE_ENV !== 'development' && config.NODE_ENV !== 'test') {
+    throw new Error('DEV_LOGIN_ENABLED requires NODE_ENV=development or test')
   }
   const sessionAuth = createDevSeedAuthAdapterFromEnv(config)
   const devSeedResult = await seedDevCharacter(deps.characters, config.DEV_SEED_ACCOUNT_ID)
