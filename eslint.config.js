@@ -36,6 +36,13 @@ export default tseslint.config(
       ],
     },
   },
+  // 테스트 파일 — `expect(mock.method).toHaveBeenCalled…` 단언에서 unbound-method 오탐이 나므로
+  // 테스트에서만 끈다. 테스트가 아닌 소스는 위 타입 인지 블록의 규칙을 그대로 받는다.
+  // 위 블록보다 뒤에 있어야 이 설정이 우선한다.
+  {
+    files: ['**/*.test.{ts,tsx}'],
+    rules: { '@typescript-eslint/unbound-method': 'off' },
+  },
   // config .ts — 타입 인지 없이 스타일만 (projectService 미적용)
   {
     files: ['**/*.config.{ts,mts,cts}'],
