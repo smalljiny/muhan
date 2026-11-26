@@ -63,7 +63,7 @@ import type { MoveActor } from './tryMove.js'
  */
 
 /**
- * 개발용 기본 시작 방. 캐릭터 생성 기본값(firebaseSessionAuthAdapter의 START_ROOM=1)을 미러한다.
+ * 개발용 기본 시작 방. 캐릭터 생성 기본값(auth/characterStartDefaults의 START_ROOM=1)을 미러한다.
  * 완전한 스폰 정책(레벨·종족·소속별 시작지)은 이 토픽 범위 밖이며, orphan currentRoom의
  * 안전 폴백 단일 홈으로만 쓴다.
  */
