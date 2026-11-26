@@ -41,6 +41,15 @@ export const errorCodeSchema = z.enum([
 ])
 
 /**
+ * 방 점유자 참조 필드 — world:room `occupants[]`와 world:presence `subject`가 같은 형태를 쓰도록
+ * 한 곳에서 정의한다(입·퇴장 델타로 목록에 넣는 값과 스냅샷 값이 어긋나지 않게).
+ */
+const occupantRefShape = {
+  characterId: z.string().min(1),
+  name: z.string().min(1),
+}
+
+/**
  * server→client 이벤트 봉투 — 판별 유니온의 단일 출처.
  *
  * top-level `type` 리터럴로 이벤트를 판별한다(objectOwnerSchema 관용구와 동일). 각 variant는
@@ -95,8 +104,8 @@ export const serverEventSchema = z.discriminatedUnion('type', [
   }),
   // 방 통지 — 이동/입장 성공 시 본인에게 1회 발생하는 방 스냅샷. 방 id·이름·설명·출구 이름 목록에
   // 더해 눈에 보이는 점유자·바닥 아이템·몬스터를 싣는다(서버 `projectRoomView`가 오라클 방 표시 규칙으로
-  // 숨김 개체·비밀 출구를 이미 걸러 낸다). 스냅샷이지 실시간 델타가 아니다 — 다른 사람의 입·퇴장은 다음
-  // world:room까지 반영되지 않는다(#116).
+  // 숨김 개체·비밀 출구를 이미 걸러 낸다). 스냅샷이지 실시간 델타가 아니다 — 다른 사람의 입·퇴장 델타는
+  // world:presence가 담당하고, 점유자 목록은 다음 world:room 스냅샷에서 다시 수렴한다.
   //
   // `name`·`longDesc`는 빈 문자열이 유효하다 — 기준 월드 데이터에 빈 name 97방·빈 longDesc 433방이
   // 실재하며, 대체 문구('이름 없는 곳'·'설명이 없다.') 선택은 표시 계층의 관심사다.
@@ -109,7 +118,7 @@ export const serverEventSchema = z.discriminatedUnion('type', [
     name: z.string(),
     longDesc: z.string(),
     exits: z.array(z.string()),
-    occupants: z.array(z.strictObject({ characterId: z.string().min(1), name: z.string().min(1) })),
+    occupants: z.array(z.strictObject(occupantRefShape)),
     items: z.array(z.strictObject({ instanceId: z.string().min(1), name: z.string() })),
     creatures: z.array(
       z.strictObject({
@@ -118,6 +127,38 @@ export const serverEventSchema = z.discriminatedUnion('type', [
         level: z.int().min(0),
       }),
     ),
+  }),
+  // 방 입·퇴장 통지 — 같은 방의 다른 사람이 들어오거나 나갈 때 그 방에 있는 수신자에게 발생하는 델타.
+  // roomId는 통지가 일어난 방(수신자가 지금 있는 방)이다.
+  //
+  // change는 네 변화의 판별 유니온이다:
+  // - moved-out(이동 퇴장): 걸어서 이 방을 떠났다. direction은 원본 `%s`에 들어가는 출구 이름(ExitEdge.name)
+  //   그대로이며 moved-out에만 있고 비어 있을 수 없다.
+  // - moved-in(이동 도착): 다른 방에서 걸어서 이 방에 도착했다.
+  // - entered(접속 진입): 접속하며 이 방에 나타났다.
+  // - exited(세션 종료): 세션이 끝나 이 방에서 사라졌다. 원본이 알리지 않으므로 announce는 항상 false다.
+  // arrived 성격(점유자 목록에 추가)은 moved-in·entered, departed 성격(목록에서 제거)은 moved-out·exited다.
+  //
+  // announce는 원본 문장을 출력할지 여부다 — 은신·투명 등의 억제는 이벤트를 막지 않고 announce만 false로
+  // 만든다(목록 갱신은 항상 일어난다). 조합 규칙(방향 필수·exited 무음)은 refine 없이 strictObject 판별
+  // 유니온이 파싱 단계에서 강제한다 — 다른 변화에 direction이 붙으면 strict가 거부한다.
+  //
+  // subject.kind는 G5 확장 판별자다 — 지금은 'player'뿐이고, 이후 'creature'를 추가할 수 있다.
+  // subject.name은 world:room의 occupants[].name과 같은 출처를 쓴다.
+  z.strictObject({
+    type: z.literal('world:presence'),
+    roomId: z.int().min(0),
+    subject: z.strictObject({ kind: z.literal('player'), ...occupantRefShape }),
+    change: z.discriminatedUnion('change', [
+      z.strictObject({
+        change: z.literal('moved-out'),
+        direction: z.string().min(1),
+        announce: z.boolean(),
+      }),
+      z.strictObject({ change: z.literal('moved-in'), announce: z.boolean() }),
+      z.strictObject({ change: z.literal('entered'), announce: z.boolean() }),
+      z.strictObject({ change: z.literal('exited'), announce: z.literal(false) }),
+    ]),
   }),
   // 채팅 발화 통지 — ChannelDeliveryContext와 1:1 매핑(speaker→speakerCharacterId로 평탄화). 인바운드
   // chat:message와 이름을 달리해(said vs message) 방향을 판별한다(D-E). channel은 채널 전달 컨텍스트와 동일
