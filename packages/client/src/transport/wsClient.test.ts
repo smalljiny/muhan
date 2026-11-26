@@ -305,6 +305,114 @@ describe('WsClient room state', () => {
   })
 })
 
+describe('WsClient world:presence', () => {
+  type PresenceFrame = Extract<ServerEvent, { type: 'world:presence' }>
+  type Change = PresenceFrame['change']
+
+  // 기본 대상은 roomA 점유자(c1)에 없는 c2다.
+  function presenceEvent(change: Change, roomId = roomA.roomId): PresenceFrame {
+    return {
+      type: 'world:presence',
+      roomId,
+      subject: { kind: 'player', characterId: 'c2', name: '개발전사' },
+      change,
+    }
+  }
+
+  // 연결 후 roomA에 들어간 상태의 하네스.
+  function enteredHarness() {
+    const h = makeHarness()
+    h.client.connect()
+    h.last().fireOpen()
+    h.last().emit(roomEvent(roomA))
+    return h
+  }
+
+  const C2 = { characterId: 'c2', name: '개발전사' }
+  const ARRIVED = '개발전사님이 도착하였습니다.'
+
+  it('ignores presence while there is no room state but still records the event', () => {
+    const { client, last } = makeHarness()
+    client.connect()
+    last().fireOpen()
+    const event = presenceEvent({ change: 'moved-in', announce: true })
+    last().emit(event)
+    expect(client.getSnapshot().room).toBeNull()
+    expect(client.getSnapshot().events).toContainEqual(event)
+  })
+
+  it('ignores a late presence for another roomId but still records the event', () => {
+    const { client, last } = enteredHarness()
+    const before = client.getSnapshot().room
+    const event = presenceEvent({ change: 'moved-in', announce: true }, roomA.roomId + 1)
+    last().emit(event)
+    expect(client.getSnapshot().room).toBe(before)
+    expect(client.getSnapshot().events).toContainEqual(event)
+  })
+
+  it('adds an announced arrival to occupants and notices for the current room', () => {
+    const { client, last } = enteredHarness()
+    last().emit(presenceEvent({ change: 'moved-in', announce: true }))
+    const room = client.getSnapshot().room
+    expect(room?.occupants).toEqual([...roomA.occupants, C2])
+    expect(room?.notices).toEqual([ARRIVED])
+  })
+
+  it('clears notices when a world:room for a different room arrives', () => {
+    const { client, last } = enteredHarness()
+    last().emit(presenceEvent({ change: 'moved-in', announce: true }))
+    last().emit(roomEvent(roomB))
+    expect(client.getSnapshot().room?.notices).toEqual([])
+  })
+
+  it('keeps notices when a world:room for the same room arrives', () => {
+    const { client, last } = enteredHarness()
+    last().emit(presenceEvent({ change: 'moved-in', announce: true }))
+    last().emit(roomEvent(makeRoom({ creatures: [] })))
+    const room = client.getSnapshot().room
+    expect(room?.notices).toEqual([ARRIVED])
+    // 스냅샷 자체는 교체된다 — 점유자는 서버 스냅샷 값으로 수렴한다.
+    expect(room?.creatures).toEqual([])
+    expect(room?.occupants).toEqual(roomA.occupants)
+  })
+
+  it.each([
+    ['moved-out without direction', { change: { change: 'moved-out', announce: true } }],
+    ['exited with announce true', { change: { change: 'exited', announce: true } }],
+  ])('rejects a %s frame as receive-validation without touching state', (_label, patch) => {
+    const { client, last } = enteredHarness()
+    const before = client.getSnapshot()
+    last().emitRaw(
+      JSON.stringify({ ...presenceEvent({ change: 'moved-in', announce: true }), ...patch }),
+    )
+    const after = client.getSnapshot()
+    expect(after.errors.map((e) => e.kind)).toEqual(['receive-validation'])
+    expect(after.events).toBe(before.events)
+    expect(after.room).toBe(before.room)
+  })
+
+  // G3 재현 1 — 은신 도착: 목록에는 들어오지만 문장은 없다.
+  it('adds a silent moved-in to occupants without a notice', () => {
+    const { client, last } = enteredHarness()
+    last().emit(presenceEvent({ change: 'moved-in', announce: false }))
+    const room = client.getSnapshot().room
+    expect(room?.occupants).toEqual([...roomA.occupants, C2])
+    expect(room?.notices).toEqual([])
+  })
+
+  // G3 재현 2 — DM 투명 퇴장: 목록에서는 빠지지만 문장은 없다.
+  it('removes a silent moved-out from occupants without a notice', () => {
+    const { client, last } = makeHarness()
+    client.connect()
+    last().fireOpen()
+    last().emit(roomEvent(makeRoom({ occupants: [...roomA.occupants, C2] })))
+    last().emit(presenceEvent({ change: 'moved-out', direction: '북', announce: false }))
+    const room = client.getSnapshot().room
+    expect(room?.occupants).toEqual(roomA.occupants)
+    expect(room?.notices).toEqual([])
+  })
+})
+
 describe('WsClient self character identity', () => {
   // 초기 null·entered/resumed 세팅은 위 'session state & commands' 블록이 함께 단정한다
   // (같은 setup·같은 emit이라 별도 케이스를 두면 시퀀스가 그림자 복제된다).

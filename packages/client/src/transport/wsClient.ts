@@ -2,6 +2,7 @@
 // useSyncExternalStore로 소비한다. 송신 전 clientCommandSchema 검증, 수신 후 serverEventSchema parse,
 // hello→ready 버전 협상, 세션 상태(phase·characterList·activePrompt·lastError·본인 characterId)와
 // 방 상태(room) 노출, selectCharacter/replyPrompt/move 사용자 조작 기반 명령, debug:echo 송신을 제공한다.
+// 방 상태는 world:room 스냅샷으로 교체되고, 그 사이 world:presence 델타가 점유자·알림(notices)을 고친다.
 
 import {
   clientCommandSchema,
@@ -14,6 +15,7 @@ import {
   type PromptOption,
   type ServerEvent,
 } from 'shared/protocol'
+import { applyPresence } from './presence.js'
 
 /** 연결 라이프사이클 상태. ready = echo 가능(session:entered/resumed 도달). */
 export type ConnectionStatus =
@@ -52,8 +54,11 @@ export interface SessionState {
 /**
  * 방 서브상태 — world:room 페이로드에서 판별자 type만 뺀 형태다. 서버의 `RoomView`와 같은
  * shared 계약 파생이라 와이어 계약이 바뀌면 양쪽이 함께 타입 에러로 드러난다.
+ * `notices`는 클라이언트 전용 필드로, announce된 world:presence 문장을 최근 20개까지 담는다.
  */
-export type RoomState = Omit<Extract<ServerEvent, { type: 'world:room' }>, 'type'>
+export type RoomState = Omit<Extract<ServerEvent, { type: 'world:room' }>, 'type'> & {
+  readonly notices: readonly string[]
+}
 
 /** 브라우저 WebSocket과 호환되는 최소 인터페이스 — 테스트가 fake를 주입할 수 있게 한다. */
 export interface SocketLike {
@@ -89,7 +94,10 @@ export interface WsClientSnapshot {
   events: readonly ServerEvent[]
   errors: readonly WsError[]
   session: SessionState
-  /** 마지막으로 통지받은 방. 방 상태가 없는 구간(서버가 이벤트 발생을 생략한 경우)은 null이다. */
+  /**
+   * 마지막으로 통지받은 방. 방 상태가 없는 구간(서버가 이벤트 발생을 생략한 경우)은 null이다.
+   * 같은 방의 world:presence 델타가 점유자 목록과 notices에 반영된다.
+   */
   room: RoomState | null
 }
 
@@ -261,9 +269,19 @@ export class WsClient {
         this.setSession({ phase: 'resumed', characterId: event.characterId })
         break
       case 'world:room': {
-        // 스냅샷이지 델타가 아니다 — 판별자만 떼고 방 전체를 통째로 교체한다.
-        const { type: _type, ...room } = event
-        this.setRoom(room)
+        // 스냅샷이지 델타가 아니다 — 판별자만 떼고 방 전체를 통째로 교체한다. 알림은 같은 방
+        // 스냅샷(몬스터 사망 등)이면 유지하고, 방이 바뀌었거나 처음이면 비운다.
+        const { type: _type, ...wire } = event
+        const prev = this.snapshot.room
+        const notices = prev !== null && prev.roomId === wire.roomId ? prev.notices : []
+        this.setRoom({ ...wire, notices })
+        break
+      }
+      case 'world:presence': {
+        // 방 상태가 없거나 다른 방의 늦은 통지(OQ2)는 무시한다 — 이벤트 기록은 이미 끝났다.
+        const room = this.snapshot.room
+        if (room === null || room.roomId !== event.roomId) break
+        this.setRoom(applyPresence(room, event))
         break
       }
       case 'error':
