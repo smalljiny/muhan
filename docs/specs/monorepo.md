@@ -54,39 +54,29 @@ muhan/
 | 항목 | 핀 |
 |------|-----|
 | typescript | ^5.7.2 |
-| vitest / @vitest/coverage-v8 | ^3.0.0 |
+| vitest / @vitest/coverage-v8 | ^4.1.12 |
 | eslint / typescript-eslint | ^9.17.0 / ^8.19.0 |
 | prettier | ^3.4.0 |
 | turbo | ^2.3.0 |
-| fastify | ^5.2.0 |
-| vite | ^7.0.0 |
+| fastify | ^5.12.5 |
+| vite | ^7.3.7 |
 | tsx | ^4.19.0 |
 | @types/node | ^22.10.0 |
 | mongodb | ^7.4.0 |
-| zod | ^4.4.3 |
+| zod | ^4.6.6 |
 | mongodb-memory-server | ^11.2.0 |
 
 런타임 의존성은 소비 패키지의 `dependencies`에 `catalog:`로 참조한다: `zod`는 `shared`(스키마)·`server`, `mongodb`는 `server`, `mongodb-memory-server`는 `server` devDependency(통합 테스트). E2-1 영속화 계층이 추가했다(`docs/specs/persistence.md`).
 
 pnpm 버전은 루트 `package.json`의 `packageManager: "pnpm@10.33.0"`가 단일 출처다.
 
-### transitive 취약점 하드닝 (pnpm.overrides)
+### 의존성 취약점 기준
 
-루트 `package.json`의 `pnpm.overrides`가 `pnpm audit`이 검출한 transitive 의존성 취약점을 패치 버전으로 강제 해석한다. catalog가 직접 devDependency 버전을 단일화하는 것과 층위가 다르다 — overrides는 소비 패키지가 선언하지 않은 **transitive 노드**의 해석을 대역 한정으로 재작성한다.
+`pnpm audit`(전체)과 `pnpm audit --prod`가 모두 0건인 상태를 기준으로 한다. 루트 `package.json`에는 `pnpm.overrides`를 두지 않는다. transitive 노드는 부모 패키지의 선언 범위 안에서 수정본으로 해석되며, 해석 결과는 `pnpm-lock.yaml`이 고정한다.
 
-| LHS 셀렉터(취약 대역) | RHS(강제 버전) | 대상 경로 | Advisory |
-|------|------|------|------|
-| `brace-expansion@<1.1.16` | `>=1.1.16 <2.0.0` | eslint → minimatch → brace-expansion | GHSA-3jxr-9vmj-r5cp (ReDoS) |
-| `brace-expansion@>=2.0.0 <2.1.2` | `>=2.1.2 <3.0.0` | @vitest/coverage-v8 → test-exclude → glob → minimatch → brace-expansion | GHSA-3jxr-9vmj-r5cp (ReDoS) |
-| `uuid@<11.1.1` | `>=11.1.1 <12.0.0` | firebase-admin → @google-cloud/storage → gaxios → uuid | GHSA-w5hq-g745-h8pq |
-| `fast-uri@<3.1.4` | `>=3.1.4 <4.0.0` | packages/server → fastify → @fastify/ajv-compiler → fast-uri | GHSA-v2hh-gcrm-f6hx (host confusion) |
-| `find-my-way@<9.7.0` | `>=9.7.0 <10.0.0` | packages/server → fastify → find-my-way | GHSA-c96f-x56v-gq3h (HTTP2 DDoS) |
+catalog 핀 가운데 `fastify ^5.12.5`·`zod ^4.6.6`·`vite ^7.3.7`·`vitest`·`@vitest/coverage-v8 ^4.1.12`의 하한은 취약점 기준선이다. 각 하한은 그 패키지에 보고된 권고를 모두 충족하는 최소 버전이다. caret 범위는 권고의 취약 구간과 겹치지 않으므로, lockfile을 다시 만들어도 그 권고에 걸리는 버전은 선택되지 않는다. 하한을 낮추면 이 보장이 깨진다. `@vitest/coverage-v8`은 자체 권고가 없지만 vitest와 같은 버전이어야 해서 함께 맞춘다.
 
-정책 두 축:
-- **LHS 대역 한정**: 취약 대역에 해당하는 노드만 재해석하고 다른 소비자는 건드리지 않아 blast radius를 최소화한다. 무범위 override(`"uuid": ">=11.1.1"`)는 전 트리를 강제해 부작용 위험이 크므로 금지한다.
-- **RHS "다음 메이저 미만" 상한**: 각 RHS를 취약 대역과 같은 메이저 라인에 고정한다(`<2.0.0`/`<3.0.0`/`<12.0.0`/`<4.0.0`/`<10.0.0`). 상한 없는 `>=`는 최고 만족 버전을 끌어와 cross-major breaking을 유발한다 — 실제로 상한 없는 `>=2.1.2`는 minimatch@9.0.9(brace-expansion `^2.0.2` 소비)에 brace-expansion 5.0.7(ESM named-export)을 강제해 CJS `.default` interop을 깨뜨렸고, 상한 없는 `>=11.1.1`은 uuid를 14.x로 점프시켰다. fast-uri도 4.x 라인이 존재해 상한 없는 `>=3.1.4`는 미검증 메이저를 끌어올 수 있으므로 `<4.0.0`으로 고정한다.
-
-override는 transitive 버전만 바꾸므로 애플리케이션 소스는 무변경이며, 검증은 audit 0건 + build·type-check·test 회귀 없음으로 갈음한다. 시점 반응 패치이므로 향후 dependency bump가 취약 대역을 재도입할 수 있고, CI에는 아직 `pnpm audit` 게이트가 없어(향후 별도 토픽) 재검출은 로컬 `pnpm audit`에 의존한다.
+감사는 로컬 `pnpm audit`으로 확인한다. CI에는 `pnpm audit` 게이트가 없다(운영 정책을 먼저 정해야 하는 별도 토픽). 그래서 새 권고나 lockfile 재해석으로 생긴 회귀는 로컬 감사 때 드러난다.
 
 ## 동작
 
@@ -152,6 +142,7 @@ shared#transit ──▶ server#transit ──▶ server#type-check
 - `**/*.ts`(config 파일 제외): 타입 인지 규칙(`recommendedTypeChecked`, `projectService`).
 - `**/*.config.{ts,mts,cts}`: tsconfig include 밖이라 non-type-checked(`recommended`).
 - `packages/port/**/*.js`: 순수 CommonJS, `disableTypeChecked`.
+- `**/*.test.{ts,tsx}`: 타입 인지 블록 뒤에 두어 `@typescript-eslint/unbound-method`만 끈다. `expect(mock.method).toHaveBeenCalled…` 단언에서 오탐이 나기 때문이다. 테스트가 아닌 소스(`*.testutil.ts` 포함)는 이 규칙을 그대로 받는다.
 
 prettier는 포맷 전용으로 분리(`.prettierrc.json` + `.prettierignore`).
 

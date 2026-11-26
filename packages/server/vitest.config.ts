@@ -16,7 +16,6 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
-      all: true,
       include: ['src/**/*.ts'],
       // firebaseVerifier.ts는 실 firebase 자격증명이 필요해 단위 테스트가 비실용적이라 index.ts처럼
       // 연결 코드로 취급해 제외한다(seam은 통합 테스트가 FAKE verifier로 관통 검증).

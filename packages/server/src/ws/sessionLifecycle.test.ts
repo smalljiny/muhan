@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, type Mock } from 'vitest'
 import { createSessionLifecycle } from './sessionLifecycle.js'
 import { createSessionRegistry, type SessionRegistry } from './sessionRegistry.js'
 import { createResolveDisconnect } from './resolveDisconnect.js'
@@ -17,7 +17,7 @@ function fakeHandle(n: number): NodeJS.Timeout {
 
 /** onSessionEnd를 스파이하는 포트. */
 function makePort(): SessionLifecyclePort & { onSessionEnd: ReturnType<typeof vi.fn> } {
-  return { onSessionEnd: vi.fn() }
+  return { onSessionEnd: vi.fn<SessionLifecyclePort['onSessionEnd']>() }
 }
 
 /**
@@ -26,8 +26,8 @@ function makePort(): SessionLifecyclePort & { onSessionEnd: ReturnType<typeof vi
  */
 /** 스파이 idle 타이머 — arm/clear를 관측하고 onExpire를 캡처해 fake 만료를 재현한다. */
 interface SpyIdle extends IdleTimer {
-  arm: ReturnType<typeof vi.fn>
-  clear: ReturnType<typeof vi.fn>
+  arm: Mock<() => void>
+  clear: Mock<() => void>
   onExpire: () => void
 }
 
@@ -67,7 +67,7 @@ function makeHarness(graceMs = 30000, idleMs = 300000): {
   // idle 팩토리 seam — 생성된 스파이 idle을 순서대로 기록하고 각 onExpire를 캡처한다.
   const idleTimers: SpyIdle[] = []
   const createIdle = vi.fn((onExpire: () => void): IdleTimer => {
-    const spy: SpyIdle = { arm: vi.fn(), clear: vi.fn(), onExpire }
+    const spy: SpyIdle = { arm: vi.fn<() => void>(), clear: vi.fn<() => void>(), onExpire }
     idleTimers.push(spy)
     return spy
   })

@@ -1,4 +1,4 @@
-import { describe, it, expect, expectTypeOf, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, expectTypeOf, beforeEach, afterEach, vi, type Mock } from 'vitest'
 import type { CharacterRepository } from '../repo/characterRepository.js'
 import type { BankRepository } from '../repo/bankRepository.js'
 import type { WorldRepository } from '../repo/worldRepository.js'
@@ -15,7 +15,7 @@ const barrier = (): Promise<void> => new Promise((resolve) => setTimeout(resolve
 
 /** repo 스파이 묶음 — SaveEngine에 주입할 최소 fake repo 4종. */
 interface Spies {
-  charUpdate: ReturnType<typeof vi.fn>
+  charUpdate: Mock<(id: string, patch: unknown) => Promise<void>>
   bankUpdate: ReturnType<typeof vi.fn>
   worldUpsert: ReturnType<typeof vi.fn>
   objectDelete: ReturnType<typeof vi.fn>

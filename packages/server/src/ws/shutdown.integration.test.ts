@@ -32,7 +32,7 @@ describe('WS shutdown 일괄 종료 integration (실 소켓 + WorldClock)', () =
 
   /** onSessionEnd를 스파이하는 lifecyclePort. buildSeededApp({ lifecyclePort })로 주입해 종결을 관측한다. */
   function spyPort(): SessionLifecyclePort & { onSessionEnd: ReturnType<typeof vi.fn> } {
-    return { onSessionEnd: vi.fn() }
+    return { onSessionEnd: vi.fn<SessionLifecyclePort['onSessionEnd']>() }
   }
 
   beforeEach(() => {

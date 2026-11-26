@@ -164,7 +164,7 @@
 
 `buildApp(deps?)`는 `/health` REST 다음에 `registerWebsocket(app)`을 무조건 호출한다. `deps.https`(`node:https` `ServerOptions`)를 넘기면 Fastify가 https 서버를 만들어 `wss` 종단을 지원한다(TLS-ready pass-through). Fastify 타입 오버로드가 http 경로에서 https 키를 거부하므로 두 경우를 분기한다. dev는 평문 loopback을 쓰므로 기본은 미주입이다.
 
-`registerWebsocket(app)`은 먼저 `@fastify/websocket`을 `{ options: { maxPayload: MAX_FRAME_BYTES } }`로 등록한다. 그다음 별도의 encapsulated 플러그인에서 `/game` 라우트를 `{ websocket: true }`로 마운트한다. 이렇게 하면 "라우트보다 먼저 플러그인 등록" 관례를 top-level await 없이 지킬 수 있다. `verifyClient`는 쓰지 않는다(transport-only). `MAX_FRAME_BYTES`는 프로토콜 레이어(`maxPayload`)에서 강제하므로, 버퍼가 다 차기 전에 초과 프레임을 1009 close로 거부한다. 핸들러 안에서 크기를 재면 이미 버퍼링된 뒤라 방어가 되지 않는다.
+`registerWebsocket(app)`은 먼저 `@fastify/websocket`을 `{ options: { maxPayload: MAX_FRAME_BYTES } }`로 등록한다. 그다음 별도의 encapsulated 플러그인에서 `/game` 라우트를 `{ websocket: true }`로 마운트한다. 이렇게 하면 "라우트보다 먼저 플러그인 등록" 관례를 top-level await 없이 지킬 수 있다. `verifyClient`는 쓰지 않는다(transport-only). `MAX_FRAME_BYTES`는 프로토콜 레이어(`maxPayload`)에서 강제하므로, 버퍼가 다 차기 전에 초과 프레임을 1009 close로 거부한다. 핸들러 안에서 크기를 재면 이미 버퍼링된 뒤라 방어가 되지 않는다. 등록 옵션에 `errorHandler`를 주지 않으므로, 연결된 소켓의 `'error'`(maxPayload 초과, 잘못된 프레임, 피어 ECONNRESET 등)는 `@fastify/websocket` 기본 핸들러가 받는다. 기본 핸들러는 요청 로거로 기록한 뒤 `socket.terminate()`를 호출한다. 이 경우 `ws`가 close 프레임(1009 등)을 먼저 쓰고 `'error'`를 내므로 close 코드는 terminate 전에 전송된다. 다만 실제 TCP에서 쓰기가 끝나기 전에 소켓이 끊기면 클라이언트는 1006을 받을 수 있다.
 
 명령 레지스트리는 상태 없는 핸들러 연결표라 연결끼리 공유해도 안전하다. E3-4가 `ChannelPort`를 클로저로 주입하면서, 모듈 싱글턴이던 레지스트리를 `registerWebsocket` 스코프에서 `createCommandRegistry(channelPort)`로 1회 조립하도록 옮겼다. 레지스트리는 stateless Map이라 옮기는 비용은 없다(zero).
 

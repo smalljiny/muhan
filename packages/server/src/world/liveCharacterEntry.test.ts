@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { type Character, type ObjectInstance } from 'shared'
 import type { RoomNode } from 'shared'
 import { createLiveCharacterRegistry, type LiveCharacter } from './liveCharacterRegistry.js'
@@ -71,7 +71,7 @@ function makeRoom(roomId: number): RoomNode {
 
 type Harness = {
   deps: LiveCharacterEntryDeps
-  findById: ReturnType<typeof vi.fn>
+  findById: Mock<(id: string) => Promise<Character | null>>
   hydrateInventory: ReturnType<typeof vi.fn>
   onRoomEntered: ReturnType<typeof vi.fn>
   onRoomLeft: ReturnType<typeof vi.fn>
