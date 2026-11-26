@@ -6,7 +6,7 @@ import { FakeClock } from '../util/clock.testutil.js'
 // injectWS로 제어 프레임(ping/pong)을 태우지 않는다 — 라이트-소켓 릴레이 타이밍 불확실성을 피한다.
 
 function createFakeSocket(): HeartbeatSocket & { ping: ReturnType<typeof vi.fn>; terminate: ReturnType<typeof vi.fn> } {
-  return { ping: vi.fn(), terminate: vi.fn() }
+  return { ping: vi.fn<() => void>(), terminate: vi.fn<() => void>() }
 }
 
 /** 6개 테스트가 공유하는 표준 셋업(간격 1000ms·임계 3, 주입 fake clock). */

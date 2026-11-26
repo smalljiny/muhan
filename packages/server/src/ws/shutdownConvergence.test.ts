@@ -26,7 +26,7 @@ function makeScheduleGrace(handle: NodeJS.Timeout) {
 
 /** onSessionEnd를 스파이하는 no-op 포트. */
 function makePort(): SessionLifecyclePort & { onSessionEnd: ReturnType<typeof vi.fn> } {
-  return { onSessionEnd: vi.fn() }
+  return { onSessionEnd: vi.fn<SessionLifecyclePort['onSessionEnd']>() }
 }
 
 /** listBindings가 준비된 스냅샷을 반환하는 stub registry(converge 순수 단위 검증용). */

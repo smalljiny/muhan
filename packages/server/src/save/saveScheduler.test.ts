@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest'
 import type { DirtyEntry } from './dirtyTracker.js'
 import { DirtyTracker } from './dirtyTracker.js'
 import { AsyncWriteQueue, type WriteAdapter, type WriteOutcome } from './asyncWriteQueue.js'
-import { NOOP_LOGGER } from './logger.js'
+import { NOOP_LOGGER, type SaveLogger } from './logger.js'
 import { DocumentNotFoundError } from '../repo/types.js'
 import {
   SaveScheduler,
@@ -291,7 +291,7 @@ describe('SaveScheduler', () => {
     /** tracker·queue·scheduler를 프로덕션과 같은 형태로 조립한다(onSettled → ack/discard). */
     function compose(
       adapter: WriteAdapter,
-      options: { logger?: { error: ReturnType<typeof vi.fn> }; onSettled?: (entry: DirtyEntry, outcome: WriteOutcome) => void } = {},
+      options: { logger?: { error: Mock<SaveLogger['error']> }; onSettled?: (entry: DirtyEntry, outcome: WriteOutcome) => void } = {},
     ): Composed {
       const tracker = new DirtyTracker()
       const settle = vi.fn<(entry: DirtyEntry, outcome: WriteOutcome) => void>((entry, outcome) => {
@@ -369,7 +369,7 @@ describe('SaveScheduler', () => {
       const adapter = vi.fn<WriteAdapter>(() =>
         Promise.reject(new DocumentNotFoundError('characters', 'c1')),
       )
-      const logger = { error: vi.fn() }
+      const logger = { error: vi.fn<SaveLogger['error']>() }
       const { tracker, queue, scheduler, settle } = compose(adapter, { logger })
       tracker.markDirty('characters', 'c1', { gold: 10 })
 

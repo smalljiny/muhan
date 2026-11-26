@@ -20,12 +20,12 @@ function fakeSocket(): WebSocket {
 
 /** clear를 스파이하는 fake Deadline. */
 function fakeDeadline(): Deadline & { clear: ReturnType<typeof vi.fn> } {
-  return { rearm: vi.fn(), clear: vi.fn() }
+  return { rearm: vi.fn<() => void>(), clear: vi.fn<() => void>() }
 }
 
 /** clear를 스파이하는 fake IdleTimer. 팩토리는 Story 6이라 여기선 슬롯 clear만 검증한다. */
 function fakeIdle(): IdleTimer & { clear: ReturnType<typeof vi.fn> } {
-  return { arm: vi.fn(), clear: vi.fn() }
+  return { arm: vi.fn<() => void>(), clear: vi.fn<() => void>() }
 }
 
 /**

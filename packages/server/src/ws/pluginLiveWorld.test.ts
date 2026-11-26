@@ -119,7 +119,7 @@ describe('registerWebsocket 라이브 월드 묶음 연결', () => {
   it('명시 lifecyclePort가 묶음보다 우선한다(explicit > bundle-derived, #2)', async () => {
     const h = makeBundle()
     const explicit: SessionLifecyclePort & { onSessionEnd: ReturnType<typeof vi.fn> } = {
-      onSessionEnd: vi.fn(),
+      onSessionEnd: vi.fn<SessionLifecyclePort['onSessionEnd']>(),
     }
     const app = buildApp({ liveWorldDeps: h.bundle, lifecyclePort: explicit })
     await app.ready()

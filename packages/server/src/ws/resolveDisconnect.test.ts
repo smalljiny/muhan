@@ -177,8 +177,8 @@ describe('createResolveDisconnect', () => {
   it('idle 타이머가 있으면 clear한다(연결의 idle 슬롯 정리)', () => {
     const registry = createSessionRegistry()
     const idle: IdleTimer & { clear: ReturnType<typeof vi.fn> } = {
-      arm: vi.fn(),
-      clear: vi.fn(),
+      arm: vi.fn<() => void>(),
+      clear: vi.fn<() => void>(),
     }
     const ctx = createConnectionContext()
     ctx.idle = idle

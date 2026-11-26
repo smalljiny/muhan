@@ -32,7 +32,7 @@ function createFakeClock() {
 }
 
 function createFakeSocket(): DeadlineSocket & { close: ReturnType<typeof vi.fn> } {
-  return { close: vi.fn() }
+  return { close: vi.fn<() => void>() }
 }
 
 /** 표준 셋업(데드라인 1000ms, 주입 fake clock). */

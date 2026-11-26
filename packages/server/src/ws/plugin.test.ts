@@ -390,7 +390,7 @@ describe('WS transport', () => {
 
   /** onSessionEnd를 스파이하는 lifecyclePort. buildSeededApp({ lifecyclePort })로 주입해 종결을 관측한다. */
   function spyPort(): SessionLifecyclePort & { onSessionEnd: ReturnType<typeof vi.fn> } {
-    return { onSessionEnd: vi.fn() }
+    return { onSessionEnd: vi.fn<SessionLifecyclePort['onSessionEnd']>() }
   }
 
   it('command 진입 시 세션 레지스트리에 live 바인딩을 등록한다', async () => {
