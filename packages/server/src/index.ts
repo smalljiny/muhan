@@ -14,6 +14,7 @@ import { SaveEngine } from './save/saveEngine.js'
 import type { SaveLogger } from './save/logger.js'
 import { loadObjectTemplates } from './items/objectTemplate.js'
 import { loadWorldGraph } from './world/worldGraph.js'
+import { assertReviveRoom } from './progression/death.js'
 import { WorldClock, type WorldTickLogger } from './world/worldClock.js'
 import { createGameTime } from './world/gameTime.js'
 import { createCheckExitsSlot } from './world/checkExits.js'
@@ -41,7 +42,9 @@ async function boot(): Promise<void> {
   await Promise.all([objects.init(), characters.init(), accounts.init(), bank.init()])
 
   // 기준 방 번들을 인메모리 그래프로 로드한다(부팅 스코프에 보관). 템플릿·리스폰은 E4 범위.
+  // 부활 방(1008)이 없으면 throw해 boot().catch fail-fast로 부팅을 중단한다(D9).
   const worldGraph = loadWorldGraph()
+  assertReviveRoom(worldGraph)
 
   // 기준 object 템플릿 인덱스를 1회 로드한다(근거: LiveWorldWiringBundle.objectTemplates doc).
   const objectTemplates = loadObjectTemplates()
@@ -187,7 +190,7 @@ async function boot(): Promise<void> {
 }
 
 boot().catch((err: unknown) => {
-  // env·DB 연결 fail-fast 경로. 자격증명(URI)이 로그로 새지 않도록 메시지만 출력한다.
+  // env·DB 연결·월드 데이터 검증(부활 방) fail-fast 경로. 자격증명(URI)이 로그로 새지 않도록 메시지만 출력한다.
   console.error('부팅 실패:', err instanceof Error ? err.message : err)
   process.exit(1)
 })

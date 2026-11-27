@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { neededExp, resolveHpMax, resolveMpMax, type Character } from 'shared'
-import { applyPlayerDeath } from './death.js'
+import { applyPlayerDeath, assertReviveRoom, DEFAULT_REVIVE_ROOM } from './death.js'
+import { loadWorldGraph } from '../world/worldGraph.js'
 
 /**
  * PvE 사망 페널티 seam(applyPlayerDeath) 단위 테스트.
@@ -116,7 +117,13 @@ describe('applyPlayerDeath — 부활·회복', () => {
 
 describe('applyPlayerDeath — 순수성(입력 무변이)', () => {
   it('criterion 7: 입력 char를 변형하지 않고 distinct 참조를 반환한다', () => {
-    const char = makeChar({ level: 10, experience: 100_000, currentRoom: 500, hpCurrent: 5, mpCurrent: 3 })
+    const char = makeChar({
+      level: 10,
+      experience: 100_000,
+      currentRoom: 500,
+      hpCurrent: 5,
+      mpCurrent: 3,
+    })
     const snapshot = { ...char }
     const result = applyPlayerDeath(char)
     expect(result).not.toBe(char) // distinct 참조
@@ -127,5 +134,33 @@ describe('applyPlayerDeath — 순수성(입력 무변이)', () => {
     expect(result.race).toBe(char.race)
     expect(result.stats).toEqual(char.stats)
     expect(result.gold).toBe(char.gold)
+  })
+})
+
+describe('assertReviveRoom — 부팅 시 부활 방 존재 확인(D9)', () => {
+  it('기본 부활 방 번호는 1008이다', () => {
+    expect(DEFAULT_REVIVE_ROOM).toBe(1008)
+  })
+
+  it('그래프에 1008번 방이 있으면 throw하지 않는다', () => {
+    const rooms = new Set<number>([1, 1008])
+    expect(() => assertReviveRoom(rooms)).not.toThrow()
+  })
+
+  it('그래프에 1008번 방이 없으면 방 번호를 담은 메시지로 throw한다', () => {
+    const rooms = new Set<number>([1, 1007])
+    expect(() => assertReviveRoom(rooms)).toThrow(/1008/)
+  })
+
+  it('reviveRoom 인자를 주입하면 그 번호로 검사한다', () => {
+    const rooms = new Set<number>([1008, 42])
+    expect(() => assertReviveRoom(rooms, 42)).not.toThrow()
+    expect(() => assertReviveRoom(rooms, 77)).toThrow(/77/)
+  })
+
+  it('기본 월드 번들 그래프는 1008번 방을 포함하고 검증을 통과한다', () => {
+    const graph = loadWorldGraph()
+    expect(graph.has(1008)).toBe(true)
+    expect(() => assertReviveRoom(graph)).not.toThrow()
   })
 })
