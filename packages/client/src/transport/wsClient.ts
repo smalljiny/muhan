@@ -5,6 +5,7 @@
 // 방 상태는 world:room 스냅샷으로 교체되고, 그 사이 world:presence 델타가 점유자·알림(notices)을 고친다.
 // lastError 수명: transient 오류는 해제 집합 이벤트(errorLifetime.ts의 CLEARS_TRANSIENT_ERROR) 처리 뒤 지우고,
 // sticky 오류(unauthorized·forbidden)는 새 transient 오류로 덮어쓰지 않고 dismissError()로만 지운다.
+// 로그 상한: events는 seq를 매긴 최근 EVENT_LOG_LIMIT건, errors는 최근 TRANSPORT_ERROR_LIMIT건만 유지한다.
 
 import {
   clientCommandSchema,
@@ -17,25 +18,31 @@ import {
   type PromptOption,
   type ServerEvent,
 } from 'shared/protocol'
+import { appendBounded } from './appendBounded.js'
 import { clearsTransientError, isStickyError } from './errorLifetime.js'
 import { applyPresence } from './presence.js'
 
+/** 스냅샷 events가 유지하는 최근 수신 이벤트 건수 상한. */
+export const EVENT_LOG_LIMIT = 200
+
+/** 스냅샷 errors가 유지하는 최근 전송 오류 건수 상한. */
+export const TRANSPORT_ERROR_LIMIT = 50
+
+/**
+ * 기록된 수신 이벤트 — seq는 WsClient 인스턴스 단위로 0부터 단조 증가하며 재연결에도 이어진다.
+ * 상한으로 앞 항목이 빠져도 남은 항목의 seq·참조는 바뀌지 않아 렌더 키로 쓸 수 있다.
+ */
+export interface LoggedEvent {
+  readonly seq: number
+  readonly event: ServerEvent
+}
+
 /** 연결 라이프사이클 상태. ready = echo 가능(session:entered/resumed 도달). */
-export type ConnectionStatus =
-  | 'disconnected'
-  | 'connecting'
-  | 'connected'
-  | 'negotiating'
-  | 'ready'
+export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'negotiating' | 'ready'
 
 /** 세션 진입 단계 — status(전송 라이프사이클)와 독립적으로 갱신되는 파생 필드. */
 export type SessionPhase =
-  | 'connecting'
-  | 'negotiating'
-  | 'selecting'
-  | 'creating'
-  | 'entered'
-  | 'resumed'
+  'connecting' | 'negotiating' | 'selecting' | 'creating' | 'entered' | 'resumed'
 
 /** 진행 중 prompt 요약 — 캐릭터 선택·생성 필드 입력 대화의 활성 질문. */
 export interface ActivePrompt {
@@ -99,7 +106,12 @@ export type WsError =
  */
 export interface WsClientSnapshot {
   status: ConnectionStatus
-  events: readonly ServerEvent[]
+  /**
+   * 수신 순서대로 기록한 최근 EVENT_LOG_LIMIT건. seq는 인스턴스 단위로 이어지며
+   * connect·disconnect·reconnect로 초기화되지 않는다(로그도 비우지 않는다).
+   */
+  events: readonly LoggedEvent[]
+  /** 최근 TRANSPORT_ERROR_LIMIT건의 전송 오류(들어온 순서). */
   errors: readonly WsError[]
   session: SessionState
   /**
@@ -121,6 +133,8 @@ export class WsClient {
   private readonly socketFactory: SocketFactory
   private socket: SocketLike | null = null
   private listeners: readonly (() => void)[] = []
+  /** 다음 기록 이벤트에 매길 seq — 인스턴스 수명 동안 단조 증가한다. */
+  private nextSeq = 0
   private snapshot: WsClientSnapshot = {
     status: 'disconnected',
     events: [],
@@ -346,12 +360,18 @@ export class WsClient {
   }
 
   private recordEvent(event: ServerEvent): void {
-    this.snapshot = { ...this.snapshot, events: [...this.snapshot.events, event] }
+    this.snapshot = {
+      ...this.snapshot,
+      events: appendBounded(this.snapshot.events, { seq: this.nextSeq++, event }, EVENT_LOG_LIMIT),
+    }
     this.notify()
   }
 
   private pushError(error: WsError): void {
-    this.snapshot = { ...this.snapshot, errors: [...this.snapshot.errors, error] }
+    this.snapshot = {
+      ...this.snapshot,
+      errors: appendBounded(this.snapshot.errors, error, TRANSPORT_ERROR_LIMIT),
+    }
     this.notify()
   }
 

@@ -2,7 +2,13 @@ import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { ServerEvent } from 'shared'
 
+import type { LoggedEvent } from '../transport/wsClient'
 import { EventLog } from './EventLog'
+
+// 원본 이벤트 배열을 수신 순서대로 seq를 매긴 기록 형태로 감싼다.
+function logged(events: readonly ServerEvent[]): LoggedEvent[] {
+  return events.map((event, seq) => ({ seq, event }))
+}
 
 describe('EventLog', () => {
   it('renders received events in reception order', () => {
@@ -12,7 +18,7 @@ describe('EventLog', () => {
       { type: 'session:entered', characterId: 'char-1' },
     ]
 
-    render(<EventLog events={events} />)
+    render(<EventLog events={logged(events)} />)
 
     const items = screen.getAllByRole('listitem')
     expect(items).toHaveLength(3)
@@ -25,7 +31,7 @@ describe('EventLog', () => {
   it('shows the original type and payload content of each event', () => {
     const events: ServerEvent[] = [{ type: 'debug:echo:result', text: '메아리' }]
 
-    render(<EventLog events={events} />)
+    render(<EventLog events={logged(events)} />)
 
     const item = screen.getByRole('listitem')
     expect(within(item).getByText('debug:echo:result')).toBeInTheDocument()
