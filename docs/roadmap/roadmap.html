@@ -533,7 +533,7 @@
     <p class="eyebrow">muhan · github issues → roadmap · 2026-11-27 · <strong>v0.1.0</strong> · 11-27 정정</p>
     <h1>지금 어디에 있나 — 무한 포팅 진행 궤도</h1>
     <p class="lede">1991–93년 Mordor에서 파생된 한국어 MUD "무한"을 Node.js와 웹으로 재구현하는 프로젝트입니다. 이 페이지는 에픽 E1~E13과 토픽·부채 이슈를 바탕으로 현황을 정리합니다. <strong>규칙 엔진의 순수 레이어(전투·마법·진행·스탯·아이템·경제)는 전부 닫혔습니다.</strong> 지금 남은 것은 그 규칙을 살아 있는 세션에 잇는 "연결"입니다. 크리티컬 패스는 여전히 라이브 명령 연결 체인입니다. 다만 체인의 첫 이슈였던 <a href="https://github.com/smalljiny/muhan/issues/118">#118</a>이 08-10에 닫히면서 체인의 모든 이슈에 착수할 수 있게 됐습니다. 이제 병목은 선행 이슈가 아니라 각 토픽 내부의 설계 결정입니다.</p>
-    <p class="lede" style="margin-top:8px"><strong>11-27 정정 — 전투 결과 방 전파 이슈 발행</strong> — 릴리스 노트에 알려진 제약으로 남긴 "전투 결과가 같은 방에 전파되지 않는 문제"를 <a href="https://github.com/smalljiny/muhan/issues/186">#186</a>로 발행했습니다. 몬스터가 죽었을 때의 <code>world:room</code>과 공격 통지가 공격자 소켓에만 가는 문제로, CP2 게이트에 넣었습니다. 선행 이슈 #116·#121이 모두 닫혀 있어 바로 착수할 수 있습니다. 같은 날 열린 이슈를 전수 점검했습니다. 다시 연 이유였던 #116이 닫혔으므로 E4 에픽 <a href="https://github.com/smalljiny/muhan/issues/34">#34</a>를 닫았습니다. <a href="https://github.com/smalljiny/muhan/issues/61">#61</a>(E12)의 BLOCKED 표기는 실제와 맞지 않아 상태를 갱신했습니다. 스탯·전투 패널은 착수할 수 있지만, 인벤토리 이벤트는 아직 계약에 없습니다. 그리고 GitHub 마일스톤 <a href="https://github.com/smalljiny/muhan/milestone/4">v0.2.0 (CP2)</a>를 만들어 CP2 게이트 이슈 7건(#99·#100·#122·#186·#61·#43·#149)을 넣었습니다.</p>
+    <p class="lede" style="margin-top:8px"><strong>11-27 정정 — 전투 결과 방 전파 이슈 발행</strong> — 릴리스 노트에 알려진 제약으로 남긴 "전투 결과가 같은 방에 전파되지 않는 문제"를 <a href="https://github.com/smalljiny/muhan/issues/186">#186</a>으로 발행했습니다. 몬스터가 죽었을 때의 <code>world:room</code>과 공격 통지가 공격자 소켓에만 가는 문제로, CP2 게이트에 넣었습니다. 선행 이슈 #116·#121이 모두 닫혀 있어 바로 착수할 수 있습니다. 같은 날 열린 이슈를 전수 점검했습니다. 다시 연 이유였던 #116이 닫혔으므로 E4 에픽 <a href="https://github.com/smalljiny/muhan/issues/34">#34</a>를 닫았습니다. <a href="https://github.com/smalljiny/muhan/issues/61">#61</a>(E12)의 BLOCKED 표기는 실제와 맞지 않아 상태를 갱신했습니다. 스탯·전투 패널은 착수할 수 있지만, 인벤토리 이벤트는 아직 계약에 없습니다. 그리고 GitHub 마일스톤 <a href="https://github.com/smalljiny/muhan/milestone/4">v0.2.0 (CP2)</a>를 만들어 CP2 게이트 이슈 7건(#99·#100·#122·#186·#61·#43·#149)을 넣었습니다.</p>
     <p class="lede" style="margin-top:8px"><strong>11-27 기준 — CP1 통과 · 첫 릴리스 v0.1.0</strong> — 릴리스 전 권장 항목 세 건을 모두 처리하고 첫 릴리스 <strong>v0.1.0</strong>을 냈습니다. <a href="https://github.com/smalljiny/muhan/issues/144">#144</a>는 PR #181로 닫혀 <code>pnpm audit</code> 권고가 전체·프로덕션 모두 0건입니다. <a href="https://github.com/smalljiny/muhan/issues/130">#130</a>은 PR #183으로 닫혔습니다. 서버 오류 배너에 수명 규칙과 닫기 버튼이 생겨, 이동에 성공한 뒤에도 배너가 남던 문제가 사라졌습니다. <a href="https://github.com/smalljiny/muhan/issues/131">#131</a>은 PR #184로 닫혔습니다. 이벤트 로그가 최근 N건만 남기고 행을 메모하며, <code>world:room</code>은 한 줄로 요약됩니다. 버전은 저장소 단위 SemVer로 관리하고 체크포인트마다 MINOR를 올립니다(CP1 = v0.1.0, CP2 = v0.2.0). <code>PROTOCOL_VERSION</code>(현재 7)은 앱 버전과 따로 올립니다. 이제부터 <code>main</code>=production 전략을 따릅니다.</p>
     <p class="lede" style="margin-top:8px"><strong>11-26 기준 — CP1 코드 게이트 전부 닫힘</strong> — 남아 있던 두 게이트가 하루에 닫혔습니다. <a href="https://github.com/smalljiny/muhan/issues/138">#138</a>은 PR #178로 닫혔습니다. dev 로그인으로 부팅하면 시드 캐릭터 <code>dev-char-1</code>을 Mongo <code>characters</code>에 보장하므로, 깨끗한 DB에서도 README 절차대로 e2e가 통과합니다. <a href="https://github.com/smalljiny/muhan/issues/116">#116</a>은 PR #179로 닫혔습니다. 새 이벤트 <code>world:presence</code>가 이동·진입·세션 종료 때 같은 방 점유자에게 입·퇴장을 알리고, 클라이언트 방 패널이 점유자 목록과 알림 문장을 갱신합니다(<code>PROTOCOL_VERSION</code> 6→<strong>7</strong>). 이제 CP1에 남은 것은 <strong>릴리스와 <code>develop</code>→<code>main</code> 병합</strong>뿐입니다. 전투 이벤트의 방 전파는 #116 범위에 들어가지 않아 여전히 공격자 소켓에만 갑니다. PR #179는 <code>world:presence</code>의 수신자별 가시성을 <a href="https://github.com/smalljiny/muhan/issues/129">#129</a>로 넘겼습니다. 하네스 쪽에서는 토픽 작업 흐름을 worktree와 <code>/flow-*</code> 기반으로 바꿨습니다(PR #171~#176).</p>
     <p class="lede" style="margin-top:8px"><strong>11-25 정정</strong> — 진행 상황은 10-22와 같습니다. 열린 이슈와 맞지 않던 표기만 고쳤습니다. CP3 체크리스트에서 08-18에 닫힌 #113을 통합 이슈 <a href="https://github.com/smalljiny/muhan/issues/144">#144</a>로 바꾸고, <a href="https://github.com/smalljiny/muhan/issues/154">#154</a>를 CP3 항목으로 넣었습니다. 언급만 되고 카드가 없던 <a href="https://github.com/smalljiny/muhan/issues/143">#143</a>·<a href="https://github.com/smalljiny/muhan/issues/149">#149</a>·<a href="https://github.com/smalljiny/muhan/issues/135">#135</a>·#154는 부채 절에 카드를 만들었습니다.</p>
@@ -711,7 +711,7 @@
       <h2>마일스톤 상세</h2>
       <span class="sec-tag">epics · topics · gates</span>
     </div>
-    <p class="sec-note"><strong>M0~M7과 CP1은 GitHub 마일스톤 필드가 아니라, 이 페이지가 이슈 의존 관계에서 도출한 그룹입니다.</strong> GitHub 마일스톤은 <code>게임 분석</code>·<code>스택·아키텍처 결정</code>·<code>구현</code>과, 11-27에 만든 릴리스 마일스톤 <a href="https://github.com/smalljiny/muhan/milestone/4">v0.2.0 (CP2)</a>입니다. <strong>CP2부터는 체크포인트가 릴리스 마일스톤과 1:1로 대응합니다</strong>(버전 정책은 <code>docs/release.md</code>). 그 전의 토픽과 E9~E13(<code>#58</code>~<code>#62</code>)에는 마일스톤이 지정돼 있지 않습니다. 에픽 이슈가 열려 있는지 닫혀 있는지만으로도 진행 상황을 판단할 수 없습니다. 예를 들어 E6(<code>#36</code>)은 열려 있지만 하위 규칙 토픽 8개가 모두 닫혔습니다. E4(<code>#34</code>)는 보류 항목 <code>#116</code> 하나 때문에 열려 있다가, #116이 닫힌 뒤 11-27에 닫혔습니다. 그래서 아래 내용은 실제로 완료된 토픽을 기준으로 합니다.</p>
+    <p class="sec-note"><strong>M0~M7, CP1, CP3은 GitHub 마일스톤 필드가 아니라, 이 페이지가 이슈 의존 관계에서 도출한 그룹입니다.</strong> GitHub 마일스톤은 <code>게임 분석</code>·<code>스택·아키텍처 결정</code>·<code>구현</code>과, 11-27에 만든 릴리스 마일스톤 <a href="https://github.com/smalljiny/muhan/milestone/4">v0.2.0 (CP2)</a>입니다. <strong>CP2부터는 체크포인트가 릴리스 마일스톤과 1:1로 대응합니다</strong>. CP3 마일스톤은 CP2 릴리스 뒤에 만듭니다(버전 정책은 <code>docs/release.md</code>). 그 전의 토픽과 E9~E13(<code>#58</code>~<code>#62</code>)에는 마일스톤이 지정돼 있지 않습니다. 에픽 이슈가 열려 있는지 닫혀 있는지만으로도 진행 상황을 판단할 수 없습니다. 예를 들어 E6(<code>#36</code>)은 열려 있지만 하위 규칙 토픽 8개가 모두 닫혔습니다. E4(<code>#34</code>)는 보류 항목 <code>#116</code> 하나 때문에 열려 있다가, #116이 닫힌 뒤 11-27에 닫혔습니다. 그래서 아래 내용은 실제로 완료된 토픽을 기준으로 합니다.</p>
 
     <div class="track">
 
@@ -987,7 +987,7 @@
               <a class="card-num" href="https://github.com/smalljiny/muhan/issues/61">#61</a></div>
             <div class="kv"><span class="k">범위</span><span class="v">스탯 패널(HP·MP·레벨·경험치·능력치) · 전투 로그(라운드·데미지·명중) · 인벤토리·장비 뷰</span></div>
             <div class="kv"><span class="k">게이트</span><span class="v"><strong>열렸습니다</strong> — 08-20 #121이 <code>character:stats</code>(HP·MP·경험치·레벨 스냅샷)와 <code>combat:attacked</code>(명중·피해·크리티컬·사망 + 타격별 배열)를 계약에 넣었습니다. <code>character:stats</code>는 <code>combat:attack</code>·<code>progress:train</code>·<code>progress:study</code> 세 명령 모두에서 발생하므로, 패널은 이 이벤트 하나만 받으면 됩니다</span></div>
-            <div class="kv rest"><span class="k">주의</span><span class="v"><strong>인벤 이벤트는 아직 계약에 없습니다</strong>. 그래서 스탯·전투 패널을 먼저 만들고 인벤·장비 뷰는 나중에 만듭니다. 전투 로그에는 <strong>본인 공격만</strong> 보입니다(#116은 입·퇴장 통지만 다뤘고, 전투 이벤트의 방 전파는 <a href="https://github.com/smalljiny/muhan/issues/186">#186</a>가 맡습니다). 다중공격 배열은 지금은 항상 원소가 1개입니다(<code>PUPDMG</code> 미영속)</span></div>
+            <div class="kv rest"><span class="k">주의</span><span class="v"><strong>인벤 이벤트는 아직 계약에 없습니다</strong>. 그래서 스탯·전투 패널을 먼저 만들고 인벤·장비 뷰는 나중에 만듭니다. 전투 로그에는 <strong>본인 공격만</strong> 보입니다(#116은 입·퇴장 통지만 다뤘고, 전투 이벤트의 방 전파는 <a href="https://github.com/smalljiny/muhan/issues/186">#186</a>이 맡습니다). 다중공격 배열은 지금은 항상 원소가 1개입니다(<code>PUPDMG</code> 미영속)</span></div>
           </div>
         </div>
       </div>
@@ -1010,6 +1010,7 @@
           <span class="gate open">#186 전투 결과 방 전파 — 선행 0</span>
           <span class="gate open">#61 E12 패널 — 스탯·전투 열림 · 인벤 이벤트 없음</span>
           <span class="gate open">#43 은행 write-path 조정</span>
+          <span class="gate open">#149 e2e CI 편입 — v0.2.0 릴리스 전</span>
           <span class="gate held">⏸ #123 성향 스칼라 — 게이트 동작 회귀</span>
         </div>
         <p class="cp-foot"><b>08-20 기준 이 체크포인트의 병목은 <a href="https://github.com/smalljiny/muhan/issues/99">#99</a>입니다.</b> #121로 플레이어가 전투를 시작할 수는 있지만 <strong>몬스터는 반격하지 않습니다</strong>. 무한의 전투는 몬스터 틱마다 라운드가 진행되는 구조입니다. <code>attack</code>은 전투를 <em>개시</em>할 뿐이고, 라운드를 진행시키는 것은 1Hz 틱입니다. 그래서 지금은 플레이어가 일방적으로 때리기만 하는 상태이고, 전투처럼 보이지만 실제 전투는 아닙니다. <b><a href="https://github.com/smalljiny/muhan/issues/43">#43</a>은 작업 카드가 아니라 지켜야 할 계약입니다.</b> 이슈 본문이 "#43 해소 전 은행 명령 연결 금지"를 blocking 조건으로 정해 두었습니다. 상점·은행 명령을 연결하면 그 순간부터 gold가 write-behind와 Mongo 트랜잭션 두 경로로 기록됩니다. 그러면 커밋 이후 도착한 stale flush가 트랜잭션 결과를 조용히 revert합니다.</p>
@@ -1174,7 +1175,7 @@
       <div class="next-card">
         <div class="next-n">02</div>
         <div class="next-t"><a href="https://github.com/smalljiny/muhan/issues/186">#186</a> 전투 결과 방 전파</div>
-        <div class="next-d">#116은 입·퇴장만 다뤘기 때문에 몬스터가 죽어도 <code>world:room</code>·<code>combat:attacked</code>는 공격자에게만 갑니다. 같은 방의 다른 플레이어는 죽은 몬스터를 계속 목록에서 봅니다. 혼자 걷는 CP1 범위에서는 드러나지 않았지만, CP2에서 여럿이 함께 싸우려면 반드시 필요합니다. 11-27에 <a href="https://github.com/smalljiny/muhan/issues/186">#186</a>로 발행했습니다. 선행 이슈(#116·#121)가 모두 닫혀 있어 바로 착수할 수 있고, #99와 병렬로 진행할 수 있습니다. #186이 만드는 방 스코프 송신기는 #99에서 몬스터가 공격자를 칠 때의 방 전파에도 재사용합니다. 수신자별 가시성 필터는 #129로 남깁니다.</div>
+        <div class="next-d">#116은 입·퇴장만 다뤘기 때문에 몬스터가 죽어도 <code>world:room</code>·<code>combat:attacked</code>는 공격자에게만 갑니다. 같은 방의 다른 플레이어는 죽은 몬스터를 계속 목록에서 봅니다. 혼자 걷는 CP1 범위에서는 드러나지 않았지만, CP2에서 여럿이 함께 싸우려면 반드시 필요합니다. 11-27에 <a href="https://github.com/smalljiny/muhan/issues/186">#186</a>으로 발행했습니다. 선행 이슈(#116·#121)가 모두 닫혀 있어 바로 착수할 수 있고, #99와 병렬로 진행할 수 있습니다. #186이 만드는 방 스코프 송신기는 #99에서 몬스터가 공격자를 칠 때의 방 전파에도 재사용합니다. 수신자별 가시성 필터는 #129로 남깁니다.</div>
       </div>
       <div class="next-card">
         <div class="next-n">03</div>
@@ -1223,7 +1224,7 @@
     [119, 5, "todo", 610, 42,  "teach 명령 연결", "같은 방의 대상 플레이어에게 전수"],
     [120, 6, "done", 610, 100, "아이템 라이브화 + study (완료)", "PR #145 — 인벤 라이브화 · PROTOCOL_VERSION 5"],
     [121, 6, "done", 610, 158, "attack 명령 라이브 연결", "PR #148 머지 — 전투·스탯 이벤트 계약 신설"],
-    [61,  6, "todo", 610, 342, "E12 캐릭터·전투·인벤 패널", "스탯·전투 게이트 열림(#121) · 인벤 이벤트 미정 · CP2"],
+    [61,  6, "todo", 610, 342, "E12 캐릭터·전투·인벤 패널", "스탯·전투 게이트 열림(#121) · 인벤 이벤트 없음 · CP2"],
     [122, 6, "todo", 710, 158, "cast 연결 — 플레이어 시전 진입점", "선행 해제(#121 머지) · 체인의 마지막 이슈"],
     [62,  7, "todo", 710, 262, "E13 소셜·채팅 UI", "방 채팅 절반 충족 · 채널·귓속말은 E7 이후"],
     [144, -1, "done", 58,  296, "의존성 갱신 — pnpm audit (완료)", "PR #181 — 권고 전체·프로덕션 0건 · #113 통합"],
