@@ -1,9 +1,14 @@
 import type { CreatureInstance, RoomNode } from 'shared'
 import type { CombatRng } from './dice.js'
 import type { CombatRegistry } from './combatRegistry.js'
-import type { DamageLedger } from './enmity.js'
+import type { CreatureLedgers } from './creatureLedgers.js'
 import type { PlayerCombatState } from './playerState.js'
-import { resolveAttack, fireDeath, type ResolveContext, type AttackOutcome } from './resolveAttack.js'
+import {
+  resolveAttack,
+  fireDeath,
+  type ResolveContext,
+  type AttackOutcome,
+} from './resolveAttack.js'
 import { toCombatant } from './combatant.js'
 import type { OnCombatTick } from '../world/creatureTick.js'
 import { F_ISSET, MMAGIC, MCHARM, PBLIND } from '../world/hexFlags.js'
@@ -61,8 +66,11 @@ export interface CombatTickDeps {
   readonly rng: CombatRng
   /** present 적 플레이어 해석 — characterId로 라이브 전투상태 조회. */
   readonly registry: Pick<CombatRegistry, 'get'>
-  /** 데미지 원장 — resolveAttack ctx가 누적(deps 주입 단일 인스턴스). */
-  readonly ledger: DamageLedger
+  /**
+   * 몬스터별 데미지 원장 라우터 — 라운드마다 `for(creature.instanceId)`로 이번 몬스터의 원장을 얻는다.
+   * 공격 핸들러와 같은 인스턴스를 주입한다(몬스터별로 나누는 근거는 `creatureLedgers.ts` 헤더).
+   */
+  readonly ledgers: Pick<CreatureLedgers, 'for'>
   /** 몬스터 사망 seam — resolveAttack이 (dead, room, now)로 실행. */
   readonly fireCreatureDeath: (dead: CreatureInstance, room: RoomNode, now: number) => void
   /** 플레이어 사망 seam — resolveAttack이 (dead, room, now)로 실행. */
@@ -125,13 +133,14 @@ export function createCombatTick(deps: CombatTickDeps): OnCombatTick {
     // 이번 틱의 ResolveContext를 조립한다 — deps만 바인딩하고 death seam은 커링하지 않는다(사전
     // 바인딩 금지, resolveAttack.ts:37). resolveAttack이 ctx를 read-only로 취급하므로(유일 변형은
     // 공유 참조 ledger 누적) 틱당 1개 인스턴스를 근접·반격에서 공유한다.
+    // 원장 라우팅은 조기 반환 뒤에서 한다 — 행동하지 않는 몬스터에 빈 원장 캐시를 만들지 않는다.
     const ctx: ResolveContext = {
       rng: deps.rng,
       room,
       now,
       fireCreatureDeath: deps.fireCreatureDeath,
       firePlayerDeath: deps.firePlayerDeath,
-      ledger: deps.ledger,
+      ledger: deps.ledgers.for(creature.instanceId),
     }
 
     // MMAGIC 주문 분기 — 시전 성공('cast')이면 그 라운드 근접만 스킵한다(update.c:348).
@@ -170,7 +179,8 @@ export function createCombatTick(deps: CombatTickDeps): OnCombatTick {
 
       resolveAttack(toCombatant(player), toCombatant(creature), ctx)
       // 쿨다운 재설정 — 반격 대상이 몬스터라 PvP +3 미적용(command5.c:131/135).
-      player.nextAttackAt = now + (F_ISSET(player.flags, PBLIND) ? ATTACK_COOLDOWN_BLIND : ATTACK_COOLDOWN_INTERVAL)
+      player.nextAttackAt =
+        now + (F_ISSET(player.flags, PBLIND) ? ATTACK_COOLDOWN_BLIND : ATTACK_COOLDOWN_INTERVAL)
 
       // 몬스터가 이 counter에 사망 → death 1회 발생(fire-free 이양) + target pending death 취소 후 중단.
       // 오라클 goto crt_died; if(rtn){ continue }로 target 사망 체크를 스킵 → "막타치면 target 생존".

@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { CreatureInstance, RoomNode } from 'shared'
 import { createCombatTick, type CombatTickDeps, type CastSpellSeam } from './combatTick.js'
 import { createCombatRegistry, type CombatRegistry } from './combatRegistry.js'
+import { createCreatureLedgers } from './creatureLedgers.js'
 import type { PlayerCombatState } from './playerState.js'
 import type { DamageLedger } from './enmity.js'
 import { seqRng } from './dice.testutil.js'
@@ -110,24 +111,29 @@ interface DepsHarness {
 
 function makeDeps(
   values: readonly number[],
-  opts: { now?: number; castSpell?: CastSpellSeam } = {},
+  opts: {
+    now?: number
+    clock?: { now: number }
+    castSpell?: CastSpellSeam
+    ledgers?: CombatTickDeps['ledgers']
+  } = {},
 ): DepsHarness {
   const registry = createCombatRegistry()
   const ledger: DamageLedger = new Map<string, number>()
   const creatureDeaths: DeathCall[] = []
   const playerDeaths: DeathCall[] = []
-  const now = opts.now ?? 1000
+  const clock = opts.clock ?? { now: opts.now ?? 1000 }
   const deps: CombatTickDeps = {
     rng: seqRng(values),
     registry,
-    ledger,
+    ledgers: opts.ledgers ?? { for: () => ledger },
     fireCreatureDeath: (dead, r, n) => {
       creatureDeaths.push([dead, r, n])
     },
     firePlayerDeath: (dead, r, n) => {
       playerDeaths.push([dead, r, n])
     },
-    now: () => now,
+    now: () => clock.now,
     ...(opts.castSpell !== undefined ? { castSpell: opts.castSpell } : {}),
   }
   return { deps, registry, ledger, creatureDeaths, playerDeaths }
@@ -235,7 +241,10 @@ describe('createCombatTick — 근접 + 반격', () => {
     const room = makeRoom(['p1'])
     // 근접 [15,5]: p1 3-5=-2 (pending death, fire-free). 죽어가는 target p1이 last 반격 [20,5,50,50,2]:
     // creature 100-5=95. 몬스터 생존 → end-of-round에서 target death 1회 발생.
-    const { deps, registry, playerDeaths, creatureDeaths, ledger } = makeDeps([15, 5, 20, 5, 50, 50, 2], { now: 1000 })
+    const { deps, registry, playerDeaths, creatureDeaths, ledger } = makeDeps(
+      [15, 5, 20, 5, 50, 50, 2],
+      { now: 1000 },
+    )
     registry.register(player)
 
     createCombatTick(deps)(creature, room)
@@ -254,7 +263,9 @@ describe('createCombatTick — 근접 + 반격', () => {
     const room = makeRoom(['p1'])
     // 근접 [15,5]: p1 3-5=-2 (pending). target p1 last 반격 [20,5,50,50,2]: creature 3-5=-2 사망 →
     // fireCreatureDeath 1회 + p1 pending death 취소(막타 생존, update.c goto crt_died→continue).
-    const { deps, registry, playerDeaths, creatureDeaths } = makeDeps([15, 5, 20, 5, 50, 50, 2], { now: 1000 })
+    const { deps, registry, playerDeaths, creatureDeaths } = makeDeps([15, 5, 20, 5, 50, 50, 2], {
+      now: 1000,
+    })
     registry.register(player)
 
     createCombatTick(deps)(creature, room)
@@ -294,7 +305,9 @@ describe('createCombatTick — 근접 + 반격', () => {
     const room = makeRoom(['p1', 'p2'])
     // 근접 target p1: [15,5] → p1 45. counter 역순: p2(OTHER)는 stale-dead → 스킵(굴림 없음), p1(TARGET)만
     // 반격 [20,5,50,50,2] → creature 95. p2가 스킵 안 되면 seq 소비가 어긋나 실패한다.
-    const { deps, registry, ledger, creatureDeaths } = makeDeps([15, 5, 20, 5, 50, 50, 2], { now: 1000 })
+    const { deps, registry, ledger, creatureDeaths } = makeDeps([15, 5, 20, 5, 50, 50, 2], {
+      now: 1000,
+    })
     registry.register(p1)
     registry.register(p2)
 
@@ -315,7 +328,9 @@ describe('createCombatTick — 근접 + 반격', () => {
     const creature = makeCreature({ hpcur: -2, enemies: ['p1'] }) // 이전 틱 사망분이 미제거로 재진입
     const room = makeRoom(['p1'])
     // seq [15,5]는 가드 없을 때 근접이 소비하는 굴림. 가드가 있으면 조기 return으로 미소비(under-consume 무해).
-    const { deps, registry, creatureDeaths, playerDeaths, ledger } = makeDeps([15, 5], { now: 1000 })
+    const { deps, registry, creatureDeaths, playerDeaths, ledger } = makeDeps([15, 5], {
+      now: 1000,
+    })
     registry.register(player)
 
     createCombatTick(deps)(creature, room)
@@ -507,5 +522,49 @@ describe('createCombatTick — death seam 1회 + break', () => {
     expect(p2.hpCurrent).toBe(50) // OTHER는 공격자라 무피해
     expect(p2.nextAttackAt).toBe(1001) // OTHER가 killing counter를 날림
     expect(p1.nextAttackAt).toBe(0) // TARGET은 last라 break로 반격 못 함
+  })
+})
+
+describe('createCombatTick — 몬스터별 원장 라우터(OQ4)', () => {
+  it('두 몬스터의 반격 데미지가 ledgers.for(instanceId)에 각각 따로 쌓인다', () => {
+    // 같은 플레이어 p1이 m1·m2를 차례로 반격한다 — 단일 원장이면 attackerId 'p1' 키로 합산(5+3=8)된다.
+    const player = makePlayer({ characterId: 'p1', hpCurrent: 50, nextAttackAt: 0 })
+    const m1 = makeCreature({ instanceId: 'm1', hpcur: 100, enemies: ['p1'] })
+    const m2 = makeCreature({ instanceId: 'm2', hpcur: 100, enemies: ['p1'] })
+    const room = makeRoom(['p1'])
+    const clock = { now: 1000 }
+    // m1 라운드: 근접 [15,5] + 반격 [20,5,50,50,2]=dmg5. m2 라운드: 근접 [15,5] + 반격 [20,3,50,50,2]=dmg3.
+    const ledgers = createCreatureLedgers()
+    const { deps, registry } = makeDeps([15, 5, 20, 5, 50, 50, 2, 15, 5, 20, 3, 50, 50, 2], {
+      clock,
+      ledgers,
+    })
+    registry.register(player)
+    const tick = createCombatTick(deps)
+
+    tick(m1, room)
+    clock.now = 1002 // p1 반격 쿨다운(now+1) 도래
+    tick(m2, room)
+
+    expect(m1.hpcur).toBe(95)
+    expect(m2.hpcur).toBe(97)
+    expect(ledgers.for('m1')).toEqual(new Map([['p1', 5]]))
+    expect(ledgers.for('m2')).toEqual(new Map([['p1', 3]]))
+  })
+
+  it.each([
+    ['enemies 빈 몬스터', makeCreature({ enemies: [] }), makeRoom(['p1'])],
+    ['이미 사망(hpcur<1)한 몬스터', makeCreature({ hpcur: 0, enemies: ['p1'] }), makeRoom(['p1'])],
+    ['present 적이 없는 몬스터', makeCreature({ enemies: ['p1'] }), makeRoom([])],
+  ])('조기 반환 경로(%s)에서는 ledgers.for를 호출하지 않는다', (_label, creature, room) => {
+    const forSpy = vi.fn(() => new Map<string, number>())
+    // 다층 가드: 검증 대상이 아닌 가드는 통과하도록 p1을 생존 상태로 등록한다(빈 레지스트리면 사망 몬스터
+    // 케이스가 present 적 없음 경로로 새어 hpcur<1 가드를 따로 고정하지 못한다).
+    const { deps, registry } = makeDeps([], { ledgers: { for: forSpy } })
+    registry.register(makePlayer({ characterId: 'p1', hpCurrent: 50, nextAttackAt: 0 }))
+
+    createCombatTick(deps)(creature, room)
+
+    expect(forSpy).toHaveBeenCalledTimes(0)
   })
 })

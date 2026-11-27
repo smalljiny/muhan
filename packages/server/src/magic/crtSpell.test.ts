@@ -300,7 +300,7 @@ describe('crtSpell — createCombatTick 주입 데모(T6.4, combatTick.ts 미변
     createCombatTick({
       rng,
       registry,
-      ledger: new Map<string, number>(),
+      ledgers: { for: () => new Map<string, number>() },
       fireCreatureDeath: () => {},
       firePlayerDeath: () => {},
       now: () => 1000,
@@ -330,7 +330,7 @@ describe('crtSpell — createCombatTick 주입 데모(T6.4, combatTick.ts 미변
     createCombatTick({
       rng,
       registry,
-      ledger: new Map<string, number>(),
+      ledgers: { for: () => new Map<string, number>() },
       fireCreatureDeath: () => {},
       firePlayerDeath: () => {},
       now: () => 1000,
