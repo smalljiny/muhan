@@ -51,6 +51,7 @@ export function App({ socketFactory }: AppProps = {}) {
     [client],
   )
   const move = useCallback((direction: string) => client.move(direction), [client])
+  const dismissError = useCallback(() => client.dismissError(), [client])
 
   const { phase, characterList, activePrompt, lastError } = snapshot.session
 
@@ -105,7 +106,7 @@ export function App({ socketFactory }: AppProps = {}) {
     <main>
       <h1>무한</h1>
       <ConnectionStatus status={snapshot.status} onReconnect={reconnect} />
-      <SessionErrorBanner error={lastError} />
+      <SessionErrorBanner error={lastError} onDismiss={dismissError} />
       {renderPhase()}
     </main>
   )

@@ -248,6 +248,49 @@ describe('App', () => {
     expect(screen.getByLabelText('캐릭터 목록')).toBeInTheDocument()
   })
 
+  // 배너 닫기 — 닫기 버튼이 App의 dismissError 연결을 거쳐 transient·sticky 오류를 모두 지운다.
+  it('dismisses a transient error banner when the close button is clicked', async () => {
+    const user = userEvent.setup()
+    const socket = makeFakeSocket()
+    render(<App socketFactory={() => socket} />)
+
+    driveToEntered(socket)
+    emit(socket, { type: 'error', code: 'rule_rejected', message: '길이 막혔습니다' })
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '닫기' }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('dismisses a sticky unauthorized error banner when the close button is clicked', async () => {
+    const user = userEvent.setup()
+    const socket = makeFakeSocket()
+    render(<App socketFactory={() => socket} />)
+
+    driveToSelecting(socket)
+    emit(socket, { type: 'error', code: 'unauthorized', message: '권한 없음' })
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '닫기' }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('clears a transient error banner when a world:room frame arrives', () => {
+    const socket = makeFakeSocket()
+    render(<App socketFactory={() => socket} />)
+
+    driveToEntered(socket)
+    emit(socket, { type: 'error', code: 'rule_rejected', message: '길이 막혔습니다' })
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    // 성공 이벤트에 의한 자동 해제가 스냅샷을 거쳐 화면까지 도달하는지 확인한다.
+    emit(socket, roomEvent(makeRoom()))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   // 방 패널 연결 — 소켓에서 온 world:room이 스냅샷을 거쳐 화면에 도달하는 전 구간을 통합으로 확인한다.
   // 방 내용 단정은 방 섹션 안으로 범위를 좁힌다(EventLog가 같은 이벤트를 원본 JSON으로도 렌더한다).
   it('renders the room panel after a world:room frame arrives in the entered shell', () => {
