@@ -3,7 +3,7 @@ import type { CreatureInstance, ItemInstance, RoomNode } from 'shared'
 import { FakeClock } from '../util/clock.testutil.js'
 import { WorldClock } from './worldClock.js'
 import { createActiveSet } from './activeSet.js'
-import { createCreatureTick, defaultOnCombatTick } from './creatureTick.js'
+import { createCreatureTick, defaultOnCombatTick, type OnCombatTick } from './creatureTick.js'
 import { alwaysFireRng, neverFireRng } from './autonomic.js'
 import { F_SET, F_ISSET, MSCAVE, MHASSC, MAGGRE } from './hexFlags.js'
 
@@ -135,7 +135,11 @@ describe('autonomic 상태 적용', () => {
   it('scavenge가 방 아이템을 몬스터 인벤토리로 옮기고 방에서 제거한다', () => {
     const activeSet = createActiveSet()
     const item = makeItem('금화', '0000000000000000')
-    const c = makeCreature({ flags: F_SET('0000000000000000', MSCAVE), lastScavengeAt: 0, nextActionAt: 0 })
+    const c = makeCreature({
+      flags: F_SET('0000000000000000', MSCAVE),
+      lastScavengeAt: 0,
+      nextActionAt: 0,
+    })
     const room = makeRoom({ creatures: [c], items: [item] })
     activeSet.activate(room, 0)
     const slot = createCreatureTick({ activeSet, rng: alwaysFireRng })
@@ -202,5 +206,74 @@ describe('§3.5 조기종료 게이트 + onCombatTick 디스패치 seam', () => 
     const slot = createCreatureTick({ activeSet, rng: neverFireRng })
     expect(() => slot.run(10)).not.toThrow()
     expect(defaultOnCombatTick(c, room)).toBeUndefined()
+  })
+})
+
+describe('tick 도중 비활성화된 방 동결', () => {
+  // 사망 seam이 마지막 점유자를 부활 방으로 옮기면 onRoomLeft 훅이 출발 방을 deactivate한다. 같은 tick에서
+  // 그 방의 후속 몬스터가 재생·재스케줄·전투 디스패치를 받으면 빈 방 동결 규칙을 어긴다.
+  // B는 재생이 도래한 상태(hp·mp 최대 미만, lastRegenAt=0, now=60)로 구성해, 동결과 "전투 굴림만 사라짐"을
+  // 구분한다 — 동결이면 hp·mp·nextActionAt이 그대로, 활성이면 재생되고 재스케줄된다.
+  const NOW = 60
+
+  function setup() {
+    const activeSet = createActiveSet()
+    const a = makeCreature({ instanceId: '1:c0', nextActionAt: 0, enemies: ['p1'] })
+    const b = makeCreature({
+      instanceId: '1:c1',
+      nextActionAt: 0,
+      enemies: ['p1'],
+      hpcur: 50,
+      hpmax: 100,
+      mpcur: 5,
+      mpmax: 30,
+      lastRegenAt: 0,
+    })
+    const room = makeRoom({ creatures: [a, b], occupants: new Set(['p1']) })
+    expect(activeSet.activate(room, 0)).toBe(true)
+    return { activeSet, room }
+  }
+
+  /** tick 이후 방 배열에서 instanceId로 다시 찾는다 — runAutonomic·applyResult가 객체를 교체한다. */
+  function findB(room: RoomNode): CreatureInstance {
+    const b = room.creatures.find((c) => c.instanceId === '1:c1')
+    if (b === undefined) throw new Error('B가 방에 없다')
+    return b
+  }
+
+  it('A의 전투 처리로 방이 비활성화되면 B는 hp·mp·nextActionAt 불변이고 onCombatTick을 받지 않는다', () => {
+    const { activeSet, room } = setup()
+    const deactivated: boolean[] = []
+    const onCombatTick = vi.fn((creature: CreatureInstance, r: RoomNode) => {
+      if (creature.instanceId !== '1:c0') return
+      // 마지막 점유자 퇴장(부활 이동) → onRoomLeft 훅의 deactivate를 흉내낸다.
+      r.occupants.delete('p1')
+      deactivated.push(activeSet.deactivate(r))
+    })
+    const slot = createCreatureTick({ activeSet, rng: neverFireRng, onCombatTick })
+
+    slot.run(NOW)
+
+    expect(deactivated).toEqual([true])
+    const b = findB(room)
+    expect(b.hpcur).toBe(50)
+    expect(b.mpcur).toBe(5)
+    expect(b.nextActionAt).toBe(0)
+    expect(onCombatTick.mock.calls.filter(([c]) => c.instanceId === '1:c1')).toHaveLength(0)
+  })
+
+  it('대조: 방이 계속 활성이면 B도 재생·재스케줄되고 onCombatTick을 1회 받는다', () => {
+    const { activeSet, room } = setup()
+    const onCombatTick = vi.fn<OnCombatTick>()
+    const slot = createCreatureTick({ activeSet, rng: neverFireRng, onCombatTick })
+
+    slot.run(NOW)
+
+    const b = findB(room)
+    expect(b.hpcur).toBeGreaterThan(50)
+    expect(b.mpcur).toBeGreaterThan(5)
+    expect(b.nextActionAt).toBeGreaterThan(NOW)
+    const callsForB = onCombatTick.mock.calls.filter(([c]) => c.instanceId === '1:c1')
+    expect(callsForB).toHaveLength(1)
   })
 })
