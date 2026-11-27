@@ -16,7 +16,7 @@
 - `src/transport/appendBounded.ts` — 끝에 항목을 덧붙이고 최근 `limit`건만 남긴 새 배열을 돌려주는 순수 헬퍼(입력 불변, `limit`이 1 이상 정수가 아니면 `RangeError`). `events`·`errors` 기록과 `presence.ts`의 통지 목록이 공유한다.
 - `src/App.tsx` — 전송 셸 최상위. `WsClient`를 마운트 동안 단일 인스턴스로 유지하고 스냅샷을 구독해 하위 컴포넌트에 데이터·콜백을 주입한다. 게임 소켓 URL을 `window.location`에서 파생한다(하드코딩 host 없음 — same-origin이라야 쿠키가 upgrade에 첨부된다).
 - `src/main.tsx` — React 마운트 엔트리(`#root`).
-- `src/components/EventLog.tsx` — `WsClient`가 기록한 최근 200건의 `LoggedEvent`를 순차 렌더하는 순수 표시 컴포넌트. 행은 `seq`를 키로 쓰는 `React.memo` 행(`EventLogRow`)이고 표시 문자열은 `useMemo`로 계산해, 같은 마운트에서 유지되는 행은 새 이벤트가 덧붙어도 다시 직렬화하지 않는다(`App`의 `entered`/`resumed` 분기를 벗어났다 돌아와 재마운트되는 경우는 보장 밖). 각 행은 `<span>type</span> <code>표시 문자열</code>`이다.
+- `src/components/EventLog.tsx` — `WsClient`가 기록한 최근 `EVENT_LOG_LIMIT`건의 `LoggedEvent`를 순차 렌더하는 순수 표시 컴포넌트. 행은 `seq`를 키로 쓰는 `React.memo` 행(`EventLogRow`)이고 표시 문자열은 `useMemo`로 계산해, 같은 마운트에서 유지되는 행은 새 이벤트가 덧붙어도 다시 직렬화하지 않는다(`App`의 `entered`/`resumed` 분기를 벗어났다 돌아와 재마운트되는 경우는 보장 밖). 각 행은 `<span>type</span> <code>표시 문자열</code>`이다.
 - `src/components/describeEvent.ts` — 행 표시 문자열을 만드는 순수 함수. `world:room`은 `<방 이름> (#<roomId>)` 한 줄로 요약하고(직렬화하지 않음), 그 밖의 타입은 원시 JSON(`JSON.stringify(event)`)을 돌려준다.
 - `src/components/CommandInput.tsx` — 텍스트 입력 폼. submit 시 주입된 `onSubmitEcho` 콜백을 호출한다. `disabled`가 참이면 제출 버튼을 비활성화하고 submit 핸들러도 송신하지 않는다(입력란은 유지). `App`은 전송 `status`가 `ready`가 아닐 때 `disabled`를 넘긴다([`session-entry.md`](session-entry.md)).
 - `src/components/ConnectionStatus.tsx` — 연결 상태 표시 + 수동 재연결 버튼(`onReconnect` 콜백).

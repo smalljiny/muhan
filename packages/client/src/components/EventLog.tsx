@@ -7,7 +7,7 @@
 //   마운트되는 경우는 이 보장 밖이다(전 행을 한 번 다시 계산한다).
 // - 표시 문자열 규칙(world:room 요약 등)은 describeEvent를 따른다.
 import { memo, useMemo } from 'react'
-import type { ServerEvent } from 'shared'
+import type { ServerEvent } from 'shared/protocol'
 
 import type { LoggedEvent } from '../transport/wsClient'
 import { describeEvent } from './describeEvent'
