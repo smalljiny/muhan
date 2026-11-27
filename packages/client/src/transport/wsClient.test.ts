@@ -255,6 +255,28 @@ describe('WsClient room state', () => {
     // room 갱신은 session 서브객체를 복제하지 않는다 — 구조 공유 유지.
     expect(client.getSnapshot().session).toBe(before.session)
   })
+
+  // 방 상태의 단일 출처는 world:room 스냅샷이다(D12) — 몬스터가 죽은 라운드라도 combat:round로
+  // 몬스터 목록을 고치지 않고 이벤트 기록에만 남긴다.
+  it('keeps the room reference unchanged on combat:round but still records the event', () => {
+    const { client, last } = makeHarness()
+    client.connect()
+    last().fireOpen()
+    last().emit(roomEvent(roomA))
+    const before = client.getSnapshot().room
+    const event: Extract<ServerEvent, { type: 'combat:round' }> = {
+      type: 'combat:round',
+      creatureInstanceId: 'm1',
+      creatureName: '고블린',
+      received: { kind: 'melee', hit: true, damage: 12, critical: false, fumble: false },
+      counter: { hit: true, damage: 5, critical: false, fumble: false },
+      monsterDied: true,
+      youDied: false,
+    }
+    last().emit(event)
+    expect(client.getSnapshot().room).toBe(before)
+    expect(client.getSnapshot().events.map((e) => e.event)).toContainEqual(event)
+  })
 })
 
 describe('WsClient world:presence', () => {
