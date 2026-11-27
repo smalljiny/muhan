@@ -292,7 +292,7 @@ describe('App', () => {
   })
 
   // 방 패널 연결 — 소켓에서 온 world:room이 스냅샷을 거쳐 화면에 도달하는 전 구간을 통합으로 확인한다.
-  // 방 내용 단정은 방 섹션 안으로 범위를 좁힌다(EventLog가 같은 이벤트를 원본 JSON으로도 렌더한다).
+  // 방 내용 단정은 방 섹션 안으로 범위를 좁힌다(EventLog가 방 이름을 요약 줄로도 렌더한다).
   it('renders the room panel after a world:room frame arrives in the entered shell', () => {
     const socket = makeFakeSocket()
     render(<App socketFactory={() => socket} />)
@@ -305,6 +305,17 @@ describe('App', () => {
     // 진입 시퀀스의 본인(c1)은 사람 목록에서 빠지고, 목록이 비므로 섹션 자체가 없다.
     // selfCharacterId 연결을 잡는 유일한 단정 — RoomPanel 자체 내용 검증은 RoomPanel.test.tsx가 담당한다.
     expect(panel.queryByLabelText('사람')).not.toBeInTheDocument()
+  })
+
+  it('summarizes a world:room frame as one line in the event log', () => {
+    const socket = makeFakeSocket()
+    render(<App socketFactory={() => socket} />)
+
+    driveToEntered(socket)
+    emit(socket, roomEvent(makeRoom()))
+
+    const log = within(screen.getByRole('list', { name: '이벤트 로그' }))
+    expect(log.getByText('무한의 광장 (#1)')).toBeInTheDocument()
   })
 
   it('places the room panel above the event log', () => {
