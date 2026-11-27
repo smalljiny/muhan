@@ -3,6 +3,7 @@
 // 받침 유무와 상관없이 `<이름>님이 …`가 된다. exited는 원본이 알리지 않아 문장이 없다.
 
 import type { ServerEvent } from 'shared/protocol'
+import { appendBounded } from './appendBounded.js'
 import type { RoomState } from './wsClient.js'
 
 /** 방 입·퇴장 통지 이벤트. */
@@ -47,7 +48,7 @@ function nextNotices(notices: RoomState['notices'], event: PresenceEvent): RoomS
   if (!event.change.announce) return notices
   const sentence = formatPresenceNotice(event)
   if (sentence === null) return notices
-  return [...notices, sentence].slice(-NOTICE_LIMIT)
+  return appendBounded(notices, sentence, NOTICE_LIMIT)
 }
 
 /**

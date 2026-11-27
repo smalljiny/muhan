@@ -1,63 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import type { ServerEvent } from 'shared'
 import { PROTOCOL_VERSION, serverEventSchema } from 'shared'
-import { WsClient, type SocketLike, type WsClientSnapshot } from './wsClient.js'
+import { WsClient, type WsClientSnapshot } from './wsClient.js'
 import { makeRoom, makeEmptyRoom, roomEvent } from '../test/roomFixtures.testutil.js'
-
-// 테스트용 최소 fake WebSocket — send를 기록하고, open/close/message를 수동 트리거한다.
-// DOM 없이 wsClient 로직만 검증하기 위해 socketFactory로 주입한다.
-class FakeSocket implements SocketLike {
-  sent: string[] = []
-  closed = false
-  onopen: ((ev: Event) => void) | null = null
-  onclose: ((ev: CloseEvent) => void) | null = null
-  onmessage: ((ev: MessageEvent) => void) | null = null
-  onerror: ((ev: Event) => void) | null = null
-
-  send(data: string): void {
-    this.sent.push(data)
-  }
-  close(): void {
-    this.closed = true
-    this.onclose?.(new CloseEvent('close'))
-  }
-
-  // 테스트 헬퍼 — 소켓 이벤트를 수동으로 발생시킨다.
-  fireOpen(): void {
-    this.onopen?.(new Event('open'))
-  }
-  emit(event: ServerEvent): void {
-    this.onmessage?.(new MessageEvent('message', { data: JSON.stringify(event) }))
-  }
-  emitRaw(data: unknown): void {
-    this.onmessage?.(new MessageEvent('message', { data }))
-  }
-  fireError(): void {
-    this.onerror?.(new Event('error'))
-  }
-}
-
-// 각 테스트가 마지막으로 생성된 fake를 회수할 수 있게 하는 factory.
-function makeHarness() {
-  const created: FakeSocket[] = []
-  const factory = (): SocketLike => {
-    const s = new FakeSocket()
-    created.push(s)
-    return s
-  }
-  const client = new WsClient({ url: 'ws://test', socketFactory: factory })
-  const last = () => {
-    const s = created[created.length - 1]
-    if (!s) throw new Error('no socket created')
-    return s
-  }
-  return { client, created, last }
-}
-
-// send 기록을 파싱해 배열로 돌려준다.
-function sentFrames(s: FakeSocket): unknown[] {
-  return s.sent.map((raw) => JSON.parse(raw) as unknown)
-}
+import { makeHarness, sentFrames } from '../test/wsHarness.testutil.js'
 
 afterEach(() => {
   vi.clearAllMocks()
@@ -153,7 +99,10 @@ describe('WsClient session state & commands', () => {
     last().fireOpen()
     const ok = client.selectCharacter('c1')
     expect(ok).toBe(true)
-    expect(sentFrames(last())).toContainEqual({ type: 'session:selectCharacter', characterId: 'c1' })
+    expect(sentFrames(last())).toContainEqual({
+      type: 'session:selectCharacter',
+      characterId: 'c1',
+    })
   })
 
   it('replyPrompt sends a session:reply frame with the caller value verbatim', () => {
@@ -195,7 +144,10 @@ describe('WsClient session state & commands', () => {
       { characterId: 'c2', name: 'B', class: 0, race: 0, level: 1 },
     ])
     const selects = sentFrames(last()).filter(
-      (f) => typeof f === 'object' && f !== null && (f as { type: string }).type === 'session:selectCharacter',
+      (f) =>
+        typeof f === 'object' &&
+        f !== null &&
+        (f as { type: string }).type === 'session:selectCharacter',
     )
     expect(selects).toHaveLength(0)
   })
@@ -338,7 +290,7 @@ describe('WsClient world:presence', () => {
     const event = presenceEvent({ change: 'moved-in', announce: true })
     last().emit(event)
     expect(client.getSnapshot().room).toBeNull()
-    expect(client.getSnapshot().events).toContainEqual(event)
+    expect(client.getSnapshot().events.map((e) => e.event)).toContainEqual(event)
   })
 
   it('ignores a late presence for another roomId but still records the event', () => {
@@ -347,7 +299,7 @@ describe('WsClient world:presence', () => {
     const event = presenceEvent({ change: 'moved-in', announce: true }, roomA.roomId + 1)
     last().emit(event)
     expect(client.getSnapshot().room).toBe(before)
-    expect(client.getSnapshot().events).toContainEqual(event)
+    expect(client.getSnapshot().events.map((e) => e.event)).toContainEqual(event)
   })
 
   it('adds an announced arrival to occupants and notices for the current room', () => {
@@ -458,7 +410,10 @@ describe('WsClient send validation', () => {
     last().fireOpen()
     const ok = client.send({ type: 'session:selectCharacter', characterId: 'c1' })
     expect(ok).toBe(true)
-    expect(sentFrames(last())).toContainEqual({ type: 'session:selectCharacter', characterId: 'c1' })
+    expect(sentFrames(last())).toContainEqual({
+      type: 'session:selectCharacter',
+      characterId: 'c1',
+    })
   })
 
   it('blocks an invalid ClientCommand before sending and records an error', () => {
@@ -498,7 +453,10 @@ describe('WsClient receive validation', () => {
     client.connect()
     last().fireOpen()
     last().emit({ type: 'debug:echo:result', text: 'pong' })
-    expect(client.getSnapshot().events).toContainEqual({ type: 'debug:echo:result', text: 'pong' })
+    expect(client.getSnapshot().events.map((e) => e.event)).toContainEqual({
+      type: 'debug:echo:result',
+      text: 'pong',
+    })
   })
 
   it('rejects an invalid ServerEvent and records a receive-validation error', () => {
@@ -697,7 +655,7 @@ describe('WsClient lastError lifetime', () => {
     h.last().emit(event)
     const after = h.client.getSnapshot()
     expect(after.errors).toHaveLength(errorsBefore)
-    expect(after.events[after.events.length - 1]?.type).toBe(event.type)
+    expect(after.events[after.events.length - 1]?.event.type).toBe(event.type)
     expect(after.session.lastError?.code).toBe(code)
   }
 
