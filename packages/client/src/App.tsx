@@ -54,6 +54,9 @@ export function App({ socketFactory }: AppProps = {}) {
   const dismissError = useCallback(() => client.dismissError(), [client])
 
   const { phase, characterList, activePrompt, lastError } = snapshot.session
+  // 출구·명령 제출은 ready에서만 연다 — 닫힌 소켓·hello 전 새 소켓 구간의 송신을 UI에서 막는다(스펙 §3.5).
+  // 선택·생성 단계(CharacterList·SessionPrompt)에는 적용하지 않는다.
+  const controlsDisabled = snapshot.status !== 'ready'
 
   // activePrompt 존재 시에만 렌더되므로 promptId는 non-null이다. 클로저는 렌더 시점 스냅샷의
   // promptId를 캡처한다(값 가공 없이 그대로 전달 — sentinel·confirm 하드코딩 없음).
@@ -91,10 +94,11 @@ export function App({ socketFactory }: AppProps = {}) {
                 room={snapshot.room}
                 selfCharacterId={snapshot.session.characterId}
                 onMove={move}
+                disabled={controlsDisabled}
               />
             )}
             <EventLog events={snapshot.events} />
-            <CommandInput onSubmitEcho={sendEcho} />
+            <CommandInput onSubmitEcho={sendEcho} disabled={controlsDisabled} />
           </>
         )
       default:

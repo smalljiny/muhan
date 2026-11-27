@@ -4,14 +4,16 @@ import { useState, type FormEvent } from 'react'
 
 export interface CommandInputProps {
   onSubmitEcho: (text: string) => void
+  /** 미연결 시 명령 제출 차단 — 참이면 제출 버튼과 submit 처리를 막는다. 입력란은 비활성화하지 않는다. */
+  disabled?: boolean
 }
 
-export function CommandInput({ onSubmitEcho }: CommandInputProps) {
+export function CommandInput({ onSubmitEcho, disabled }: CommandInputProps) {
   const [text, setText] = useState('')
 
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault()
-    if (text === '') return
+    if (disabled || text === '') return
     onSubmitEcho(text)
     setText('')
   }
@@ -24,7 +26,7 @@ export function CommandInput({ onSubmitEcho }: CommandInputProps) {
         value={text}
         onChange={(event) => setText(event.target.value)}
       />
-      <button type="submit">보내기</button>
+      <button type="submit" disabled={disabled}>보내기</button>
     </form>
   )
 }

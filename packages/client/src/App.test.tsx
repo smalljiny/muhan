@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PROTOCOL_VERSION } from 'shared'
 import { describe, expect, it, vi } from 'vitest'
@@ -376,5 +376,87 @@ describe('App', () => {
     expect(screen.getByRole('list', { name: '이벤트 로그' })).toBeInTheDocument()
     expect(screen.getByLabelText('명령')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '보내기' })).toBeInTheDocument()
+  })
+
+  // 미연결 차단 — status !== 'ready'이면 출구·보내기가 비활성이고, ready 재도달 시 다시 열린다(스펙 §3.5).
+  describe('controls disabled while status is not ready', () => {
+    function expectControlsDisabled(disabled: boolean): void {
+      const controls = [
+        screen.getByRole('button', { name: '북' }),
+        screen.getByRole('button', { name: '동' }),
+        screen.getByRole('button', { name: '보내기' }),
+      ]
+      for (const control of controls) {
+        if (disabled) expect(control).toBeDisabled()
+        else expect(control).toBeEnabled()
+      }
+    }
+
+    it('disables exits and the submit button when the socket closes in the entered shell', () => {
+      const socket = makeFakeSocket()
+      render(<App socketFactory={() => socket} />)
+
+      driveToEntered(socket)
+      emit(socket, roomEvent(makeRoom()))
+      expectControlsDisabled(false)
+
+      act(() => socket.onclose?.(new CloseEvent('close')))
+
+      // phase는 entered 그대로라 셸·방 패널이 남는다. WsClient가 소켓 참조를 이미 비우므로
+      // 이 구간의 송신 부재 단정은 UI 차단을 검증하지 못한다 — disabled만 단정한다.
+      expect(screen.getByLabelText('방')).toBeInTheDocument()
+      expectControlsDisabled(true)
+    })
+
+    it('blocks sends on a reconnected socket before hello and re-enables after resume', async () => {
+      const user = userEvent.setup()
+      const first = makeFakeSocket()
+      const second = makeFakeSocket()
+      const factory = vi
+        .fn<() => SocketLike>()
+        .mockReturnValueOnce(first)
+        .mockReturnValueOnce(second)
+      render(<App socketFactory={factory} />)
+
+      driveToEntered(first)
+      emit(first, roomEvent(makeRoom()))
+      expectControlsDisabled(false)
+
+      await user.click(screen.getByRole('button', { name: '재연결' }))
+      expect(factory).toHaveBeenCalledTimes(2)
+
+      // (a) 새 소켓 open 직후·hello 전 — status는 connected, phase는 entered 그대로라 셸이 렌더된다.
+      act(() => second.onopen?.(new Event('open')))
+      expect(screen.getByLabelText('연결 상태')).toHaveTextContent('connected')
+      expect(screen.getByLabelText('방')).toBeInTheDocument()
+      expectControlsDisabled(true)
+
+      // 열린 소켓이 있으므로 UI 차단만이 송신을 막는다.
+      await user.click(screen.getByRole('button', { name: '북' }))
+      const input = screen.getByLabelText('명령')
+      await user.type(input, '봐')
+      const form = input.closest('form')
+      expect(form).not.toBeNull()
+      fireEvent.submit(form as HTMLFormElement)
+
+      const sentFrames = vi.mocked(second.send).mock.calls.map((call) => call[0])
+      expect(sentFrames.some((f) => f.includes('"type":"world:move"'))).toBe(false)
+      expect(sentFrames.some((f) => f.includes('"type":"debug:echo"'))).toBe(false)
+
+      // (b) system:hello 수신 — phase가 negotiating으로 바뀌어 방 패널·명령 폼이 언마운트된다.
+      emit(second, { type: 'system:hello', protocolVersion: PROTOCOL_VERSION })
+      expect(screen.queryByRole('button', { name: '북' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '동' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '보내기' })).not.toBeInTheDocument()
+
+      // (c) session:resumed → world:room — ready 재도달로 출구·보내기가 다시 활성이다.
+      emit(second, { type: 'session:resumed', characterId: 'c1' })
+      emit(second, roomEvent(makeRoom()))
+      expectControlsDisabled(false)
+
+      // 재활성화된 출구가 새 소켓으로 world:move를 실제로 보낸다.
+      await user.click(screen.getByRole('button', { name: '북' }))
+      sentFrame(vi.mocked(second.send), 'world:move')
+    })
   })
 })

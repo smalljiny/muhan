@@ -26,9 +26,11 @@ export interface RoomPanelProps {
   selfCharacterId: string | null
   /** 출구 이름을 가공 없이 그대로 받는다 — world:move.direction은 출구명과 정확히 일치하는 최종 문자열이다. */
   onMove: (direction: string) => void
+  /** 미연결 시 출구 조작 차단 — 참이면 모든 출구 버튼을 비활성화한다. */
+  disabled?: boolean
 }
 
-export function RoomPanel({ room, selfCharacterId, onMove }: RoomPanelProps) {
+export function RoomPanel({ room, selfCharacterId, onMove, disabled }: RoomPanelProps) {
   // 필터 결과의 길이로 분기한다 — 원본 occupants 길이로 판정하면 본인만 있던 방에서 빈 목록이 남는다.
   const others = room.occupants.filter((occupant) => occupant.characterId !== selfCharacterId)
 
@@ -43,7 +45,7 @@ export function RoomPanel({ room, selfCharacterId, onMove }: RoomPanelProps) {
         <ul aria-label="출구">
           {room.exits.map((exit) => (
             <li key={exit}>
-              <button type="button" onClick={() => onMove(exit)}>
+              <button type="button" disabled={disabled} onClick={() => onMove(exit)}>
                 {exit}
               </button>
             </li>

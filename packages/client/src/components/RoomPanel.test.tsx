@@ -87,6 +87,29 @@ describe('RoomPanel', () => {
     expect(onMove).toHaveBeenCalledWith('동')
   })
 
+  it('disables every exit button and ignores clicks when disabled', async () => {
+    const user = userEvent.setup()
+    const onMove = vi.fn()
+    render(<RoomPanel room={makeRoom()} selfCharacterId={null} onMove={onMove} disabled />)
+
+    const north = screen.getByRole('button', { name: '북' })
+    const east = screen.getByRole('button', { name: '동' })
+    expect(north).toBeDisabled()
+    expect(east).toBeDisabled()
+
+    await user.click(north)
+    await user.click(east)
+
+    expect(onMove).not.toHaveBeenCalled()
+  })
+
+  it('keeps exit buttons enabled when disabled is omitted', () => {
+    render(<RoomPanel room={makeRoom()} selfCharacterId={null} onMove={vi.fn()} />)
+
+    expect(screen.getByRole('button', { name: '북' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '동' })).toBeEnabled()
+  })
+
   it('labels exit buttons with the exit name only — no lock or door state (OQ3)', () => {
     render(<RoomPanel room={makeRoom()} selfCharacterId={null} onMove={vi.fn()} />)
 
