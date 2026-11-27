@@ -3,6 +3,8 @@
 // hello→ready 버전 협상, 세션 상태(phase·characterList·activePrompt·lastError·본인 characterId)와
 // 방 상태(room) 노출, selectCharacter/replyPrompt/move 사용자 조작 기반 명령, debug:echo 송신을 제공한다.
 // 방 상태는 world:room 스냅샷으로 교체되고, 그 사이 world:presence 델타가 점유자·알림(notices)을 고친다.
+// lastError 수명: transient 오류는 해제 집합 이벤트(errorLifetime.ts의 CLEARS_TRANSIENT_ERROR) 처리 뒤 지우고,
+// sticky 오류(unauthorized·forbidden)는 새 transient 오류로 덮어쓰지 않고 dismissError()로만 지운다.
 
 import {
   clientCommandSchema,
@@ -15,6 +17,7 @@ import {
   type PromptOption,
   type ServerEvent,
 } from 'shared/protocol'
+import { clearsTransientError, isStickyError } from './errorLifetime.js'
 import { applyPresence } from './presence.js'
 
 /** 연결 라이프사이클 상태. ready = echo 가능(session:entered/resumed 도달). */
@@ -46,6 +49,11 @@ export interface SessionState {
   phase: SessionPhase
   characterList: readonly CharacterSummary[]
   activePrompt: ActivePrompt | null
+  /**
+   * 마지막 서버 error 이벤트. transient 코드는 해제 집합 이벤트(본인 조작 성공·진입 대화의 새 단계)가
+   * 오면 null로 돌아가고, sticky 코드(unauthorized·forbidden)는 dismissError() 전까지 남는다.
+   * sticky가 걸려 있는 동안 새 transient 오류는 무시되고, 새 sticky 오류는 교체된다.
+   */
   lastError: { code: ErrorCode; message: string } | null
   /** 본인 캐릭터 id — session:entered·resumed로 확정된다. 진입 전에는 null. */
   characterId: string | null
@@ -218,6 +226,12 @@ export class WsClient {
     return this.send({ type: 'session:reply', promptId, value })
   }
 
+  /** lastError를 코드와 무관하게 지운다(사용자가 배너를 닫는 조작). 이미 null이면 통지하지 않는다. */
+  dismissError(): void {
+    if (this.snapshot.session.lastError === null) return
+    this.setSession({ lastError: null })
+  }
+
   /** 이동 명령 송신. send 검증 경로를 재사용하며, direction min(1)·max(32) 위반은 차단된다. */
   move(direction: string): boolean {
     return this.send({ type: 'world:move', direction })
@@ -285,11 +299,26 @@ export class WsClient {
         break
       }
       case 'error':
-        this.setSession({ lastError: { code: event.code, message: event.message } })
+        this.applyError({ code: event.code, message: event.message })
         break
       default:
         break
     }
+    if (clearsTransientError(event.type)) this.clearTransientError()
+  }
+
+  /** 새 서버 오류를 저장한다 — sticky가 걸려 있으면 transient 오류로 덮어쓰지 않는다. */
+  private applyError(next: { code: ErrorCode; message: string }): void {
+    const current = this.snapshot.session.lastError
+    if (current !== null && isStickyError(current.code) && !isStickyError(next.code)) return
+    this.setSession({ lastError: next })
+  }
+
+  /** transient lastError만 지운다. null이거나 sticky이면 setSession을 호출하지 않아 참조를 보존한다. */
+  private clearTransientError(): void {
+    const current = this.snapshot.session.lastError
+    if (current === null || isStickyError(current.code)) return
+    this.setSession({ lastError: null })
   }
 
   private setStatus(status: ConnectionStatus): void {
