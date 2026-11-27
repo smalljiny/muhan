@@ -33,7 +33,7 @@ function makeDead(overrides: Partial<CreatureInstance> = {}): CreatureInstance {
   })
 }
 
-function setup() {
+function setup(options: { onCreatureDeathAwards?: (ids: readonly string[]) => void } = {}) {
   const liveRegistry = createLiveCharacterRegistry()
   const ledgers = createCreatureLedgers()
   const markCharacterDirty = vi.fn()
@@ -50,6 +50,7 @@ function setup() {
       alloc: createInstanceIdAllocator(),
     },
     logger,
+    onCreatureDeathAwards: options.onCreatureDeathAwards,
   })
 
   return { liveRegistry, ledgers, markCharacterDirty, logger, register, discard, seams }
@@ -195,6 +196,77 @@ describe('assembleDeathSeams — fireCreatureDeath 방·원장 처리', () => {
     // 폐기가 먼저면 원장이 비어 기여자 자체가 사라지고 보상이 0이 된다. `> 0`이 아니라 정확값을
     // 단언한다 — 약한 단언은 순서가 아닌 다른 회귀(분배 비율 변화)를 통과시킨다.
     expect(ctx.liveRegistry.get('char-1')?.character.experience).toBe(100)
+  })
+})
+
+describe('assembleDeathSeams — fireCreatureDeath 경험치 수령자 관찰자(D11)', () => {
+  /** 라이브 기여자 2명 + 미등록 기여자 1명이 같은 몬스터를 나눠 잡은 상태를 만든다. */
+  function seedGroupKill(ctx: ReturnType<typeof setup>) {
+    place(ctx.liveRegistry, makeCharacter({ _id: 'char-1', experience: 0 }))
+    place(ctx.liveRegistry, makeCharacter({ _id: 'char-2', name: '타이', experience: 0 }))
+    const dead = makeDead({ enemies: ['char-1', 'char-gone', 'char-2'] })
+    const room = makeRoom({ roomId: 50, creatures: [dead] })
+    const ledger = ctx.ledgers.for(dead.instanceId)
+    accumulateDamage(ledger, 'char-1', 3)
+    accumulateDamage(ledger, 'char-gone', 3)
+    accumulateDamage(ledger, 'char-2', 4)
+    return { dead, room }
+  }
+
+  it('실제로 적립된 라이브 기여자 id만 1회 넘긴다 — 미등록 기여자는 빠진다', () => {
+    const observer = vi.fn<(ids: readonly string[]) => void>()
+    const ctx = setup({ onCreatureDeathAwards: observer })
+    const { dead, room } = seedGroupKill(ctx)
+
+    ctx.seams.fireCreatureDeath(dead, room, 500)
+
+    expect(observer).toHaveBeenCalledTimes(1)
+    const [ids] = observer.mock.calls[0] ?? []
+    expect([...(ids ?? [])].sort()).toEqual(['char-1', 'char-2'])
+  })
+
+  it('관찰자 호출 시점에 수령자 경험치가 이미 레지스트리에 적립돼 있다', () => {
+    const seen: Record<string, number | undefined> = {}
+    const ctx = setup({
+      onCreatureDeathAwards: (ids) => {
+        for (const id of ids) seen[id] = ctx.liveRegistry.get(id)?.character.experience
+      },
+    })
+    const { dead, room } = seedGroupKill(ctx)
+
+    ctx.seams.fireCreatureDeath(dead, room, 500)
+
+    // 관찰 시점 값이 최종 값과 같고 0보다 크다 — 적립이 관찰자보다 먼저 끝났다.
+    expect(seen['char-1']).toBeGreaterThan(0)
+    expect(seen['char-2']).toBeGreaterThan(0)
+    expect(seen['char-1']).toBe(ctx.liveRegistry.get('char-1')?.character.experience)
+    expect(seen['char-2']).toBe(ctx.liveRegistry.get('char-2')?.character.experience)
+  })
+
+  it('적립된 수령자가 없어도 사망 1건당 빈 목록으로 1회 호출한다', () => {
+    const observer = vi.fn<(ids: readonly string[]) => void>()
+    const ctx = setup({ onCreatureDeathAwards: observer })
+    const dead = makeDead({ enemies: ['char-gone'] })
+    const room = makeRoom({ roomId: 50, creatures: [dead] })
+    accumulateDamage(ctx.ledgers.for(dead.instanceId), 'char-gone', 10)
+
+    ctx.seams.fireCreatureDeath(dead, room, 500)
+
+    expect(observer).toHaveBeenCalledTimes(1)
+    expect(observer).toHaveBeenCalledWith([])
+  })
+
+  it('관찰자 미주입 시 적립·방 제거·원장 폐기가 그대로다', () => {
+    const ctx = setup()
+    const { dead, room } = seedGroupKill(ctx)
+
+    expect(() => ctx.seams.fireCreatureDeath(dead, room, 500)).not.toThrow()
+
+    expect(ctx.liveRegistry.get('char-1')?.character.experience).toBeGreaterThan(0)
+    expect(ctx.liveRegistry.get('char-2')?.character.experience).toBeGreaterThan(0)
+    expect(ctx.markCharacterDirty).toHaveBeenCalledTimes(2)
+    expect(room.creatures).toEqual([])
+    expect(ctx.discard).toHaveBeenCalledWith('50:c0')
   })
 })
 

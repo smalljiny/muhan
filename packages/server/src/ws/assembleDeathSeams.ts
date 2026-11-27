@@ -17,7 +17,7 @@ import type { MarkCharacterDirty } from '../world/markCharacterDirty.js'
  * ## 처리 순서가 load-bearing이다
  * `fireCreatureDeath`는 다음 순서를 지킨다:
  *   1. `ledgers.for(dead.instanceId)`로 이 몬스터 원장을 읽어 `distributeCreatureDeath`에 넘긴다.
- *   2. 기여자 경험치를 라이브 레지스트리에 적립한다.
+ *   2. 기여자 경험치를 라이브 레지스트리에 적립하고, 관찰자가 있으면 수령자 목록을 알린다(D11).
  *   3. `onCreatureDeath`로 방에서 제거하고 리스폰 타이머를 리셋한다.
  *   4. `ledgers.discard(dead.instanceId)`로 원장을 버린다.
  *
@@ -30,6 +30,14 @@ import type { MarkCharacterDirty } from '../world/markCharacterDirty.js'
  * 만들어 주므로(`creatureLedgers.ts` 계약) 기여자 집합이 통째로 비고 — `distributeCreatureDeath`의
  * 기여자 게이트가 `ledger.get(id) > 0`이다 — 보상이 조용히 0이 된다. 예외도 로그도 남지 않아
  * "경험치가 안 오른다"는 증상으로만 드러나므로, 이 순서를 테스트로 고정한다.
+ *
+ * ## 경험치 수령자 관찰자 (D11)
+ * 선택 의존성 `onCreatureDeathAwards`를 주면 `fireCreatureDeath`가 (2) 적립 루프를 마친 직후 실제로
+ * 적립된 **라이브** 플레이어 id 목록으로 관찰자를 사망 1건당 정확히 1회 부른다. 미등록 기여자는 적립되지
+ * 않으므로 목록에 없다. 적립된 사람이 없어도 빈 목록으로 부른다 — "사망 1건 = 호출 1회" 불변식을
+ * 지켜 수집 측이 분기 없이 합집합만 쌓으면 되게 한다. 관찰자가 불리는 시점에 수령자의 레지스트리
+ * 경험치는 이미 올라가 있다. 이 seam은 여전히 아무것도 전송하지 않는다 — 수령자에게 스탯을 보내는
+ * 일은 관찰자를 소비하는 쪽(라운드 통지기)이 맡는다. 관찰자를 주지 않으면 동작은 이전과 같다.
  *
  * ## alignmentDelta를 적용하지 않는다 (D7)
  * `DeathAward.alignmentDelta`는 계산해 받지만 캐릭터에 더하지 않는다. 오라클의 alignment 값 범위는
@@ -70,6 +78,8 @@ export interface DeathSeamDeps {
   readonly markCharacterDirty: MarkCharacterDirty
   readonly creatureDeathDeps: CreatureDeathDeps
   readonly logger: DeathSeamLogger
+  /** 몬스터 사망 1건마다 실제로 경험치가 적립된 라이브 플레이어 id 목록을 받는 선택 관찰자(D11). */
+  readonly onCreatureDeathAwards?: (awardedPlayerIds: readonly string[]) => void
 }
 
 /**
@@ -90,10 +100,12 @@ export function assembleDeathSeams(deps: DeathSeamDeps): DeathSeams {
    * 라이브 문서를 in-place로 고치지 않고 새 `LiveCharacter`·새 `Character`를 만들어 교체 등록한다
    * (immutability 규칙). markDirty 스냅샷 복사는 `markCharacterDirty`가 단독으로 담당하므로 여기서
    * 다시 복사하지 않는다.
+   *
+   * @returns 실제로 적립했으면 `true`, 미등록이라 건너뛰었으면 `false`.
    */
-  function creditExperience(playerId: string, exp: number): void {
+  function creditExperience(playerId: string, exp: number): boolean {
     const live = deps.liveRegistry.get(playerId)
-    if (live === undefined) return
+    if (live === undefined) return false
 
     const merged = {
       ...live,
@@ -102,6 +114,7 @@ export function assembleDeathSeams(deps: DeathSeamDeps): DeathSeams {
     }
     deps.liveRegistry.register(merged)
     deps.markCharacterDirty(merged.character._id, merged.character)
+    return true
   }
 
   return {
@@ -115,7 +128,13 @@ export function assembleDeathSeams(deps: DeathSeamDeps): DeathSeams {
       )
 
       // (2) 기여자 적립. drops는 소비하지 않는다(D8 — 파일 상단 참조).
-      for (const award of distribution.awards) creditExperience(award.playerId, award.exp)
+      const awardedPlayerIds: string[] = []
+      for (const award of distribution.awards) {
+        if (creditExperience(award.playerId, award.exp)) awardedPlayerIds.push(award.playerId)
+      }
+
+      // (2') 적립을 마친 뒤 수령자 관찰자에 알린다(D11 — 파일 상단 참조). 전송은 하지 않는다.
+      deps.onCreatureDeathAwards?.(awardedPlayerIds)
 
       // (3) perm 리스폰 타이머 리셋 → MSUMMO 소환 → 방 creatures[] 제거.
       onCreatureDeath(dead, room, now, deps.creatureDeathDeps)
