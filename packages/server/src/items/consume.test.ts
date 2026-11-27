@@ -214,13 +214,13 @@ describe('deliverConsumable — resolve 분기(unresolved/delivered)', () => {
       expect(outcome.spellNo).toBe(OFFENSIVE_SPELL)
       expect(outcome.context).toBe('potion')
     }
-    // seam은 감소하지 않는다 — shotscur 감소는 effect 성공(오라클 `if(n)`) 시 배선 계층 소관.
+    // seam은 감소하지 않는다 — shotscur 감소는 effect 성공(오라클 `if(n)`) 시 연결 계층 담당.
     expect(instance.shotscur).toBe(3)
   })
 })
 
 describe('deliverConsumable — shotscur 불변(seam은 감소하지 않음)', () => {
-  it('delivered여도 seam은 입력 인스턴스를 변형하지 않는다 — 감소는 배선 유예(오라클 성공 결합)', () => {
+  it('delivered여도 seam은 입력 인스턴스를 변형하지 않는다 — 감소는 연결 단계로 미룸(오라클 성공 결합)', () => {
     const dispatch = new SpellDispatch<unknown>()
     dispatch.register(OFFENSIVE_SPELL, () => 'handler')
     const instance = makeInstance({ shotscur: 1 })
@@ -232,7 +232,7 @@ describe('deliverConsumable — shotscur 불변(seam은 감소하지 않음)', (
       dispatch,
     })
     expect(outcome.kind).toBe('delivered')
-    // delivered는 object를 담지 않는다(감소 유예). 입력 인스턴스 shotscur 무변경.
+    // delivered는 object를 담지 않는다(감소 보류). 입력 인스턴스 shotscur 무변경.
     expect(instance.shotscur).toBe(1)
   })
 })

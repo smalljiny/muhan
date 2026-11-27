@@ -32,7 +32,7 @@ function makeExit(bits: number[], key = 0, ltime = 0): ExitEdge {
   }
 }
 
-// 테스트용 열쇠 오브젝트(door 로컬 최소 shape). type=KEY(11)면 열쇠, ndice가 열쇠 ID.
+// 테스트용 열쇠 아이템(door 로컬 최소 shape). type=KEY(11)면 열쇠, ndice가 열쇠 ID.
 function makeKey(ndice: number, shotscur = 3, type = KEY) {
   return { type, ndice, shotscur }
 }

@@ -51,8 +51,12 @@ export function App({ socketFactory }: AppProps = {}) {
     [client],
   )
   const move = useCallback((direction: string) => client.move(direction), [client])
+  const dismissError = useCallback(() => client.dismissError(), [client])
 
   const { phase, characterList, activePrompt, lastError } = snapshot.session
+  // 출구·명령 제출은 ready에서만 연다 — 닫힌 소켓·hello 전 새 소켓 구간의 송신을 UI에서 막는다(스펙 §3.5).
+  // 선택·생성 단계(CharacterList·SessionPrompt)에는 적용하지 않는다.
+  const controlsDisabled = snapshot.status !== 'ready'
 
   // activePrompt 존재 시에만 렌더되므로 promptId는 non-null이다. 클로저는 렌더 시점 스냅샷의
   // promptId를 캡처한다(값 가공 없이 그대로 전달 — sentinel·confirm 하드코딩 없음).
@@ -79,7 +83,7 @@ export function App({ socketFactory }: AppProps = {}) {
         return (
           <>
             {phase === 'resumed' && <p>재접속됨</p>}
-            {/* 서버가 미해소 방에서 발화를 생략하므로 room === null 구간이 존재한다(스펙 §3.4).
+            {/* 서버가 해석되지 않은 방에서 이벤트 발생을 생략하므로 room === null 구간이 존재한다(스펙 §3.4).
                 여기가 스냅샷의 두 서브트리(최상위 room + session.characterId)를 조인하는 첫 지점이다.
                 서버는 방 단위 fan-out 캐시를 유지하려고 수신자와 무관한 같은 페이로드를 보내며
                 occupants에 **본인을 포함**한다 — 제외는 소비자 책임이다(스펙 §4). 방 점유자를 쓰는
@@ -90,10 +94,11 @@ export function App({ socketFactory }: AppProps = {}) {
                 room={snapshot.room}
                 selfCharacterId={snapshot.session.characterId}
                 onMove={move}
+                disabled={controlsDisabled}
               />
             )}
             <EventLog events={snapshot.events} />
-            <CommandInput onSubmitEcho={sendEcho} />
+            <CommandInput onSubmitEcho={sendEcho} disabled={controlsDisabled} />
           </>
         )
       default:
@@ -105,7 +110,7 @@ export function App({ socketFactory }: AppProps = {}) {
     <main>
       <h1>무한</h1>
       <ConnectionStatus status={snapshot.status} onReconnect={reconnect} />
-      <SessionErrorBanner error={lastError} />
+      <SessionErrorBanner error={lastError} onDismiss={dismissError} />
       {renderPhase()}
     </main>
   )

@@ -9,7 +9,7 @@
 
 import { defaultClock, type SchedulerClock } from '../util/clock.js'
 
-/** 매니저가 의존하는 소켓 표면. 실 ws.WebSocket이 구조적으로 충족한다. */
+/** 매니저가 의존하는 소켓 인터페이스. 실 ws.WebSocket이 구조적으로 충족한다. */
 export interface HeartbeatSocket {
   ping(): void
   terminate(): void
@@ -22,7 +22,7 @@ export interface HeartbeatOptions {
   readonly clock?: SchedulerClock
 }
 
-/** per-connection 하트비트 핸들. `start`가 타이머 핸들을 돌려줘 `ctx.heartbeat`에 배선한다. */
+/** per-connection 하트비트 핸들. `start`가 타이머 핸들을 돌려줘 `ctx.heartbeat`에 연결한다. */
 export interface Heartbeat {
   start(): NodeJS.Timeout
   stop(): void

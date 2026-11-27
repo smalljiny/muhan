@@ -280,7 +280,7 @@ describe('Story 4 회귀: 프레임 직렬화 + async-gap liveness', () => {
     } as unknown as SessionAuthPort
 
     // 소켓은 hook 진입 시엔 살아 있고(destroyed=false), await 도중 파괴된다. once는 no-op이라 'close' 리스너는
-    // 절대 발화하지 않는다 — 슬롯 반납의 유일한 경로를 :245 destroyed 체크로 국한해 그 경로만 검증한다.
+    // 절대 실행되지 않는다 — 슬롯 반납의 유일한 경로를 :245 destroyed 체크로 국한해 그 경로만 검증한다.
     const socketObj = { destroyed: false, once: vi.fn() }
     const fakeReq = {
       headers: { origin: DEFAULT_TEST_ORIGIN, cookie: '__session=any-token' },
@@ -299,7 +299,7 @@ describe('Story 4 회귀: 프레임 직렬화 + async-gap liveness', () => {
     const hookPromise = gameAuthPreValidation(fakeSessionAuth, quota)(fakeReq, fakeReply)
     await tick()
 
-    // await 도중 소켓 파괴를 시뮬레이션한 뒤, 유효 신원으로 resolve한다 → hook이 reserve → 배선 → :245로 진행한다.
+    // await 도중 소켓 파괴를 시뮬레이션한 뒤, 유효 신원으로 resolve한다 → hook이 reserve → 연결 → :245로 진행한다.
     socketObj.destroyed = true
     resolveValidate?.({ accountId: 'acc-1' })
     await hookPromise

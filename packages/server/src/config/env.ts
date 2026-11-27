@@ -3,7 +3,7 @@ import { z } from 'zod'
 // 환경변수 스키마 — 시작 시 파싱해 잘못된 설정이면 즉시 종료한다.
 // MONGODB_URI는 존재만 검증한다(z.string().min(1)). z.url()은 generic URL 검증이라
 // 유효한 seed-list 복제셋 URI(mongodb://h1:27017,h2:27017/db)를 false-reject하므로,
-// 연결 문자열 문법 검증은 드라이버(Story 4 connectMongo)에 맡기고 여기선 부재만 잡는다.
+// 연결 문자열 문법 검증은 드라이버(Story 4 connectMongo)에 맡기고 여기선 값이 없는 경우만 잡는다.
 // 빈 문자열(.env의 KEY= )은 .default()를 우회하므로 문자열 필드에 .min(1)을 건다.
 // zod 4 관용: z.flattenError(구식 error.flatten() 대신).
 export const EnvSchema = z.object({
@@ -44,16 +44,16 @@ export const EnvSchema = z.object({
   WS_SESSION_DEADLINE_MS: z.coerce.number().int().min(1).default(60000),
   // 재연결 grace 창(Story 5, G3). command 상태 소켓의 클라 주도 drop 감지 시 바인딩을 즉시 제거하지 않고
   // link-dead로 표시한 뒤 이 시간 안에 같은 캐릭터로 재접속하면 rebind(재연결)한다. 만료되면 disconnect
-  // 수렴 seam(resolveDisconnect(graceExpired))으로 정식 종료한다. 진행 데드라인·idle과 별개 타이머다.
+  // 정리 seam(resolveDisconnect(graceExpired))으로 정식 종료한다. 진행 데드라인·idle과 별개 타이머다.
   // 0이면 link-dead 진입 즉시 만료돼 재연결 창이 무의미하므로 최소 1을 강제한다.
   WS_RECONNECT_GRACE_MS: z.coerce.number().int().min(1).default(30000),
   // 월드 진입(command) 후 무입력(idle) 종료 창(Story 6, G4). command 진입 시 arm하고 유효 명령 처리
-  // 성공(dispatch handled)마다 재-arm한다. 이 시간 안에 유효 명령이 없으면 disconnect 수렴 seam
+  // 성공(dispatch handled)마다 재-arm한다. 이 시간 안에 유효 명령이 없으면 disconnect 정리 seam
   // (resolveDisconnect(idleTimeout))으로 정식 종료한다. 하트비트(물리 생존)·진행 데드라인(핸드셰이크 진행)·
   // grace(재연결 창)와 별개 타이머다. 0이면 진입 즉시 만료돼 무입력 감시가 무의미하므로 최소 1을 강제한다.
   WS_IDLE_TIMEOUT_MS: z.coerce.number().int().min(1).default(300000),
   // dev 전용 로그인 게이트(Story 4, G1 서버측). true일 때만 /dev/login 라우트가 마운트되고 시드
-  // SessionAuthPort 어댑터가 배선된다. z.coerce.boolean은 비어있지 않은 문자열 "false"를 true로
+  // SessionAuthPort 어댑터가 연결된다. z.coerce.boolean은 비어있지 않은 문자열 "false"를 true로
   // 강제하므로 금지 — enum(['true','false'])로 명시 허용값을 강제하고 transform으로 boolean화한다.
   DEV_LOGIN_ENABLED: z
     .enum(['true', 'false'])
@@ -61,7 +61,7 @@ export const EnvSchema = z.object({
     .transform((s) => s === 'true'),
   // Firebase 프로젝트 식별자 — 실 세션 쿠키 검증 어댑터(DEV_LOGIN off 경로) 조립에만 쓰인다.
   // dev 부팅(DEV_LOGIN on)은 이 값을 요구하지 않으므로 optional로 둔다. 실 어댑터 조립 시점(index.ts)에서
-  // 부재를 fail-fast로 방어한다 — optional 스키마가 프로덕션 경로의 fail-fast를 대체하지 않는다.
+  // 값이 없는 경우를 fail-fast로 방어한다 — optional 스키마가 프로덕션 경로의 fail-fast를 대체하지 않는다.
   FIREBASE_PROJECT_ID: z.string().optional(),
   // 시드 세션 쿠키·계정 식별자. 플래그 off일 때도 파싱이 실패하지 않도록 빈 문자열 default를 둔다.
   // 플래그 on인데 값이 비면 devSeedSessionAuth 조립 단계에서 fail-fast로 방어한다(빈 유효 쿠키 배포 방지).

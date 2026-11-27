@@ -2,15 +2,15 @@ import type { ExitEdge, RoomNode } from 'shared'
 import { hasFlag, XLOCKD, XCLOSD } from './door.js'
 
 /**
- * 이동 게이트 건틀릿 — A4 §1의 순차 거부 검사를 순수 predicate 배열로 이식한다.
+ * 이동 게이트 검사 — A4 §1의 순차 거부 검사를 순수 predicate 배열로 이식한다.
  *
- * oracle `docs/notes/game-analysis-20260625/a4-movement-rooms.md` §1 + spec §3.3:
+ * 오라클 `docs/notes/game-analysis-20260625/a4-movement-rooms.md` §1 + spec §3.3:
  *   원본 `move()`(command2.c:284)는 정규화된 출구명 이후 ~20단 게이트를 순서대로 평가하고,
  *   하나라도 걸리면 즉시 거부·이동 취소한다. 본 이식은 그 순서(콘텐츠)를 보존하되 각 게이트를
  *   부수효과 없는 순수 predicate로 만든다. 강제 게이트는 실 거부하고, 입력 에픽 대기 게이트는
  *   순서상 자리만 지키는 pass-through stub이다.
  *
- * 범위: gate 1(출구 존재)·XNOSEE 이름 탐색 제외는 이 모듈 밖(tryMove 소관, Story 7)이다.
+ * 범위: gate 1(출구 존재)·XNOSEE 이름 탐색 제외는 이 모듈 밖(tryMove 담당, Story 7)이다.
  *   여기서는 gate 1b(dangling)부터 20까지를 다룬다. 통과 시 leave/join·점유자 재배치도 tryMove가 한다.
  *
  * 순수성: 모든 게이트는 입력을 읽기만 하고 변형하지 않는다(출구 flags·방 occupants·actor 불변).
@@ -51,9 +51,9 @@ export type MoveGateActor = {
 }
 
 /**
- * 게이트 건틀릿 입력. exit·targetRoom은 이미 해석된 상태로 주입된다(출구 선택·대상 해석은
- * tryMove의 mode 분기 소관). currentHour는 G2 gameTime.currentHour() 주입값(0~23)이다.
- * targetRoom이 undefined면 dangling(대상 방 부재)이다.
+ * 게이트 검사 입력. exit·targetRoom은 이미 해석된 상태로 주입된다(출구 선택·대상 해석은
+ * tryMove의 mode 분기 담당). currentHour는 G2 gameTime.currentHour() 주입값(0~23)이다.
+ * targetRoom이 undefined면 dangling(대상 방 없음)이다.
  */
 export interface MoveGateInput {
   readonly exit: ExitEdge
@@ -74,7 +74,7 @@ const PASS: MoveGateResult = { ok: true }
  * 1b dangling — 대상 방이 그래프에 없으면 거부한다.
  *
  * spec §3.3가 gate 1 직후·나머지 앞에 배치한 확정 순서다(원본 command2.c:510의 dangling
- * 검사가 게이트 중반에 있으나, 대상 방 부재는 다른 어떤 방 게이트보다 선행해야 논리적이라
+ * 검사가 게이트 중반에 있으나, 대상 방이 없는 경우는 다른 어떤 방 게이트보다 선행해야 논리적이라
  * 스펙이 의도적으로 재정렬했다 — 되돌리지 않는다).
  */
 export function danglingGate(input: MoveGateInput): MoveGateResult {
@@ -95,7 +95,7 @@ export function closedGate(input: MoveGateInput): MoveGateResult {
  * 7·8 시간 — 야간/주간 전용 출구를 게임시각(Time%24)으로 게이트한다.
  *
  * XNGHTO(야간전용)는 낮(6<t<20, command2.c:401)에 거부, XDAYON(주간전용)은 밤
- * (t<6 || t>20, :406)에 거부한다. 경계는 strict 비교로 원본 정합: XNGHTO는 t=7..19에서만
+ * (t<6 || t>20, :406)에 거부한다. 경계는 strict 비교로 원본과 일치: XNGHTO는 t=7..19에서만
  * 거부(t=6·20 통과), XDAYON은 t<=5 또는 t>=21에서만 거부(t=6·20 통과). §3.3가 두 검사를
  * 한 시간 게이트 행(7·8)으로 묶으므로 XNGHTO를 먼저(원본 순서) 평가한다.
  */
@@ -118,8 +118,8 @@ export function timeGate(input: MoveGateInput): MoveGateResult {
  * 근사한다. 투명 플레이어가 방에 있으면 원본보다 빨리 만원 판정될 수 있다 — E5 가시성
  * 필터 도입 후 정정한다.
  *
- * targetRoom undefined는 dangling 게이트가 선행 거부하므로 건틀릿 경로에선 도달 불가다.
- * 직접 호출 시의 방어로 undefined면 통과한다(부재를 만원으로 오판하지 않는다).
+ * targetRoom undefined는 dangling 게이트가 선행 거부하므로 게이트 검사 경로에선 도달 불가다.
+ * 직접 호출 시의 방어로 undefined면 통과한다(없음을 만원으로 오판하지 않는다).
  */
 export function capacityGate(input: MoveGateInput): MoveGateResult {
   const room = input.targetRoom
@@ -140,7 +140,7 @@ export function capacityGate(input: MoveGateInput): MoveGateResult {
  */
 const passStub = (): MoveGateResult => PASS
 
-// ── 건틀릿 배열 (spec §3.3 순서) ──────────────────────────────────────────────
+// ── 게이트 검사 배열 (spec §3.3 순서) ──────────────────────────────────────────────
 
 /** 이름 붙은 게이트. name은 §3.3 행 식별자로 순서 검증에 노출된다. */
 interface MoveGate {
@@ -149,7 +149,7 @@ interface MoveGate {
 }
 
 /**
- * 게이트 건틀릿 — spec §3.3 표 순서(1b~20)를 배열 순서로 인코딩한다. 각 stub 항목의 주석은
+ * 게이트 검사 — spec §3.3 표 순서(1b~20)를 배열 순서로 인코딩한다. 각 stub 항목의 주석은
  * 실 강제를 붙일 대기 에픽이다. 시간(7·8)·성별(10·11)·레벨(15·16)·패거리결혼(18·19·20)은
  * §3.3가 묶은 행 단위로 한 항목씩 배치한다.
  */
@@ -171,11 +171,11 @@ const MOVE_GATE_GAUNTLET: readonly MoveGate[] = [
   { name: '패거리결혼', evaluate: passStub }, // 18·19·20 RFAMIL/RONFML/RONMAR — E5/E7
 ]
 
-/** 건틀릿 게이트 이름을 §3.3 순서대로 나열한다 — 순서 검증 테스트에 노출한다. */
+/** 게이트 검사의 게이트 이름을 §3.3 순서대로 나열한다 — 순서 검증 테스트에 노출한다. */
 export const MOVE_GATE_ORDER: readonly string[] = MOVE_GATE_GAUNTLET.map((gate) => gate.name)
 
 /**
- * 이동 게이트 건틀릿을 순차 평가한다. §3.3 순서대로 각 게이트를 호출하고, 첫 거부에서
+ * 이동 게이트 검사를 순차 평가한다. §3.3 순서대로 각 게이트를 호출하고, 첫 거부에서
  * 즉시 정지해 그 거부 결과를 반환한다. 모든 게이트를 통과하면 { ok: true }를 반환한다.
  * 순수 함수 — 입력을 변형하지 않는다.
  */

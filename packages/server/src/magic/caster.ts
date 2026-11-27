@@ -3,13 +3,13 @@ import type { PlayerCombatState } from '../combat/playerState.js'
 import { F_ISSET } from '../world/hexFlags.js'
 
 /**
- * Caster — 몹(CreatureInstance)·플레이어(PlayerCombatState) 공유 시전 추상.
+ * Caster — 몬스터(CreatureInstance)·플레이어(PlayerCombatState) 공유 시전 추상.
  *
  * ## 계약 경계 (#84·#85·#86 공유 — 정확히 6필드, 그 이상 노출 금지)
  * 이 6필드로 시전 게이트·spell_fail·데미지 bns가 완결된다. 계약은 다음을 **포함하지 않는다**:
- *   - realm-growth write(addrealm)·학습 write(study/teach) → #85 소관.
- *   - delivery 아이템 본체(scroll/potion/wand) → #86 소관.
- * 필드를 더하지 마라 — 계약 경계가 무너지면 하위 토픽이 잘못된 표면에 결합한다.
+ *   - realm-growth write(addrealm)·학습 write(study/teach) → #85 담당.
+ *   - delivery 아이템 본체(scroll/potion/wand) → #86 담당.
+ * 필드를 더하지 마라 — 계약 경계가 무너지면 하위 토픽이 잘못된 인터페이스에 결합한다.
  *
  * mpCurrent만 가변(S4가 `caster.mpCurrent -= N`으로 마나 소비)이고, 나머지는 읽기 전용이다.
  */
@@ -18,13 +18,13 @@ export interface Caster {
   mpCurrent: number
   /** 레벨 — spell_fail L4·mprofic 입력(읽기). */
   readonly level: number
-  /** realm별 숙련(길이 4, 읽기) — 플레이어는 캐릭터 영속 realm, 몹은 creature.realm. */
+  /** realm별 숙련(길이 4, 읽기) — 플레이어는 캐릭터 영속 realm, 몬스터는 creature.realm. */
   readonly realm: readonly number[]
   /** 직업 인덱스(읽기). */
   readonly class: number
   /** bonusOf(intelligence) 사전 계산값(읽기) — 데미지 bns 입력. */
   readonly intBonus: number
-  /** S_ISSET 판독 — 해당 주문을 보유하는지(읽기). */
+  /** S_ISSET 읽기 — 해당 주문을 보유하는지(읽기). */
   knows(spellNo: number): boolean
 }
 
@@ -76,7 +76,7 @@ export function toCaster(source: CreatureInstance | PlayerCombatState): Caster {
     realm: state.realm,
     class: state.class,
     intBonus: bonusOf(state.effectiveIntelligence),
-    // #85: 플레이어 spell store(uint8[16]) 실판독 — S_ISSET 이식(더 이상 false 스텁 아님).
+    // #85: 플레이어 spell store(uint8[16]) 실제 읽기 — S_ISSET 이식(더 이상 false 스텁 아님).
     knows: (spellNo: number) => isKnown(state.spells, spellNo),
   }
 }

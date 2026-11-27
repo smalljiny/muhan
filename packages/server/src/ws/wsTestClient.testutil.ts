@@ -90,7 +90,7 @@ export interface MessageReader {
  * 소켓에 영구 `message` 리스너 하나를 걸어 도착 프레임을 버퍼링하는 리더를 만든다.
  *
  * `waitForMessage`는 `once`라 프레임당 리스너 하나만 대기시킨다 — 서버가 같은 턴에 2프레임 이상을
- * 동기 발화하면(핸드셰이크 accept의 characterList+prompt) 배치 도착분이 유실되거나 두 `once`가 같은
+ * 동기 발생하면(핸드셰이크 accept의 characterList+prompt) 배치 도착분이 유실되거나 두 `once`가 같은
  * 프레임을 중복 소비한다. 이 리더는 영구 리스너로 모든 프레임을 큐에 쌓아 `next()`가 순서대로 꺼내게
  * 한다(유실 없음). 파싱 실패(계약 밖 이벤트)는 리스너에서 throw하지 않고 다음 `next()`에 표면화한다
  * (공유 유틸의 unhandled rejection 방지). 소켓당 리더는 하나만 쓴다 — `waitForMessage`와 혼용하면 두
@@ -182,7 +182,7 @@ export const DEFAULT_TEST_ORIGIN = 'http://localhost'
 
 /**
  * cookie/Origin 주입 옵션. `undefined`(미지정)면 유효 기본값(시드 쿠키·허용 Origin)을 쓰고, `null`이면
- * 해당 헤더를 아예 생략한다(부재 케이스 테스트). `cookie`는 `__session` 쿠키에 담길 순수 토큰 값이다.
+ * 해당 헤더를 아예 생략한다(헤더 없음 케이스 테스트). `cookie`는 `__session` 쿠키에 담길 순수 토큰 값이다.
  */
 export interface AuthHeaderOptions {
   cookie?: string | null
@@ -200,7 +200,7 @@ function buildAuthHeaders(opts?: AuthHeaderOptions): Record<string, string> {
 }
 
 /**
- * 시드 세션 어댑터가 배선된 app을 만든다. preValidation 게이트가 유효 쿠키를 인식하도록, 모든 인증
+ * 시드 세션 어댑터가 연결된 app을 만든다. preValidation 게이트가 유효 쿠키를 인식하도록, 모든 인증
  * 테스트의 buildApp 진입점을 이 팩토리로 단일화한다(어댑터 시드 누락 방지). deps는 buildApp으로 전달된다.
  */
 export function buildSeededApp(deps?: Parameters<typeof buildApp>[0]): FastifyInstance {
@@ -239,18 +239,18 @@ export function waitForUnexpectedResponse(ws: WebSocket, timeoutMs = 2000): Prom
   })
 }
 
-// ── 세션 FSM(Story 4) 종단 배선 헬퍼 ──────────────────────────────────────────
+// ── 세션 FSM(Story 4) 종단 연결 헬퍼 ──────────────────────────────────────────
 
 /**
  * 소켓을 connect→hello→ready→characterList→prompt→selectCharacter→entered→command 경로로 왕복시켜
  * command 상태에 도달시킨다(Lock B — Story 4·5·7이 공유하는 단일 traversal).
  *
- * 유실 없는 `createMessageReader`로 핸드셰이크 accept가 동기 발화하는 2프레임(characterList+prompt)을
+ * 유실 없는 `createMessageReader`로 핸드셰이크 accept가 동기 발생시키는 2프레임(characterList+prompt)을
  * 안전히 소비한다. injectWS 소켓은 이미 OPEN이라 open 대기를 건너뛰고, 실 `ws` 소켓은 open을 먼저
  * 기다린 뒤 send한다(send-before-open throw 회피). 반환된 리더로 호출자가 이후 프레임(예: echo:result)을
  * 이어서 읽는다 — 같은 소켓에 `waitForMessage`를 섞지 않는다(이중 소비).
  *
- * 리더는 어떤 프레임도 발화되기 전에 리스너를 걸어야 하므로, 이 헬퍼는 소켓 생성 직후(첫 send·open 전)
+ * 리더는 어떤 프레임도 발생하기 전에 리스너를 걸어야 하므로, 이 헬퍼는 소켓 생성 직후(첫 send·open 전)
  * 호출한다.
  */
 export async function enterCommandState(ws: WebSocket, timeoutMs = 1000): Promise<MessageReader> {
@@ -284,7 +284,7 @@ export interface CreateFlowFields {
  * 소켓을 connect→hello→ready→characterList→prompt→create 신호→8단계 인터뷰→entered 경로로 왕복시켜
  * create 다단 대화를 완주하고 command 상태에 도달시킨다(Story 5·7이 공유하는 단일 create traversal).
  *
- * select prompt에 `session:reply{value: CREATE_SENTINEL}`로 답해 create로 전이시킨 뒤, 서버가 발화하는 각
+ * select prompt에 `session:reply{value: CREATE_SENTINEL}`로 답해 create로 전이시킨 뒤, 서버가 발생시키는 각
  * create prompt(name→gender→class→stats→weapon→alignment→race→confirm)에 상관된 promptId로 순차
  * 응답한다. `enterCommandState`와 같은 유실 없는 리더 규약을 따르며(소켓 생성 직후 첫 send·open 전 호출),
  * entered를 소비한 리더를 돌려줘 호출자가 이후 프레임을 이어 읽게 한다. Story 7 T7.2가 이 헬퍼를 재사용한다.

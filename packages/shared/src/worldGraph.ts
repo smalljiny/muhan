@@ -5,13 +5,13 @@
  * 타입으로, 디스크에 저장되지 않는 라이브 상태(런타임 필드·생성 id)를 표현한다.
  *
  * 가변성(mutability) 경계 — 프로젝트 CRITICAL immutability 규칙의 의도된 예외:
- *   - 라이브 가변: `RoomNode.occupants`(점유자 Set), `RoomNode.creatures`(라이브 크리처 배열 —
+ *   - 라이브 가변: `RoomNode.occupants`(점유자 Set), `RoomNode.creatures`(라이브 몬스터 배열 —
  *     스폰 push·사망 제거, occupants 선례), `CreatureInstance`의 라이브 상태 필드(hpcur·mpcur·
- *     타이머·enemies·inventory), `ExitEdge.flags`+`ExitEdge.ltime`(문 개폐/재잠금 상태 머신 — oracle a4 §111
+ *     타이머·enemies·inventory), `ExitEdge.flags`+`ExitEdge.ltime`(문 개폐/재잠금 상태 머신 — 오라클 a4 §111
  *     `check_exits`가 ltime+interval로 재잠금), `RoomNode.permMon[].ltime`(perm 리스폰 타이머 —
  *     exit ltime과 동형, 입장 lazy 리스폰·사망 시 now로 세팅. Story 4·5).
  *   - immutable: 정적 필드 전부(전투 스탯 + `CreatureInstance`의 마법 읽기 필드
- *     realm·spells·class·intelligence·piety는 콘텐츠 불변 — 성장·학습 write 경로 없음, #85 유예) +
+ *     realm·spells·class·intelligence·piety는 콘텐츠 불변 — 성장·학습 write 경로 없음, #85 보류) +
  *     `RoomNode.flags`(64비트 raw 방 flags는 콘텐츠로 불변) +
  *     `RoomNode.random`/`RoomNode.traffic`(스폰 정의 콘텐츠, 불변).
  *   방 flags와 exit flags를 혼동하지 않는다 — 전자는 불변, 후자는 문 상태로 가변이다.
@@ -21,7 +21,7 @@
  * 방 출구 엣지. 원본 raw exit의 `room`(대상 방 번호)을 `targetRoomId`로 매핑한다.
  *
  * `ltime`은 마지막 상태 변경 실초 시각(기본 0), `interval`은 재잠금/재닫힘 지연 초로
- * 둘 다 런타임 전용 필드다(raw에는 없음). oracle a4 §111 `check_exits`가
+ * 둘 다 런타임 전용 필드다(raw에는 없음). 오라클 a4 §111 `check_exits`가
  * `ltime + interval < now`이면 `XLOCKS`/`XCLOSS` 출구를 자동 재잠금/재닫힘한다 —
  * `ltime`이 문 상태 머신의 타이밍을 인코딩한다. 대상이 그래프에 없으면(dangling)
  * 엣지는 그대로 유지되고 해석은 지연(Map.has 조회)된다.
@@ -47,20 +47,20 @@ export type ItemInstance = {
   /**
    * object flags(8바이트 hex string, creatures/objects.json과 동일 표현). scavenge(A9 §3.3) 제외
    * 판정에 쓰인다 — OPERMT·OHIDDN·OPERM2·ONOTAK·OSCENE 중 하나라도 있으면 몬스터가 줍지 못한다.
-   * 콘텐츠(불변). 전투 스탯 등 나머지 object 필드는 아이템 에픽 소관이라 여기에 싣지 않는다(D8).
+   * 콘텐츠(불변). 전투 스탯 등 나머지 object 필드는 아이템 에픽 담당이라 여기에 싣지 않는다(D8).
    */
   flags: string
   /**
    * 이름 매칭용 별칭(콘텐츠, 불변) — 원본 `char key[3][20]`을 위생 처리한 배열. 소스
    * JSON(objects.json / rooms.json `items[]`·중첩 `contains[]`, port `templates.js` OBJ 오프셋
-   * 160)에 존재하며 물질화 시점에 옮긴다(배선은 Story 4 — 이 선언 시점엔 값이 흐르지 않는다).
+   * 160)에 존재하며 인스턴스 생성 시점에 옮긴다(연결은 Story 4 — 이 선언 시점엔 값이 흐르지 않는다).
    * 빈 슬롯·공백 전용 슬롯은 리더가 드롭하므로 별칭이
-   * 없는 아이템은 `[]`다(`undefined` 아님 — 매처가 두 형상을 분기하지 않도록).
+   * 없는 아이템은 `[]`다(`undefined` 아님 — 매처가 두 경우를 따로 처리하지 않도록).
    *
    * **선택 필드**로 둔다(required 금지) — `ItemInstance` 인라인 리터럴을 다수 테스트 픽스처가
    * 흩어서 구성하므로 required면 전 리터럴 컴파일이 깨진다(`CreatureInstance.experience` 선례).
    *
-   * 소비자는 #120 study 대상 해소다. 아이템 해소자 자체는 아직 미배선이며(스펙 §4 결정),
+   * 소비자는 #120 study 대상 해석이다. 아이템 리졸버 자체는 아직 미연결이며(스펙 §4 결정),
    * 대상 매처가 타입 무관이라 #120이 그대로 재사용한다.
    */
   keys?: string[]
@@ -68,13 +68,13 @@ export type ItemInstance = {
 }
 
 /**
- * 라이브 크리처 인스턴스 — 크리처 템플릿(또는 방 embedded 몬스터)을 부팅/스폰 시 물질화한
+ * 라이브 크리처 인스턴스 — 몬스터 템플릿(또는 방 embedded 몬스터)을 부팅/스폰 시 인스턴스로 생성한
  * 런타임 객체. `instanceId`는 디스크에 저장되지 않는 고유 id다(non-durable, ItemInstance 선례).
  *
  * 두 출처(server `creatureFactory`):
  *   (a) 방 embedded 몬스터 — 방 파일에 박힌 완전한 creature 구조체(빌더 커스터마이즈).
- *       `templateId=null`(템플릿 링크 없음, 인라인 데이터로 물질화).
- *   (b) 템플릿 번호 — `creatures.json`을 id로 조회해 물질화(perm/random 스폰·MSUMMO 소환용).
+ *       `templateId=null`(템플릿 링크 없음, 인라인 데이터로 인스턴스 생성).
+ *   (b) 템플릿 번호 — `creatures.json`을 id로 조회해 인스턴스 생성(perm/random 스폰·MSUMMO 소환용).
  *       `templateId`=조회한 템플릿 id.
  *
  * 라이브 가변 필드(hpcur·mpcur·`nextActionAt`·`lastRegenAt`·enemies)는 tick/전투가 in-place
@@ -98,7 +98,7 @@ export type CreatureInstance = {
    * 전투 스탯(콘텐츠, 불변) — cross-topic creature-spawn 필드 확장(`enemies` 선례). 스펙 §3.2
    * monster operand 실현: E6 전투 해석이 armor(AC)·thaco(공격표)·ndice/sdice/pdice(피해 굴림
    * N d S + P)를 읽는다. 소스 JSON(creatures.json / rooms.json `monsters[]`, port templates.js
-   * 오프셋 340/341/352/354/356)에 이미 존재하며 물질화 시점에 옮긴다 — embedded 몬스터는
+   * 오프셋 340/341/352/354/356)에 이미 존재하며 인스턴스 생성 시점에 옮긴다 — embedded 몬스터는
    * `templateId=null`이라 재조회가 불가능하기 때문이다. armor·thaco는 부호 있는 정수 가능.
    */
   armor: number
@@ -108,15 +108,15 @@ export type CreatureInstance = {
   pdice: number
   /**
    * 마법 시전 읽기 필드(콘텐츠, 불변) — magic 에픽(#84)이 몬스터 주문 시전 판정에 읽는다. 소스
-   * JSON(creatures.json / rooms.json `monsters[]`)에 이미 존재하며 물질화 시점에 옮긴다 —
+   * JSON(creatures.json / rooms.json `monsters[]`)에 이미 존재하며 인스턴스 생성 시점에 옮긴다 —
    * embedded 몬스터는 `templateId=null`이라 재조회가 불가능하기 때문이다(combat 스탯 선례).
    *
-   *   - `realm`: magic realm별 숙련 누적 경험치(길이 4). 정본 값은 전 몬스터 0이다 — port
+   *   - `realm`: magic realm별 숙련 누적 경험치(길이 4). 기준 값은 전 몬스터 0이다 — port
    *     templates.js가 offset 380 realm을 오프셋 테이블에 정의만 하고 readCrt 리더가 추출하지
-   *     않아 소스 JSON에 없으므로, 물질화가 상수 [0,0,0,0]으로 설정한다(추출 결과와 byte-identical).
-   *     realm 성장 write(`addrealm`)·실 추출은 #85 소관. 여기선 read-only.
+   *     않아 소스 JSON에 없으므로, 인스턴스 생성이 상수 [0,0,0,0]으로 설정한다(추출 결과와 byte-identical).
+   *     realm 성장 write(`addrealm`)·실 추출은 #85 담당. 여기선 read-only.
    *   - `spells`: 보유 주문 비트셋(16바이트 = 32 hex chars, creatures.json과 동일 hex 표현).
-   *     `S_ISSET` 판독용. 빈 hex('0'×32)는 "주문 없음". 학습 write는 없다(read-only).
+   *     `S_ISSET` 읽기용. 빈 hex('0'×32)는 "주문 없음". 학습 write는 없다(read-only).
    *   - `class`·`intelligence`·`piety`: 시전 성공·주문 위력 판정 입력(직업·지능·신앙심).
    */
   realm: readonly number[]
@@ -125,42 +125,42 @@ export type CreatureInstance = {
   intelligence: number
   piety: number
   /**
-   * 사망 분배 읽기 필드(콘텐츠, 불변) — Story 7 사망 처리가 킬 경험치 분배·정렬(alignment) 변동에
+   * 사망 분배 읽기 필드(콘텐츠, 불변) — Story 7 사망 처리가 킬 경험치 분배·성향(alignment) 변동에
    * 읽는다. armor/thaco/realm 선례처럼 소스 JSON(creatures.json / rooms.json `monsters[]`, port
-   * templates.js CRT 오프셋 experience=344·alignment=324)에 이미 존재하며 물질화 시점에 옮긴다 —
+   * templates.js CRT 오프셋 experience=344·alignment=324)에 이미 존재하며 인스턴스 생성 시점에 옮긴다 —
    * embedded 몬스터는 `templateId=null`이라 재조회가 불가능하기 때문이다.
    *
    * **선택 필드**로 둔다(required 금지) — `CreatureInstance` 인라인 리터럴을 다수 테스트 픽스처가
    * 흩어서 구성하므로 required면 전 리터럴 컴파일이 깨진다(befuddledUntil/charmedUntil 선택 필드 관례,
-   * blast-radius 회피). 소스 JSON은 항상 두 키를 보유하므로 물질화가 실값을 채운다(experience/alignment는
+   * blast-radius 회피). 소스 JSON은 항상 두 키를 보유하므로 인스턴스 생성이 실값을 채운다(experience/alignment는
    * 부호 있는 정수 가능 — alignment는 선/악 축이라 음수 유효).
    *
-   *   - `experience`: 몬스터 처치 시 분배할 경험치(정본 값, read-only).
-   *   - `alignment`: 정렬 값(선/악 축). 처치 시 플레이어 alignment 변동 판정 입력.
+   *   - `experience`: 몬스터 처치 시 분배할 경험치(기준 값, read-only).
+   *   - `alignment`: 성향 값(선/악 축). 처치 시 플레이어 alignment 변동 판정 입력.
    */
   experience?: number
   alignment?: number
   /**
    * 이름 매칭용 별칭(콘텐츠, 불변) — 원본 `char key[3][20]`을 위생 처리한 배열. `experience`·
    * `alignment` 선례처럼 소스 JSON(creatures.json / rooms.json `monsters[]`, port `templates.js`
-   * CRT 오프셋 255)에 이미 존재하며 물질화 시점에 옮긴다(배선은 Story 4 — 이 선언 시점엔 값이
+   * CRT 오프셋 255)에 이미 존재하며 인스턴스 생성 시점에 옮긴다(연결은 Story 4 — 이 선언 시점엔 값이
    * 흐르지 않는다) — embedded 몬스터는 `templateId=null`이라 재조회가 불가능하기 때문이다.
    * 빈 슬롯·공백 전용 슬롯은 리더가 드롭하므로 별칭이 없는
-   * 크리처는 `[]`다(`undefined` 아님 — 매처가 두 형상을 분기하지 않도록).
+   * 몬스터는 `[]`다(`undefined` 아님 — 매처가 두 경우를 따로 처리하지 않도록).
    *
    * **선택 필드**로 둔다(required 금지) — `CreatureInstance` 인라인 리터럴을 다수 테스트 픽스처가
    * 흩어서 구성하므로 required면 전 리터럴 컴파일이 깨진다(experience/alignment 선례).
    *
-   * 소비자는 방 스코프 크리처 해소자(대상 이름 매칭)다. 매처는 `name`과 `keys` 전 원소를 순수
+   * 소비자는 방 스코프 크리처 리졸버(대상 이름 매칭)다. 매처는 `name`과 `keys` 전 원소를 순수
    * 접두로 검사하므로 `keys` 미보유 후보도 `name` 단독으로 매칭된다.
    */
   keys?: string[]
   flags: string
   enemies: string[]
   /**
-   * 크리처가 보유한 아이템(라이브 가변). 부팅 시 빈 배열이며 scavenge(A9 §3.3)가 바닥 아이템을
+   * 몬스터가 보유한 아이템(라이브 가변). 부팅 시 빈 배열이며 scavenge(A9 §3.3)가 바닥 아이템을
    * 여기로 옮긴다. Story 5 사망 시 바닥 드롭의 출처가 된다. embedded 몬스터의 초기 인벤토리
-   * 물질화는 별도(아이템 에픽) 소관이라 여기선 scavenge 회수분만 담는다.
+   * 인스턴스 생성은 별도(아이템 에픽) 담당이라 여기선 scavenge 회수분만 담는다.
    */
   inventory: ItemInstance[]
   /** 다음 autonomic/전투 행동 도래 실초 시각. Story 3 next-action 큐가 세팅. */
@@ -174,19 +174,19 @@ export type CreatureInstance = {
   /**
    * 혼동(MBEFUD) 만료 실초 시각(LT_BEFUD 도래시각). E6 전투/주문이 미래 시각으로 세팅한다. 미설정은
    * "활성 혼동 없음"(오라클 LT_BEFUD=0=과거)이라, autonomic이 MBEFUD 비트를 스크럽한다 — 스폰 시 on-disk
-   * MBEFUD stale 비트(예 화룡)를 첫 처리에서 정리한다(오라클 update.c:258 무가드). 능동 효과는 E6 소관.
+   * MBEFUD stale 비트(예 화룡)를 첫 처리에서 정리한다(오라클 update.c:258 무가드). 능동 효과는 E6 담당.
    */
   befuddledUntil?: number
   /**
    * 매혹(MCHARM) 만료 실초 시각(LT_CHRMD 도래시각). E6 주문이 미래 시각으로 세팅한다. 미설정은 "활성 매혹
    * 없음"(LT_CHRMD=0=과거)이라 autonomic이 MCHARM을 스크럽한다 — 스폰 시 on-disk stale 비트(초향·모래괴물·
-   * 해적)를 정리한다(오라클 update.c:277). 능동 효과는 E6 소관.
+   * 해적)를 정리한다(오라클 update.c:277). 능동 효과는 E6 담당.
    */
   charmedUntil?: number
 }
 
 /**
- * perm 스폰 슬롯 — 방 구조체 `lasttime perm_mon[10]`의 런타임 표현. `misc`는 스폰할 몹번호,
+ * perm 스폰 슬롯 — 방 구조체 `lasttime perm_mon[10]`의 런타임 표현. `misc`는 스폰할 몬스터 번호,
  * `interval`은 리스폰 지연 초, `ltime`은 마지막 스폰/사망 실초 시각(라이브 가변 — exit ltime과
  * 동형). Story 4가 `ltime+interval ≤ now` 슬롯을 입장 시 lazy 리스폰하고, Story 5가 사망 시
  * `ltime = now`로 리셋한다.
@@ -201,13 +201,13 @@ export type PermMonSlot = {
  * 방 그래프 노드. 그래프 탐색·표시에 필요한 필드만 담는다(모든 raw 필드를 옮기지 않음).
  * raw의 short_desc/long_desc를 shortDesc/longDesc로 매핑한다.
  *
- * `flags`는 64비트 raw 방 flags를 8바이트 number[]로 그대로 보존한다(oracle a4 §117 —
+ * `flags`는 64비트 raw 방 flags를 8바이트 number[]로 그대로 보존한다(오라클 a4 §117 —
  * 이동/마법/상점/전투 서브시스템이 이 플래그를 읽으므로 방이 전부 운반해야 한다). 불변.
  * `occupants`는 방에 있는 캐릭터의 characterId 집합으로 라이브 가변이다. shared는
  * server의 ActorContext를 import할 수 없으므로 원소 타입은 string(characterId)이다.
  *
- * 스폰 필드: `creatures`는 방의 라이브 크리처 배열(가변 — 스폰 push·사망 제거), `permMon`은
- * perm 스폰 슬롯 배열(각 슬롯 ltime 가변), `random`은 랜덤 스폰 몹번호 후보(길이 10, 불변),
+ * 스폰 필드: `creatures`는 방의 라이브 몬스터 배열(가변 — 스폰 push·사망 제거), `permMon`은
+ * perm 스폰 슬롯 배열(각 슬롯 ltime 가변), `random`은 랜덤 스폰 몬스터 번호 후보(길이 10, 불변),
  * `traffic`은 스폰/배회 확률(불변).
  */
 export type RoomNode = {
@@ -235,16 +235,16 @@ export type DirectionHints = {
   other: ExitEdge[]
 }
 
-/** 기본 6방향 출구명 집합(oracle a3 §2-1 방향 매핑표: 동/서/남/북/위/밑). */
+/** 기본 6방향 출구명 집합(오라클 a3 §2-1 방향 매핑표: 동/서/남/북/위/밑). */
 const CARDINAL_NAMES: ReadonlySet<string> = new Set(['동', '서', '남', '북', '위', '밑'])
 
 /**
  * 방 출구를 기본 6방향(cardinal)과 명명/대각(other)으로 분류하는 파생 순수 함수.
  *
- * 노드 필드로 물질화하지 않는 on-demand 조회다 — 방향은 간선 라벨일 뿐이고 무한의
- * 월드에는 좌표(x/y/z)가 없으므로(oracle a4 §7) 좌표를 합성하지 않는다. 대각 출구
+ * 노드 필드로 만들어 두지 않는 on-demand 조회다 — 방향은 간선 라벨일 뿐이고 무한의
+ * 월드에는 좌표(x/y/z)가 없으므로(오라클 a4 §7) 좌표를 합성하지 않는다. 대각 출구
  * (남서 등)는 라이브에서 전체 단어 입력으로만 도달 가능한 별칭 없는 명명 출구이므로
- * (oracle a3 §2-2, numpad/jamo 대각 정규화는 죽은 코드) 기본 6축이 아니라 other로 둔다.
+ * (오라클 a3 §2-2, numpad/jamo 대각 정규화는 죽은 코드) 기본 6축이 아니라 other로 둔다.
  * 밖(out)도 6방향 축이 아니므로 other다.
  *
  * 부수효과·전역 상태 없음. 입력 room을 변형하지 않고 새 배열을 반환한다.

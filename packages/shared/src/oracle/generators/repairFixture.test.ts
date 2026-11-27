@@ -66,7 +66,7 @@ describe('buildCases — anti-tautology 앵커 (repair)', () => {
     expect(cases[5]?.expected).toEqual({ broken: false, cost: 25, newShotscur: 40 })
   })
 
-  it('내구도 trunc 트랩 앵커: floor(85*7/10)=59 (곱 위에서 절삭, 85*floor(7/10)=0 아님)', () => {
+  it('내구도 trunc 트랩 앵커: floor(85*7/10)=59 (곱한 뒤 버림, 85*floor(7/10)=0 아님)', () => {
     expect(buildCases()[6]?.expected).toEqual({ broken: false, cost: 25, newShotscur: 59 })
   })
 

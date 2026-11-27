@@ -13,13 +13,13 @@ worktree 간 캐시 공유는 우연이나 오염이 아니라 **turbo가 의도
 
 Turborepo는 **global hash**와 **task hash** 두 개를 만들고 둘 중 하나만 바뀌어도 cache miss가 난다 ([Caching](https://turborepo.dev/docs/crafting-your-repository/caching)).
 
-**Global hash 입력** — 루트·패키지 `turbo.json`의 해소된 태스크 정의, 워크스페이스 루트에 영향을 주는 lockfile 변경, **루트 `package.json`이 (전이적으로) 의존하는 내부 패키지의 소스**, `globalDependencies`에 나열된 파일 내용, `globalEnv` 변수 값, 런타임에 영향을 주는 플래그, passthrough 인자.
+**Global hash 입력** — 루트·패키지 `turbo.json`의 해석된 태스크 정의, 워크스페이스 루트에 영향을 주는 lockfile 변경, **루트 `package.json`이 (전이적으로) 의존하는 내부 패키지의 소스**, `globalDependencies`에 나열된 파일 내용, `globalEnv` 변수 값, 런타임에 영향을 주는 플래그, passthrough 인자.
 
 **Package hash 입력** — 패키지 자신의 `turbo.json`, 그 패키지에 영향을 주는 lockfile 변경, 패키지 `package.json`, 그리고 **기본적으로 패키지 디렉터리 안의 source-controlled 파일 전부**(`inputs`로 조정).
 
 핵심은 마지막 줄이다. 패키지 해시는 **자기 디렉터리 안**만 본다. 따라서 `dependsOn`이 비어 있으면 상위 패키지의 소스 변경은 하위 패키지 태스크의 해시에 어떤 경로로도 들어가지 않는다. 루트에 있는 설정 파일(`eslint.config.js`, `tsconfig.base.json`)도 어느 패키지 디렉터리에도 속하지 않으므로 `globalDependencies`에 명시하지 않는 한 해시 밖이다.
 
-## 2. type-check·lint의 정본 처방 — Transit Node
+## 2. type-check·lint의 기준 처방 — Transit Node
 
 공식 문서는 우리 상황을 그대로 다룬다 ([Configuring Tasks §Dependent tasks that can be run in parallel](https://turborepo.dev/docs/crafting-your-repository/configuring-tasks)):
 
@@ -101,7 +101,7 @@ client:lint:        cache hit, replaying logs cb02917d575c1f16
 - 이 저장소는 `paths`로 `shared/src`를 직접 참조하므로 `^build`는 불필요하다 — `dist`를 읽지 않는다.
 - worktree 캐시 공유는 turbo 2.x의 의도된 기능(PR #11416)이다. 끄는 방법은 `cacheDir` 명시이며, 이는 해시 결함을 고치는 게 아니라 관측을 막는 완화책이다.
 - 이슈 #126이 적지 않은 두 번째 구멍이 있다 — 루트 `eslint.config.js`·`tsconfig.base.json`이 `globalDependencies` 미설정으로 해시 밖이다. `dependsOn` 수정만으로는 닫히지 않는다.
-- 진단 도구가 존재한다: `turbo run <task> --summarize`가 태스크별 해시 입력 전체를 덤프하고, 두 summary 비교로 "왜 해시가 같은가"를 규명할 수 있다. 완료 조건의 재현 테스트를 이 위에 세울 수 있다.
+- 진단 도구가 존재한다: `turbo run <task> --summarize`가 태스크별 해시 입력 전체를 덤프하고, 두 summary 비교로 "왜 해시가 같은가"를 분석할 수 있다. 완료 조건의 재현 테스트를 이 위에 세울 수 있다.
 
 ## Sources
 

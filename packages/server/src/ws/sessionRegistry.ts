@@ -12,7 +12,7 @@ import type { ConnectionContext } from './connection.js'
  * 구성 단계다(아무도 아직 관찰하지 않으므로 공유 변이가 아니다). 이 때문에 `graceTimer`만 `readonly`가 아니다.
  *
  * **ABA-safe identity 가드**: stale 판별의 1차 불변식은 객체 identity(`get(characterId) === binding`)다.
- * grace 타이머·close 리스너는 자신을 스케줄한 시점의 바인딩 객체 참조를 캡처하고, 발화 시 이 identity를
+ * grace 타이머·close 리스너는 자신을 스케줄한 시점의 바인딩 객체 참조를 캡처하고, 실행 시 이 identity를
  * 재확인한다. rebind/markLinkDead가 새 객체로 교체하므로 옛 객체를 캡처한 트리거는 identity 불일치로 no-op이다.
  */
 
@@ -21,17 +21,17 @@ export type LinkState = 'live' | 'link-dead'
 
 /**
  * 종결 사유 — `register`의 evict-old가 쓰는 `evictedByNewLogin`(같은 캐릭터 재로그인)과, Story 4/5가 채우는
- * grace 만료·idle 종료 사유. `shutdown`은 Story 5/6의 서버 종료 일괄 수렴이 전체 바인딩을 종결할 때 쓴다.
+ * grace 만료·idle 종료 사유. `shutdown`은 Story 5/6의 서버 종료 일괄 정리가 전체 바인딩을 종결할 때 쓴다.
  * Story 3의 `register`는 `evictedByNewLogin`만 발생시킨다.
  */
 export type DisconnectReason = 'evictedByNewLogin' | 'graceExpired' | 'idleTimeout' | 'shutdown'
 
-/** 등록된 기존 엔트리를 종결하는 주입 콜백. Story 4의 `resolveDisconnect`가 이 형태로 배선된다. */
+/** 등록된 기존 엔트리를 종결하는 주입 콜백. Story 4의 `resolveDisconnect`가 이 형태로 연결된다. */
 export type TerminateCallback = (existing: SessionBinding, reason: DisconnectReason) => void
 
 /**
  * link-dead 진입 시 grace 타이머를 거는 주입 콜백. 새 link-dead 바인딩 객체를 인자로 받아(그 객체를 캡처해
- * 만료 시 identity 판정 기준으로 삼는다) 타이머 핸들을 반환한다. Story 5가 fake clock 지원 setTimeout으로 배선한다.
+ * 만료 시 identity 판정 기준으로 삼는다) 타이머 핸들을 반환한다. Story 5가 fake clock 지원 setTimeout으로 연결한다.
  */
 export type ScheduleGraceCallback = (deadBinding: SessionBinding) => NodeJS.Timeout
 
@@ -146,8 +146,8 @@ export function createSessionRegistry(opts: SessionRegistryOptions = {}): Sessio
 
   /**
    * 등록된 모든 바인딩(live·link-dead 무관)의 materialized 스냅샷 복사본을 반환한다. link-dead도
-   * armed grace 타이머 + 미저장 세션을 쥐고 있어 shutdown 수렴 대상이므로 필터링하지 않는다. 라이브 뷰가
-   * 아닌 복사본이라, 수렴이 이 배열을 순회하며 각 바인딩에 resolveDisconnect(→ index.remove)를 호출해도
+   * armed grace 타이머 + 미저장 세션을 쥐고 있어 shutdown 일괄 종료 대상이므로 필터링하지 않는다. 라이브 뷰가
+   * 아닌 복사본이라, 일괄 종료가 이 배열을 순회하며 각 바인딩에 resolveDisconnect(→ index.remove)를 호출해도
    * 순회 중 변이 위험이 없다.
    */
   function listBindings(): readonly SessionBinding[] {

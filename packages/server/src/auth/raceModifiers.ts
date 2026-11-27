@@ -4,7 +4,7 @@
  * a7 오라클 §7(command1.c:338~)의 8종족 생성 시 스탯 보정을 [힘,민첩,맷집,지식,신앙심] 순서로
  * 이식한다 — 이 순서는 characterSchema.stats 튜플 순서와 동일하다. 종족 코드(1~8)는 오라클 RACE 상수다.
  *
- * server E5 코드에 둔다(shared/stats가 아니라) — #80 stats-core의 병합 표면과 분리한다. DTO가 raw
+ * server E5 코드에 둔다(shared/stats가 아니라) — #80 stats-core의 병합 인터페이스와 분리한다. DTO가 raw
  * 포인트바이 스탯 + 종족 코드를 나르고, Character 문서를 조립하는 지점(firebase 어댑터 createCharacter)에서
  * 이 헬퍼로 저장할 최종 스탯을 만든다.
  */

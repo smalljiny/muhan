@@ -15,26 +15,26 @@ import type { SpellDispatch } from './dispatch.js'
  * ## 세 handler 셰이프 (핸들러 타입 이질성 — Story 6 rationale, 단일 타입 강제 금지)
  * 즉발 16주문은 데이터 홈이 셋으로 갈린다 — 억지 통일 대신 handler 타입으로 분할한다:
  *   - **report(InstantEffectHandler → InstantOutcome)**: 회복 5 + 즉발 seam 8 = 13. 회복은 hp(라이브
- *     combat)를, seam은 room/item/world를 건드리므로 실 write를 유예하고 pure-report한다(Story 8 debuff
+ *     combat)를, seam은 room/item/world를 건드리므로 실 write를 보류하고 pure-report한다(Story 8 debuff
  *     선례). 회복량은 caster 파생(int/piety/class/level/rng)이라 target hp를 읽지 않는다.
  *   - **cure(CureEffectHandler → Character)**: statusEffects 해제 3(SCUREP/SRMDIS/SRMBLD). statusEffects는
  *     Character에 영속하므로(combat Combatant엔 없음) Character→Character 순수 변환이다(buffEffects 셰이프).
  * 두 셰이프는 반환 타입이 달라 **각자 SpellDispatch 인스턴스**에 등록한다(offensive/buff/debuff 재사용 금지).
  *
- * ## 회복 = pure-report HealOutcome (hpmax 미read, in-place write 유예)
+ * ## 회복 = pure-report HealOutcome (hpmax 미read, in-place write 보류)
  * PlayerCombatState에 hpMax 필드가 없어 완치(hpcur=hpmax)를 amount로 환산할 수 없다 — SFHEAL은 toFull=true
  * 변형으로 보고하고(오라클 `hpcur=hpmax` 리터럴 충실), 나머지는 healed 스칼라를 보고한다. 실 hp write·hpmax
  * clamp는 소비처가 담당한다(Story 11 몬스터 self-cast는 creature.hpmax로 clamp) — combatant.ts를 건드리지 않는다.
  *
- * ## 마나 미소비 (gate.ts 소관)
+ * ## 마나 미소비 (gate.ts 담당)
  * A6 §2 마나값(vigor 2·mend 4·heal 20·rm_disease 12 …)은 시전 게이트(gate.ts S4)가 소비한다. 이 모듈은
  * effect 전용이라 caster.mpCurrent를 감소시키지 않는다(offensiveSpell·buffEffects 선례). restore의 마나
  * **회복**(mrand(1,100)<60 → mpmax)은 effect라 restoredMana로 보고한다(게이트 소비와 별개).
  *
- * ## 즉발 seam (#106 live-wiring 유예)
+ * ## 즉발 seam (#106 live-wiring 보류)
  * teleport/recall/summon(room 이동)·enchant/object_send(item)·track/locate_player(world query)·
  * remove_curse(item OCURSE + PFEARS)는 라이브 command/world write가 필요해 범위 밖(#106/#86)이다. effect의
- * 의도만 { kind:'seam', effect } 라벨로 보고하고 실 write를 유예한다(DebuffOutcome defer-write 선례).
+ * 의도만 { kind:'seam', effect } 라벨로 보고하고 실 write를 보류한다(DebuffOutcome defer-write 선례).
  * remove_curse는 catalog cure family지만 statusEffects(poison/disease/blind) 어느 필드도 아닌 item OCURSE·
  * PFEARS를 해제하므로 cure 3(필드 해제)이 아닌 seam으로 분류한다(A6 §6 즉발, magic6.c:216).
  */
@@ -53,7 +53,7 @@ export type HealOutcome =
 /**
  * InstantOutcome — report dispatch(회복 + seam) 반환. kind로 자기표현한다:
  *   - 'heal': HealOutcome(회복량·완치·마나회복).
- *   - 'seam': #106/#86 유예 즉발의 의도 라벨(teleport/recall/…/remove_curse).
+ *   - 'seam': #106/#86 보류 즉발의 의도 라벨(teleport/recall/…/remove_curse).
  */
 export type InstantOutcome =
   | { readonly kind: 'heal'; readonly heal: HealOutcome }
@@ -93,7 +93,7 @@ export type InstantEffectHandler = (req: InstantEffectRequest) => InstantOutcome
 /** cure effect 핸들러 형태 — 대상 Character의 statusEffects 필드를 해제한 새 Character를 반환한다. */
 export type CureEffectHandler = (character: Character) => Character
 
-// ── 회복량 산술 (A6 §2, magic2-8.c 전사) ──────────────────────────────────────
+// ── 회복량 산술 (A6 §2, magic2-8.c에서 옮겨 적음) ──────────────────────────────────────
 
 /** L4 = trunc((level+3)/4) — 클래스 보너스·굴림 상한 스케일(오라클 `(level+3)/4` 정수 나눗셈). */
 function l4Of(level: number): number {
@@ -159,7 +159,7 @@ function restoreHeal(req: InstantEffectRequest): HealOutcome {
 /**
  * room_vigor(SRVIGO) 회복량 — magic8.c:52-56. heal = mrand(1,6) + bonus[piety]; RPMEXT 방이면 += mrand(1,3).
  * 오라클은 방 전체 플레이어에 이 heal을 적용한다(AOE) — per-target 회복량만 보고하고 방 fan-out은
- * 라이브 배선(#106)이 소비한다. MAX(1) 없음(오라클 미적용).
+ * 라이브 연결(#106)이 소비한다. MAX(1) 없음(오라클 미적용).
  */
 function roomVigorHeal(req: InstantEffectRequest): number {
   const rng = req.ctx.rng
@@ -177,7 +177,7 @@ const scalarHeal =
   (fn: (req: InstantEffectRequest) => number): InstantEffectHandler =>
   (req) => ({ kind: 'heal', heal: { toFull: false, healed: fn(req) } })
 
-/** seam — #106/#86 유예 즉발 핸들러 팩토리. effect 라벨만 다른 8개 핸들러의 반복을 순수 data로 접는다. */
+/** seam — #106/#86 보류 즉발 핸들러 팩토리. effect 라벨만 다른 8개 핸들러의 반복을 순수 data로 접는다. */
 const seam =
   (effect: SeamEffect): InstantEffectHandler =>
   () => ({ kind: 'seam', effect })

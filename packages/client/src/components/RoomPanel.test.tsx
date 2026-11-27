@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { makeRoom } from '../test/roomFixtures.testutil'
+import { applyPresence, type PresenceEvent } from '../transport/presence'
 import { RoomPanel } from './RoomPanel'
 
 // 방 픽스처는 test/roomFixtures.testutil의 makeRoom을 그대로 쓴다 — 전송 계층 테스트와 같은
@@ -86,6 +87,29 @@ describe('RoomPanel', () => {
     expect(onMove).toHaveBeenCalledWith('동')
   })
 
+  it('disables every exit button and ignores clicks when disabled', async () => {
+    const user = userEvent.setup()
+    const onMove = vi.fn()
+    render(<RoomPanel room={makeRoom()} selfCharacterId={null} onMove={onMove} disabled />)
+
+    const north = screen.getByRole('button', { name: '북' })
+    const east = screen.getByRole('button', { name: '동' })
+    expect(north).toBeDisabled()
+    expect(east).toBeDisabled()
+
+    await user.click(north)
+    await user.click(east)
+
+    expect(onMove).not.toHaveBeenCalled()
+  })
+
+  it('keeps exit buttons enabled when disabled is omitted', () => {
+    render(<RoomPanel room={makeRoom()} selfCharacterId={null} onMove={vi.fn()} />)
+
+    expect(screen.getByRole('button', { name: '북' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '동' })).toBeEnabled()
+  })
+
   it('labels exit buttons with the exit name only — no lock or door state (OQ3)', () => {
     render(<RoomPanel room={makeRoom()} selfCharacterId={null} onMove={vi.fn()} />)
 
@@ -112,5 +136,70 @@ describe('RoomPanel', () => {
 
     expect(container.querySelector('script')).toBeNull()
     expect(screen.getByText(payload)).toBeInTheDocument()
+  })
+
+  describe('notices', () => {
+    // world:presence 픽스처 — 대상은 makeRoom() 점유자(c1)와 다른 c2다.
+    function presence(change: PresenceEvent['change'], name = '개발전사'): PresenceEvent {
+      return {
+        type: 'world:presence',
+        roomId: 1,
+        subject: { kind: 'player', characterId: 'c2', name },
+        change,
+      }
+    }
+
+    it('renders notices in order under the 알림 list', () => {
+      const notices = ['개발전사님이 도착하였습니다.', '개발전사님이 북쪽으로 갔습니다.']
+      render(<RoomPanel room={makeRoom({ notices })} selfCharacterId="c1" onMove={vi.fn()} />)
+
+      const items = within(screen.getByLabelText('알림'))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent)
+      expect(items).toEqual(notices)
+    })
+
+    it('renders repeated identical notices as separate items', () => {
+      // 같은 문장이 반복될 수 있다(같은 사람이 들락날락) — 둘 다 보여야 한다.
+      const notices = ['개발전사님이 도착하였습니다.', '개발전사님이 도착하였습니다.']
+      render(<RoomPanel room={makeRoom({ notices })} selfCharacterId="c1" onMove={vi.fn()} />)
+
+      expect(within(screen.getByLabelText('알림')).getAllByRole('listitem')).toHaveLength(2)
+    })
+
+    it('omits the notices list when there are no notices', () => {
+      render(<RoomPanel room={makeRoom({ notices: [] })} selfCharacterId="c1" onMove={vi.fn()} />)
+
+      expect(screen.queryByLabelText('알림')).not.toBeInTheDocument()
+    })
+
+    it('renders a notice with a markup name as text only', () => {
+      const room = applyPresence(
+        makeRoom({ notices: [] }),
+        presence({ change: 'entered', announce: true }, '<b>x</b>'),
+      )
+      const { container } = render(<RoomPanel room={room} selfCharacterId="c1" onMove={vi.fn()} />)
+
+      expect(container.querySelector('b')).toBeNull()
+      expect(
+        within(screen.getByLabelText('알림')).getByText('<b>x</b>님이 도착하였습니다.'),
+      ).toBeInTheDocument()
+    })
+
+    it('drops an exited occupant from people without adding a notice', () => {
+      const start = makeRoom({
+        occupants: [
+          { characterId: 'c1', name: '타이' },
+          { characterId: 'c2', name: '개발전사' },
+        ],
+        notices: [],
+      })
+      const room = applyPresence(start, presence({ change: 'exited', announce: false }))
+      render(<RoomPanel room={room} selfCharacterId="c1" onMove={vi.fn()} />)
+
+      expect(screen.queryByText('개발전사')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('사람')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('알림')).not.toBeInTheDocument()
+    })
   })
 })

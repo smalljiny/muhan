@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { FakeClock } from './clock.testutil.js'
 
 /**
- * 공유 FakeClock의 계약 검증 — save·heartbeat 테스트가 이 더블에 의존하므로 노출 표면
+ * 공유 FakeClock의 계약 검증 — save·heartbeat 테스트가 이 더블에 의존하므로 노출 인터페이스
  * (tick·activeCount·lastMs·clearInterval)의 동작을 단위로 고정한다.
  */
 describe('FakeClock', () => {

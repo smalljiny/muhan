@@ -85,7 +85,7 @@ describe('createConnectionQuota', () => {
 
     expect(quota.reserve('a')).toEqual({ ok: true })
     quota.release('a')
-    quota.release('a') // 이중 배선(abort-close + ws-close) 중복 release 시뮬레이션
+    quota.release('a') // 이중 연결(abort-close + ws-close) 중복 release 시뮬레이션
 
     // 정확 복원이면 per-account 여유=2. a 2개까지만 성공하고 3번째는 429.
     expect(quota.reserve('a')).toEqual({ ok: true })
@@ -108,7 +108,7 @@ describe('createConnectionQuota', () => {
   })
 
   it('한 번도 reserve하지 않은 계정의 release는 no-op이다', () => {
-    // 부재 계정 release가 음수로 새면 후속 정원 회계가 틀어진다.
+    // 없는 계정의 release가 음수로 새면 후속 정원 회계가 틀어진다.
     const quota = makeQuota(1, 1)
 
     quota.release('ghost') // 존재한 적 없는 계정

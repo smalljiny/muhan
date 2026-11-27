@@ -13,7 +13,7 @@ import { createDamageLedger } from '../combat/enmity.js'
 /**
  * realmGrowthAmount 단위 테스트 — realm 숙련 성장량 순수식(magic1.c:1122-1130, A6 §5).
  *   addrealm = MIN(trunc((m*exp)/MAX(1,hpmax)), exp)
- * delta(number)만 반환한다(deathDistribution expdiv 선례 충실). PvE 가드·realm 슬롯 적용은 호출자·#99 소관.
+ * delta(number)만 반환한다(deathDistribution expdiv 선례 충실). PvE 가드·realm 슬롯 적용은 호출자·#99 담당.
  */
 describe('realmGrowthAmount — realm 성장량 공식', () => {
   it('growth=MIN(trunc(m*exp/hpmax), exp)', () => {
@@ -21,7 +21,7 @@ describe('realmGrowthAmount — realm 성장량 공식', () => {
     expect(realmGrowthAmount(15, 100, 30)).toBe(50)
   })
 
-  it('trunc 절삭(정수 나눗셈)', () => {
+  it('trunc 버림(정수 나눗셈)', () => {
     // m=7, exp=10, hpmax=30 → 2.33 → trunc 2.
     expect(realmGrowthAmount(7, 10, 30)).toBe(2)
   })
@@ -108,15 +108,15 @@ describe('체크인된 addrealm.json 골든 fixture', () => {
     return result.data as Parameters<typeof approve>[0]
   }
 
-  it('goldenFixtureSchema를 통과하고 manual oracle이다', () => {
+  it('goldenFixtureSchema를 통과하고 manual 오라클이다', () => {
     const fixture = loadFixture()
     expect(fixture.oracle.method).toBe('manual')
     expect(fixture.cases.length).toBeGreaterThan(0)
   })
 
   it('approve가 realmGrowthAmount SUT로 전 케이스를 throw 없이 통과한다', () => {
-    // anti-tautology: fixture expected는 addRealmFixture.ts의 magic1.c 독립 전사(oracleRealmGrowth),
-    // SUT는 realmGrowth.ts realmGrowthAmount. 두 전사가 diff되면 approve가 throw한다.
+    // anti-tautology: fixture expected는 addRealmFixture.ts의 magic1.c를 독립적으로 옮겨 적은 것(oracleRealmGrowth),
+    // SUT는 realmGrowth.ts realmGrowthAmount. 옮겨 적은 두 코드가 diff되면 approve가 throw한다.
     const fixture = loadFixture()
     const sut = (input: unknown): unknown => {
       const inp = input as RealmGrowthCaseInput

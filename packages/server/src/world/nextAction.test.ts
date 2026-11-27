@@ -44,12 +44,12 @@ describe('cadenceSec — 민첩 연동 공격 주기(A9 §7 LT_ATTCK)', () => {
 })
 
 describe('scheduleNextAction — nextActionAt = now + cadence(dex)', () => {
-  it('민첩<20 크리처는 now+3으로 스케줄된다', () => {
+  it('민첩<20 몬스터는 now+3으로 스케줄된다', () => {
     const c = makeCreature('1:c0', 14)
     scheduleNextAction(c, 100)
     expect(c.nextActionAt).toBe(103)
   })
-  it('민첩>=20 크리처는 now+2로 스케줄된다', () => {
+  it('민첩>=20 몬스터는 now+2로 스케줄된다', () => {
     const c = makeCreature('1:c0', 22)
     scheduleNextAction(c, 100)
     expect(c.nextActionAt).toBe(102)

@@ -88,7 +88,7 @@ describe('projectEquipStats', () => {
     expect(result.weaponAdjustment).toBe(3)
   })
 
-  it('weaponProficiency 인자를 그대로 투영한다(빈 배열에서도)', () => {
+  it('weaponProficiency 인자를 그대로 변환한다(빈 배열에서도)', () => {
     const result = projectEquipStats([], 77)
     expect(result.weaponProficiency).toBe(77)
   })

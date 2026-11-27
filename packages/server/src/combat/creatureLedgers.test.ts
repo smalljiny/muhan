@@ -3,9 +3,9 @@ import { createCreatureLedgers } from './creatureLedgers.js'
 import { accumulateDamage } from './enmity.js'
 
 /**
- * creatureLedgers 라우팅 계약 — 크리처(defender) instanceId별 데미지 원장 분리.
+ * creatureLedgers 라우팅 계약 — 몬스터(defender) instanceId별 데미지 원장 분리.
  *
- * `DamageLedger`는 `Map<attackerId, number>`라 defender를 키에 담지 않는다. 그래서 크리처마다
+ * `DamageLedger`는 `Map<attackerId, number>`라 defender를 키에 담지 않는다. 그래서 몬스터마다
  * 별도 원장을 쥐어 주는 라우팅이 없으면 몬스터 B에 준 데미지가 몬스터 A 사망 보상에 섞인다.
  * 아래 테스트가 그 분리를 고정한다.
  */
@@ -25,7 +25,7 @@ describe('createCreatureLedgers', () => {
     expect(second.get('player-1')).toBe(7)
   })
 
-  it('크리처 A에 누적한 데미지가 크리처 B 원장에 나타나지 않는다', () => {
+  it('몬스터 A에 누적한 데미지가 몬스터 B 원장에 나타나지 않는다', () => {
     const ledgers = createCreatureLedgers()
     accumulateDamage(ledgers.for('a'), 'player-1', 10)
     accumulateDamage(ledgers.for('b'), 'player-1', 3)
@@ -51,7 +51,7 @@ describe('createCreatureLedgers', () => {
     expect(after.size).toBe(0)
   })
 
-  it('discard는 다른 크리처의 원장을 건드리지 않는다', () => {
+  it('discard는 다른 몬스터의 원장을 건드리지 않는다', () => {
     const ledgers = createCreatureLedgers()
     accumulateDamage(ledgers.for('a'), 'player-1', 10)
     accumulateDamage(ledgers.for('b'), 'player-1', 3)

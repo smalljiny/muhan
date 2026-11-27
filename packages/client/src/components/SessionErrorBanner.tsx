@@ -4,7 +4,7 @@ import type { ErrorCode } from 'shared/protocol'
 
 // ErrorCode → 사용자 안내 문구 매핑. 매핑에 없는 코드는 일반 오류 안내로 폴백한다.
 const CODE_GUIDANCE: Partial<Record<ErrorCode, string>> = {
-  unauthorized: '인증이 만료되었습니다. 재인증이 필요합니다.',
+  unauthorized: '해당 캐릭터에 대한 권한이 없습니다.',
   forbidden: '권한이 없습니다.',
   session_state: '세션 상태가 올바르지 않습니다. 다시 입력해 주세요.',
 }
@@ -13,9 +13,11 @@ const FALLBACK_GUIDANCE = '오류가 발생했습니다.'
 
 export interface SessionErrorBannerProps {
   error: { code: ErrorCode; message: string } | null
+  /** 닫기 버튼 클릭 시 호출된다. 코드(transient·sticky)와 무관하게 사용자가 오류를 직접 지운다. */
+  onDismiss: () => void
 }
 
-export function SessionErrorBanner({ error }: SessionErrorBannerProps) {
+export function SessionErrorBanner({ error, onDismiss }: SessionErrorBannerProps) {
   if (error === null) {
     return null
   }
@@ -24,6 +26,9 @@ export function SessionErrorBanner({ error }: SessionErrorBannerProps) {
     <div role="alert">
       <p>{guidance}</p>
       <p>{error.message}</p>
+      <button type="button" onClick={onDismiss}>
+        닫기
+      </button>
     </div>
   )
 }

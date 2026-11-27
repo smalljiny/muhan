@@ -1,18 +1,18 @@
 # A12 세션·인증·세이브 라이프사이클
 
-**이슈**: [#12](https://github.com/smalljiny/muhan/issues/12) · **분석 대상 oracle**: `io.c`(`accept_connect`/`init_connect`/`disconnect`/`handle_commands`), `command1.c`(`login`/`create_ply`/`command`/`first_han`/`checkdouble`), `files2.c`(`save_ply`/`load_ply`/`save_all_ply`), `command8.c`(`savegame`/`savegame_nomsg`), `command5.c`(`suicide`), `update.c`(`update_game`/`update_users`/`update_shutdown`), `player.c`(`init_ply`/`uninit_ply`/`update_ply`), `auth.c`(identd 클라이언트), `global.c`(명령 테이블), 플레이어 세이브 실측(`player/타/타이`).
+**이슈**: [#12](https://github.com/smalljiny/muhan/issues/12) · **분석 대상 오라클**: `io.c`(`accept_connect`/`init_connect`/`disconnect`/`handle_commands`), `command1.c`(`login`/`create_ply`/`command`/`first_han`/`checkdouble`), `files2.c`(`save_ply`/`load_ply`/`save_all_ply`), `command8.c`(`savegame`/`savegame_nomsg`), `command5.c`(`suicide`), `update.c`(`update_game`/`update_users`/`update_shutdown`), `player.c`(`init_ply`/`uninit_ply`/`update_ply`), `auth.c`(identd 클라이언트), `global.c`(명령 테이블), 플레이어 세이브 실측(`player/타/타이`).
 
 ## 개요
 
-접속·인증·캐릭터 생성·세이브·삭제의 전 라이프사이클을 규명한다. 결론부터: **무한에는 "계정"이라는 1급 객체가 없다.** 로그인 단위는 캐릭터 그 자체이며, **캐릭터 이름이 곧 크리덴셜의 키**다. 인증은 캐릭터 세이브 파일 안에 든 **평문 비밀번호를 `strcmp`로 비교**하는 방식이고(실측 확인), 세션은 telnet 소켓 위의 **함수 포인터 상태머신**(`io->fn`)으로 돌아간다. 세이브는 **주기적 자동세이브가 없고**(검증 완료), 로그아웃·셧다운·이벤트(은행·거래·레벨업 등) 시점에만 디스크에 기록된다.
+접속·인증·캐릭터 생성·세이브·삭제의 전 라이프사이클을 정리한다. 결론부터: **무한에는 "계정"이라는 독립 객체가 없다.** 로그인 단위는 캐릭터 그 자체이며, **캐릭터 이름이 곧 크리덴셜의 키**다. 인증은 캐릭터 세이브 파일 안에 든 **평문 비밀번호를 `strcmp`로 비교**하는 방식이고(실측 확인), 세션은 telnet 소켓 위의 **함수 포인터 상태머신**(`io->fn`)으로 돌아간다. 세이브는 **주기적 자동세이브가 없고**(검증 완료), 로그아웃·셧다운·이벤트(은행·거래·레벨업 등) 시점에만 디스크에 기록된다.
 
-`auth.c`는 이슈가 인증 oracle로 지목했지만 실제로는 **계정 인증과 무관한 identd(RFC 1413) 클라이언트**다 — 접속자의 호스트명·userid를 조회하는 별도 fork 바이너리이며, 게임 로그인 로직은 전부 `command1.c`의 `login`/`create_ply` 상태머신에 있다. 이 오독을 바로잡는 것이 A12의 첫 발견이다.
+`auth.c`는 이슈가 인증 오라클로 지목했지만 실제로는 **계정 인증과 무관한 identd(RFC 1413) 클라이언트**다 — 접속자의 호스트명·userid를 조회하는 별도 fork 바이너리이며, 게임 로그인 로직은 전부 `command1.c`의 `login`/`create_ply` 상태머신에 있다. 이 오독을 바로잡는 것이 A12의 첫 발견이다.
 
 ## 핵심 발견 요약
 
 1. **`auth.c` ≠ 계정 인증**. `auth.c`는 identd(포트 113) 클라이언트로, `accept_connect`가 `vfork`+`execl`로 띄우는 **접속자 호스트/userid 조회용 헬퍼 프로세스**다(`io.c:295`). 결과는 `LOGPATH/auth/lookup.<pid>` 파일로 남고 `reap_children`이 회수한다(`io.c:1216`). 비밀번호 검증과 무관하며, 실패해도 `userid="unknown"`으로 게임은 정상 진행한다.
 
-2. **계정 개념 부재 — 이름=크리덴셜**. 로그인은 `이름 → load_ply(이름) → 평문 password strcmp`. 별도 account 객체·이메일·계정 ID가 없다. 한 사람이 캐릭터 N개를 쓰면 N개의 독립 크리덴셜이며, 이들을 묶는 상위 엔티티는 코드에 존재하지 않는다.
+2. **계정 개념 없음 — 이름=크리덴셜**. 로그인은 `이름 → load_ply(이름) → 평문 password strcmp`. 별도 account 객체·이메일·계정 ID가 없다. 한 사람이 캐릭터 N개를 쓰면 N개의 독립 크리덴셜이며, 이들을 묶는 상위 엔티티는 코드에 존재하지 않는다.
 
 3. **평문 비밀번호(실측 확인)**. `creature.password`(offset 240, 20B)에 평문 저장. 실측: `player/타/타이`(1188B) → `name@0="타이"`(EUC-KR), `password@240="1234"`(ASCII 평문·미해시). 검증도 `strcmp(str, ply->password)`(`command1.c:159`) 단순 비교. **재설계 필수 1순위**.
 
@@ -82,11 +82,11 @@ while(1) {
 1. `close_alias(fd)`, 소켓 `close`, `FD_CLR`, `Spy[fd]=-1`.
 2. `io->intrpt & 2`이면 `Numplayers--`, `iobuf` free.
 3. `extra`(무시 목록 linked list) free.
-4. **플레이어가 인게임(`ply->fd > -1`)이면** `uninit_ply(ply)` 후 **`save_ply(ply->name, ply)`** — 로그아웃 세이브의 정본 경로.
+4. **플레이어가 인게임(`ply->fd > -1`)이면** `uninit_ply(ply)` 후 **`save_ply(ply->name, ply)`** — 로그아웃 세이브의 기준 경로.
 5. `free_crt(ply)`.
 6. 대기열이 있고 정원 여유가 생기면 `remove_wait(1)` → `init_connect`로 다음 대기자 입장.
 
-**함의**: 정상 종료·연결 끊김·idle timeout·강퇴가 모두 `disconnect`를 거치므로 세이브 지점이 하나로 수렴한다. 단 서버 크래시(`kill -9`, 세그폴트)는 이 경로를 타지 못해 **마지막 이벤트 세이브 이후 변경분이 소실**된다.
+**시사점**: 정상 종료·연결 끊김·idle timeout·강퇴가 모두 `disconnect`를 거치므로 세이브 지점이 하나로 수렴한다. 단 서버 크래시(`kill -9`, 세그폴트)는 이 경로를 타지 못해 **마지막 이벤트 세이브 이후 변경분이 소실**된다.
 
 ---
 
@@ -197,7 +197,7 @@ save_ply(ply->name, ply);                      /* 즉시 첫 세이브 */
 
 ## 4. 세이브 모델
 
-### 4.1 세이브 시점(전수)
+### 4.1 세이브 시점(전체 목록)
 
 | 시점 | 호출 경로 | 메시지 |
 |------|-----------|--------|
@@ -206,7 +206,7 @@ save_ply(ply->name, ply);                      /* 즉시 첫 세이브 */
 | 수동 `저장` 명령 | `savegame`(`global.c:323`) | "저장하였습니다." |
 | 서버 종료 | `update_shutdown` → `save_all_ply`(`update.c:837`) | 종료 방송 |
 
-**주기적(시간 기반) 자동세이브는 없다** — 검증: 20초 틱의 `update_ply`(`player.c:348`) 본문에 save 호출 부재 확인. 상태 지속의 실질 안전망은 (a) 이벤트 세이브 + (b) 5분 idle disconnect 세이브(§1.4·§6)다.
+**주기적(시간 기반) 자동세이브는 없다** — 검증: 20초 틱의 `update_ply`(`player.c:348`) 본문에 save 호출이 없음을 확인. 상태 지속의 실질 안전망은 (a) 이벤트 세이브 + (b) 5분 idle disconnect 세이브(§1.4·§6)다.
 
 ### 4.2 `save_ply` 경로 공식·원자성 (`files2.c:538`)
 
@@ -246,7 +246,7 @@ free(dum_ptr);
 
 ## 5. 계정 ↔ 캐릭터 데이터 모델
 
-"계정"이라는 1급 객체는 **없다**. 대신 **캐릭터 이름을 키로 한 병렬 파일 집합 + 그룹 파일**이 계정 기능을 분산 수행한다:
+"계정"이라는 독립 객체는 **없다**. 대신 **캐릭터 이름을 키로 한 병렬 파일 집합 + 그룹 파일**이 계정 기능을 분산 수행한다:
 
 | 경로 | 역할 | 소비처 | 교차참조 |
 |------|------|--------|---------|
@@ -260,7 +260,7 @@ free(dum_ptr);
 
 **초성 샤딩**: `first_han`(`command1.c:732`)이 이름 첫 음절을 KS→Johab 변환(`KStbl`)으로 **초성(ㄱ/ㄴ/…/ㅎ)** 추출 → `exam[]`으로 디렉터리명 매핑. 실제 `player/` 하위: `가 나 다 라 마 바 사 아 자 차 타 파 하` + 특수 디렉터리(`alias`/`bank`/`simul`/`family`/`marriage`/`suic`/`temp`). 한 디렉터리 엔트리 수를 줄이는 1990년대 파일시스템 최적화이며, **재설계 시 완전히 소거**(DB 인덱스로 대체) 대상이다.
 
-**정리**: 관계는 "1 계정 : N 캐릭터"가 아니라 **"이름 = 크리덴셜 = 파일 키"의 flat namespace**이고, family/marriage/simul이 캐릭터 간 그룹 관계를 옆에서 표현한다. 재설계에서는 이를 `account`(1급) → `character`(N) 정규 모델로 승격하고 병렬 파일을 서브도큐먼트/컬렉션으로 흡수하는 것이 자연스럽다(§9).
+**정리**: 관계는 "1 계정 : N 캐릭터"가 아니라 **"이름 = 크리덴셜 = 파일 키"의 flat namespace**이고, family/marriage/simul이 캐릭터 간 그룹 관계를 옆에서 표현한다. 재설계에서는 이를 `account`(독립) → `character`(N) 정규 모델로 올리고 병렬 파일을 서브도큐먼트/컬렉션으로 흡수하는 것이 자연스럽다(§9).
 
 ---
 
@@ -281,7 +281,7 @@ free(dum_ptr);
 2. 전체 방송("자살신청") 후 **`disconnect(fd)`** — 이때 `save_ply`가 원 경로에 파일을 다시 쓴다.
 3. `system("mv <파일> player/suic/<이름>")` ×3(캐릭터·alias·bank) — **셸 이동으로 graveyard 격리**.
 
-물리 삭제가 아니라 이동이므로 login의 `load_ply`가 파일을 못 찾아 재로그인이 차단된다(+ `SUICD` 플래그 보조). **형상 위험**: `system()` 셸 호출 + 이름 보간은 인젝션 표면(§8·`security.md` Shell Injection Defense).
+물리 삭제가 아니라 이동이므로 login의 `load_ply`가 파일을 못 찾아 재로그인이 차단된다(+ `SUICD` 플래그 보조). **구현 위험**: `system()` 셸 호출 + 이름 보간은 인젝션 표면(§8·`security.md` Shell Injection Defense).
 
 ### 6.2 저레벨 삭제
 
@@ -289,7 +289,7 @@ free(dum_ptr);
 
 ---
 
-## 7. 텔넷 협상 / identd (형상 계층)
+## 7. 텔넷 협상 / identd (구현 방식 계층)
 
 ### 7.1 텔넷 in-band 협상
 
@@ -305,43 +305,43 @@ free(dum_ptr);
 - 게임 프로세스는 `SIGCHLD`→`reap_children`(`io.c:1216`)로 파일을 읽어 `io->userid`/`io->address`를 채운다.
 - **순수 텔레메트리**(접속 로깅용). 인증 결정에 관여하지 않음.
 
-**재설계**: telnet 에코 협상·identd 조회는 전부 **형상**이다. WebSocket 핸드셰이크 + TLS + 서버측 입력 마스킹(클라이언트 `<input type=password>`)로 대체하고, identd는 폐기(현대엔 무의미)하거나 IP/UA 로깅으로 대체한다.
+**재설계**: telnet 에코 협상·identd 조회는 전부 **원작 구현 방식**이다. WebSocket 핸드셰이크 + TLS + 서버측 입력 마스킹(클라이언트 `<input type=password>`)로 대체하고, identd는 폐기(현대엔 무의미)하거나 IP/UA 로깅으로 대체한다.
 
 ---
 
-## 8. 콘텐츠(이식) vs 형상(재설계) 분류
+## 8. 콘텐츠(이식) vs 구현 방식(재설계) 분류
 
 | 항목 | 분류 | 근거·재설계 방향 |
 |------|------|-----------------|
-| 캐릭터 생성 인터뷰 순서·질문·검증(성별→직업→능력치54pt→무기→성향→종족→비번) | **콘텐츠** | 게임 규칙. 스텝·제약(합≤54, 3~18, 한글이름 1~12)·종족 보정 그대로 이식 |
-| 직업/종족 로컬라이제이션 매핑 | **콘텐츠** | 표시명↔enum 표(§3.1) 정본 이식, A7과 정합 |
-| 시작 골드 500·시작 방 1·레벨1 up_level | **콘텐츠** | 초기 상태 규칙 |
-| 세이브 시점 규칙(로그아웃·이벤트·종료, 주기 없음) | **콘텐츠(의미)** | *언제* 저장하는가는 게임 의미. *어떻게*(파일 rename)는 형상 |
-| 세이브 전 장비 flatten 정규화 | **콘텐츠(의미)** | 파생 상태 비직렬화 규칙은 재현, 구현은 자유 |
-| Idle 300초 → 종료 | **콘텐츠** | 세션 정책. 값·동작 이식, 타이머는 JS 스케줄러 |
-| 중복 로그인 강제 종료·`checkdouble` 그룹 | **콘텐츠(의미)** | 1캐릭터 1세션·멀티박싱 금지 규칙 이식 |
-| 자살 이중 확인·가문 제명·재로그인 차단 | **콘텐츠** | 삭제 UX·부수효과 이식 |
-| **평문 비밀번호 저장·strcmp 검증** | **형상(교체 필수)** | bcrypt/argon2 해시 + 상수시간 비교 |
-| **함수 포인터 상태머신(`io->fn`)** | **형상** | 명시적 세션 FSM(상태 enum) + async 핸들러 |
-| **초성 디렉터리 샤딩·병렬 파일 집합** | **형상** | MongoDB `account`/`character` 도큐먼트로 통합 |
-| **telnet 에코 협상·identd** | **형상** | WebSocket+TLS 핸드셰이크, 클라이언트측 마스킹 |
-| **`system("mv")` soft-delete** | **형상(보안 위험)** | DB soft-delete 플래그/TTL, 셸 호출 제거 |
-| 대기열(`add_wait`/256 정원) | **형상(재검토)** | 프로세스당 fd 한계 산물. 현대엔 커넥션 풀·수평 확장으로 대체 |
-| 백업-쓰기-교체 원자성 | **형상** | DB 트랜잭션/원자적 upsert |
+| 캐릭터 생성 인터뷰 순서·질문·검증(성별→직업→능력치54pt→무기→성향→종족→비번) | **이식** | 게임 규칙. 스텝·제약(합≤54, 3~18, 한글이름 1~12)·종족 보정 그대로 이식 |
+| 직업/종족 로컬라이제이션 매핑 | **이식** | 표시명↔enum 표(§3.1) 기준 이식, A7과 일치 |
+| 시작 골드 500·시작 방 1·레벨1 up_level | **이식** | 초기 상태 규칙 |
+| 세이브 시점 규칙(로그아웃·이벤트·종료, 주기 없음) | **이식(의미)** | *언제* 저장하는가는 게임 의미. *어떻게*(파일 rename)는 구현 방식 |
+| 세이브 전 장비 flatten 정규화 | **이식(의미)** | 파생 상태 비직렬화 규칙은 재현, 구현은 자유 |
+| Idle 300초 → 종료 | **이식** | 세션 정책. 값·동작 이식, 타이머는 JS 스케줄러 |
+| 중복 로그인 강제 종료·`checkdouble` 그룹 | **이식(의미)** | 1캐릭터 1세션·멀티박싱 금지 규칙 이식 |
+| 자살 이중 확인·가문 제명·재로그인 차단 | **이식** | 삭제 UX·부수효과 이식 |
+| **평문 비밀번호 저장·strcmp 검증** | **재설계(교체 필수)** | bcrypt/argon2 해시 + 상수시간 비교 |
+| **함수 포인터 상태머신(`io->fn`)** | **재설계** | 명시적 세션 FSM(상태 enum) + async 핸들러 |
+| **초성 디렉터리 샤딩·병렬 파일 집합** | **재설계** | MongoDB `account`/`character` 도큐먼트로 통합 |
+| **telnet 에코 협상·identd** | **재설계** | WebSocket+TLS 핸드셰이크, 클라이언트측 마스킹 |
+| **`system("mv")` soft-delete** | **재설계(보안 위험)** | DB soft-delete 플래그/TTL, 셸 호출 제거 |
+| 대기열(`add_wait`/256 정원) | **재설계(재검토)** | 프로세스당 fd 한계 산물. 현대엔 커넥션 풀·수평 확장으로 대체 |
+| 백업-쓰기-교체 원자성 | **재설계** | DB 트랜잭션/원자적 upsert |
 
 ---
 
-## 9. 아키텍처 함의
+## 9. 아키텍처 시사점
 
-1. **`account`를 1급 객체로 승격**. 원본의 flat "이름=크리덴셜"을 `account(_id, email?, passwordHash, createdAt)` → `character(accountId, name, class, race, stats, …)` 1:N으로 정규화한다. family/marriage/simul/alias/bank 병렬 파일은 각각 캐릭터 서브도큐먼트 또는 참조 컬렉션으로 흡수. 초성 샤딩은 소거(인덱스로 대체).
+1. **`account`를 독립 객체로 올림**. 원본의 flat "이름=크리덴셜"을 `account(_id, email?, passwordHash, createdAt)` → `character(accountId, name, class, race, stats, …)` 1:N으로 정규화한다. family/marriage/simul/alias/bank 병렬 파일은 각각 캐릭터 서브도큐먼트 또는 참조 컬렉션으로 흡수. 초성 샤딩은 소거(인덱스로 대체).
 
-2. **인증 재설계는 최우선 보안 항목**. 평문 password(실측 "1234") → argon2id 해시 + 상수시간 비교. 무한의 "이름=한글, 비번=평문 14자" 규칙 중 **이름 규칙(한글 1~12)은 콘텐츠로 유지 가능**하나 비번 저장·전송은 전면 교체. 로그인 실패 3회 잠금은 rate-limit로 승격.
+2. **인증 재설계는 최우선 보안 항목**. 평문 password(실측 "1234") → argon2id 해시 + 상수시간 비교. 무한의 "이름=한글, 비번=평문 14자" 규칙 중 **이름 규칙(한글 1~12)은 콘텐츠로 유지 가능**하나 비번 저장·전송은 전면 교체. 로그인 실패 3회 잠금은 rate-limit로 올린다.
 
 3. **세션 FSM을 명시화**. `io->fn` 함수 포인터 전이(waiting→login→create_ply→command)를 상태 enum + 핸들러 맵으로 재작성한다. `RETURN(fn, param)` 관례는 `{ state, step }` 전이로 1:1 대응되므로 이식이 기계적이다. fall-through(case -1→0) 같은 암묵 흐름은 명시 상태로 풀어 문서화한다.
 
 4. **세이브 정책은 의미 보존 + 안전망 강화**. "주기 자동세이브 없음 + 이벤트/로그아웃 세이브"는 크래시 시 데이터 손실 위험(§1.4)이 있다. 의미(이벤트 시점 저장)는 유지하되, 이벤트 소싱/write-ahead 또는 짧은 주기 flush를 **추가**해 크래시 내성을 보강한다. 장비 flatten 정규화는 직렬화 훅으로 재현한다.
 
-5. **`system()` 제거**. 자살 삭제의 셸 `mv`는 인젝션 표면이자 이식 불가 형상. DB `deletedAt`/`status=suicided` 플래그 + TTL 인덱스로 graveyard 의미를 재현하고, 셸 호출을 코드에서 제거한다(`security.md` Shell Injection Defense와 정합).
+5. **`system()` 제거**. 자살 삭제의 셸 `mv`는 인젝션 표면이자 이식 불가한 구현 방식. DB `deletedAt`/`status=suicided` 플래그 + TTL 인덱스로 graveyard 의미를 재현하고, 셸 호출을 코드에서 제거한다(`security.md` Shell Injection Defense와 일치).
 
 6. **identd·telnet 협상 폐기, WebSocket 핸드셰이크 신설**. 접속 텔레메트리는 IP/UA/타임스탬프 로깅으로 대체. 정원·대기열은 커넥션 관리 미들웨어로 재설계하되, 초기엔 단순 상한만 두고 수평 확장은 후순위.
 

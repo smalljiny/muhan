@@ -7,7 +7,7 @@ import { buildCases, buildFixture, oracleMprofic, writeFixtureFile } from './mpr
 
 const FIXED_CLOCK = (): Date => new Date('2026-07-16T00:00:00.000Z')
 
-describe('mproficFixture — oracleMprofic 독립 전사', () => {
+describe('mproficFixture — oracleMprofic 독립 옮겨 적기', () => {
   it('realm=0이면 0이다', () => {
     expect(oracleMprofic(5, [0, 0, 0, 0], 1)).toBe(0)
   })
@@ -63,7 +63,7 @@ describe('mproficFixture — writeFixtureFile', () => {
 })
 
 describe('체크인된 mprofic.json fixture', () => {
-  it('goldenFixtureSchema를 통과하고 manual oracle이다', () => {
+  it('goldenFixtureSchema를 통과하고 manual 오라클이다', () => {
     const url = new URL('../fixtures/mprofic.json', import.meta.url)
     const parsed: unknown = JSON.parse(readFileSync(url, 'utf8'))
     const result = goldenFixtureSchema.safeParse(parsed)

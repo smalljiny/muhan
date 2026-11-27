@@ -189,9 +189,9 @@ describe('SaveEngine (integration)', () => {
     // 라이브 characters markDirty는 부분 스냅샷이 아니라 전체 문서를 싣는다(markCharacterDirty 계약).
     // 그 형태가 어댑터 경계에서 조용히 거부되면(_id immutable 에러·strict patch 거부) 봉쇄하려던
     // write-loss가 그대로 나므로, 실 Mongo·실 Zod 경계로 관통 검증한다.
-    // schemaVersion은 5(현행)로 둔다 — 라이브 캐릭터는 findById의 backfill 체인을 거쳐 v5로 승격된
+    // schemaVersion은 5(현행)로 둔다 — 라이브 캐릭터는 findById의 backfill 체인을 거쳐 v5로 올라간
     // 문서이고, v4 이하면 read-path의 backfillCharacterV5가 spells·realm을 재시딩해 write 경계가 아닌
-    // 읽기 승격을 검증하게 된다.
+    // 읽기 시 버전 올림을 검증하게 된다.
     await charRepo.insert(
       makeCharacter({ _id: 'char-1', gold: 100, currentRoom: 1, level: 1, schemaVersion: 5 }),
     )
@@ -200,7 +200,7 @@ describe('SaveEngine (integration)', () => {
 
     // 실 헬퍼를 통과시켜 라이브 경로가 실제로 흘리는 스냅샷 형태 그대로 경계를 친다 — 직접 markDirty에
     // 넣으면 프로덕션이 만들 수 없는 형태(status 포함)를 검증하게 된다.
-    // optional 객체 필드(buffs·statusEffects)까지 실어 patch 스키마 표면을 넓게 친다.
+    // optional 객체 필드(buffs·statusEffects)까지 실어 patch 스키마 범위를 넓게 친다.
     const markCharacterDirty = createMarkCharacterDirty((collection, id, snapshot) =>
       engine.markDirty(collection, id, snapshot),
     )
@@ -324,7 +324,7 @@ describe('SaveEngine (integration)', () => {
    * 완료 프로토콜(checkout→ack/discard) 전환 회귀.
    *
    * flush가 파괴적 drain에서 checkout으로 바뀌면서 스냅샷이 write 종결까지 tracker에 남는다.
-   * 반납(ack/discard)이 배선되지 않으면 그 키가 inProgress에 잔류하는데, 잔류 자체는 조용해서
+   * 반납(ack/discard)이 연결되지 않으면 그 키가 inProgress에 잔류하는데, 잔류 자체는 조용해서
    * 실 Mongo 왕복으로 "다음 주기가 여전히 최신값을 쓴다"를 관통 확인한다.
    */
   it('CC#9 — 반납 후 같은 키를 재-mark하면 다음 flush가 최신값을 영속화한다', async () => {

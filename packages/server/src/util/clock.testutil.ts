@@ -1,8 +1,8 @@
 /**
- * 수동 구동 FakeClock — SchedulerClock 테스트 더블의 단일 출처.
+ * 수동 실행 FakeClock — SchedulerClock 테스트 더블의 단일 출처.
  *
  * setInterval으로 등록된 콜백을 tick()으로 직접 발사한다. 실타이머를 쓰지 않아 완전히
- * 결정적이며, 테스트가 간격 경과를 명시적으로 구동한다(비결정적 대기 제거). SchedulerClock
+ * 결정적이며, 테스트가 간격 경과를 명시적으로 실행한다(비결정적 대기 제거). SchedulerClock
  * 소비자 테스트가 인라인 중복 없이 공유한다(현재 save 패키지 테스트, 이후 heartbeat·WorldClock으로 확대).
  */
 

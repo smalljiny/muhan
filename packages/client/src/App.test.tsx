@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PROTOCOL_VERSION } from 'shared'
 import { describe, expect, it, vi } from 'vitest'
@@ -19,7 +19,7 @@ function makeFakeSocket(): SocketLike {
   }
 }
 
-// 단일 ServerEvent를 소켓 onmessage로 발화한다. WsClient는 수신 프레임을 문자열로 기대한다.
+// 단일 ServerEvent를 소켓 onmessage로 발생시킨다. WsClient는 수신 프레임을 문자열로 기대한다.
 function emit(socket: SocketLike, event: unknown): void {
   act(() =>
     socket.onmessage?.(
@@ -248,8 +248,51 @@ describe('App', () => {
     expect(screen.getByLabelText('캐릭터 목록')).toBeInTheDocument()
   })
 
-  // 방 패널 배선 — 소켓에서 온 world:room이 스냅샷을 거쳐 화면에 도달하는 전 구간을 통합으로 확인한다.
-  // 방 내용 단정은 방 섹션 안으로 범위를 좁힌다(EventLog가 같은 이벤트를 원본 JSON으로도 렌더한다).
+  // 배너 닫기 — 닫기 버튼이 App의 dismissError 연결을 거쳐 transient·sticky 오류를 모두 지운다.
+  it('dismisses a transient error banner when the close button is clicked', async () => {
+    const user = userEvent.setup()
+    const socket = makeFakeSocket()
+    render(<App socketFactory={() => socket} />)
+
+    driveToEntered(socket)
+    emit(socket, { type: 'error', code: 'rule_rejected', message: '길이 막혔습니다' })
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '닫기' }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('dismisses a sticky unauthorized error banner when the close button is clicked', async () => {
+    const user = userEvent.setup()
+    const socket = makeFakeSocket()
+    render(<App socketFactory={() => socket} />)
+
+    driveToSelecting(socket)
+    emit(socket, { type: 'error', code: 'unauthorized', message: '권한 없음' })
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '닫기' }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('clears a transient error banner when a world:room frame arrives', () => {
+    const socket = makeFakeSocket()
+    render(<App socketFactory={() => socket} />)
+
+    driveToEntered(socket)
+    emit(socket, { type: 'error', code: 'rule_rejected', message: '길이 막혔습니다' })
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    // 성공 이벤트에 의한 자동 해제가 스냅샷을 거쳐 화면까지 도달하는지 확인한다.
+    emit(socket, roomEvent(makeRoom()))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  // 방 패널 연결 — 소켓에서 온 world:room이 스냅샷을 거쳐 화면에 도달하는 전 구간을 통합으로 확인한다.
+  // 방 내용 단정은 방 섹션 안으로 범위를 좁힌다(EventLog가 방 이름을 요약 줄로도 렌더한다).
   it('renders the room panel after a world:room frame arrives in the entered shell', () => {
     const socket = makeFakeSocket()
     render(<App socketFactory={() => socket} />)
@@ -260,8 +303,19 @@ describe('App', () => {
     const panel = within(screen.getByLabelText('방'))
     expect(panel.getByRole('heading', { name: '무한의 광장' })).toBeInTheDocument()
     // 진입 시퀀스의 본인(c1)은 사람 목록에서 빠지고, 목록이 비므로 섹션 자체가 없다.
-    // selfCharacterId 배선을 잡는 유일한 단정 — RoomPanel 자체 내용 검증은 RoomPanel.test.tsx가 담당한다.
+    // selfCharacterId 연결을 잡는 유일한 단정 — RoomPanel 자체 내용 검증은 RoomPanel.test.tsx가 담당한다.
     expect(panel.queryByLabelText('사람')).not.toBeInTheDocument()
+  })
+
+  it('summarizes a world:room frame as one line in the event log', () => {
+    const socket = makeFakeSocket()
+    render(<App socketFactory={() => socket} />)
+
+    driveToEntered(socket)
+    emit(socket, roomEvent(makeRoom()))
+
+    const log = within(screen.getByRole('list', { name: '이벤트 로그' }))
+    expect(log.getByText('무한의 광장 (#1)')).toBeInTheDocument()
   })
 
   it('places the room panel above the event log', () => {
@@ -287,7 +341,7 @@ describe('App', () => {
 
     driveToEntered(socket)
     emit(socket, roomEvent(makeRoom()))
-    // 첫 출구('북')가 아니라 두 번째('동')를 눌러 exits[0] 하드코딩 배선을 배제한다.
+    // 첫 출구('북')가 아니라 두 번째('동')를 눌러 exits[0] 하드코딩 연결을 배제한다.
     await user.click(screen.getByRole('button', { name: '동' }))
 
     expect(sentFrame(send, 'world:move')).toContain('"direction":"동"')
@@ -326,12 +380,94 @@ describe('App', () => {
     const socket = makeFakeSocket()
     render(<App socketFactory={() => socket} />)
 
-    // 서버는 미해소 방에서 world:room 발화를 생략한다(스펙 §3.4) — 그 구간에도 셸은 정상이어야 한다.
+    // 서버는 해석되지 않은 방에서 world:room 발생을 생략한다(스펙 §3.4) — 그 구간에도 셸은 정상이어야 한다.
     driveToEntered(socket)
 
     expect(screen.queryByLabelText('방')).not.toBeInTheDocument()
     expect(screen.getByRole('list', { name: '이벤트 로그' })).toBeInTheDocument()
     expect(screen.getByLabelText('명령')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '보내기' })).toBeInTheDocument()
+  })
+
+  // 미연결 차단 — status !== 'ready'이면 출구·보내기가 비활성이고, ready 재도달 시 다시 열린다(스펙 §3.5).
+  describe('controls disabled while status is not ready', () => {
+    function expectControlsDisabled(disabled: boolean): void {
+      const controls = [
+        screen.getByRole('button', { name: '북' }),
+        screen.getByRole('button', { name: '동' }),
+        screen.getByRole('button', { name: '보내기' }),
+      ]
+      for (const control of controls) {
+        if (disabled) expect(control).toBeDisabled()
+        else expect(control).toBeEnabled()
+      }
+    }
+
+    it('disables exits and the submit button when the socket closes in the entered shell', () => {
+      const socket = makeFakeSocket()
+      render(<App socketFactory={() => socket} />)
+
+      driveToEntered(socket)
+      emit(socket, roomEvent(makeRoom()))
+      expectControlsDisabled(false)
+
+      act(() => socket.onclose?.(new CloseEvent('close')))
+
+      // phase는 entered 그대로라 셸·방 패널이 남는다. WsClient가 소켓 참조를 이미 비우므로
+      // 이 구간의 송신 부재 단정은 UI 차단을 검증하지 못한다 — disabled만 단정한다.
+      expect(screen.getByLabelText('방')).toBeInTheDocument()
+      expectControlsDisabled(true)
+    })
+
+    it('blocks sends on a reconnected socket before hello and re-enables after resume', async () => {
+      const user = userEvent.setup()
+      const first = makeFakeSocket()
+      const second = makeFakeSocket()
+      const factory = vi
+        .fn<() => SocketLike>()
+        .mockReturnValueOnce(first)
+        .mockReturnValueOnce(second)
+      render(<App socketFactory={factory} />)
+
+      driveToEntered(first)
+      emit(first, roomEvent(makeRoom()))
+      expectControlsDisabled(false)
+
+      await user.click(screen.getByRole('button', { name: '재연결' }))
+      expect(factory).toHaveBeenCalledTimes(2)
+
+      // (a) 새 소켓 open 직후·hello 전 — status는 connected, phase는 entered 그대로라 셸이 렌더된다.
+      act(() => second.onopen?.(new Event('open')))
+      expect(screen.getByLabelText('연결 상태')).toHaveTextContent('connected')
+      expect(screen.getByLabelText('방')).toBeInTheDocument()
+      expectControlsDisabled(true)
+
+      // 열린 소켓이 있으므로 UI 차단만이 송신을 막는다.
+      await user.click(screen.getByRole('button', { name: '북' }))
+      const input = screen.getByLabelText('명령')
+      await user.type(input, '봐')
+      const form = input.closest('form')
+      expect(form).not.toBeNull()
+      fireEvent.submit(form as HTMLFormElement)
+
+      const sentFrames = vi.mocked(second.send).mock.calls.map((call) => call[0])
+      expect(sentFrames.some((f) => f.includes('"type":"world:move"'))).toBe(false)
+      expect(sentFrames.some((f) => f.includes('"type":"debug:echo"'))).toBe(false)
+
+      // (b) system:hello 수신 — phase가 negotiating으로 바뀌어 방 패널·명령 폼이 언마운트된다.
+      emit(second, { type: 'system:hello', protocolVersion: PROTOCOL_VERSION })
+      expect(screen.queryByRole('button', { name: '북' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '동' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '보내기' })).not.toBeInTheDocument()
+
+      // (c) session:resumed → world:room — ready 재도달로 출구·보내기가 다시 활성이다.
+      emit(second, { type: 'session:resumed', characterId: 'c1' })
+      emit(second, roomEvent(makeRoom()))
+      expectControlsDisabled(false)
+
+      // 재활성화된 출구가 새 소켓으로 world:move를 실제로 보낸다.
+      await user.click(screen.getByRole('button', { name: '북' }))
+      sentFrame(vi.mocked(second.send), 'world:move')
+    })
   })
 })

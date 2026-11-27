@@ -25,7 +25,7 @@ describe('shared 루트 배럴 re-export', () => {
     expect(characterSummarySchema).toBeDefined()
     expect(promptKindSchema).toBeDefined()
     expect(promptOptionSchema).toBeDefined()
-    expect(PROTOCOL_VERSION).toBe(6)
+    expect(PROTOCOL_VERSION).toBe(7)
   })
 
   it('세션 command·event variant를 루트 배럴로 파싱한다', () => {
@@ -44,7 +44,7 @@ describe('shared 루트 배럴 re-export', () => {
     expect(errorCodeSchema.safeParse('unauthorized').success).toBe(true)
   })
 
-  it('핸드셰이크 왕복이 버전 상수로 정합한다', () => {
+  it('핸드셰이크 왕복이 버전 상수로 일치한다', () => {
     expect(
       clientCommandSchema.safeParse({ type: 'system:ready', protocolVersion: PROTOCOL_VERSION })
         .success,

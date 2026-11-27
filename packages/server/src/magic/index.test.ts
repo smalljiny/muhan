@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import * as magic from './index.js'
 
 /**
- * magic 배럴 스모크 — 공개 표면(toCaster·SpellDispatch)이 배럴에서 재export됨을 고정한다.
+ * magic 배럴 스모크 — 공개 인터페이스(toCaster·SpellDispatch)이 배럴에서 재export됨을 고정한다.
  * 카탈로그는 shared/magic 소유라 배럴에 노출하지 않는다.
  */
 describe('magic 배럴', () => {
@@ -11,7 +11,7 @@ describe('magic 배럴', () => {
     expect(typeof magic.SpellDispatch).toBe('function')
   })
 
-  it('시전 게이트·spell_fail 표면을 재export한다', () => {
+  it('시전 게이트·spell_fail 인터페이스를 재export한다', () => {
     expect(typeof magic.evaluateGate).toBe('function')
     expect(typeof magic.applyCastGate).toBe('function')
     expect(typeof magic.spellFail).toBe('function')
@@ -25,7 +25,7 @@ describe('magic 배럴', () => {
     expect(typeof magic.isSelfTargetSpell).toBe('function')
   })
 
-  it('카탈로그 표면은 배럴에 노출하지 않는다(shared/magic 소유)', () => {
+  it('카탈로그 인터페이스는 배럴에 노출하지 않는다(shared/magic 소유)', () => {
     expect('SPELL_CATALOG' in magic).toBe(false)
     expect('spellByNo' in magic).toBe(false)
   })

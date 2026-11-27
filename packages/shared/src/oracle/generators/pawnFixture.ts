@@ -5,11 +5,11 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * 전당포 판매(pawn/sell) 골든 fixture 생성기 — manual oracle의 독립 참조 구현(A8 §8, command7.c sell).
+ * 전당포 판매(pawn/sell) 골든 fixture 생성기 — manual 오라클의 독립 참조 구현(A8 §8, command7.c sell).
  *
  * 원본 `command7.c`의 판매 게이트(거부 매트릭스 + 1/250 이중 지급)를 참조 구현(`referencePawn`)으로
  * 옮기고, 손 계산으로 확정한 13개 케이스를 fixture로 감싸 `fixtures/pawn.json`에 기록한다. 판매가
- * 산술 정본은 런타임 `economy/priceConfig.ts`의 `sellPrice`(SUT)에, 거부·이중지급 게이트 정본은
+ * 산술 기준은 런타임 `economy/priceConfig.ts`의 `sellPrice`(SUT)에, 거부·이중지급 게이트 기준은
  * 런타임 `server`의 `shopService.sell`(SUT)에 둔다.
  *
  * ## 오라클 거부 순서 (command7.c sell)
@@ -24,8 +24,8 @@ export { writeFixtureFile }
  * 단일 `rng(1,250)===9` 굴림으로 대체한다 — 확률 1/250(콘텐츠)은 보존, `===9`는 오라클 상수를 반향한다.
  *
  * ## anti-tautology: SUT와 독립 표현
- * SUT(`priceConfig.sellPrice`)는 `PRICE_CONFIG` 상수를 판독하고 `Math.trunc`로 절삭한다. 이 참조는
- * **인라인 리터럴**(`2`·`100000`·타입 상수)을 직접 쓰고 절삭은 `Math.floor`로 표현한다(value 비음수라
+ * SUT(`priceConfig.sellPrice`)는 `PRICE_CONFIG` 상수를 읽고 `Math.trunc`로 버린다. 이 참조는
+ * **인라인 리터럴**(`2`·`100000`·타입 상수)을 직접 쓰고 버림은 `Math.floor`로 표현한다(value 비음수라
  * 값 동일, 표현만 다름). 참조는 SUT(sellPrice·sell)를 import·호출하지 않는다.
  *
  * ## 재생성 (수동 트리거)
@@ -49,7 +49,7 @@ export { writeFixtureFile }
  */
 
 /**
- * fixture 한 case의 input 형태 — 판매 게이트가 판독하는 좁은 필드 + 결정적 1/250 굴림 값.
+ * fixture 한 case의 input 형태 — 판매 게이트가 읽는 좁은 필드 + 결정적 1/250 굴림 값.
  * `luckyRoll`은 `rng(1,250)`의 반환값을 고정한다(9면 이중 지급). 거부 케이스에서는 소비되지 않는다.
  */
 export type PawnInput = {
@@ -69,7 +69,7 @@ export type PawnExpected = { rejectReason: string | null; payout: number }
  * 전당포 판매 참조 구현 — command7.c sell 게이트를 인라인 리터럴로 옮긴다.
  *
  * SUT(`sellPrice`·`sell`)와 표현을 분리한다: 여기선 `PRICE_CONFIG`를 참조하지 않고 상수를 인라인
- * 리터럴로 박고, 정수 절삭을 `Math.floor`로 표현한다(SUT는 `Math.trunc`). 거부 순서는 오라클과
+ * 리터럴로 박고, 정수 버림을 `Math.floor`로 표현한다(SUT는 `Math.trunc`). 거부 순서는 오라클과
  * 동일해야 정확한 expected가 나오므로 cascade 순서는 유지하되 산술 표현만 독립시킨다.
  * 이중 지급은 오라클의 pay-twice(`+= sell`)를 그대로 표현한다(`sell * 2`가 아니라 `sell + sell`).
  */
@@ -98,7 +98,7 @@ type PawnCase = { input: PawnInput; expected: PawnExpected; note?: string }
 type PawnCaseDraft = Omit<PawnCase, 'expected'>
 
 /**
- * 판독하지 않는 필드에 안전한 기본값을 채워 완전한 PawnInput을 만든다. 각 케이스는 검증 대상
+ * 읽지 않는 필드에 안전한 기본값을 채워 완전한 PawnInput을 만든다. 각 케이스는 검증 대상
  * 필드만 overrides로 지정한다. 기본은 type=13(MISC, 판매가능)·비귀속·빈용기·luckyRoll=1(비럭키).
  */
 function pawn(overrides: Partial<PawnInput>): PawnInput {

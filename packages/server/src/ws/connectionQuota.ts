@@ -37,7 +37,7 @@ export interface ConnectionQuota {
  *
  * `reserve`는 상한을 초과하면 증가 없이 거부하고, 여유가 있으면 전역·계정 카운터를 함께 증가시킨다(전역 게이트
  * 우선). `release`는 계정 엔트리가 있을 때만 전역·계정 카운터를 함께 감소시켜 두 카운터를 원자적으로 유지하고,
- * 계정 카운터가 0이 되면 Map 엔트리를 삭제해 churn 계정의 무한 엔트리 누적을 막는다. 부재 계정 release나
+ * 계정 카운터가 0이 되면 Map 엔트리를 삭제해 churn 계정의 무한 엔트리 누적을 막는다. 없는 계정의 release나
  * 이중 반납(중복 release)은 어느 카운터도 건드리지 않는 완전 no-op이다(음수·desync 없음).
  */
 export function createConnectionQuota(getLimits: () => ConnectionQuotaLimits): ConnectionQuota {
@@ -64,7 +64,7 @@ export function createConnectionQuota(getLimits: () => ConnectionQuotaLimits): C
 
   function release(accountId: string): void {
     // 계정 엔트리를 먼저 조회한다 — 반납할 실제 슬롯이 있을 때만 두 카운터를 함께 감소시켜
-    // 회계를 원자적으로 유지한다. 엔트리가 없으면(부재 계정 또는 이미 완전 반납된 계정의 중복 release)
+    // 회계를 원자적으로 유지한다. 엔트리가 없으면(없는 계정 또는 이미 완전 반납된 계정의 중복 release)
     // 전역 카운터도 건드리지 않는다. 전역만 먼저 깎으면 다른 계정이 슬롯을 쥔 상황에서 중복 release가
     // 전역 카운터를 per-account 합과 desync시켜 전역 상한을 초과 점유하게 만든다.
     const accountCount = perAccount.get(accountId)

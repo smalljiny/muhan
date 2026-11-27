@@ -5,12 +5,12 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * 가격 배수 골든 fixture 생성기 — manual oracle의 독립 참조 구현(A8 §8).
+ * 가격 배수 골든 fixture 생성기 — manual 오라클의 독립 참조 구현(A8 §8).
  *
  * 원본 `command7.c:169`(구매)·`command7.c:258`(판매)·`command8.c:249`(수리)·
- * `command10.c:573`(몹구매)의 네 가격 공식을 참조 구현(`referencePrice`)으로 옮기고,
+ * `command10.c:573`(몬스터 구매)의 네 가격 공식을 참조 구현(`referencePrice`)으로 옮기고,
  * 손 계산으로 확정한 12개 케이스를 fixture로 감싸 `fixtures/price.json`에 기록한다.
- * 산술 정본은 런타임 `economy/priceConfig.ts`의 네 함수(직접 SUT 산술)에 둔다.
+ * 산술 기준은 런타임 `economy/priceConfig.ts`의 네 함수(직접 SUT 산술)에 둔다.
  *
  * ## GoldenFixture<I,O> 모델링: 4함수 dispatch
  * 대상이 네 함수(buy·mobBuy·sell·repair)인데 GoldenFixture는 단일 `fn`을 가정하므로,
@@ -19,13 +19,13 @@ export { writeFixtureFile }
  * 형태를 깨지 않고 네 함수를 한 fixture에 담을 수 있다.
  *
  * ## anti-tautology: SUT와 독립 표현
- * SUT(`priceConfig.ts`)는 `PRICE_CONFIG` 상수를 판독하고 `Math.trunc`로 절삭한다. 이 참조는
- * **인라인 리터럴**(`10`·`100000`·`/2`·`/4`)을 직접 쓰고 절삭은 `Math.floor`로 표현한다
+ * SUT(`priceConfig.ts`)는 `PRICE_CONFIG` 상수를 읽고 `Math.trunc`로 버린다. 이 참조는
+ * **인라인 리터럴**(`10`·`100000`·`/2`·`/4`)을 직접 쓰고 버림은 `Math.floor`로 표현한다
  * (value 비음수라 값은 동일, 표현만 다름). 참조는 SUT를 import·호출하지 않는다.
  *
  * ## 재생성 (수동 트리거)
  * `expected`·`generatedAt`은 체크인 후 frozen이며, 회귀 테스트 중 자동 재생성은 없다.
- * bare `node`는 상대 import의 `.js`→`.ts`를 해석하지 못하므로(형상 경계 = vite 번들러
+ * bare `node`는 상대 import의 `.js`→`.ts`를 해석하지 못하므로(import 해석 기준 = vite 번들러
  * moduleResolution), TS-aware 러너로 재생성한다. 임시 테스트를 vitest로 1회 실행하고 제거한다:
  *
  * ```
@@ -50,7 +50,7 @@ export type PriceInput = { fn: 'buy' | 'mobBuy' | 'sell' | 'repair'; value: numb
  * 가격 참조 구현 — 네 공식을 `input.fn`으로 디스패치한다.
  *
  * SUT(`priceConfig.ts`)와 표현을 분리한다: 여기선 `PRICE_CONFIG`를 참조하지 않고 상수를
- * 인라인 리터럴로 박고, 정수 절삭을 `Math.floor`로 표현한다(SUT는 `Math.trunc`).
+ * 인라인 리터럴로 박고, 정수 버림을 `Math.floor`로 표현한다(SUT는 `Math.trunc`).
  */
 export function referencePrice(input: PriceInput): number {
   switch (input.fn) {
@@ -77,7 +77,7 @@ type PriceCaseDraft = Omit<PriceCase, 'expected'>
  * 골든 케이스 12개를 구성한다. expected는 생성기 정상 경로대로 `referencePrice`로 채운다.
  * (테스트 측 Layer B 앵커는 이와 독립적으로 손 계산 하드 리터럴을 사용해 tautology를 차단한다.)
  *
- * 경계 커버리지: value<40(39)·판매 상한(200000 경계·250000 초과)·몹구매 하한(5·0)·중간값(100).
+ * 경계 커버리지: value<40(39)·판매 상한(200000 경계·250000 초과)·몬스터 구매 하한(5·0)·중간값(100).
  */
 export function buildCases(): PriceCase[] {
   const inputs: PriceCaseDraft[] = [

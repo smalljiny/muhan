@@ -7,7 +7,7 @@ import { createLiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
 //
 // 이 파일은 `.harness/rules/testing.md`의 "비즈니스 로직 mock 금지" 원칙의 문서화된 예외다.
 // 팩토리를 실제 구현으로 감싼 spy이므로 로직이 가려지지 않으며(`...actual` 스프레드 + 원본 위임),
-// 단정 대상은 산출물이 아니라 **어떤 인스턴스를 넘겼는가**라는 배선 사실이다.
+// 단정 대상은 산출물이 아니라 **어떤 인스턴스를 넘겼는가**라는 연결 사실이다.
 vi.mock('../world/roomTargetResolvers.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../world/roomTargetResolvers.js')>()
   return { ...actual, createRoomPlayerResolver: vi.fn(actual.createRoomPlayerResolver) }
@@ -18,13 +18,13 @@ import { createLiveWorldWiring, type LiveWorldWiringBundle } from './liveWorldWi
 import { createInstanceIdAllocator } from '../world/spawn.js'
 
 /**
- * 공유 불변식 #3 — 방 스코프 플레이어 해소자가 **기존 `resolveCharacterName` 인스턴스**를 배후에 둔다.
+ * 공유 불변식 #3 — 방 스코프 플레이어 리졸버가 **기존 `resolveCharacterName` 인스턴스**를 배후에 둔다.
  *
  * 행동 동등 단정(같은 레지스트리에 도달하는가)은 `bundle.liveRegistry`를 새로 클로징한 별개 함수도
  * 통과시킨다. 여기서는 팩토리에 실제로 넘어간 인자를 잡아 **객체 동일성**(`toBe` 수준)을 고정한다 —
- * 배선이 해소자를 새로 만들면 이 단정이 깨진다.
+ * 연결이 리졸버를 새로 만들면 이 단정이 깨진다.
  */
-describe('resolveRoomPlayer 배선 — 이름 해소자 인스턴스 공유 (불변식 #3)', () => {
+describe('resolveRoomPlayer 연결 — 이름 리졸버 인스턴스 공유 (불변식 #3)', () => {
   it('기존 resolveCharacterName 인스턴스를 그대로 팩토리에 넘긴다 (재생성 없음)', () => {
     const bundle: LiveWorldWiringBundle = {
       worldGraph: new Map<number, RoomNode>(),

@@ -55,7 +55,7 @@ function makeRoom(over: Partial<RoomNode> = {}): RoomNode {
   }
 }
 
-/** 결정적 발화 rng — traffic 게이트 통과(roll100=1), 첫 후보(0), 그룹 크기=max. */
+/** 결정적 실행 rng — traffic 게이트 통과(roll100=1), 첫 후보(0), 그룹 크기=max. */
 function firingRng(over: Partial<SpawnRng> = {}): SpawnRng {
   return { roll100: () => 1, pickIndex: () => 0, groupSize: (max) => max, ...over }
 }
@@ -129,7 +129,7 @@ describe('후보 선택', () => {
     expect(room.creatures).toHaveLength(0)
   })
 
-  it('알 수 없는 템플릿 몹번호는 스킵한다', () => {
+  it('알 수 없는 템플릿 몬스터 번호는 스킵한다', () => {
     const room = makeRoom({ random: [999, 0, 0, 0, 0, 0, 0, 0, 0, 0] })
     const slot = createRandomSpawn({
       rooms: () => [room],
@@ -181,7 +181,7 @@ describe('그룹 크기', () => {
   })
 })
 
-describe('스폰 크리처 타이머 초기화', () => {
+describe('스폰 몬스터 타이머 초기화', () => {
   it('nextActionAt=now+cadence·lastScavengeAt·lastWanderAt=now', () => {
     const room = makeRoom()
     const slot = createRandomSpawn({
@@ -227,8 +227,8 @@ describe('D7 monotonic idx + rng seam', () => {
   })
 })
 
-describe('WorldClock 통합(FakeClock 구동)', () => {
-  it('20초마다 발화한다', () => {
+describe('WorldClock 통합(FakeClock 기반)', () => {
+  it('20초마다 실행된다', () => {
     const clock = new FakeClock()
     const world = new WorldClock({ clock })
     const room = makeRoom()

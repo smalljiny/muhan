@@ -8,8 +8,8 @@ import type { Account } from 'shared'
  * 실패), 낮으면 RoleError를 던진다. exact-equality가 아니라 `>=` 비교다.
  *
  * 이 모듈은 인가 seam(함수 + 계약 에러)만 제공한다. 실제 권한 게이트 명령(누가 무엇을 실행할 수
- * 있는지의 명령별 배선)은 A13으로 유예된다 — 이 Story는 assertRole 함수와 role 필드만 두며,
- * RBAC 권한 어댑터를 command dispatch에 배선하지 않는다(기본 permissionPort는 permissive 유지).
+ * 있는지의 명령별 연결)은 A13으로 보류된다 — 이 Story는 assertRole 함수와 role 필드만 두며,
+ * RBAC 권한 어댑터를 command dispatch에 연결하지 않는다(기본 permissionPort는 permissive 유지).
  */
 
 /**

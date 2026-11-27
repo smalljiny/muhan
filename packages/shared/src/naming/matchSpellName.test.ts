@@ -16,7 +16,7 @@ import { SPELL_CATALOG, SPELL_NO } from '../magic/catalog.js'
  * ```
  *
  * 완전일치는 누적을 1로 **리셋하고 즉시 break** — 선언 순서와 무관하게 이긴다.
- * match === 0 → 부재, match > 1 → 모호 거부.
+ * match === 0 → 없음, match > 1 → 모호 거부.
  */
 
 type Entry = { spellNo: number; koreanName: string }

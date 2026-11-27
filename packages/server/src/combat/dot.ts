@@ -18,15 +18,15 @@ import {
  * 드레인·만료·사망판정을 순수 함수로 계산하고, progression 재생과의 xor 상호배제 계약을
  * `dotApplied` 반환으로 확정한다.
  *
- * ## damage-only 범위(#99 유예 명시)
+ * ## damage-only 범위(#99 보류 명시)
  * 오라클의 healing 분기(Branch A: 비-harm·비-ill 재생)와 각 tail의 `else if(!ill)` mp/hp 재생은
- * 미이식이다 — 재생은 progression 소관이고 xor는 health-pulse 조립부가 접합한다(#99). 아래도 유예:
+ * 미이식이다 — 재생은 progression 담당이고 xor는 health-pulse 조립부가 접합한다(#99). 아래도 보류:
  *   - realm 저항 게이트(PRFIRE/PBRWAT/PSSHLD/PRCOLD): 플레이어 combat-flag substrate이고 Character에
- *     없다. realm/무형 피해는 저항 게이트 없이 적용하고, 게이팅은 #99(PlayerCombatState 배선)로 유예.
- *   - RPBEFU·모든 LT_ATTCK 쿨다운(질병 dice(1,6,3) interval 포함): combat-state 소관. 질병은 hp 차감만 이식.
- *   - status until/interval 영속화(RPPOIS의 F_SET 지속): #99 유예. RPPOIS는 이번 틱 독 피해로만 취급한다.
+ *     없다. realm/무형 피해는 저항 게이트 없이 적용하고, 게이팅은 #99(PlayerCombatState 연결)로 보류.
+ *   - RPBEFU·모든 LT_ATTCK 쿨다운(질병 dice(1,6,3) interval 포함): combat-state 담당. 질병은 hp 차감만 이식.
+ *   - status until/interval 영속화(RPPOIS의 F_SET 지속): #99 보류. RPPOIS는 이번 틱 독 피해로만 취급한다.
  *   - 외부 타이머 게이트 `if(parent_rom && t>LT_HEALS)`: 미이식. 이 resolver는 호출 시마다 DoT를
- *     적용하고 cadence(호출 주기)는 health-pulse 호출자가 소유한다(#99).
+ *     적용하고 cadence(호출 주기)는 health-pulse 호출자가 담당한다(#99).
  *
  * ## Branch 구조(player.c dangling-else 체인, C ⟺ RPHARM)
  *   - !RPHARM && !ill → Branch A(재생) : 미이식 no-op.
@@ -40,7 +40,7 @@ import {
  *
  * ## immutability
  * 입력 Character를 변형하지 않고 새 Character를 반환한다(applyPlayerDeath 선례). hpCurrent는 스키마
- * min(0) 정합을 위해 max(0)로 클램프하고, died는 클램프 전 raw hp<1(오라클 die 조건)로 판정한다.
+ * min(0)과 맞추기 위해 max(0)로 클램프하고, died는 클램프 전 raw hp<1(오라클 die 조건)로 판정한다.
  */
 
 /** DoT resolver 컨텍스트 — 결정적 테스트를 위해 rng·now를 주입한다(Math.random/Date.now 금지). */
@@ -55,7 +55,7 @@ export interface PlayerDotContext {
 export interface PlayerDotResult {
   /** DoT를 반영한 새 Character(입력 불변). hpCurrent는 0으로 클램프된다. */
   readonly character: Character
-  /** raw hp<1이면 true. 사망 seam 발화는 미배선(반환만, #99). */
+  /** raw hp<1이면 true. 사망 seam 실행은 미연결(반환만, #99). */
   readonly died: boolean
   /** 이번 틱에 hp/mp를 1건이라도 차감했으면 true. health-pulse가 재생을 skip하는 xor 계약 입력. */
   readonly dotApplied: boolean
@@ -94,7 +94,7 @@ export function resolvePlayerDot(
       dotApplied = true
     }
     if (diseaseActive) {
-      hp -= Math.max(1, rng(1, 6) - con) // 질병 dice(1,6,3) interval 쿨다운은 #99 유예.
+      hp -= Math.max(1, rng(1, 6) - con) // 질병 dice(1,6,3) interval 쿨다운은 #99 보류.
       dotApplied = true
     }
   }
@@ -102,7 +102,7 @@ export function resolvePlayerDot(
   if (harm) {
     // RPMPDR mp 드레인. 오라클의 `else if(!ill)` mp 재생은 미이식(#99). 실차감(>0)만 dotApplied 계상 —
     // 단, #99의 xor는 "RPMPDR 세팅 여부"로 재생 skip을 판정해야 할 수 있다(오라클은 drain=0이어도
-    // 재생 else 분기를 막는다). 이 seam은 #99가 배선한다.
+    // 재생 else 분기를 막는다). 이 seam은 #99가 연결한다.
     if (hasFlag(flags, RPMPDR)) {
       const drain = Math.min(mp, 3)
       mp -= drain
@@ -110,7 +110,7 @@ export function resolvePlayerDot(
     }
 
     // realm/무형 생명력 흡수(8-MIN(con,2)) — Branch C 내부에만 존재. 저항 플래그는 전부 미보유로 간주
-    // (게이팅 #99 유예)하므로, realm 플래그가 있으면 무저항 피해가 항상 발동한다.
+    // (게이팅 #99 보류)하므로, realm 플래그가 있으면 무저항 피해가 항상 발동한다.
     const anyRealm =
       hasFlag(flags, RFIRER) ||
       hasFlag(flags, RWATER) ||
@@ -128,10 +128,10 @@ export function resolvePlayerDot(
     }
   }
 
-  const died = hp < 1 // 오라클 die 조건(hpcur<1). 발화는 미배선(#99).
+  const died = hp < 1 // 오라클 die 조건(hpcur<1). 실행은 미연결(#99).
   const character2: Character = {
     ...character,
-    hpCurrent: Math.max(0, hp), // 스키마 min(0) 정합. died는 클램프 전 raw로 이미 판정.
+    hpCurrent: Math.max(0, hp), // 스키마 min(0)과 일치. died는 클램프 전 raw로 이미 판정.
     mpCurrent: mp,
   }
   return { character: character2, died, dotApplied }

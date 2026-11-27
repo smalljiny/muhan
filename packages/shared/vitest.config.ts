@@ -8,7 +8,6 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
-      all: true,
       include: ['src/**/*.ts'],
       // index.ts(배럴)·context.ts(type-only)는 실행 코드가 없어 커버리지에서 제외.
       exclude: ['src/index.ts', 'src/stats/context.ts', '**/*.test.ts', 'src/**/*.testutil.ts'],

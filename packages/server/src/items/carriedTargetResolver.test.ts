@@ -22,7 +22,7 @@ const DETECT_INVIS = flagsHex(PDINVI)
 const BOOK_INDEX = makeIndex([makeTemplate({ objnum: 2, name: '비법서' })])
 
 describe('resolveCarriedObject — 1단 인벤 탐색(find_obj)', () => {
-  it('미착용 인벤 아이템을 이름 접두로 해소한다', () => {
+  it('미착용 인벤 아이템을 이름 접두로 해석한다', () => {
     const index = makeIndex([
       makeTemplate({ objnum: 1, name: '단도' }),
       makeTemplate({ objnum: 2, name: '비법서' }),
@@ -90,7 +90,7 @@ describe('resolveCarriedObject — 1단 OINVIS 가시성 게이트', () => {
     expect(resolveCarriedObject(inventory, index, '비법서', NO_FLAGS, 2)?.instance._id).toBe(
       'visible-2',
     )
-    // 투명 후보만 있는 질의는 미해소다.
+    // 투명 후보만 있는 질의는 미해석이다.
     expect(resolveCarriedObject([inventory[0]!], index, '비법서', NO_FLAGS)).toBeUndefined()
   })
 
@@ -114,7 +114,7 @@ describe('resolveCarriedObject — 1단 OINVIS 가시성 게이트', () => {
 })
 
 describe('resolveCarriedObject — 2단 착용 슬롯 스캔(ready[])', () => {
-  it('1단이 미해소면 착용 슬롯을 slot 오름차순으로 스캔해 첫 매치를 돌려준다', () => {
+  it('1단이 미해석이면 착용 슬롯을 slot 오름차순으로 스캔해 첫 매치를 돌려준다', () => {
     // 배열 순서를 슬롯 순서와 어긋나게 둔다 — 정렬이 실제로 일어나는지 본다.
     const inventory = [
       makeInstance({ _id: 'slot-7', objnum: 2, equipped: true, slot: 7 }),
@@ -138,7 +138,7 @@ describe('resolveCarriedObject — 2단 착용 슬롯 스캔(ready[])', () => {
     )
   })
 
-  it('1단이 해소되면 착용 슬롯을 스캔하지 않는다', () => {
+  it('1단이 해석되면 착용 슬롯을 스캔하지 않는다', () => {
     const inventory = [
       makeInstance({ _id: 'worn', objnum: 2, equipped: true, slot: 0 }),
       makeInstance({ _id: 'carried', objnum: 2 }),
@@ -201,7 +201,7 @@ describe('resolveCarriedObject — 2단 착용 슬롯 스캔(ready[])', () => {
 })
 
 describe('resolveCarriedObject — ordinal 0 갈래(와이어 도달 불가, 오라클 고정용)', () => {
-  it('ordinal 0이면 1단이 구조적으로 미해소라 착용 슬롯 결과가 반환된다', () => {
+  it('ordinal 0이면 1단이 구조적으로 미해석이라 착용 슬롯 결과가 반환된다', () => {
     const inventory = [
       makeInstance({ _id: 'carried', objnum: 2 }),
       makeInstance({ _id: 'worn', objnum: 2, equipped: true, slot: 3 }),
@@ -219,8 +219,8 @@ describe('resolveCarriedObject — ordinal 0 갈래(와이어 도달 불가, 오
   })
 })
 
-describe('resolveCarriedObject — 템플릿 미해소·순수성', () => {
-  it('템플릿 미해소 인스턴스는 후보에서 빠지고 서수도 소모하지 않는다', () => {
+describe('resolveCarriedObject — 템플릿 미해석·순수성', () => {
+  it('템플릿 미해석 인스턴스는 후보에서 빠지고 서수도 소모하지 않는다', () => {
     const inventory = [
       makeInstance({ _id: 'orphan', objnum: 999 }),
       makeInstance({ _id: 'real-1', objnum: 2 }),
@@ -235,7 +235,7 @@ describe('resolveCarriedObject — 템플릿 미해소·순수성', () => {
     )
   })
 
-  it('템플릿 미해소 착용 인스턴스도 2단 후보에서 빠진다', () => {
+  it('템플릿 미해석 착용 인스턴스도 2단 후보에서 빠진다', () => {
     const inventory = [
       makeInstance({ _id: 'orphan-worn', objnum: 999, equipped: true, slot: 0 }),
       makeInstance({ _id: 'real-worn', objnum: 2, equipped: true, slot: 1 }),

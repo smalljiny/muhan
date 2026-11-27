@@ -22,17 +22,17 @@ export interface SessionLifecycleDeps {
   /**
    * link-dead 재연결 창(ms)을 돌려주는 provider. **thunk로 받는 것이 load-bearing**이다 — lifecycle은
    * registerWebsocket 1회에 인스턴스화되지만 env(getConfig)는 연결 시점에야 읽혀야 하므로(미설정 buildApp을
-   * 막지 않는다), grace 값을 스케줄 시점에 지연 조회한다. 셸은 `() => getConfig().WS_RECONNECT_GRACE_MS`로 배선한다.
+   * 막지 않는다), grace 값을 스케줄 시점에 지연 조회한다. 셸은 `() => getConfig().WS_RECONNECT_GRACE_MS`로 연결한다.
    */
   readonly graceMs: () => number
   /**
    * 무입력(idle) 종료 창(ms)을 돌려주는 provider. graceMs와 같은 이유로 **thunk**다 — env(getConfig)를
-   * 연결(월드 진입) 시점에 지연 조회한다. 셸은 `() => getConfig().WS_IDLE_TIMEOUT_MS`로 배선한다.
+   * 연결(월드 진입) 시점에 지연 조회한다. 셸은 `() => getConfig().WS_IDLE_TIMEOUT_MS`로 연결한다.
    */
   readonly idleMs: () => number
   /**
    * idle 타이머 팩토리 seam — 만료 위임 콜백(onExpire)을 받아 IdleTimer를 만든다. 미주입 시 createIdleTimer로
-   * 기본 배선한다(idleMs·setTimeoutFn·clearTimeoutFn 주입). **grace의 setTimeoutFn과 분리된 seam**이라
+   * 기본 연결한다(idleMs·setTimeoutFn·clearTimeoutFn 주입). **grace의 setTimeoutFn과 분리된 seam**이라
    * 테스트가 idle을 grace 관측과 독립적으로 스파이할 수 있다.
    */
   readonly createIdle?: (onExpire: () => void) => IdleTimer
@@ -76,7 +76,7 @@ export function createSessionLifecycle(deps: SessionLifecycleDeps): SessionLifec
     }, deps.graceMs())
   }
 
-  // idle 타이머 팩토리를 1회 해소한다 — 테스트가 createIdle을 주입하면 그것을, 아니면 createIdleTimer 기본을
+  // idle 타이머 팩토리를 1회 해석한다 — 테스트가 createIdle을 주입하면 그것을, 아니면 createIdleTimer 기본을
   // 쓴다. idleMs()는 팩토리 body에서 arm 시점에 지연 조회되므로 여기로 hoist해도 lazy 조회가 보존된다.
   // grace의 setTimeoutFn과 분리된 seam이라 테스트가 idle을 grace 관측과 독립적으로 스파이한다.
   const createIdle: (onExpire: () => void) => IdleTimer =
@@ -90,7 +90,7 @@ export function createSessionLifecycle(deps: SessionLifecycleDeps): SessionLifec
       }))
 
   /**
-   * 월드 진입한 바인딩에 idle 타이머를 걸어 ctx에 배선하고 arm한다. onExpire는 캡처한 바인딩으로
+   * 월드 진입한 바인딩에 idle 타이머를 걸어 ctx에 연결하고 arm한다. onExpire는 캡처한 바인딩으로
    * resolveDisconnect(idleTimeout)을 호출한다 — resolveDisconnect의 identity 가드가 stale(evict/rebind로
    * 교체된 옛 바인딩)을 걸러 no-op으로 만든다.
    */

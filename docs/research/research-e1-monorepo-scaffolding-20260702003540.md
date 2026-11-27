@@ -3,7 +3,7 @@
 
 ## Executive Summary
 
-E1 스캐폴딩의 스택은 ADR D8에서 pnpm workspaces + Vite(client) + tsup(server) + vitest로 확정됐다. 리서치는 그 구성의 2026 현재 관행과 함정을 확인했고, **한 가지 실질적 재검토 지점**을 발견했다: **tsup은 현재 활발히 유지보수되지 않으며, README가 직접 후속작 `tsdown`(Rolldown+Oxc 기반)을 권장한다** ([egoist/tsup](https://www.github.com/egoist/tsup), [tsdown migrate](https://tsdown.dev/guide/migrate-from-tsup)). 나머지 결정(pnpm workspace 프로토콜, vitest projects, eslint 9 flat config, GitHub Actions CI)은 모두 안정적 관행이 있으며 ADR 방향과 정합한다. 핵심 세부: pnpm **catalog**로 버전 드리프트 방지, vitest **커버리지는 프로세스 전체 단위로 계산**(임계는 루트 정의), eslint flat config는 **단일 루트 config + glob 타게팅**, CI는 pnpm 버전을 lockfile에 맞춰 핀 고정.
+E1 스캐폴딩의 스택은 ADR D8에서 pnpm workspaces + Vite(client) + tsup(server) + vitest로 확정됐다. 리서치는 그 구성의 2026 현재 관행과 함정을 확인했고, **한 가지 실질적 재검토 지점**을 발견했다: **tsup은 현재 활발히 유지보수되지 않으며, README가 직접 후속작 `tsdown`(Rolldown+Oxc 기반)을 권장한다** ([egoist/tsup](https://www.github.com/egoist/tsup), [tsdown migrate](https://tsdown.dev/guide/migrate-from-tsup)). 나머지 결정(pnpm workspace 프로토콜, vitest projects, eslint 9 flat config, GitHub Actions CI)은 모두 안정적 관행이 있으며 ADR 방향과 일치한다. 핵심 세부: pnpm **catalog**로 버전 드리프트 방지, vitest **커버리지는 프로세스 전체 단위로 계산**(임계는 루트 정의), eslint flat config는 **단일 루트 config + glob 타게팅**, CI는 pnpm 버전을 lockfile에 맞춰 핀 고정.
 
 ## 1. pnpm workspaces 구조 관행
 
@@ -17,7 +17,7 @@ E1 스캐폴딩의 스택은 ADR D8에서 pnpm workspaces + Vite(client) + tsup(
 
 - **tsup은 유지보수 중단 상태**로 표기된다. 공식 README가 "not actively maintained"를 명시하고 `tsdown` 마이그레이션 가이드를 링크한다 ([egoist/tsup](https://www.github.com/egoist/tsup)). 다만 여전히 ~6M weekly downloads로 가장 널리 쓰인다 ([PkgPulse 2026](https://www.pkgpulse.com/guides/tsup-vs-tsdown-vs-unbuild-typescript-library-bundling-2026)).
 - **tsdown**은 Rolldown+Oxc 기반 "production-ready successor to tsup"으로, tsup과 높은 호환성 + 더 빠른 빌드 + 출력 제어 개선을 표방 ([tsdown](https://tsdown.dev/), [migrate](https://tsdown.dev/guide/migrate-from-tsup)). `experimentalDts` → `dts`로 정리, swc 대신 내장 oxc 사용.
-- *추론/주의*: tsup·tsdown 모두 **라이브러리 번들러**다. 서버는 라이브러리가 아니므로 번들이 필수가 아니다 — `tsc` 빌드 또는 `tsx`(dev) + `tsc`(prod)도 유효한 대안. 번들의 이점은 단일 dist 배포 단순화. **결정 필요**: (a) ADR대로 tsup 유지(성숙·광범위하나 유지보수 정체), (b) tsdown 채택(모던·미성숙), (c) 서버는 tsc/tsx로 충분하다고 판단. Open Question으로 승격 권장.
+- *추론/주의*: tsup·tsdown 모두 **라이브러리 번들러**다. 서버는 라이브러리가 아니므로 번들이 필수가 아니다 — `tsc` 빌드 또는 `tsx`(dev) + `tsc`(prod)도 유효한 대안. 번들의 이점은 단일 dist 배포 단순화. **결정 필요**: (a) ADR대로 tsup 유지(성숙·광범위하나 유지보수 정체), (b) tsdown 채택(모던·미성숙), (c) 서버는 tsc/tsx로 충분하다고 판단. Open Question으로 올릴 것을 권장.
 
 ## 3. vitest 구성·커버리지 (모노레포)
 
@@ -42,7 +42,7 @@ E1 스캐폴딩의 스택은 ADR D8에서 pnpm workspaces + Vite(client) + tsup(
 
 ## Key Takeaways
 
-- **tsup 유지보수 정체를 스펙 Open Question으로 승격** — tsup 유지 vs tsdown 채택 vs 서버는 tsc/tsx로 대체. ADR D8은 tsup을 명시했으나 P2("적합성 별도 판단")가 이 재검토를 허용한다.
+- **tsup 유지보수 정체를 스펙 Open Question으로 올림** — tsup 유지 vs tsdown 채택 vs 서버는 tsc/tsx로 대체. ADR D8은 tsup을 명시했으나 P2("적합성 별도 판단")가 이 재검토를 허용한다.
 - **pnpm catalog를 초기부터 도입** — 4패키지라도 버전 드리프트 예방. workspace: 프로토콜 + 단일 lockfile 필수.
 - **vitest 80% 커버리지 임계는 루트 config에 정의**(프로세스 전체 계산), 패키지는 `projects`로 등록, v8 provider.
 - **eslint는 단일 루트 flat config + glob 타게팅**, Prettier 별도. 소규모라 typed-linting OOM 리스크 없음.

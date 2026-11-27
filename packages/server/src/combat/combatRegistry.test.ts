@@ -5,7 +5,7 @@ import type { PlayerCombatState } from './playerState.js'
 /**
  * combatRegistry 라이프사이클 — characterId-keyed 라이브 전투상태 레지스트리.
  *
- * 플레이어는 방-물질화 객체가 아닌 세션 액터이므로 방 부착이 아닌 characterId 키로 관리한다.
+ * 플레이어는 방에서 인스턴스 생성되는 객체가 아닌 세션 액터이므로 방 부착이 아닌 characterId 키로 관리한다.
  * register 후 get은 동일 참조(reference)를 반환해야 한다 — Story 5가 이 참조로 hpCurrent를
  * in-place 차감하기 때문. 팩토리가 Map을 소유하며 전역 싱글턴을 조회하지 않는다.
  */

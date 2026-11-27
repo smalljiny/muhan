@@ -6,7 +6,7 @@ const speaker: ActorContext = { accountId: 'acc-1', characterId: 'char-1' }
 
 describe('createNoopChannelAdapter', () => {
   it('deliver가 전달 사실(characterId·channel·target)만 구조 로깅한다', () => {
-    // info fn을 캡처해 단언한다 — logger.info를 오브젝트에서 분리 참조하면 unbound-method 규칙을 트립한다.
+    // info fn을 캡처해 단언한다 — logger.info를 객체에서 분리 참조하면 unbound-method 규칙을 트립한다.
     const info = vi.fn()
     const logger: ChannelLogger = { info }
     const adapter = createNoopChannelAdapter(logger)

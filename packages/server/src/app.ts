@@ -31,10 +31,10 @@ import type { LiveWorldWiringBundle } from './ws/liveWorldWiring.js'
  *
  * `deps.devLoginSeedCookie`는 dev 전용 로그인 라우트(`GET /dev/login`)의 게이트다. 값이 주어질 때만
  * 라우트를 마운트해 `__session=<값>` 쿠키를 발급한다(Story 4, G1 서버측). 미주입(프로덕션)이면 라우트가
- * 존재하지 않아 dev 쿠키 발급 표면이 없다. 부팅(index.ts)이 DEV_LOGIN_ENABLED가 true일 때만 주입한다.
+ * 존재하지 않아 dev 쿠키 발급 접점이 없다. 부팅(index.ts)이 DEV_LOGIN_ENABLED가 true일 때만 주입한다.
  *
  * `deps.liveWorld`는 월드 진입 seam(Story 4)의 라이브 의존(진입 코어+월드 그래프)이다. 주입 시 세션이
- * 캐릭터를 로드해 저장된 방에 배치하고 world:room을 발화한다. 미주입이면 registerWebsocket이 undefined를
+ * 캐릭터를 로드해 저장된 방에 배치하고 world:room을 발생시킨다. 미주입이면 registerWebsocket이 undefined를
  * 그대로 넘겨 진입 seam을 통째로 건너뛴다(T4.5, 기존 동작 보존) — lifecyclePort 관례 미러.
  *
  * `deps.liveWorldDeps`는 라이브 월드 의존 묶음(Story 7)이다. 주입 시 registerWebsocket이 이 원재료로
@@ -67,7 +67,7 @@ export function buildApp(deps?: {
   // 세션 인증 포트를 조립한다. 미주입 시 빈 인메모리 어댑터(유효 쿠키 없음)를 기본으로 세운다.
   const sessionAuth = deps?.sessionAuth ?? new InMemorySessionAuthAdapter()
 
-  // dev 로그인 라우트는 시드 쿠키가 주입될 때만 마운트한다(프로덕션은 미주입 → 라우트 부재).
+  // dev 로그인 라우트는 시드 쿠키가 주입될 때만 마운트한다(프로덕션은 미주입 → 라우트 없음).
   if (deps?.devLoginSeedCookie !== undefined) {
     registerDevLoginRoute(app, deps.devLoginSeedCookie)
   }

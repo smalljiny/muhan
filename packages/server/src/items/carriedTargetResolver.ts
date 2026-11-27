@@ -6,9 +6,9 @@ import type { ObjectTemplateIndex } from './objectTemplate.js'
 import { MAXWEAR } from './taxonomy.js'
 
 /**
- * 인벤 스코프 대상 해소자 — 오라클 `study`(`legacy/muhan/src/magic1.c:279-293`)의 2단 탐색을 이식한다.
+ * 인벤 스코프 대상 리졸버 — 오라클 `study`(`legacy/muhan/src/magic1.c:279-293`)의 2단 탐색을 이식한다.
  * 1단은 `find_obj`(`object.c:134-161`)로 **미착용 인벤**을, 2단은 `ready[]` 배열로 **착용 슬롯**을 훑는다.
- * 매칭 규칙 자체(4필드 순수 접두 + 서수)는 순수 매처 `shared/naming/matchTarget`이 소유하고 이 모듈은
+ * 매칭 규칙 자체(4필드 순수 접두 + 서수)는 순수 매처 `shared/naming/matchTarget`이 담당하고 이 모듈은
  * **후보 선별·순서 결정**만 한다(`world/roomTargetResolvers.ts` 관례 미러).
  *
  * ```c
@@ -54,15 +54,15 @@ import { MAXWEAR } from './taxonomy.js'
  * 그 분리를 구조로 얻는다.
  *
  * ## 관찰자 flags는 인자다
- * 해소자가 `composeCharacterFlags`를 호출하지 않는다 — 호출부(배선 계층)가 합성한 16자 P-flag hex를
- * 넘긴다(`world/roomTargetResolvers.ts`·`combat/playerState.ts` 선례). `now` 의존성을 순수 해소자 밖에
+ * 리졸버가 `composeCharacterFlags`를 호출하지 않는다 — 호출부(연결 계층)가 합성한 16자 P-flag hex를
+ * 넘긴다(`world/roomTargetResolvers.ts`·`combat/playerState.ts` 선례). `now` 의존성을 순수 리졸버 밖에
  * 두어 이 모듈이 시간에 무관한 순수 함수로 남는다.
  *
- * ## 템플릿 미해소는 별도 결과로 보고하지 않는다
- * `ObjectInstance`에 `name`·`keys`가 없어 템플릿 미해소 인스턴스는 **원리적으로 이름이 없다**. 따라서
- * 질의 시점에 "템플릿 미해소"와 "미소지"를 구분할 수단이 없고, 해소자는 미해소를 별도 결과로 보고하지
- * 않는다 — 데이터 정합 실패를 관측하려면 결합 시점(hydrate·pairing)의 로그가 맞는 자리다.
- * 미해소 인스턴스는 후보에서 빠지며 서수 슬롯도 소모하지 않는다.
+ * ## 템플릿 미해석은 별도 결과로 보고하지 않는다
+ * `ObjectInstance`에 `name`·`keys`가 없어 템플릿 미해석 인스턴스는 **원리적으로 이름이 없다**. 따라서
+ * 질의 시점에 "템플릿 미해석"과 "미소지"를 구분할 수단이 없고, 리졸버는 미해석을 별도 결과로 보고하지
+ * 않는다 — 데이터 일치 실패를 관측하려면 결합 시점(hydrate·pairing)의 로그가 맞는 자리다.
+ * 미해석 인스턴스는 후보에서 빠지며 서수 슬롯도 소모하지 않는다.
  *
  * ## ⚠ 알려진 divergence — 1단 서수 기준 순서
  * 이 모듈은 인벤 배열 순서를 **서수 기준으로 처음 소비하는 코드**다. 그 순서는 오라클과 다르다 —
@@ -76,7 +76,7 @@ import { MAXWEAR } from './taxonomy.js'
  */
 
 /**
- * 소지품 해소자 계약 — 배선 계층이 `typeof` 구현 종속 없이 잡을 수 있는 명시 타입
+ * 소지품 리졸버 계약 — 연결 계층이 `typeof` 구현 종속 없이 잡을 수 있는 명시 타입
  * (`world/roomTargetResolvers.ts`의 `RoomCreatureResolver` 선례).
  */
 export type CarriedObjectResolver = (
@@ -130,8 +130,8 @@ function isSlotted(instance: ObjectInstance): instance is ObjectInstance & { slo
 }
 
 /**
- * 인스턴스 배열을 템플릿과 결합해 매처 후보로 만든다. 결합·미해소 드롭·순서 보존은 전부
- * `pairObjects`가 소유하고(같은 정책을 여기 다시 쓰지 않는다), 이 함수는 매처가 요구하는
+ * 인스턴스 배열을 템플릿과 결합해 매처 후보로 만든다. 결합·미해석 드롭·순서 보존은 전부
+ * `pairObjects`가 담당하고(같은 정책을 여기 다시 쓰지 않는다), 이 함수는 매처가 요구하는
  * `name`·`keys`를 템플릿에서 끌어올리기만 한다.
  */
 function toCandidates(
@@ -146,11 +146,11 @@ function toCandidates(
 }
 
 /**
- * 소지품(인벤 → 착용 슬롯)에서 아이템을 이름(별칭 포함)·서수로 해소한다. 미달이면 `undefined`.
+ * 소지품(인벤 → 착용 슬롯)에서 아이템을 이름(별칭 포함)·서수로 해석한다. 미달이면 `undefined`.
  *
  * @param inventory 소유자의 전 소지품(착용·미착용 혼재). 두 단계가 `equipped`로 스스로 갈라 쓴다
  * @param index objnum → 템플릿 인덱스(이름·별칭·flags의 출처)
- * @param query 사용자가 친 이름 접두(질의 전처리는 호출부 소유)
+ * @param query 사용자가 친 이름 접두(질의 전처리는 호출부 담당)
  * @param observerFlags 관찰자 P-flag hex 스냅샷. 호출부가 `composeCharacterFlags(character, now)`로 합성해 넘긴다
  * @param ordinal 몇 번째 매치를 고를지(1-base, 오라클 `cmnd->val[1]`)
  */
@@ -175,7 +175,7 @@ export const resolveCarriedObject: CarriedObjectResolver = (
   // ── 2단: 착용 슬롯(ready[]) ─────────────────────────────────────────────────
   // 오라클은 `ready[]`를 인덱스 오름차순으로 훑으므로 슬롯 번호가 곧 서수 기준이다(인벤 배열 순서가 아니다).
   // `slot`이 null이거나 `[0, MAXWEAR)` 밖인 착용 인스턴스는 `ready[]`에 자리가 없어 오라클 루프가
-  // 도달할 수 없으므로 후보에서 뺀다(`isSlotted` 참조) — 착용 상태와 슬롯 번호가 어긋난 데이터 정합
+  // 도달할 수 없으므로 후보에서 뺀다(`isSlotted` 참조) — 착용 상태와 슬롯 번호가 어긋난 데이터 일치
   // 실패이지, 이름으로 지목 가능한 대상이 아니다.
   const wornSorted = inventory.filter(isSlotted).sort((a, b) => a.slot - b.slot)
   // 가시성 게이트를 두지 않는다 — 오라클 `ready[]` 루프 조건이 `EQUAL` 하나뿐이다(magic1.c:285).
@@ -184,7 +184,7 @@ export const resolveCarriedObject: CarriedObjectResolver = (
   const wornMatch = matchTarget(worn, query, ordinal === 0 ? 1 : ordinal)?.pair
 
   // 오라클은 2단이 아무것도 못 찾으면 `obj_ptr`에 1단 결과를 그대로 남긴다. 다만 여기 도달했다는 것은
-  // "1단 미해소" 또는 "ordinal === 0"이라는 뜻이고, `matchTarget`은 ordinal 0에서 `match++` 뒤에
+  // "1단 미해석" 또는 "ordinal === 0"이라는 뜻이고, `matchTarget`은 ordinal 0에서 `match++` 뒤에
   // `match === 0`을 비교하므로 구조적으로 항상 `undefined`다 — 즉 이 시점의 `carriedMatch`는 늘
   // `undefined`이며, 이 fallback은 오라클 형태를 보존할 뿐 값이 바뀌는 경로가 아니다.
   //

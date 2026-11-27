@@ -8,7 +8,7 @@ import type { CreatureInstance } from 'shared'
  *     — 인접·게이트 판정(`enemies.length`)이 이 배열을 읽는다. 타입은 불변(string[]).
  *   - per-attacker 데미지는 병렬 `Map<attackerId, number>` 원장(이 모듈 소유)에 누적한다.
  *
- * 이 모듈은 누적만 수행한다. 데미지 기반 분배·페널티는 #83 소관(non-goal)이다.
+ * 이 모듈은 누적만 수행한다. 데미지 기반 분배·페널티는 #83 담당(non-goal)이다.
  */
 
 /**
@@ -46,7 +46,7 @@ export function createDamageLedger(): DamageLedger {
  * 동작 divergence(D5 분리 설계): 오라클 add_enm_dmg는 적 리스트 멤버(strcmp 매칭)에만 누적하므로
  * 비-적 데미지 기록이 구조적으로 불가능하나, 병렬 원장 분리로 이 멤버십 게이트가 사라져 임의
  * attackerId에 무조건 누적한다. 실사용은 무해하다(Story 8 T8.4가 registerEnemy 후 누적) — 멤버십
- * 게이팅·분배는 #83 resolver 소관.
+ * 게이팅·분배는 #83 resolver 담당.
  */
 export function accumulateDamage(ledger: DamageLedger, attackerId: string, amount: number): void {
   ledger.set(attackerId, (ledger.get(attackerId) ?? 0) + amount)

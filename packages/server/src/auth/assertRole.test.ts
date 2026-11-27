@@ -7,8 +7,8 @@ import { assertRole, RoleError } from './assertRole.js'
  *
  * 정책: player < builder < dm < admin (계층적 >= 비교). role rank가 요구 rank 이상이면
  * 통과(void), 미만이면 RoleError. exact-equality가 아니라 계층 비교다 — dm은 builder 게이트를
- * 통과하고 admin은 모든 게이트를 통과한다. 실제 권한 게이트 명령은 A13으로 유예되며, 이 seam은
- * assertRole 함수와 role 필드만 제공한다(RBAC 어댑터 배선 없음).
+ * 통과하고 admin은 모든 게이트를 통과한다. 실제 권한 게이트 명령은 A13으로 보류되며, 이 seam은
+ * assertRole 함수와 role 필드만 제공한다(RBAC 어댑터 연결 없음).
  */
 const roleOf = (role: Account['role']): Pick<Account, 'role'> => ({ role })
 

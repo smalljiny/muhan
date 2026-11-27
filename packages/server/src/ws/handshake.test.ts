@@ -4,7 +4,7 @@ import { handleHandshakeFrame } from './handshake.js'
 import { createConnectionContext, type ConnectionContext } from './connection.js'
 
 // T4.4 — 핸드셰이크 상태 전이표의 단위 스펙. 소켓 I/O 없이 순수 함수로 전이를 고정한다.
-// 서버 버전 권위 대조(client === server)·pre-ready 게이트·중복 ready·post-ready pass-through를 모두 커버한다.
+// 서버 버전 기준 대조(client === server)·pre-ready 게이트·중복 ready·post-ready pass-through를 모두 커버한다.
 describe('handleHandshakeFrame', () => {
   const pending = (): ConnectionContext => createConnectionContext()
   const established = (): ConnectionContext => ({ ...createConnectionContext(), ready: true })

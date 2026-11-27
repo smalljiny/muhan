@@ -3,7 +3,7 @@
 
 ## Executive Summary
 
-이 문제는 write-behind 캐시의 알려진 실패 모드이고, 업계는 이미 이름을 붙여 다루고 있다. 핵심 명제는 **"캐시가 진실의 원천인 동안에는 저장소를 다시 읽으면 안 된다"**이다. Meta는 같은 형상(캐시 fill 응답과 무효화 이벤트의 경쟁)을 TAO에서 수년간 다뤘고, 해법은 **버전 필드를 통한 충돌 해소** — "오래된 데이터가 새 데이터를 덮어써서는 안 된다"였다 ([Meta Engineering](https://engineering.fb.com/2022/06/08/core-infra/cache-made-consistent/)). 다만 Meta는 그 위에 함정 하나를 더 지적한다: 버전을 가진 캐시 엔트리가 **evict되면 최신 데이터에 대한 지식 자체가 사라진다**. 본 토픽의 `release(id)`가 정확히 그 evict다.
+이 문제는 write-behind 캐시의 알려진 실패 모드이고, 업계는 이미 이름을 붙여 다루고 있다. 핵심 명제는 **"캐시가 진실의 원천인 동안에는 저장소를 다시 읽으면 안 된다"**이다. Meta는 같은 패턴(캐시 fill 응답과 무효화 이벤트의 경쟁)을 TAO에서 수년간 다뤘고, 해법은 **버전 필드를 통한 충돌 해소** — "오래된 데이터가 새 데이터를 덮어써서는 안 된다"였다 ([Meta Engineering](https://engineering.fb.com/2022/06/08/core-infra/cache-made-consistent/)). 다만 Meta는 그 위에 함정 하나를 더 지적한다: 버전을 가진 캐시 엔트리가 **evict되면 최신 데이터에 대한 지식 자체가 사라진다**. 본 토픽의 `release(id)`가 정확히 그 evict다.
 
 가장 값진 발견은 **두 write의 순서가 손실 방향을 결정한다는 것이 15년 된 게임 서버 상식**이라는 점이다. gamedev.stackexchange의 채택 답변은 거래 시나리오로 이를 명시한다 — "'받는 쪽에 아이템 추가'와 '보내는 쪽에서 아이템 차감' 두 명령 중 첫 번째 뒤·두 번째 전에 실패하면 **아이템 복제**가 생긴다. 순서를 뒤집으면 **아이템 소실**이 생긴다" ([gamedev.SE](https://gamedev.stackexchange.com/questions/19338/how-often-to-save-players-state-in-persistent-online-games)). #120이 `markCharacterDirty` → `markObjectDeleted` 순서를 고른 근거와 정확히 같은 추론이고, 같은 답변이 이어서 **"서로 의존하는 연속 명령은 함께 저장돼야 한다"**고 못박는다.
 
@@ -34,7 +34,7 @@ Meta가 제시한 해법과 그 한계가 둘 다 중요하다.
 
 이 한계가 본 토픽에 직접 적용된다. `onSessionEnd`의 `release(id)`가 라이브 엔트리를 제거하는 순간이 곧 evict이고, 그 뒤의 `hydrate`에는 "무엇이 더 새로운지" 판단할 근거가 남지 않는다. **버전 가드만 라이브 레지스트리에 얹는 해법은 release가 그 버전을 함께 지우면 무력화된다** — 가드는 `release`보다 오래 사는 곳(DirtyTracker)에 있어야 한다.
 
-Meta는 또 하나를 짚는다. 동적 캐시는 **읽기(fill) 경로와 쓰기(무효화) 경로 양쪽에서 데이터가 변한다**는 점이 race condition의 근원이라는 것이다. 본 토픽의 `hydrate`(읽기)와 `markCharacterDirty`(쓰기)가 같은 `characters:<id>` 키를 건드리는 구조가 정확히 이 형상이다.
+Meta는 또 하나를 짚는다. 동적 캐시는 **읽기(fill) 경로와 쓰기(무효화) 경로 양쪽에서 데이터가 변한다**는 점이 race condition의 근원이라는 것이다. 본 토픽의 `hydrate`(읽기)와 `markCharacterDirty`(쓰기)가 같은 `characters:<id>` 키를 건드리는 구조가 정확히 이 패턴이다.
 
 Redis도 캐시 드리프트의 원인을 셋으로 정리하며 같은 지점을 든다 — TTL 창, **캐시와 DB 사이의 write-ordering 경쟁**, 여러 앱 인스턴스의 캐시 fill 충돌 ([Redis](https://redis.io/blog/cache-consistency-strategies/)).
 
@@ -46,7 +46,7 @@ Redis도 캐시 드리프트의 원인을 셋으로 정리하며 같은 지점�
 
 #120 스펙 OQ1이 `markCharacterDirty`를 먼저 두기로 한 결정은 이 추론과 동형이다. 다만 인용문의 마지막 문장이 본 토픽에 대한 경고다 — **본 결함에서는 두 write가 모두 성공하는데도 "한쪽만 revert"되어 소실 방향이 실현된다.** 부분 커밋의 원인이 실패가 아니라 revert라는 점만 다르고 결과는 같다.
 
-**아이템 복제 방지 선례가 강조하는 것은 원자성과 단일 권위다.** Bugnet은 "전송을 원자적으로 만들라(전송 시 **추가보다 제거를 먼저**), 이벤트 이중 발화를 막으라, 인벤토리를 **한 곳에서만 바뀌는 권위 상태**로 다루라"로 요약한다 ([Bugnet](https://bugnet.io/blog/how-to-fix-inventory-item-duplication-bug)). 고전적 복제 익스플로잇 목록에도 **"다른 캐릭터에게 거래한 뒤 거래한 계정을 먼저 접속 종료"**가 올라 있다 ([munique.net](https://munique.net/item-duplication-exploits/)) — 접속 종료가 영속 경계와 엮이는 순간이 공격 표면이라는 뜻이다.
+**아이템 복제 방지 선례가 강조하는 것은 원자성과 단일 기준이다.** Bugnet은 "전송을 원자적으로 만들라(전송 시 **추가보다 제거를 먼저**), 이벤트 이중 발화를 막으라, 인벤토리를 **한 곳에서만 바뀌는 기준 상태(authoritative)**로 다루라"로 요약한다 ([Bugnet](https://bugnet.io/blog/how-to-fix-inventory-item-duplication-bug)). 고전적 복제 익스플로잇 목록에도 **"다른 캐릭터에게 거래한 뒤 거래한 계정을 먼저 접속 종료"**가 올라 있다 ([munique.net](https://munique.net/item-duplication-exploits/)) — 접속 종료가 영속 경계와 엮이는 순간이 공격 표면이라는 뜻이다.
 
 **다중 키 원자성의 일반 해법은 transactional outbox다.** 업무 엔티티 갱신과 메시지 발행을 같은 트랜잭션에 넣고 별도 릴레이가 전달한다. 이득은 "2PC 없이도 DB 트랜잭션이 커밋될 때만 메시지가 전달됨이 보장"되고 **순서가 보존**된다는 것이다. 대가는 릴레이가 **메시지를 두 번 이상 발행할 수 있다**는 점이라 소비자 멱등성이 필요하다 ([microservices.io](https://microservices.io/patterns/data/transactional-outbox.html)).
 
@@ -126,7 +126,7 @@ Meta의 표현이 심각도를 요약한다 — *"어떤 경우 캐시 불일치
 13. [Cache Consistency: Strategies to Keep Data Fresh — Redis](https://redis.io/blog/cache-consistency-strategies/) — 캐시 드리프트 3대 원인
 14. [Players Save is reverted to last save state — The Indie Stone](https://theindiestone.com/forums/topic/90611-42131-players-save-is-reverted-to-last-save-state-whenever-he-disconnects/) — Project Zomboid 동일 증상 프로덕션 사례
 15. [Player data being reset to the "start" — Minecraft Forum](https://www.minecraftforum.net/forums/support/server-support-and/2950936-player-data-being-reset-to-the-start) — abrupt disconnect 시 상태 리셋 사례
-16. [How to Fix an Inventory Item Duplication Bug — Bugnet](https://bugnet.io/blog/how-to-fix-inventory-item-duplication-bug) — 원자적 전송·단일 권위 상태 원칙
+16. [How to Fix an Inventory Item Duplication Bug — Bugnet](https://bugnet.io/blog/how-to-fix-inventory-item-duplication-bug) — 원자적 전송·단일 기준 상태 원칙
 17. [On item duplication exploits and how to prevent them — munique.net](https://munique.net/item-duplication-exploits/) — 접속 종료를 이용한 복제 익스플로잇 유형
 18. [Session Management and Caching at Scale — Apache Ignite](https://ignite.apache.org/use-cases/session-management/) — 세션 캐시 정합성 포지셔닝
 19. [Ignite Write Behind Internals — StackOverflow](https://stackoverflow.com/questions/47548547/ignite-write-behind-internals) — write-behind backpressure 설계

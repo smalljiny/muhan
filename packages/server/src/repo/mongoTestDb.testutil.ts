@@ -8,7 +8,7 @@ import { MongoClient, type Db } from 'mongodb'
  * beforeAll에서 create, afterAll에서 cleanup으로 client.close + replset.stop을
  * 순서대로 수행한다. standalone 모드는 `session.withTransaction`을 지원하지 않아
  * ("Transaction numbers are only allowed on a replica set member or mongos")
- * 단일노드 replset으로 승격했다.
+ * 단일노드 replset으로 올렸다.
  * 컬렉션별 격리(deleteMany)는 컬렉션 목록이 파일마다 다르므로 각 테스트 파일이
  * beforeEach에서 자체 수행한다.
  *

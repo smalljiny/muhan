@@ -1,15 +1,15 @@
 /**
- * hex string 비트 헬퍼 — 크리처/오브젝트 flags(8바이트 = 16자 hex string)의 비트 조회·세팅·클리어.
+ * hex string 비트 헬퍼 — 몬스터/아이템 flags(8바이트 = 16자 hex string)의 비트 조회·세팅·클리어.
  *
  * 원본 `F_ISSET(p,f) = flags[f/8] & (1<<(f%8))`(mtype.h) 이식. door.ts `hasFlag`는 바이트당 한
  * 원소인 number[]용이라 여기 hex string 표현(creatures.json·objects.json·rooms.json의 flags 필드)에는
  * 부적합하다. 이 모듈은 hex string을 그대로 다뤄 별도 디코딩 없이 비트를 판정한다.
  *
- * F_SET/F_CLR은 in-place 변형 대신 새 문자열을 반환한다 — autonomic(순수 함수)이 새 크리처 상태를
+ * F_SET/F_CLR은 in-place 변형 대신 새 문자열을 반환한다 — autonomic(순수 함수)이 새 몬스터 상태를
  * 만들 때 flags를 교체하는 용도다(입력 flags 불변).
  */
 
-// ── 크리처 M-flag 비트(mtype.h 검증) ─────────────────────────────────────────
+// ── 몬스터 M-flag 비트(mtype.h 검증) ─────────────────────────────────────────
 /** 고정 몬스터(입장 리스폰 대상). */
 export const MPERMT = 0
 /** 숨음(hidden) 상태 — MHIDDN(mtype.h). 방 표시 루틴이 목록에서 제외(room.c 방 표시 + creature 나열). */
@@ -32,7 +32,7 @@ export const MBRWP2 = 29
 export const MENEDR = 30
 /** 질병 특수공격 — MDISEA(mtype.h). 근접 후 질병 부여 게이트 rng(1,100)<=10(update.c:387~480). */
 export const MDISEA = 34
-/** 장비용해 특수공격 — MDISIT(mtype.h). 근접 후 게이트 rng(1,100)<=15(update.c:387~480, 효과는 유예). */
+/** 장비용해 특수공격 — MDISIT(mtype.h). 근접 후 게이트 rng(1,100)<=15(update.c:387~480, 효과는 보류). */
 export const MDISIT = 35
 /** 실명 특수공격 — MBLNDR(mtype.h). 근접 후 실명 부여 게이트 rng(1,100)<=10(update.c:387~480). */
 export const MBLNDR = 45
@@ -50,7 +50,7 @@ export const MMGONL = 20
 export const MENONL = 22
 /** 절대 해칠 수 없음 — MUNKIL(mtype.h:435). 전투 대상 무적 무조건 거부(command5.c:146). */
 export const MUNKIL = 24
-/** 마법 저항(크리처) — MRMAGI(mtype.h:438). offensive_spell 데미지 감산 게이트(magic1.c:1113). */
+/** 마법 저항(몬스터) — MRMAGI(mtype.h:438). offensive_spell 데미지 감산 게이트(magic1.c:1113). */
 export const MRMAGI = 27
 /** 혼동(befuddle) 저항 — MRBEFD(mtype.h:454 "Monster resists stun only"). 혼동술 dur=3 단축(magic3.c:775). */
 export const MRBEFD = 43
@@ -62,9 +62,9 @@ export const MSILNC = 48
 export const MBLIND = 49
 /** 매혹 불가 — MNOCHA(mtype.h:473 "Monster cannot be charmed"). charm 완전 반탄 조건(magic8.c:751). */
 export const MNOCHA = 62
-/** 선한 유저 공격형(정렬 alg=-1). */
+/** 선한 플레이어 공격형(성향 alg=-1). */
 export const MGAGGR = 39
-/** 악한 유저 공격형(정렬 alg=1). */
+/** 악한 플레이어 공격형(성향 alg=1). */
 export const MEAGGR = 40
 /** DM 추종 몬스터(wander-out 제외 조건). */
 export const MDMFOL = 46
@@ -78,8 +78,8 @@ export const MSUMMO = 61
 // ── 플레이어 P-flag 비트(mtype.h #define 검증) ───────────────────────────────
 // 원작 무한/Mordor는 플레이어도 creature 구조체라 P-flag는 creature flags와 동일 바이트 배열을
 // 같은 F_ISSET(0-index `flags[f/8]&(1<<(f%8))`)로 읽는다 — M-flag와 다른 오프셋 체계일 수 없다.
-// 비트 인덱스가 31을 넘으므로(42·43) 32비트 number bitfield로는 표현 불가 — hex string 표현이 정본.
-// help/pflags 문서 값(PBLIND 43·PFEARS 44)은 raw #define보다 +1이므로 mtype.h를 정본으로 채택한다.
+// 비트 인덱스가 31을 넘으므로(42·43) 32비트 number bitfield로는 표현 불가 — hex string 표현이 기준.
+// help/pflags 문서 값(PBLIND 43·PFEARS 44)은 raw #define보다 +1이므로 mtype.h를 기준으로 채택한다.
 /** 숨음(hidden) 상태 — PHIDDN(mtype.h:346). aggro 타깃선정 자격 제외(player.c:1327 lowest_piety, 1490 low_piety_alg). */
 export const PHIDDN = 1
 /** 투명(invisibility) 상태 — PINVIS(mtype.h:347). aggro 타깃선정 시 공격자 MDINVI 없으면 자격 제외(player.c:1328). */
@@ -113,7 +113,7 @@ export const PRCOLD = 36
 /**
  * 대지 저항(방어자) — PSSHLD(mtype.h:383 `#define PSSHLD 38`). earth_shield(지방호) 시전 시 F_SET
  * (magic7.c:252·286). resistBuff family 4주문 중 SSSHLD 대응 저항 플래그(PRFIRE/PRMAGI/PRCOLD와 동렬,
- * #85 G5). #84 저항-read 미배선(플레이어 저항 감산 유예) — 상수·투영만 보존한다.
+ * #85 G5). #84 저항-read 미연결(플레이어 저항 감산 보류) — 상수·변환만 보존한다.
  */
 export const PSSHLD = 38
 /** 패거리 가입자 — PFAMIL(mtype.h:400). 양측 PFAMIL이면 선악 게이트를 check_war로 게이팅(command5.c:183). */
@@ -122,7 +122,7 @@ export const PFAMIL = 55
 // ── 버프·감지 P-flag 비트(mtype.h #define, Story 9 G7 timed effect) ───────────
 // 원작은 P-flag를 creature flags와 같은 바이트 배열에 F_SET한다(예 bless: F_SET(ply,PBLESS)). 이 포트의
 // Character엔 flags 필드가 없어 타이머는 buffs `{until}`로 영속하고, 활성 버프를 projectBuffFlags가 fresh
-// P-flag hex로 투영한다(resistBuff의 projectResistFlags 계약 승계). 비트값은 mtype.h를 정본으로 전사한다.
+// P-flag hex로 변환한다(resistBuff의 projectResistFlags 계약 승계). 비트값은 mtype.h를 기준으로 옮겨 적는다.
 /** 축복(bless) — PBLESS(mtype.h:345 `#define PBLESS 0`). SBLESS 시전 시 F_SET(magic3.c). PINVIS 등과 같은 flags 배열, 플레이어 문맥 비트0. */
 export const PBLESS = 0
 /** 수호(protection) — PPROTE(mtype.h:353 `#define PPROTE 8`). SPROTE 시전 시 F_SET(magic2.c:373). */
@@ -145,7 +145,7 @@ export const PBRWAT = 37
 export const PUPDMG = 59
 /**
  * 마법 저항(플레이어) — PRMAGI(mtype.h:377). offensive_spell 데미지 감산 게이트(magic1.c:1113).
- * #84 미발동(플레이어 대상 저항은 piety store가 없어 #85 소관) — 상수만 보존한다.
+ * #84 미발동(플레이어 대상 저항은 piety store가 없어 #85 담당) — 상수만 보존한다.
  */
 export const PRMAGI = 32
 
@@ -162,9 +162,9 @@ export const OPERM2 = 9
 export const ONOTAK = 17
 /** 배경 소품(회수 불가). */
 export const OSCENE = 18
-/** 선인 전용 아이템 — OGOODO(mtype.h:488). study 정렬 게이트(alignment<-100이면 연마 실패, magic1.c:305). */
+/** 선인 전용 아이템 — OGOODO(mtype.h:488). study 성향 게이트(alignment<-100이면 연마 실패, magic1.c:305). */
 export const OGOODO = 12
-/** 악인 전용 아이템 — OEVILO(mtype.h:489). study 정렬 게이트(alignment>100이면 연마 실패, magic1.c:305). */
+/** 악인 전용 아이템 — OEVILO(mtype.h:489). study 성향 게이트(alignment>100이면 연마 실패, magic1.c:305). */
 export const OEVILO = 13
 /** 저주받은 무기 — OCURSE(mtype.h:498). 불발 시 무기 낙하 제외 조건(command5.c:298). */
 export const OCURSE = 22
@@ -188,7 +188,7 @@ function byteAt(hex: string, bit: number): number {
  * 입력이 대상 바이트 오프셋보다 짧으면(예: 빈 문자열에 고비트 세팅) 대상 오프셋까지 '0'으로
  * 채운 뒤 교체한다 — zero-pad가 없으면 substring이 짧은 문자열 전체를 반환해 고바이트 비트를
  * 낮은 바이트에 잘못 기록한다(플레이어 flags '' + PFEARS=44 경로). 16자 full-width 입력에는
- * padEnd가 no-op이라 기존 크리처/오브젝트 flags 동작은 불변.
+ * padEnd가 no-op이라 기존 몬스터/아이템 flags 동작은 불변.
  */
 function withByte(hex: string, byteIdx: number, value: number): string {
   const i = byteIdx * 2

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { FakeClock } from '../util/clock.testutil.js'
 import { WorldClock, type WorldTickSlot } from './worldClock.js'
 
-// 호출된 tickSec를 기록하는 fake 슬롯. 실 슬롯(게임시간·크리처 큐 등)은 붙이지 않는다.
+// 호출된 tickSec를 기록하는 fake 슬롯. 실 슬롯(게임시간·몬스터 큐 등)은 붙이지 않는다.
 function makeSlot(
   name: string,
   intervalSec: number,

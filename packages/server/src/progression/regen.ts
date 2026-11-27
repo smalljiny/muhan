@@ -7,8 +7,8 @@ import type { WorldTickSlot } from '../world/worldClock.js'
  * hpCurrent/mpCurrent를 재생 공식으로 채운다.
  *
  * 원본 충실: player.c:588-604의 재생 본문을 이식한다. shared 순수 함수(resolveHpMax·resolveMpMax·
- * clampVital·bonusOf)를 소비하고, room flag는 hasFlag(F_ISSET 이식)로 판독한다. 재생 산술은
- * regenVitals가 순수 함수로 소유하고, 슬롯은 케이던스·플레이어 순회·영속화(markDirty) seam만 소유한다.
+ * clampVital·bonusOf)를 소비하고, room flag는 hasFlag(F_ISSET 이식)로 읽는다. 재생 산술은
+ * regenVitals가 순수 함수로 담당하고, 슬롯은 케이던스·플레이어 순회·영속화(markDirty) seam만 담당한다.
  *
  * ## 오라클 outer guard 미구현 (전체 생략, 의도된 결정)
  * 원본 재생 블록은 `if(!RPHARM && !ill && !PPOISN)`로 감싸여 있다(방 RPHARM 플래그·질병 상태·독
@@ -20,27 +20,27 @@ import type { WorldTickSlot } from '../world/worldClock.js'
  * ## RHEALR /=3 케이던스 가속 미구현 (D5)
  * 원본은 RHEALR(회복실) 방에서 `lasttime[LT_HEALS].interval /= 3`으로 재생 케이던스를 가속한다.
  * 본 이식은 이 /3 가속을 구현하지 않는다 — WorldClock 슬롯의 intervalSec는 정수·전 플레이어 공유
- * 상수라 방별 케이던스 분기를 얹을 수 없다(단일 슬롯 제약). RHEALR의 +100 진폭만 재현하고 케이던스는
+ * 상수라 방별 케이던스 분기를 얹을 수 없다(단일 슬롯 제약). RHEALR의 +100 가산만 재현하고 케이던스는
  * 고정 5초로 둔다. 방별 재생 주기 차등은 per-player 스케줄러를 도입하는 후속 토픽에서 다룬다.
  *
  * ## immutability
  * regenVitals는 순수 함수로 입력 char를 변형하지 않고 새 Character를 반환한다. 슬롯 run은 tick 계층
- * carve-out으로 라이브 char를 in-place 갱신하되(creatureTick 선례 — 다음 발화가 누적 baseline을
+ * carve-out으로 라이브 char를 in-place 갱신하되(creatureTick 선례 — 다음 실행이 누적 baseline을
  * 잇게 함), markDirty에는 distinct 스냅샷을 넘긴다(dirtyTracker 계약).
  *
  * ## 쓰기경로 조정 — named deferred dependency (미해결, train.ts 동형)
  * regen은 재생 후 최종 Character 스냅샷 전체를 markDirty로 흘린다. dirtyTracker는 키당 full 스냅샷
  * last-write-wins 교체이고 SaveEngine은 characters를 patch(`$set`)로 적용하므로, 이 스냅샷은 hp/mp만이
  * 아니라 라이브 char의 전 필드(gold·currentRoom·status 등)를 함께 쓴다. 라이브 인메모리 객체가
- * 권위 소스인 현 모델에서는 정합적이지만(스냅샷=최신 라이브 상태), bank 직접 write나 #82 이중 홈(X3)
- * 같은 out-of-band DB write가 라이브 객체를 우회하면, 이후 regen flush가 그 write를 무성 revert할 수
- * 있다. regen은 5초 주기 **반복** writer라 일단 라이브 디스패처에 배선되면 이 위험 창이 상시화된다.
+ * 기준 소스인 현 모델에서는 정합적이지만(스냅샷=최신 라이브 상태), bank 직접 write나 #82 이중 홈(X3)
+ * 같은 out-of-band DB write가 라이브 객체를 우회하면, 이후 regen flush가 그 write를 조용한 revert할 수
+ * 있다. regen은 5초 주기 **반복** writer라 일단 라이브 디스패처에 연결되면 이 위험 창이 상시화된다.
  * 부분 스냅샷({hpCurrent,mpCurrent})은 해가 아니다 — last-write-wins 교체가 형제 writer의 full
  * 스냅샷을 evict해 오히려 durability를 깬다. 정답은 field-ownership/versioning 병합 계약(X1/X2/X3와
- * 함께 배선 토픽 소유)이다. seam이 미배선인 현재는 도달 불가하다.
+ * 함께 연결 토픽 담당)이다. seam이 미연결인 현재는 도달 불가하다.
  */
 
-/** RHEALR(회복실) 방 플래그 비트(mtype.h). +100 재생 진폭 트리거. */
+/** RHEALR(회복실) 방 플래그 비트(mtype.h). +100 재생 가산 트리거. */
 export const RHEALR = 13
 
 /** BARBARIAN(권법가) class 인덱스(mtype.h:92-105). HP 재생에 +2 보너스. */
@@ -49,7 +49,7 @@ export const BARBARIAN = 2
 /** MAGE(도술사) class 인덱스(mtype.h:92-105). MP 재생에 +2 보너스. */
 export const MAGE = 5
 
-/** RHEALR 방의 HP/MP 재생 가산 진폭(player.c:592-593). */
+/** RHEALR 방의 HP/MP 재생 가산량(player.c:592-593). */
 const HEALER_ROOM_BONUS = 100
 
 /** 재생 최소 바닥(player.c:589-590 MAX(4,…)). */
@@ -68,7 +68,7 @@ const CHARACTERS_COLLECTION = 'characters'
  * RHEALR 가산 뒤 1회만). hpGain/mpGain은 각각 MAX(4,…) 바닥을 가진다.
  */
 export function regenVitals(char: Character, room: { flags: number[] }): Character {
-  // con=stats[2], int=stats[3] — 정본 StatIndex enum(shared/stats/tables.ts)으로 인덱싱.
+  // con=stats[2], int=stats[3] — 기준 StatIndex enum(shared/stats/tables.ts)으로 인덱싱.
   const con = char.stats[StatIndex.constitution]
   const int = char.stats[StatIndex.intelligence]
 
@@ -80,7 +80,7 @@ export function regenVitals(char: Character, room: { flags: number[] }): Charact
   let hp = char.hpCurrent + hpGain
   let mp = char.mpCurrent + mpGain
 
-  // player.c:592-596 RHEALR 방: +100 진폭(/=3 케이던스 가속은 미구현 — 상단 D5 주석).
+  // player.c:592-596 RHEALR 방: +100 가산(/=3 케이던스 가속은 미구현 — 상단 D5 주석).
   if (hasFlag(room.flags, RHEALR)) {
     hp += HEALER_ROOM_BONUS
     mp += HEALER_ROOM_BONUS
@@ -116,7 +116,7 @@ export function createRegenSlot(deps: RegenDeps): WorldTickSlot {
     run(): void {
       for (const entry of players()) {
         const regenerated = regenVitals(entry.character, entry.room)
-        // carve-out: 라이브 char에 재생값을 반영해 다음 발화가 누적 baseline을 잇는다.
+        // carve-out: 라이브 char에 재생값을 반영해 다음 실행이 누적 baseline을 잇는다.
         entry.character.hpCurrent = regenerated.hpCurrent
         entry.character.mpCurrent = regenerated.mpCurrent
         // regenerated는 regenVitals가 갓 만든 distinct 객체(라이브 char와 별개)라 그대로 스냅샷으로

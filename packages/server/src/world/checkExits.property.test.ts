@@ -7,8 +7,8 @@ import { createCheckExitsSlot } from './checkExits.js'
 
 /**
  * checkExits 스윕 property 테스트 — 타이머 자동 재설정의 핵심 불변식
- * "만료된 XLOCKS 출구는 XLOCKD ∧ XCLOSD가 **동시** 세팅된다(잠겼지만 열림 모순 부재)"를
- * fast-check로 실증한다(room.c:469 이식, "잠금은 닫힘을 함의").
+ * "만료된 XLOCKS 출구는 XLOCKD ∧ XCLOSD가 **동시** 세팅된다(잠겼지만 열림 모순 없음)"를
+ * fast-check로 실증한다(room.c:469 이식, "잠금은 닫힘을 포함").
  *
  * 비-vacuity 설계(advisor 지침): 완전 임의 flags/ltime/interval/now면 만료 ∧ XLOCKS 전건이
  * 일부 실행에서만 성립해 약하다. 대신 `now = ltime + interval + delta`(delta>=1)로 만료를
@@ -56,7 +56,7 @@ describe('checkExits — 만료 XLOCKS 불변식 (property)', () => {
         const graph = new Map<number, RoomNode>([[1, makeRoom(exit)]])
         const now = ltime + interval + delta // ltime+interval < now → 만료 보장
         createCheckExitsSlot(graph).run(now)
-        // "잠겼지만 열림" 모순 부재: 두 비트가 동시에 세팅됨(무조건 단정, 성공 경로 항상 관측).
+        // "잠겼지만 열림" 모순 없음: 두 비트가 동시에 세팅됨(무조건 단정, 성공 경로 항상 관측).
         expect(hasFlag(exit.flags, XLOCKD)).toBe(true)
         expect(hasFlag(exit.flags, XCLOSD)).toBe(true)
       }),

@@ -1,8 +1,8 @@
 /**
- * items 배럴 — 아이템 타입 taxonomy·착용 슬롯 매핑의 공개 표면.
+ * items 배럴 — 아이템 타입 taxonomy·착용 슬롯 매핑의 공개 인터페이스.
  *
  * 오라클(mtype.h)의 object 타입(0~14)·착용 wearflag(1~20) 상수, 무기 판정(isWeapon),
- * 착용 명령 라우팅(routeWearCommand)·다중슬롯 해소(resolveSlot)를 노출한다.
+ * 착용 명령 라우팅(routeWearCommand)·다중슬롯 해석(resolveSlot)를 노출한다.
  */
 export {
   // object 타입 상수(0~14)
@@ -100,20 +100,20 @@ export {
 } from './objectTemplate.js'
 
 export {
-  // 착용 장비 파생 스탯 투영(EffectiveStatContext 기여 부분집합)
+  // 착용 장비 파생 스탯 변환(EffectiveStatContext 기여 부분집합)
   projectEquipStats,
   type EquippedPair,
   type EquipStatContribution,
 } from './equipStats.js'
 
 export {
-  // 인스턴스↔템플릿 결합(EquippedPair 단일 출처) — 미해소는 호출자가 판단한다
+  // 인스턴스↔템플릿 결합(EquippedPair 단일 출처) — 미해석은 호출자가 판단한다
   pairObject,
   pairObjects,
 } from './objectPairing.js'
 
 export {
-  // 인벤 스코프 이름 해소자(오라클 study 2단 탐색 — find_obj 인벤 → ready 착용 스캔)
+  // 인벤 스코프 이름 리졸버(오라클 study 2단 탐색 — find_obj 인벤 → ready 착용 스캔)
   resolveCarriedObject,
   type CarriedObjectResolver,
 } from './carriedTargetResolver.js'

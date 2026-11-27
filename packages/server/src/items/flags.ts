@@ -1,9 +1,9 @@
 /**
  * object 플래그 게이트 predicate substrate — 착용 게이트(Story 5/6)가 소비할 object 플래그 비트 상수와
- * 게이트 predicate(직업·성별·정렬·크기·저주·결혼·귀속)를 hex F_ISSET 위에 정의한다.
+ * 게이트 predicate(직업·성별·성향·크기·저주·결혼·귀속)를 hex F_ISSET 위에 정의한다.
  *
  * 이 모듈은 순수 predicate substrate만 제공한다 — ARMOR type 검사·게이트 순서·INVINCIBLE 전역 우회
- * 조립은 Story 5/6 소관이다. 각 predicate는 flags(hex string)를 읽기만 하며 변형하지 않는다.
+ * 조립은 Story 5/6 담당이다. 각 predicate는 flags(hex string)를 읽기만 하며 변형하지 않는다.
  *
  * 오라클: 비트 값은 mtype.h, 게이트 로직은 command3.c(착용 명령 wear).
  */
@@ -15,9 +15,9 @@ import { MAGE, CLERIC, INVINCIBLE } from '../combat/constants.js'
 // OCURSE(22)는 world/hexFlags.js에서 import — 여기서 중복 정의하지 않는다.
 /** 마법 클래스(MAGE·CLERIC) 착용 금지 — ONOMAG(command3.c:61). */
 export const ONOMAG = 10
-/** 선 정렬(-50 미만) 착용 금지 — OGOODO(command3.c:143). */
+/** 선 성향(-50 미만) 착용 금지 — OGOODO(command3.c:143). */
 export const OGOODO = 12
-/** 악 정렬(50 초과) 착용 금지 — OEVILO(command3.c:152). */
+/** 악 성향(50 초과) 착용 금지 — OEVILO(command3.c:152). */
 export const OEVILO = 13
 /** 마법 부여됨(enchanted) 표식 — OENCHA. */
 export const OENCHA = 14
@@ -46,7 +46,7 @@ export const OWHELD = 49
 /** 개인 귀속(personal bound) — ONEWEV(신규 이벤트 귀속). */
 export const ONEWEV = 50
 
-// ── 종족 상수(mtype.h RACE, 코드베이스에 named 상수 부재 → 여기 정의) ─────────
+// ── 종족 상수(mtype.h RACE, 코드베이스에 named 상수 없음 → 여기 정의) ─────────
 /** 드워프. */
 export const DWARF = 1
 /** 엘프. */
@@ -90,13 +90,13 @@ export function genderAllowed(flags: string, gender: number): boolean {
 }
 
 /**
- * 정렬 착용 허용 — 오라클 command3.c:143·152.
- * OGOODO 세트 + 정렬 < -50이면 거부, OEVILO 세트 + 정렬 > 50이면 거부. 그 외 허용.
+ * 성향 착용 허용 — 오라클 command3.c:143·152.
+ * OGOODO 세트 + 성향 < -50이면 거부, OEVILO 세트 + 성향 > 50이면 거부. 그 외 허용.
  *
- * known divergence — 현 `alignment` 값역은 [0,2](생성 인터뷰 1|2 + backfill sentinel 0)라 두 조건이
- * 항상 거짓이고 이 게이트는 실 데이터에서 미발화한다. 오라클 임계값을 보존해 E6 성향 시스템
- * (-1000..+1000, #123)이 들어올 때 코드 변경 없이 발화하게 둔다 — 임계값을 현 값역에 맞춰 "고치면"
- * 오라클 상수가 소실된다. 상세는 `magic/learning.ts`의 study 정렬 게이트 주석 참조.
+ * known divergence — 현 `alignment` 값 범위는 [0,2](생성 인터뷰 1|2 + backfill sentinel 0)라 두 조건이
+ * 항상 거짓이고 이 게이트는 실 데이터에서 동작하지 않는다. 오라클 임계값을 보존해 E6 성향 시스템
+ * (-1000..+1000, #123)이 들어올 때 코드 변경 없이 동작하게 둔다 — 임계값을 현 값 범위에 맞춰 "고치면"
+ * 오라클 상수가 소실된다. 상세는 `magic/learning.ts`의 study 성향 게이트 주석 참조.
  */
 export function alignmentAllowed(flags: string, alignment: number): boolean {
   if (F_ISSET(flags, OGOODO) && alignment < -50) return false
@@ -140,7 +140,7 @@ export function oclselBlocks(flags: string, characterClass: number): boolean {
 /**
  * 크기 착용 허용 — 오라클 command3.c:168-184.
  * i = OSIZE1?×2 + OSIZE2?×1. 0=무제한, 1=소형, 2=중형, 3=대형별 허용 종족 집합을 게이트한다.
- * INVINCIBLE 전역 우회는 여기 넣지 않는다(Story 5 게이트 조립 소관).
+ * INVINCIBLE 전역 우회는 여기 넣지 않는다(Story 5 게이트 조립 담당).
  */
 export function sizeAllowed(flags: string, race: number): boolean {
   const i = (F_ISSET(flags, OSIZE1) ? 1 : 0) * 2 + (F_ISSET(flags, OSIZE2) ? 1 : 0)

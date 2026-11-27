@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import type { ExitEdge, RoomNode } from 'shared'
 import { setFlag, XLOCKD, XNOSEE } from './door.js'
 import { RONEPL } from './moveGates.js'
+import type { PresenceJoinContext, PresenceLeaveContext } from './presence.js'
 import {
   tryMove,
   chooseFleeExit,
@@ -57,11 +58,11 @@ function makeDeps(rooms: RoomNode[], currentHour = 12) {
   const deps: TryMoveDeps = {
     resolveRoom: (roomId) => graph.get(roomId),
     currentHour: () => currentHour,
-    broadcastLeave: vi.fn((room: RoomNode, a: MoveActor) => {
+    broadcastLeave: vi.fn((room: RoomNode, a: MoveActor, _ctx: PresenceLeaveContext) => {
       // leave 시점: actor는 아직 출발 방 점유자여야 한다(재배치 前).
       log.push({ event: 'leave', room: room.roomId, hasActor: room.occupants.has(a.characterId) })
     }),
-    broadcastJoin: vi.fn((room: RoomNode, a: MoveActor) => {
+    broadcastJoin: vi.fn((room: RoomNode, a: MoveActor, _ctx: PresenceJoinContext) => {
       // join 시점: actor는 이미 도착 방 점유자여야 한다(재배치 後).
       log.push({ event: 'join', room: room.roomId, hasActor: room.occupants.has(a.characterId) })
     }),
@@ -193,6 +194,58 @@ describe('tryMove 통과 시 재배치·방송', () => {
     expect(deps.broadcastJoin).toHaveBeenCalledTimes(1)
   })
 
+  it('통과 이동은 broadcastLeave에 moved-out, broadcastJoin에 moved-in 문맥(mode·선택 출구)을 넘긴다', () => {
+    const exit = makeExit('동', 200)
+    const target = makeRoom(200, [])
+    const source = makeRoom(100, [exit], ['me'])
+    const { deps } = makeDeps([source, target])
+    const actor: MoveActor = { characterId: 'me', currentRoomId: 100 }
+    tryMove(deps, actor, '동', 'directional')
+
+    expect(deps.broadcastLeave).toHaveBeenCalledTimes(1)
+    expect(deps.broadcastLeave).toHaveBeenCalledWith(source, actor, {
+      change: 'moved-out',
+      mode: 'directional',
+      exit,
+    })
+    expect(deps.broadcastJoin).toHaveBeenCalledTimes(1)
+    expect(deps.broadcastJoin).toHaveBeenCalledWith(target, actor, {
+      change: 'moved-in',
+      mode: 'directional',
+      exit,
+    })
+    // exit은 선택된 ExitEdge와 같은 참조다(복사본 아님).
+    const leaveCtx = vi.mocked(deps.broadcastLeave).mock.calls[0]?.[2]
+    const joinCtx = vi.mocked(deps.broadcastJoin).mock.calls[0]?.[2]
+    expect(leaveCtx?.change === 'moved-out' && leaveCtx.exit).toBe(exit)
+    expect(joinCtx?.change === 'moved-in' && joinCtx.exit).toBe(exit)
+  })
+
+  it('flee 이동은 mode: flee와 rng가 고른 출구를 문맥으로 넘긴다', () => {
+    const east = makeExit('동', 200)
+    const west = makeExit('서', 300)
+    const source = makeRoom(100, [east, west], ['me'])
+    const westRoom = makeRoom(300, [])
+    const { deps: base } = makeDeps([source, makeRoom(200, []), westRoom])
+    const deps: TryMoveDeps = { ...base, rng: (exits) => exits[exits.length - 1] }
+    const actor: MoveActor = { characterId: 'me', currentRoomId: 100 }
+    const result = tryMove(deps, actor, '', 'flee')
+
+    expect(result.ok).toBe(true)
+    expect(deps.broadcastLeave).toHaveBeenCalledWith(source, actor, {
+      change: 'moved-out',
+      mode: 'flee',
+      exit: west,
+    })
+    expect(deps.broadcastJoin).toHaveBeenCalledWith(westRoom, actor, {
+      change: 'moved-in',
+      mode: 'flee',
+      exit: west,
+    })
+    const leaveCtx = vi.mocked(deps.broadcastLeave).mock.calls[0]?.[2]
+    expect(leaveCtx?.change === 'moved-out' && leaveCtx.exit).toBe(west)
+  })
+
   it('통과 시 onRoomEntered entry-hook을 도착 방·actor로 join 직후 1회 호출한다', () => {
     const target = makeRoom(200, [])
     const source = makeRoom(100, [makeExit('동', 200)], ['me'])
@@ -262,8 +315,8 @@ describe('tryMove 게이트 거부 시 무변경', () => {
     expect(deps.broadcastLeave).not.toHaveBeenCalled()
   })
 
-  it('flee도 공유 게이트 건틀릿을 거친다 — 정원 초과 시 이동 취소', () => {
-    // flee가 가시 출구를 해석하지만 도착 방 정원 초과 → 공유 건틀릿이 거부.
+  it('flee도 공유 게이트 검사를 거친다 — 정원 초과 시 이동 취소', () => {
+    // flee가 가시 출구를 해석하지만 도착 방 정원 초과 → 공유 게이트 검사가 거부.
     // (원본 flee는 패닉 이동이나 게이트를 건너뛰지 않음 — 4개 mode가 단일 본체 공유 검증)
     const target = makeRoom(200, [], ['resident'], [RONEPL])
     const source = makeRoom(100, [makeExit('동', 200)], ['me'])

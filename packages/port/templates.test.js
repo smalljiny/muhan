@@ -88,7 +88,7 @@ test('readKeys는 절대 오프셋 start를 기준으로 읽는다', () => {
   assert.deepEqual(readKeys(b, 0), []);
 });
 
-// --- 합성 버퍼: 리더 배선 ---
+// --- 합성 버퍼: 리더 연결 ---
 
 test('readObject가 OBJ.key(160)에서 keys를 추출하고 description 뒤에 둔다', () => {
   const b = Buffer.alloc(SZ.object);
@@ -124,7 +124,7 @@ test('readCreature는 base 상대 오프셋으로 동작한다', () => {
   assert.deepEqual(readCreature(b, SZ.creature).keys, ['동굴']);
 });
 
-// --- 오프셋 lock (헤더 없이 key[3][20] 총 60B와 over-read 부재를 증명) ---
+// --- 오프셋 lock (헤더 없이 key[3][20] 총 60B와 over-read가 없음을 증명) ---
 
 test('OBJ.key 오프셋은 오라클 160', () => {
   assert.equal(OBJ.key, 160);

@@ -6,12 +6,12 @@ import { makeManualFixture, writeFixtureFile } from './fixtureIo.js'
 export { writeFixtureFile }
 
 /**
- * 아이템 수리(repair) 골든 fixture 생성기 — manual oracle의 독립 참조 구현(A8 §8 RREPAI, command8.c).
+ * 아이템 수리(repair) 골든 fixture 생성기 — manual 오라클의 독립 참조 구현(A8 §8 RREPAI, command8.c).
  *
  * 원본 `command8.c` repair의 핵심 역학(piety 보정 실패 굴림 + 성공 시 내구도 복원)을 참조
  * 구현(`referenceRepair`)으로 옮기고, 손 계산으로 확정한 8개 케이스를 fixture로 감싸
- * `fixtures/repair.json`에 기록한다. 수리비 산술 정본은 shared `economy/priceConfig.ts`의
- * `repairCost`(SUT)에, 실패 굴림·내구도 복원 정본은 server `shopService.repair`(SUT)에 둔다.
+ * `fixtures/repair.json`에 기록한다. 수리비 산술 기준은 shared `economy/priceConfig.ts`의
+ * `repairCost`(SUT)에, 실패 굴림·내구도 복원 기준은 server `shopService.repair`(SUT)에 둔다.
  *
  * ## 오라클 역학 (command8.c repair)
  *   cost  = value / 4                                       // trunc(value/4)
@@ -22,8 +22,8 @@ export { writeFixtureFile }
  *   성공  = shotscur = (shotsmax * mrand(5,9)) / 10          // 곱 위에서 정수 나눗셈
  *
  * ## anti-tautology: SUT와 독립 표현
- * SUT(`repairCost`·`repair`)는 `PRICE_CONFIG.repairDivisor`를 판독하고 `Math.trunc`로 절삭한다.
- * 이 참조는 **인라인 리터럴**(`4`·`10`·임계값 `15`/`5`)을 직접 쓰고 절삭을 `Math.floor`로 표현한다
+ * SUT(`repairCost`·`repair`)는 `PRICE_CONFIG.repairDivisor`를 읽고 `Math.trunc`로 버린다.
+ * 이 참조는 **인라인 리터럴**(`4`·`10`·임계값 `15`/`5`)을 직접 쓰고 버림을 `Math.floor`로 표현한다
  * (value·shotsmax 비음수라 값 동일, 표현만 다름). 참조는 SUT(`repairCost`·`repair`)를 import·호출하지
  * 않는다. `bonusOf`는 shared의 lookup DATA(class_stats 류)이므로 소비해도 tautology가 아니다 —
  * anti-tautology는 공식 구조 층위에서 성립한다.
@@ -49,7 +49,7 @@ export { writeFixtureFile }
  */
 
 /**
- * fixture 한 case의 input 형태 — repair 역학이 판독하는 좁은 필드 + 결정적 굴림 값.
+ * fixture 한 case의 input 형태 — repair 역학이 읽는 좁은 필드 + 결정적 굴림 값.
  * `brokeRoll`은 `mrand(1,100)`의 반환값(bonus 적용 전 raw), `durabilityRoll`은 `mrand(5,9)`의
  * 반환값을 고정한다. 실패 케이스에서는 `durabilityRoll`이 소비되지 않는다(성공 시에만 굴림).
  */
@@ -69,8 +69,8 @@ export type RepairExpected = { broken: boolean; cost: number; newShotscur: numbe
  * 아이템 수리 참조 구현 — command8.c repair 역학을 인라인 리터럴로 옮긴다.
  *
  * SUT(`repairCost`·`repair`)와 표현을 분리한다: 여기선 `PRICE_CONFIG`를 참조하지 않고 제수 `4`·`10`을
- * 인라인 리터럴로 박고, 정수 절삭을 `Math.floor`로 표현한다(SUT는 `Math.trunc`). 실패 조건과 내구도
- * 복원 곱셈 그룹핑(`shotsmax * roll / 10`, 곱 위에서 절삭)은 오라클과 동일 구조여야 정확한 expected가
+ * 인라인 리터럴로 박고, 정수 버림을 `Math.floor`로 표현한다(SUT는 `Math.trunc`). 실패 조건과 내구도
+ * 복원 곱셈 그룹핑(`shotsmax * roll / 10`, 곱한 뒤 버림)은 오라클과 동일 구조여야 정확한 expected가
  * 나오므로 구조는 유지하되 산술 표현만 독립시킨다. `bonusOf`는 shared lookup DATA라 소비해도 무방하다.
  */
 export function referenceRepair(input: RepairInput): RepairExpected {
@@ -89,7 +89,7 @@ type RepairCase = { input: RepairInput; expected: RepairExpected; note?: string 
 type RepairCaseDraft = Omit<RepairCase, 'expected'>
 
 /**
- * 판독하지 않는 필드에 안전한 기본값을 채워 완전한 RepairInput을 만든다. 각 케이스는 검증 대상
+ * 읽지 않는 필드에 안전한 기본값을 채워 완전한 RepairInput을 만든다. 각 케이스는 검증 대상
  * 필드만 overrides로 지정한다. 기본은 value=100(cost 25)·shotsmax=80·piety=10(bonusOf=0)·
  * brokeRoll=50(임계값 초과 → 성공)·durabilityRoll=5.
  */

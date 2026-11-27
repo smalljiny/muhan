@@ -109,8 +109,8 @@ export interface SaveEngineOptions {
   /**
    * AsyncWriteQueue 옵션(capacity·재시도·backoff sleep seam).
    *
-   * `onSettled`는 제외한다 — 엔진이 그 seam으로 DirtyTracker 반납을 배선하므로 호출자 값이
-   * 들어오면 반납이 발화하지 않아 스냅샷이 inProgress에 영구 잔류한다. 그 고장은 예외도 로그도
+   * `onSettled`는 제외한다 — 엔진이 그 seam으로 DirtyTracker 반납을 연결하므로 호출자 값이
+   * 들어오면 반납이 실행되지 않아 스냅샷이 inProgress에 영구 잔류한다. 그 고장은 예외도 로그도
    * 남기지 않으니, 넘길 수 있게 두고 무시하는 대신 타입으로 막는다.
    */
   readonly queueOptions?: Omit<AsyncWriteQueueOptions, 'onSettled'>
@@ -146,7 +146,7 @@ export class SaveEngine {
     // 삭제와 갱신은 같은 (id, snapshot)에 대해 서로 다른 write다. 키를 `objects`로 두면 후속 토픽이
     // objects 갱신 어댑터를 추가할 때 삭제 어댑터를 밀어내야 한다. 삭제 전용 키로 분리하면 갱신
     // 어댑터가 `objects` 키로 나란히 들어온다.
-    // **한계(설계상 수용)**: 두 키가 다르므로 같은 오브젝트 id의 갱신과 삭제는 코얼레싱되지 않는다.
+    // **한계(설계상 수용)**: 두 키가 다르므로 같은 아이템 id의 갱신과 삭제는 코얼레싱되지 않는다.
     // 둘 다 마킹되면 각각 별개 job으로 남아 markDirty 호출 순서대로 시도되고(위 "write 시도 순서
     // 계약"), 갱신이 삭제 뒤에 오면 DocumentNotFoundError로 permanent 폐기된다. 두 write를 한 키로
     // 합쳐야 할 만큼 이 조합이 흔해지면 그때 단일 `objects` 어댑터 + 툼스톤 분기로 통합한다.
@@ -167,7 +167,7 @@ export class SaveEngine {
     }
     this.tracker = new DirtyTracker()
     // 실 logger 주입(NOOP 아님) — 무흔적 폐기 방지.
-    // onSettled 배선은 스프레드 **뒤**에 둔다. 호출자 값이 덮어쓰는 경로는 queueOptions의
+    // onSettled 연결은 스프레드 **뒤**에 둔다. 호출자 값이 덮어쓰는 경로는 queueOptions의
     // Omit이 이미 타입으로 막았고, 이 순서는 그 방어의 이중화다.
     this.queue = new AsyncWriteQueue(this.dispatch, logger, {
       ...options.queueOptions,
@@ -259,7 +259,7 @@ export class SaveEngine {
       await adapter(id, snapshot)
     } catch (error) {
       // 실패는 rethrow하되(fail-loud), 관측용 reason을 담아 기록한다 — 즉시 저장(로그아웃·거래
-      // 등 치명 경로)의 유실을 호출자와 로그 양쪽에서 인지할 수 있게 한다.
+      // 등 중요 경로)의 유실을 호출자와 로그 양쪽에서 인지할 수 있게 한다.
       this.logger.error({ collection, id, reason, err: error }, 'saveNow: 즉시 저장 실패')
       throw error
     }

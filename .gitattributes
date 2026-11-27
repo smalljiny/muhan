@@ -1,0 +1,5 @@
+# 줄바꿈 기준: 저장소와 작업 트리 모두 LF (OS·에디터 설정과 무관)
+* text=auto eol=lf
+
+# 원본 오라클은 바이트 그대로 보존한다 (EUC-KR·raw 구조체 덤프·CRLF 원문 포함)
+legacy/** -text

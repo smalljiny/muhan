@@ -7,7 +7,7 @@ import { buildCases, buildFixture, oracleKnownAfterSet, writeFixtureFile } from 
 
 const FIXED_CLOCK = (): Date => new Date('2026-07-16T00:00:00.000Z')
 
-describe('spellStoreFixture — oracleKnownAfterSet 독립 전사', () => {
+describe('spellStoreFixture — oracleKnownAfterSet 독립 옮겨 적기', () => {
   it('빈 setBits면 어느 비트든 false다', () => {
     expect(oracleKnownAfterSet([], 0)).toBe(false)
     expect(oracleKnownAfterSet([], 127)).toBe(false)
@@ -66,7 +66,7 @@ describe('spellStoreFixture — writeFixtureFile', () => {
 })
 
 describe('체크인된 spellStore.json fixture', () => {
-  it('goldenFixtureSchema를 통과하고 manual oracle이다', () => {
+  it('goldenFixtureSchema를 통과하고 manual 오라클이다', () => {
     const url = new URL('../fixtures/spellStore.json', import.meta.url)
     const parsed: unknown = JSON.parse(readFileSync(url, 'utf8'))
     const result = goldenFixtureSchema.safeParse(parsed)

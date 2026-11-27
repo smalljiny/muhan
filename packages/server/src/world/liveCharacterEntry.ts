@@ -1,10 +1,11 @@
 import type { Character, ObjectInstance, RoomNode } from 'shared'
 import { characterPatchSchema } from '../repo/characterSchemas.js'
 import type { LiveCharacter, LiveCharacterRegistry } from './liveCharacterRegistry.js'
+import type { PresenceJoinContext, PresenceLeaveContext } from './presence.js'
 import type { MoveActor } from './tryMove.js'
 
 /**
- * 라이브 캐릭터 진입 코어 — hydrate(로드) / place(방 배치) / release(퇴장)를 소유한다.
+ * 라이브 캐릭터 진입 코어 — hydrate(로드) / place(방 배치) / release(퇴장)를 담당한다.
  *
  * 책임 분리(D-G):
  *  - hydrate는 **부수효과 없는 비동기 로드**다(D-G 2). 레지스트리 등록·occupants 변경을 하지 않고
@@ -12,13 +13,14 @@ import type { MoveActor } from './tryMove.js'
  *  - 재접속은 재로드하지 않는다(D-G 1). 이미 등록된 엔트리는 findById 없이 그대로 반환해,
  *    아직 영속되지 않은 currentRoom(라이브 in-place 갱신값)을 디스크 문서로 덮어쓰지 않는다.
  *  - place/release는 동기이며 occupants Set을 in-place 변경한다(worldGraph 승인 carve-out).
- *    release의 순서 계약은 tryMove.ts:195-199를 미러한다 — occupants.delete가 onRoomLeft보다
- *    반드시 선행한다(leave-hook은 빈 방을 전제로 비활성화한다).
+ *    release의 순서 계약은 tryMove 통과 경로 (5a)~(5b')를 미러한다 — (점유 시) broadcastLeave(exited)
+ *    → occupants.delete → onRoomLeft. delete가 onRoomLeft보다 반드시 선행한다(leave-hook은 빈 방을
+ *    전제로 비활성화한다).
  *
  * 모든 의존성은 파라미터로 주입한다(T3.5 — 전역 조회 없음).
  *
- * ## 인벤토리 적재 — 세션 진입에서 1회
- * hydrate가 `characterRepo.hydrateInventory`를 함께 호출해 소유 오브젝트 인스턴스를 라이브 엔트리에
+ * ## 인벤토리 로드 — 세션 진입에서 1회
+ * hydrate가 `characterRepo.hydrateInventory`를 함께 호출해 소유 아이템 인스턴스를 라이브 엔트리에
  * 싣는다. 진입에서 한 번 다 읽어 두는 이유는 **명령 핸들러의 동기 계약을 지키기 위해서**다
  * (`ws/router.ts`의 `CommandHandler`는 `ServerEvent | undefined`를 동기 반환한다). 핸들러가 인벤을
  * 그때그때 DB에서 읽으면 async가 되고, 상태 변형과 dirty 표시 사이에 정지점이 생겨 중간 상태가
@@ -36,7 +38,7 @@ import type { MoveActor } from './tryMove.js'
  * 이 공백은 **삭제에 한해서만** 닫힌다 — 후속 Story가 `objectDeletions` 삭제 어댑터를 추가하지만
  * objects의 update·insert 어댑터는 없다. 따라서 삭제 이외의 인벤 변경(equip 토글·`shotscur` 감소·
  * 줍기)은 영속 경로가 아예 없고, 캐릭터 필드와 달리 종료 스냅샷이라는 구제자도 없다.
- * 라이브 인벤을 메모리 권위로 쓰되 **영속화까지 닫힌 것으로 읽지 말 것.**
+ * 라이브 인벤을 메모리 기준 데이터로 쓰되 **영속화까지 닫힌 것으로 읽지 말 것.**
  *
  * ### 진입 비용 추적 임계(OQ3)
  * 지금은 측정하지 않는다 — `objects`에 캐릭터 소유 문서를 만드는 경로(줍기·시드)가 아직 없어 측정
@@ -63,7 +65,7 @@ import type { MoveActor } from './tryMove.js'
  */
 
 /**
- * 개발용 기본 시작 방. 캐릭터 생성 기본값(firebaseSessionAuthAdapter의 START_ROOM=1)을 미러한다.
+ * 개발용 기본 시작 방. 캐릭터 생성 기본값(auth/characterStartDefaults의 START_ROOM=1)을 미러한다.
  * 완전한 스폰 정책(레벨·종족·소속별 시작지)은 이 토픽 범위 밖이며, orphan currentRoom의
  * 안전 폴백 단일 홈으로만 쓴다.
  */
@@ -78,7 +80,7 @@ export interface EntryLogger {
 
 export interface LiveCharacterEntryDeps {
   /**
-   * 캐릭터 문서·인벤토리 로더. 두 메서드만 요구한다(최소 표면) — `hydrateInventory`는
+   * 캐릭터 문서·인벤토리 로더. 두 메서드만 요구한다(최소 인터페이스) — `hydrateInventory`는
    * `object.owner` 역참조로 소유 인스턴스를 파생하는 조회 경로다(단일 소유권의 출처는 owner다).
    */
   readonly characterRepo: {
@@ -90,11 +92,27 @@ export interface LiveCharacterEntryDeps {
   readonly onRoomEntered: (room: RoomNode, actor: MoveActor) => void
   readonly onRoomLeft: (room: RoomNode, actor: MoveActor) => void
   /**
+   * 접속 진입 방송 seam — place가 **새로** 점유자를 추가한 직후(onRoomEntered 앞) `entered` 문맥으로
+   * 부른다. 재접속 멱등 경로에서는 부르지 않는다.
+   *
+   * **필수 필드다**(optional 아님). 이동 경로(`TryMoveDeps.broadcastJoin`)와 같은 방송기를 연결해야
+   * 진입이 같은 방 점유자에게 통지된다 — 연결 누락을 타입으로 차단한다. 전송이 없는 호출자는
+   * `noopBroadcastJoin`을 넘긴다.
+   */
+  readonly broadcastJoin: (room: RoomNode, actor: MoveActor, ctx: PresenceJoinContext) => void
+  /**
+   * 접속 종료 방송 seam — release가 실제 점유를 해제할 때만(방 해석 + 점유 집합에 있음) delete 직전에
+   * `exited` 문맥으로 부른다. 호출 시점에 actor는 아직 점유자이고 레지스트리에도 남아 있다.
+   *
+   * **필수 필드다**. 전송이 없는 호출자는 `noopBroadcastLeave`를 넘긴다.
+   */
+  readonly broadcastLeave: (room: RoomNode, actor: MoveActor, ctx: PresenceLeaveContext) => void
+  /**
    * 미영속(write-behind) 캐릭터 스냅샷 조회 seam — `SaveEngine.peekPending('characters', id)`을
-   * 배선 지점에서 1회 좁힌 것이다. 보유하지 않으면 `undefined`.
+   * 연결 지점에서 1회 좁힌 것이다. 보유하지 않으면 `undefined`.
    *
    * **필수 필드다**(optional 아님). 미주입이면 hydrate가 DB 문서만 읽어 아직 flush되지 않은 진행도를
-   * 되돌리는데(#124), 그 실패는 예외도 로그도 남기지 않는다 — 배선 누락을 타입으로 차단한다.
+   * 되돌리는데(#124), 그 실패는 예외도 로그도 남기지 않는다 — 연결 누락을 타입으로 차단한다.
    *
    * 반환값은 tracker가 보관한 **라이브 참조일 수 있다**. 읽기만 하고 mutate하지 않는다.
    */
@@ -116,7 +134,7 @@ export interface LiveCharacterEntry {
  * 남긴 뒤 저장소 문서로 폴백한다: 진행도 일부를 잃는 것이 진입 자체를 막는 것보다 낫다.
  *
  * `_id`는 항상 요청한 `characterId`로 고정한다. `peekPending`이 이미 `_id`를 벗겨 주지만, 스냅샷이
- * 엉뚱한 `_id`를 들고 있을 때 라이브 엔트리의 신원이 바뀌면 이후 모든 마킹·해소가 잘못된 키로 간다.
+ * 엉뚱한 `_id`를 들고 있을 때 라이브 엔트리의 신원이 바뀌면 이후 모든 마킹·해석이 잘못된 키로 간다.
  */
 function overlayPendingCharacter(
   stored: Character,
@@ -138,7 +156,7 @@ function overlayPendingCharacter(
   // 값이 undefined인 키를 떨군다. zod의 .partial()은 키가 존재하면 값이 undefined여도 출력에
   // 남기므로, 그대로 spread하면 `{ gold: undefined }` 같은 patch가 stored의 필수 필드를 지운다.
   // 타입은 number인데 런타임 값이 undefined인 캐릭터가 라이브 레지스트리에 들어가고, 이후 전투·
-  // 경제 규칙이 NaN을 뿜으며 다음 flush가 그 undefined를 $set한다 — 전 구간이 무성 실패다.
+  // 경제 규칙이 NaN을 뿜으며 다음 flush가 그 undefined를 $set한다 — 전 구간이 조용한 실패다.
   //
   // 현재 producer(`snapshotCharacter`)는 그런 키를 만들지 않는다고 자기 파일에 명시하지만,
   // 원시 `markDirty` seam이 열려 있어 신규 호출처가 그 계약 밖의 값을 넣을 수 있다.
@@ -185,13 +203,13 @@ export function createLiveCharacterEntry(deps: LiveCharacterEntryDeps): LiveChar
       // 것이 orphan이면, 순서가 뒤집힐 경우 멀쩡한 위치를 버리고 시작 방으로 되돌린다.
       const character = overlayPendingCharacter(stored, pending, characterId, deps.logger)
 
-      // 인벤 적재 — 진입당 정확히 1회(OQ3 상한). findById 뒤에 두어 미존재 캐릭터에는 조회하지
+      // 인벤 로드 — 진입당 정확히 1회(OQ3 상한). findById 뒤에 두어 미존재 캐릭터에는 조회하지
       // 않는다(순차 왕복 2회). 아래 두 반환 지점이 이 결과를 공유하므로 orphan 폴백도 인벤을 싣는다.
       const inventory = await deps.characterRepo.hydrateInventory(characterId)
 
-      // T3.2 orphan 폴백 — currentRoom이 미해소면 DEFAULT_START_ROOM으로 교정한다.
+      // T3.2 orphan 폴백 — currentRoom이 미해석이면 DEFAULT_START_ROOM으로 교정한다.
       // 라이브 엔트리의 단일 출처(currentRoom)가 처음부터 유효하도록 불변 교체한다.
-      // 전제: DEFAULT_START_ROOM은 월드 그래프에 항상 해소된다(정본 시작 방). 이 전제가 place()의
+      // 전제: DEFAULT_START_ROOM은 월드 그래프에 항상 해석된다(기준 시작 방). 이 전제가 place()의
       // "hydrate가 유효 방을 보장" 계약을 성립시킨다 — 전제가 깨지면 place가 room-not-resolved로 던진다.
       if (deps.resolveRoom(character.currentRoom) === undefined) {
         deps.logger.warn(
@@ -209,7 +227,7 @@ export function createLiveCharacterEntry(deps: LiveCharacterEntryDeps): LiveChar
       const room = deps.resolveRoom(live.character.currentRoom)
       if (room === undefined) {
         // TOCTOU 가드: hydrate(async)가 유효 방을 보장하지만 place(later-sync)까지 사이에 월드 그래프가
-        // 바뀌어(방 제거) 미해소가 될 수 있다. 정상 경로에선 도달하지 않으나 죽은 코드가 아니다 — 계약
+        // 바뀌어(방 제거) 미해석이 될 수 있다. 정상 경로에선 도달하지 않으나 죽은 코드가 아니다 — 계약
         // 위반을 조용히 삼키지 않고 크게 던진다(tryMove의 soft NO_EXIT과 달리 여긴 배치 계약 경계다).
         throw new Error(`place: room not resolved: ${live.character.currentRoom}`)
       }
@@ -219,7 +237,10 @@ export function createLiveCharacterEntry(deps: LiveCharacterEntryDeps): LiveChar
 
       deps.liveRegistry.register(live)
       room.occupants.add(characterId)
-      deps.onRoomEntered(room, toActor(live.character))
+      const actor = toActor(live.character)
+      // 진입 방송은 add 뒤(actor가 이미 점유자) · entry-hook 앞 — tryMove의 join → onRoomEntered 미러.
+      deps.broadcastJoin(room, actor, { change: 'entered' })
+      deps.onRoomEntered(room, actor)
     },
 
     release(characterId) {
@@ -229,7 +250,12 @@ export function createLiveCharacterEntry(deps: LiveCharacterEntryDeps): LiveChar
       const actor = toActor(live.character)
       const room = deps.resolveRoom(live.character.currentRoom)
       if (room !== undefined) {
-        // 순서 계약(tryMove.ts:195-199 미러): delete가 onRoomLeft보다 선행한다.
+        // 실제 점유 해제에만 통지한다 — 점유 집합에 없으면(배치 전 등록 등) 방송하지 않는다.
+        // 방송은 delete 직전(actor가 아직 점유자)이다(tryMove의 broadcastLeave 시점 미러).
+        if (room.occupants.has(characterId)) {
+          deps.broadcastLeave(room, actor, { change: 'exited' })
+        }
+        // 순서 계약(tryMove 통과 경로 미러): delete가 onRoomLeft보다 선행한다.
         room.occupants.delete(characterId)
         deps.onRoomLeft(room, actor)
       }

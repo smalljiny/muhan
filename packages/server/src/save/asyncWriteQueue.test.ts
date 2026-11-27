@@ -1,9 +1,10 @@
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, vi, type Mock } from 'vitest'
 import type { DirtyEntry } from './dirtyTracker.js'
 import {
   AsyncWriteQueue,
   DEFAULT_CAPACITY,
   MAX_RETRIES,
+  type OnWriteSettled,
   type WriteAdapter,
   type WriteOutcome,
 } from './asyncWriteQueue.js'
@@ -377,8 +378,8 @@ describe('AsyncWriteQueue (unit)', () => {
    */
   describe('완료 프로토콜 (onSettled)', () => {
     /** onSettled 통지를 기록하는 스파이. */
-    const settleSpy = (): ReturnType<typeof vi.fn> =>
-      vi.fn<(entry: DirtyEntry, outcome: WriteOutcome) => void>()
+    const settleSpy = (): Mock<OnWriteSettled> =>
+      vi.fn<OnWriteSettled>()
 
     it('write 성공 시 onSettled(entry, "acked")를 정확히 1회 호출한다', async () => {
       const adapter = vi.fn<WriteAdapter>(() => Promise.resolve())

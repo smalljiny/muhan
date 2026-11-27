@@ -1,7 +1,7 @@
 /**
  * 주문 카탈로그 선언 테이블 — spllist 56 + ospell 20의 read-only 메타데이터 단일 출처.
  *
- * ## 오라클 출처 (byte-level 정본)
+ * ## 오라클 출처 (byte-level 원본)
  * - spllist: `legacy/muhan/src/global.c:575-631` (splstr 한글명·splno·spllv·splfn).
  * - spell 번호: `legacy/muhan/src/mtype.h:233-289` (SVIGOR=0 … SCHARM=55, SCURSE=56).
  * - ospell 격자: `legacy/muhan/src/global.c:637-659` (struct osp_t 20행).
@@ -9,9 +9,9 @@
  * ## 엔트리 개수: 55가 아니라 56
  * spllist의 활성 행은 spellNo 0-55 = **56개**다(SCURSE=56은 spllist 미등록, SNAHAN은 주석).
  * 상위 태스크 문구의 "55"는 최대 인덱스(SCHARM=55)를 개수로 오독한 off-by-one이므로,
- * 포팅 원칙(byte 정본 우선)에 따라 56을 정본으로 삼는다.
+ * 포팅 원칙(byte 원본 우선)에 따라 56을 기준으로 삼는다.
  *
- * ## #85 유예 경계 — entries-not-bodies
+ * ## #85 보류 경계 — entries-not-bodies
  * 비-offensive 36 주문은 **메타데이터(엔트리)만** 둔다. C의 splfn(effect 함수 포인터)은
  * 옮기지 않는다(effect 본체는 #85 후속 Story). 엔트리에 함수 참조가 새어들지 않게 필드를
  * 5개(spellNo·koreanName·family·spllv·offensive)로 봉인한다.
@@ -51,7 +51,7 @@ export type SpellFamily =
   | 'offensive'
 
 /**
- * spllist 카탈로그 엔트리 — effect 본체 없이 메타데이터만 담는다(#85 유예).
+ * spllist 카탈로그 엔트리 — effect 본체 없이 메타데이터만 담는다(#85 보류).
  * 필드는 정확히 5개로 고정한다(함수 참조 유입 차단).
  */
 export interface SpellEntry {
@@ -74,7 +74,7 @@ export interface OspellEntry {
 }
 
 /**
- * 주문 번호 상수 — mtype.h:233-289 #define 전사. spellNo 0-55.
+ * 주문 번호 상수 — mtype.h:233-289 #define 옮겨 적기. spellNo 0-55.
  * 격자·카탈로그가 magic number 대신 이름으로 주문을 참조하게 한다.
  */
 export const SPELL_NO = {
@@ -137,7 +137,7 @@ export const SPELL_NO = {
 } as const
 
 /**
- * spllist 56주문 선언 테이블 — global.c:575-631 순서대로 전사한다.
+ * spllist 56주문 선언 테이블 — global.c:575-631 순서대로 옮겨 적는다.
  *
  * family는 splfn(C effect 함수)을 도메인 카테고리로 매핑한 것이다: 예) vigor·mend·heal·
  * restore·room_vigor→healing, curepoison·rm_disease·rm_blind·remove_curse→cure,
@@ -333,7 +333,7 @@ export function ospellOf(spellNo: number): OspellEntry | undefined {
  * 한글 주문명으로 카탈로그를 조회한다 — `SPELL_CATALOG`를 바인딩한 얇은 래퍼다.
  *
  * 매칭 규칙 본체(완전일치 리셋·즉시 종료·접두 누적·모호 거부)는 `naming/matchSpellName`이
- * 단독 소유하고 여기서는 **호출만** 한다. `SPELL_BY_NO`처럼 완전일치 이름 인덱스를 두고
+ * 단독으로 담당하고 여기서는 **호출만** 한다. `SPELL_BY_NO`처럼 완전일치 이름 인덱스를 두고
  * 앞질러 반환하면 오라클 규칙의 절반을 이 모듈에 복제하는 셈이라 두지 않는다 —
  * 카탈로그는 56행 정적 테이블이고 조회는 명령 입력 경로(라운드당 최대 1회)다.
  *

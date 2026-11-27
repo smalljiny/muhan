@@ -3,18 +3,18 @@
  *
  * 서버 전체가 개별 setInterval을 흩뿌리지 않고 이 WorldClock 하나가 1초 케이던스로 단조 tick
  * 카운터를 굴린다. 등록된 각 슬롯은 자신의 intervalSec를 선언하고, WorldClock은 modulo 게이트
- * (`tickSec % intervalSec === 0`)로 해당 슬롯의 발화 시점만 걸러 호출한다. 즉 서로 다른 주기
+ * (`tickSec % intervalSec === 0`)로 해당 슬롯의 실행 시점만 걸러 호출한다. 즉 서로 다른 주기
  * (매초·N초)의 주기 작업을 하나의 단조 tick 위에 얹는 프레임워크다.
  *
  * 슬롯 격리: 한 슬롯의 run이 throw해도 try/catch로 잡아 logger로 기록하고 다음 슬롯을 계속
  * 호출한다. 한 슬롯의 실패가 틱 전체나 형제 슬롯을 죽이지 않는다.
  *
- * 이 모듈은 순수 프레임워크다(YAGNI). 실 슬롯(게임시간 진행·크리처 행동 큐·출구 타이머 등)은
+ * 이 모듈은 순수 프레임워크다(YAGNI). 실 슬롯(게임시간 진행·몬스터 행동 큐·출구 타이머 등)은
  * 붙이지 않으며 후속 토픽에서 register로 연결한다. 현재는 단위 테스트가 등록하는 fake 슬롯으로만
  * 검증한다.
  *
  * clock seam: 전역 setInterval/clearInterval을 직접 부르지 않고 주입된 SchedulerClock을 통해
- * 호출한다(../util/clock.js 단일 출처). 테스트는 FakeClock을 주입해 tick을 수동 구동한다.
+ * 호출한다(../util/clock.js 단일 출처). 테스트는 FakeClock을 주입해 tick을 수동 실행한다.
  */
 
 import { defaultClock, type SchedulerClock, type IntervalHandle } from '../util/clock.js'

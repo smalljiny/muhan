@@ -17,7 +17,7 @@ function loadFixture(): GoldenFixture<ComputeAcInput, number> {
 
 /**
  * fixture의 `ComputeAcInput`을 런타임 wrapper 입력 `EffectiveStatContext`로 역-어댑트한다.
- * computeAc가 판독하는 3개 필드(effectiveDexterity·equipArmor·protection)만 의미가 있고,
+ * computeAc가 읽는 3개 필드(effectiveDexterity·equipArmor·protection)만 의미가 있고,
  * 나머지 5개(Story 4·5 소비)는 더미값으로 채운다 — computeAc는 이들을 읽지 않는다.
  */
 function adaptToContext(input: ComputeAcInput): EffectiveStatContext {
@@ -35,7 +35,7 @@ function adaptToContext(input: ComputeAcInput): EffectiveStatContext {
 
 describe('런타임 computeAc wrapper 골든 교차검증', () => {
   // T3.3 — 체크인 fixture 전 케이스가 런타임 wrapper(EffectiveStatContext 경유)를 통과한다.
-  // oracle computeAc 직접 경로는 oracle/computeAc.test.ts가 이미 검증하므로, 여기선
+  // 오라클 computeAc 직접 경로는 oracle/computeAc.test.ts가 이미 검증하므로, 여기선
   // wrapper 경로만 독립적으로 확립한다.
   it('approve(compute_ac fixture, wrapper)가 전 케이스를 throw 없이 통과한다', () => {
     const fixture = loadFixture()

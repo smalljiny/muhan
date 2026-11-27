@@ -2,7 +2,7 @@ import { fileURLToPath, URL } from 'node:url'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
-// client 앱 빌드 설정 — React 플러그인으로 JSX/Fast Refresh 배선.
+// client 앱 빌드 설정 — React 플러그인으로 JSX/Fast Refresh 연결.
 //
 // dev 프록시(Story 5, G1 클라측): 브라우저 관점 same-origin으로 `/game`(WS)·`/dev/login`을
 // API 서버(기본 PORT 3000)로 프록시한다. same-origin이라야 dev 로그인이 심은 `__session` 쿠키가

@@ -41,7 +41,7 @@ describe('spellByName — 규칙 위임 (완료 기준 3)', () => {
     expect(spellByName('은둔법')).toEqual({ kind: 'ambiguous' })
   })
 
-  it('확정·못 찾음 결과를 가공 없이 통과시킨다 (모호는 직전 케이스 소관)', () => {
+  it('확정·못 찾음 결과를 가공 없이 통과시킨다 (모호는 직전 케이스 담당)', () => {
     vi.mocked(matchSpellName).mockReturnValue({ kind: 'found', spellNo: 99 })
     expect(spellByName('아무거나')).toEqual({ kind: 'found', spellNo: 99 })
 

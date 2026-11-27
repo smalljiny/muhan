@@ -1,25 +1,27 @@
 import type { ExitEdge, RoomNode } from 'shared'
 import { hasFlag, XNOSEE } from './door.js'
 import { evaluateMoveGates } from './moveGates.js'
+// type-only import라 presence.ts와의 순환은 컴파일 시 지워진다.
+import type { PresenceJoinContext, PresenceLeaveContext } from './presence.js'
 
 /**
  * 통합 이동 경로 — 원본 A4 §8의 4중 복제 이동 코드를 단일 `tryMove`로 통합한다.
  *
- * oracle `docs/notes/game-analysis-20260625/a4-movement-rooms.md` §1(게이트)·§8(4중 복제) +
+ * 오라클 `docs/notes/game-analysis-20260625/a4-movement-rooms.md` §1(게이트)·§8(4중 복제) +
  * spec §3.3·§3.4 이식:
- *   원본은 방향 이동·명명 이동·flee·sneak가 각기 거의 동일한 게이트 건틀릿을 복제해 갖고 있었다.
- *   본 이식은 **출구 선택 방식만 mode로 분기**하고, 선택된 출구에 대한 게이트 건틀릿 본체
+ *   원본은 방향 이동·명명 이동·flee·sneak가 각기 거의 동일한 게이트 검사를 복제해 갖고 있었다.
+ *   본 이식은 **출구 선택 방식만 mode로 분기**하고, 선택된 출구에 대한 게이트 검사 본체
  *   (`evaluateMoveGates`, Story 6)와 통과 후 leave/join 방송·점유자 재배치를 전 mode가 공유한다.
  *
  * 게이트 순서(콘텐츠)는 `moveGates.ts`가 보존한다. 여기서는 그 앞단인
  *   - gate 1(출구 존재) + XNOSEE 이름/방향 탐색 제외(6번째 강제 게이트)
  *   - 통과 후 부수효과(방송·재배치)
- * 만 담당한다. dangling(대상 방 부재)은 건틀릿 내부(danglingGate)가 처리하므로 미해석 target을
- * 그대로 건틀릿에 넘긴다.
+ * 만 담당한다. dangling(대상 방 없음)은 게이트 검사 내부(danglingGate)가 처리하므로 미해석 target을
+ * 그대로 게이트 검사에 넘긴다.
  *
  * 순수성/가변성 경계:
  *   출구 해석·게이트 평가는 부수효과가 없다. 통과 시에만 라이브 가변 carve-out으로
- *   `RoomNode.occupants` Set을 in-place 변경한다(worldGraph 타입 주석과 정합). 그 외 입력은 불변.
+ *   `RoomNode.occupants` Set을 in-place 변경한다(worldGraph 타입 주석과 일치). 그 외 입력은 불변.
  *
  * 범위 밖(구현하지 않음): 추종자(first_fol)·몬스터 추격·트랩 발동(A4 §5), 그리고 A4 §8이 경고한
  *   `F_ISSET(ext, 52)` 경계 밖 접근(비트 52는 4바이트 exit flags 범위 밖 → ltime 침범). 어떤
@@ -39,7 +41,7 @@ export type MoveActor = {
 }
 
 /**
- * 이동 mode — 출구 **선택 방식**만 결정한다(게이트 건틀릿 본체는 공유). spec §3.4:
+ * 이동 mode — 출구 **선택 방식**만 결정한다(게이트 검사 본체는 공유). spec §3.4:
  *   - directional/named/sneak: 이름/방향 문자열(selector)로 출구를 선형 탐색.
  *   - flee: selector 무시, chooseFleeExit로 가시 출구를 선택.
  */
@@ -48,12 +50,12 @@ export type MoveMode = 'directional' | 'named' | 'flee' | 'sneak'
 /**
  * flee 출구 선택자(rng) seam. 가시 출구 목록에서 하나를 고른다. E4-1b 기본은 결정적 stub
  * (`defaultFleeRng`, 첫 출구)이라 단위 테스트가 결정적으로 통과한다. 실 확률(65%+dex 굴림)·
- * 시드 규약은 E8-2 RNG 규약과 정합해 이 seam에 주입한다.
+ * 시드 규약은 E8-2 RNG 규약과 일치시켜 이 seam에 주입한다.
  */
 export type FleeRng = (exits: readonly ExitEdge[]) => ExitEdge | undefined
 
 /**
- * tryMove 의존성 주입 seam(전역 금지 — 인자 주입). 실 배선은 워드 그래프·G2 게임시각·Story 5
+ * tryMove 의존성 주입 seam(전역 금지 — 인자 주입). 실 연결은 워드 그래프·G2 게임시각·Story 5
  * 채널 어댑터 경유이며, E4-1b는 fake 주입으로 검증한다.
  */
 export interface TryMoveDeps {
@@ -61,10 +63,16 @@ export interface TryMoveDeps {
   readonly resolveRoom: (roomId: number) => RoomNode | undefined
   /** 현재 게임시각(0~23) — G2 gameTime.currentHour() 주입. 시간 게이트가 소비. */
   readonly currentHour: () => number
-  /** 출발 방 leave 방송 seam — actor가 아직 출발 방 점유자일 때 호출된다. */
-  readonly broadcastLeave: (room: RoomNode, actor: MoveActor) => void
-  /** 도착 방 join 방송 seam — actor가 이미 도착 방 점유자가 된 뒤 호출된다. */
-  readonly broadcastJoin: (room: RoomNode, actor: MoveActor) => void
+  /**
+   * 출발 방 leave 방송 seam — actor가 아직 출발 방 점유자일 때 호출된다.
+   * 이동 경로는 `moved-out` 문맥(mode·선택 출구)을 넘긴다. 접속 종료(`exited`)는 진입 코어가 부른다.
+   */
+  readonly broadcastLeave: (room: RoomNode, actor: MoveActor, ctx: PresenceLeaveContext) => void
+  /**
+   * 도착 방 join 방송 seam — actor가 이미 도착 방 점유자가 된 뒤 호출된다.
+   * 이동 경로는 `moved-in` 문맥(mode·선택 출구)을 넘긴다. 접속 진입(`entered`)은 진입 코어가 부른다.
+   */
+  readonly broadcastJoin: (room: RoomNode, actor: MoveActor, ctx: PresenceJoinContext) => void
   /**
    * 방 진입 entry-hook seam — actor가 도착 방 점유자가 된 뒤(join 방송 직후) 호출된다.
    * E4-2가 활성 집합 활성화 + perm 리스폰 검사(Story 4)를 이 훅에 건다. E4-1b/기본 주입은
@@ -82,10 +90,10 @@ export interface TryMoveDeps {
   readonly rng: FleeRng
 }
 
-/** 결정적 기본 entry-hook — no-op. E4-2가 활성화·perm 리스폰 결선으로 대체 주입한다. */
+/** 결정적 기본 entry-hook — no-op. E4-2가 활성화·perm 리스폰 연결로 대체 주입한다. */
 export const noopOnRoomEntered = (_room: RoomNode, _actor: MoveActor): void => {}
 
-/** 결정적 기본 leave-hook — no-op. E4-2가 활성 집합 비활성화 결선으로 대체 주입한다. */
+/** 결정적 기본 leave-hook — no-op. E4-2가 활성 집합 비활성화 연결로 대체 주입한다. */
 export const noopOnRoomLeft = (_room: RoomNode, _actor: MoveActor): void => {}
 
 /** tryMove 결과. 통과면 arrivedRoom(도착 방), 거부면 reason(사유). MoveGateResult와 동형. */
@@ -130,7 +138,7 @@ function isVisible(exit: ExitEdge): boolean {
  *
  * directional/named/sneak 3개 mode는 이 seam에서 **의도적으로 동일한** 이름 탐색이다 —
  * 원본은 방향어(2/ㄴ→남)를 이름으로 정규화(A3 §2)하고, sneak의 은신 유지 판정은 §3.3 게이트 14
- * (은신, E5/E6 대기) stub 소관이라 출구 선택 단계에서는 갈리지 않는다. flee만 확률 선택으로 분기.
+ * (은신, E5/E6 대기) stub 담당이라 출구 선택 단계에서는 갈리지 않는다. flee만 확률 선택으로 분기.
  */
 function resolveExit(
   sourceRoom: RoomNode,
@@ -154,7 +162,7 @@ const NO_EXIT: TryMoveResult = { ok: false, reason: '길이 막혀 있습니다'
  * 통합 이동. 4개 mode가 이 단일 경로를 공유하고 출구 선택 방식만 분기한다.
  *
  * 순서: (1) source 방 해석 → (2) mode별 출구 해석(gate 1 + XNOSEE 제외) → (3) target 해석 →
- * (4) 공유 게이트 건틀릿 실행 → 통과 시 (5a) leave 방송 (5b) 점유자 재배치 (5c) join 방송.
+ * (4) 공유 게이트 검사 실행 → 통과 시 (5a) leave 방송 (5b) 점유자 재배치 (5c) join 방송.
  * 어느 단계든 거부되면 이동을 취소하고(재배치·방송 없음) 거부 결과를 반환한다.
  */
 export function tryMove(
@@ -171,11 +179,11 @@ export function tryMove(
   const exit = resolveExit(sourceRoom, selector, mode, deps.rng)
   if (exit === undefined) return NO_EXIT
 
-  // (3) 도착 방 = resolveRoom(exit.targetRoomId). 미해석(dangling)이면 건틀릿이 거부하므로
-  //     undefined를 그대로 건틀릿에 넘긴다.
+  // (3) 도착 방 = resolveRoom(exit.targetRoomId). 미해석(dangling)이면 게이트 검사가 거부하므로
+  //     undefined를 그대로 게이트 검사에 넘긴다.
   const targetRoom = deps.resolveRoom(exit.targetRoomId)
 
-  // (4) 공유 게이트 건틀릿(Story 6) — dangling·XLOCKD·XCLOSD·시간·정원 등 순서 보존.
+  // (4) 공유 게이트 검사(Story 6) — dangling·XLOCKD·XCLOSD·시간·정원 등 순서 보존.
   //     flee 도착 후 정원(17) 재검사도 이 1회 실행이 표현한다(별도 2차 실행 불필요).
   const gate = evaluateMoveGates({
     exit,
@@ -185,17 +193,17 @@ export function tryMove(
   })
   if (!gate.ok) return { ok: false, reason: gate.reason }
 
-  // 건틀릿 통과 시 targetRoom은 반드시 정의됨(dangling 게이트가 undefined를 선행 거부).
+  // 게이트 검사 통과 시 targetRoom은 반드시 정의됨(dangling 게이트가 undefined를 선행 거부).
   // 타입 좁힘을 위한 방어 — 도달 불가 경로.
   if (targetRoom === undefined) return NO_EXIT
 
   // (5) 통과 — spec §3.3 순서. 라이브 가변 carve-out: occupants Set in-place 변경(worldGraph
-  //     타입 주석과 정합, 프로젝트 immutability 규칙의 승인된 예외).
-  deps.broadcastLeave(sourceRoom, actor) // (5a) actor는 아직 출발 방 점유자
+  //     타입 주석과 일치, 프로젝트 immutability 규칙의 승인된 예외).
+  deps.broadcastLeave(sourceRoom, actor, { change: 'moved-out', mode, exit }) // (5a) actor는 아직 출발 방 점유자
   sourceRoom.occupants.delete(actor.characterId) // (5b) 재배치
   deps.onRoomLeft(sourceRoom, actor) // (5b') leave-hook — 빈 방 비활성화(E4-2). delete 後여야 deactivate 성립
   targetRoom.occupants.add(actor.characterId)
-  deps.broadcastJoin(targetRoom, actor) // (5c) actor는 이미 도착 방 점유자
+  deps.broadcastJoin(targetRoom, actor, { change: 'moved-in', mode, exit }) // (5c) actor는 이미 도착 방 점유자
   deps.onRoomEntered(targetRoom, actor) // (5d) entry-hook — 활성화·perm 리스폰(E4-2 Story 4)
 
   return { ok: true, arrivedRoom: targetRoom }

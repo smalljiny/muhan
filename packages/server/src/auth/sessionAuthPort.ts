@@ -1,7 +1,7 @@
 import type { CharacterSummary } from 'shared'
 
 /**
- * 세션 인증 포트 — server 도메인이 소유하는 계정·캐릭터 세션 어휘의 단일 계약.
+ * 세션 인증 포트 — server 도메인이 담당하는 계정·캐릭터 세션 어휘의 단일 계약.
  *
  * 이 인터페이스는 firebase-admin API(예: verifySessionCookie·getUser)를 표현하지 않는다.
  * 게임 세션 도메인 언어(쿠키 검증→계정 신원, 캐릭터 목록·생성, 소유권 확인)로만 표현하며,
@@ -29,7 +29,7 @@ export interface AccountIdentity {
  * 캐릭터 생성 입력 DTO — create_ply 인터뷰(Story 6)가 수집한 전체 필드.
  *
  * `stats`는 포인트바이 raw 배분 [힘,민첩,맷집,지식,신앙심]이며 종족 보정 *전* 값이다 — 어댑터가
- * `applyRaceModifiers(stats, race)`로 저장 스탯을 만든다(종족 수학은 server E5 코드 소유). gender(1=남/2=여)·
+ * `applyRaceModifiers(stats, race)`로 저장 스탯을 만든다(종족 수학은 server E5 코드 담당). gender(1=남/2=여)·
  * weapon(1~5)·alignment(1=선/2=악)은 생성 선택을 담는 최소 스칼라다. level 등 파생 값은 어댑터가 채운다.
  */
 export type CreateCharacterInput = {
@@ -56,7 +56,7 @@ export interface SessionAuthPort {
    * account에 최소 필드 dto로 캐릭터를 생성하고 그 요약을 반환한다.
    * 입력 검증(이름 비어있지 않음·클래스/종족 정수)은 호출자 계약이다 — 어댑터는 유효 DTO를
    * 가정한다. Story 5의 create 상태 핸들러가 Zod로 검증한 뒤 호출한다. 클래스/종족 코드의
-   * 범위·유효성 제약은 코드 테이블이 확정되는 E5로 유예한다(E3엔 테이블이 없어 강제하지 않는다).
+   * 범위·유효성 제약은 코드 테이블이 확정되는 E5로 보류한다(E3엔 테이블이 없어 강제하지 않는다).
    */
   createCharacter(accountId: string, dto: CreateCharacterInput): Promise<CharacterSummary>
 

@@ -71,7 +71,7 @@ const EVENT2: InvasionEvent = {
   broadcast: '무적존 강탈',
 }
 
-/** min을 반환하는 결정적 rng — 방=roomRange.min, 몹=mobRange.min 선택. */
+/** min을 반환하는 결정적 rng — 방=roomRange.min, 몬스터=mobRange.min 선택. */
 const minRng = (min: number) => min
 
 function graphOf(...rooms: RoomNode[]): Map<number, RoomNode> {
@@ -104,8 +104,8 @@ describe('createInvasion — 이벤트당 슬롯', () => {
   })
 })
 
-describe('발화 시 스폰·방송', () => {
-  it('슬롯 발화 시 count회 스폰하고 방송한다', () => {
+describe('실행 시 스폰·방송', () => {
+  it('슬롯 실행 시 count회 스폰하고 방송한다', () => {
     const room = makeRoom(8000) // roomRange.min
     const broadcast = vi.fn()
     const [slot] = createInvasion({
@@ -116,7 +116,7 @@ describe('발화 시 스폰·방송', () => {
       rng: minRng,
       broadcast,
     })
-    slot?.run(0) // 발화 시점 게이팅은 WorldClock 소관 — 슬롯 run은 tickSec를 쓰지 않는다
+    slot?.run(0) // 실행 시점 게이팅은 WorldClock 담당 — 슬롯 run은 tickSec를 쓰지 않는다
     expect(room.creatures).toHaveLength(3) // count=3, 방=8000 해석됨
     expect(room.creatures[0]?.templateId).toBe(732) // mobRange.min
     expect(broadcast).toHaveBeenCalledWith('카오스 침공')
@@ -133,7 +133,7 @@ describe('발화 시 스폰·방송', () => {
       rng: minRng,
     })
     const raid = slots.find((s) => s.name === 'invasion:muhan-zone-raid')
-    raid?.run(0) // raid 슬롯만 발화 — chaos 슬롯은 건드리지 않음
+    raid?.run(0) // raid 슬롯만 실행 — chaos 슬롯은 건드리지 않음
     expect(r1.creatures).toHaveLength(0)
     expect(r2.creatures).toHaveLength(2)
   })
@@ -151,10 +151,10 @@ describe('그래프에 없는 방 스킵', () => {
       broadcast,
     })
     slot?.run(0)
-    expect(broadcast).toHaveBeenCalledWith('카오스 침공') // 방송은 발화 시 나간다
+    expect(broadcast).toHaveBeenCalledWith('카오스 침공') // 방송은 실행 시 나간다
   })
 
-  it('알 수 없는 몹 템플릿은 스폰하지 않는다', () => {
+  it('알 수 없는 몬스터 템플릿은 스폰하지 않는다', () => {
     const room = makeRoom(8000)
     const [slot] = createInvasion({
       events: [EVENT1],
@@ -190,12 +190,12 @@ describe('D7 monotonic idx + seam 기본값', () => {
   })
 })
 
-describe('WorldClock 통합(FakeClock 구동)', () => {
-  it('event1이 4000초에 발화한다', () => {
+describe('WorldClock 통합(FakeClock 기반)', () => {
+  it('event1이 4000초에 실행된다', () => {
     const clock = new FakeClock()
     const world = new WorldClock({ clock })
     const room = makeRoom(8000)
-    // 발화 시점 게이팅은 WorldClock의 슬롯별 modulo가 담당한다(슬롯 내부 gcd 없음).
+    // 실행 시점 게이팅은 WorldClock의 슬롯별 modulo가 담당한다(슬롯 내부 gcd 없음).
     for (const slot of createInvasion({
       events: [EVENT1],
       resolveRoom: (id) => graphOf(room).get(id),
@@ -214,7 +214,7 @@ describe('WorldClock 통합(FakeClock 구동)', () => {
 })
 
 describe('loadInvasionEvents — data/world/events.json 스키마', () => {
-  it('events.json을 읽어 방 풀·몹 풀·주기·count·방송을 담는다', () => {
+  it('events.json을 읽어 방 풀·몬스터 풀·주기·count·방송을 담는다', () => {
     const events = loadInvasionEvents()
     expect(events.length).toBeGreaterThanOrEqual(2)
     const chaos = events.find((e) => e.id === 'chaos-invasion')

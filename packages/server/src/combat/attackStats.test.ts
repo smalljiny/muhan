@@ -16,7 +16,7 @@ function flagsWith(...bits: readonly number[]): string {
 }
 
 /**
- * attackStats — 명중 임계(hitThreshold)·피해 분기(playerBaseDamage/monsterDamage)·PALADIN 정렬
+ * attackStats — 명중 임계(hitThreshold)·피해 분기(playerBaseDamage/monsterDamage)·PALADIN 성향
  * 보정(applyPaladinAlignment)의 오라클 충실 이식.
  *
  * byte-fidelity 함정: 모든 `/`는 C 정수 나눗셈(0 방향 절사) = Math.trunc(절대 Math.floor 아님).
@@ -225,7 +225,7 @@ describe('applyPaladinAlignment', () => {
     expect(applyPaladinAlignment(10, 300, seqRng([2]))).toBe(12)
   })
 
-  it('중립 정렬(0~250)이면 n 그대로', () => {
+  it('중립 성향(0~250)이면 n 그대로', () => {
     expect(applyPaladinAlignment(10, 100, seqRng([]))).toBe(10)
   })
 

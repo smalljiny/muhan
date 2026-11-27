@@ -3,7 +3,7 @@ import { z } from 'zod'
 /**
  * 골든 fixture 하네스 — 함수별 좁은 골든 fixture의 JSON 포맷·타입 단일 출처.
  *
- * 각 fixture는 한 대상 함수(`fn`)에 대해 oracle 출처 메타(`oracle`)와 입출력 케이스
+ * 각 fixture는 한 대상 함수(`fn`)에 대해 오라클 출처 메타(`oracle`)와 입출력 케이스
  * 배열(`cases`)을 담는다. 드라이버는 fixture를 로드해 대상 함수를 각 case의 input으로
  * 실행하고 expected와 대조한다(approve).
  *
@@ -14,8 +14,8 @@ import { z } from 'zod'
  *   `expected`·`generatedAt`이 갱신된다. 회귀 테스트 도중 자동 재생성은 없다.
  *
  * ## oracle.method 확장 여지
- * - E8-1의 method 값은 항상 `'manual'`이다(사람이 oracle을 손으로 산출).
- * - `'c-compile'`은 원본 C 함수를 컴파일해 oracle을 뽑는 후확장 경로를 위해 enum에
+ * - E8-1의 method 값은 항상 `'manual'`이다(사람이 오라클을 손으로 산출).
+ * - `'c-compile'`은 원본 C 함수를 컴파일해 오라클을 뽑는 후확장 경로를 위해 enum에
  *   보존하되, E8-1에서는 c-compile 드라이버를 **생성하지 않는다**.
  */
 
@@ -40,7 +40,7 @@ export const goldenFixtureSchema = z.strictObject({
   oracle: z.strictObject({
     // E8-1은 항상 'manual'. 'c-compile'은 후확장 여지(드라이버 미생성).
     method: z.enum(['manual', 'c-compile']),
-    // oracle 출처(예: C 파일:라인 또는 참조 구현 설명).
+    // 오라클 출처(예: C 파일:라인 또는 참조 구현 설명).
     source: z.string().min(1),
     // ISO 타임스탬프 문자열. 체크인 후 frozen. ISO datetime 형식을 강제한다.
     generatedAt: z.iso.datetime(),

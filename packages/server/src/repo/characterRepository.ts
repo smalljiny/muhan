@@ -3,7 +3,7 @@ import { characterSchema, type Character, type ObjectInstance } from 'shared'
 import { DocumentNotFoundError, type IRepository } from './types.js'
 import { characterPatchSchema } from './characterSchemas.js'
 
-// 검증 스키마의 정본은 의존 0 모듈 `characterSchemas.ts`다(계층 역전 회피 — 그 파일 주석 참조).
+// 검증 스키마의 기준은 의존 0 모듈 `characterSchemas.ts`다(계층 역전 회피 — 그 파일 주석 참조).
 // 저장소를 통해 쓰던 기존 import 경로를 깨지 않도록 여기서 재-export한다.
 export { characterPatchSchema } from './characterSchemas.js'
 import type { ObjectRepository } from './objectRepository.js'
@@ -27,7 +27,7 @@ const COLLECTION_NAME = 'characters'
  *
  * 경계 검증: 저장(insert) 직전과 조회(findById) 직후 characterSchema.parse로 검증한다.
  *
- * 인덱스 수명주기는 이 저장소가 소유한다 — init()이 name unique 인덱스를 보장한다
+ * 인덱스 수명주기는 이 저장소가 담당한다 — init()이 name unique 인덱스를 보장한다
  * (원본 FS 초성 샤딩을 대체하는 이름 유일성 제약).
  */
 export class CharacterRepository implements IRepository<Character> {
@@ -52,15 +52,15 @@ export class CharacterRepository implements IRepository<Character> {
   }
 
   /**
-   * 조회 경로 공통 경계 게이트 — raw 문서를 backfill 합성 체인(V6∘V5∘V4∘V3∘V2)으로 승격한 뒤 strict parse한다.
+   * 조회 경로 공통 경계 게이트 — raw 문서를 backfill 합성 체인(V6∘V5∘V4∘V3∘V2)으로 올린 뒤 strict parse한다.
    *
-   * 이 게이트가 소유하는 불변식은 하나다: **backfill은 parse에 선행한다**. strict parse가
+   * 이 게이트가 담당하는 불변식은 하나다: **backfill은 parse에 선행한다**. strict parse가
    * hpCurrent/mpCurrent/level/experience/spells/realm/alignment 없는 구버전 문서를 거부하므로, 신규 조회
    * 쿼리가 backfill을 누락한 채 구버전 문서를 파싱해 런타임 거부되는 사고를 두 load 경로가 공유하는
    * 이 단일 구조로 차단한다.
    *
-   * 스텝별 책임(어느 버전이 무엇을 시딩하는지)은 `characterBackfill.ts` 모듈 헤더가 정본이다 —
-   * 여기서 재전사하면 버전이 오를 때마다 두 서사가 어긋난다.
+   * 스텝별 책임(어느 버전이 무엇을 시딩하는지)은 `characterBackfill.ts` 모듈 헤더가 기준이다 —
+   * 여기서 다시 옮겨 적으면 버전이 오를 때마다 두 설명이 어긋난다.
    */
   private parseCharacterDoc(doc: Record<string, unknown>): Character {
     return characterSchema.parse(
@@ -93,6 +93,22 @@ export class CharacterRepository implements IRepository<Character> {
     await this.collection.insertOne(validated)
   }
 
+  /**
+   * 없을 때만 삽입 — 부팅 시 멱등 시딩 용도다. 같은 `_id` 문서가 이미 있으면 기존 문서는 바꾸지 않는다.
+   * 새로 삽입했으면 true, 기존 문서가 있어 건너뛰었으면 false를 반환한다.
+   * 다른 `_id`가 같은 name을 가지면 E11000을 잡지 않고 전파해 호출자(부팅)를 실패시킨다.
+   */
+  async insertIfAbsent(doc: Character): Promise<boolean> {
+    const validated = characterSchema.parse(doc)
+    const { _id, ...rest } = validated
+    const result = await this.collection.updateOne(
+      { _id },
+      { $setOnInsert: rest },
+      { upsert: true },
+    )
+    return result.upsertedCount === 1
+  }
+
   async updateById(id: string, patch: Partial<Omit<Character, '_id'>>): Promise<void> {
     const validated = characterPatchSchema.parse(patch)
     // matchedCount로 판정 — 멱등 갱신(matched=1, modified=0)은 성공, 0건 매칭은 fail-loud.
@@ -119,7 +135,7 @@ export class CharacterRepository implements IRepository<Character> {
   }
 
   /**
-   * 캐릭터 인벤토리 뷰 — object.owner={type:'character', id}를 역참조해 소유 오브젝트를 파생한다.
+   * 캐릭터 인벤토리 뷰 — object.owner={type:'character', id}를 역참조해 소유 아이템을 파생한다.
    * 캐릭터 문서에 권한 배열을 두지 않는 단일 소유권 모델의 조회 경로다.
    */
   async hydrateInventory(characterId: string): Promise<ObjectInstance[]> {

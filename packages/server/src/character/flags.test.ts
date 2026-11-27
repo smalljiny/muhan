@@ -14,7 +14,7 @@ import { projectResistFlags, projectBuffFlags } from '../magic/buffEffects.js'
 import { grantBuff } from '../magic/spellDuration.js'
 
 /**
- * flags 합성 테스트 — 세 투영(status·resist·buff)의 OR 결과와 **비트 소유권 파티션**을 고정한다.
+ * flags 합성 테스트 — 세 변환(status·resist·buff)의 OR 결과와 **비트 소유권 파티션**을 고정한다.
  *
  * anti-drift 원칙: 기대 비트 집합도, 활성화할 주문 목록도 프로덕션 자료구조(TIMED_BUFF_META·
  * RESIST_FLAG_BY_SPELL·TIMED_BUFF_SPELLS·RESIST_SPELLS)에서 파생하지 않고 리터럴로 적는다. 파생하면
@@ -27,11 +27,11 @@ const ZERO16 = '0000000000000000'
 const NOW = 1000
 const UNTIL = NOW + 100
 
-/** status 투영 소유 비트 — PPOISN(16)·PDISEA(41)·PBLIND(42)·PFEARS(43)·PSILNC(44). */
+/** status 변환 소유 비트 — PPOISN(16)·PDISEA(41)·PBLIND(42)·PFEARS(43)·PSILNC(44). */
 const STATUS_BITS = [16, 41, 42, 43, 44]
-/** resist 투영 소유 비트 — PRFIRE(30)·PRMAGI(32)·PRCOLD(36)·PSSHLD(38). */
+/** resist 변환 소유 비트 — PRFIRE(30)·PRMAGI(32)·PRCOLD(36)·PSSHLD(38). */
 const RESIST_BITS = [30, 32, 36, 38]
-/** buff 투영 소유 비트 — PBLESS(0)·PINVIS(2)·PPROTE(8)·PLIGHT(17)·PDMAGI(20)·PDINVI(21)·PLEVIT(25)·PFLYSP(31)·PKNOWA(33)·PBRWAT(37). */
+/** buff 변환 소유 비트 — PBLESS(0)·PINVIS(2)·PPROTE(8)·PLIGHT(17)·PDMAGI(20)·PDINVI(21)·PLEVIT(25)·PFLYSP(31)·PKNOWA(33)·PBRWAT(37). */
 const BUFF_BITS = [0, 2, 8, 17, 20, 21, 25, 31, 33, 37]
 /** 미소유(범위 밖) 비트 — PHIDDN(1)·PDMINV(10)·PWIMPY(14)·PCHAOS(28)·PFAMIL(55)·PUPDMG(59). */
 const UNOWNED_BITS = [PHIDDN, PDMINV, PWIMPY, PCHAOS, PFAMIL, PUPDMG]
@@ -104,7 +104,7 @@ function makeAllActive(): Character {
   return withBuffs(withAllStatus(makeCharacter()), [...RESIST_SPELL_NOS, ...BUFF_SPELL_NOS])
 }
 
-describe('composeCharacterFlags — 세 투영 OR 합성', () => {
+describe('composeCharacterFlags — 세 변환 OR 합성', () => {
   it('무효과 캐릭터는 16자 0을 반환한다', () => {
     const hex = composeCharacterFlags(makeCharacter(), NOW)
     expect(hex).toBe(ZERO16)
@@ -141,7 +141,7 @@ describe('composeCharacterFlags — 비트 소유권 파티션', () => {
    * 제약 #1 회귀 — PFEARS(43)·PSILNC(44)의 생산자는 projectStatusFlags 단독이다.
    *
    * BUFF_BITS 정확일치만으로는 `TIMED_BUFF_META`에 SFEARS/SSILNC가 **추가**되는 드리프트를 잡지 못한다
-   * (버프 단독 캐릭터는 그 주문의 buffs 엔트리가 없어 투영이 false로 빠진다 — 등재해도 통과). 그래서
+   * (버프 단독 캐릭터는 그 주문의 buffs 엔트리가 없어 변환이 false로 빠진다 — 등재해도 통과). 그래서
    * 금지 주문의 buffs 엔트리를 **직접 활성화**한 뒤 아무 비트도 서지 않음을 고정한다: 등재되는 순간
    * bit 43/44가 buff 경로에서도 생산돼 이 케이스가 즉시 실패한다.
    */
@@ -170,11 +170,11 @@ describe('composeCharacterFlags — 비트 소유권 파티션', () => {
   })
 
   /**
-   * 이중 생산 가드 — 합성 결과 한 개만 보면 OR 멱등성이 이중 출처를 가린다(두 투영이 같은 비트를
-   * 생산해도 OR 결과가 같아 setBits가 변하지 않는다). 세 투영의 출력을 **분리 관찰**해야 보인다.
+   * 이중 생산 가드 — 합성 결과 한 개만 보면 OR 멱등성이 이중 출처를 가린다(두 변환이 같은 비트를
+   * 생산해도 OR 결과가 같아 setBits가 변하지 않는다). 세 변환의 출력을 **분리 관찰**해야 보인다.
    * 카탈로그 전 주문의 버프 + 상태이상 5종을 동시에 켜 미열거 주문 등재까지 사정권에 넣는다.
    */
-  it('카탈로그 전 주문 활성 시에도 세 투영의 생산 비트는 쌍마다 서로소다', () => {
+  it('카탈로그 전 주문 활성 시에도 세 변환의 생산 비트는 쌍마다 서로소다', () => {
     const saturated = withBuffs(
       withAllStatus(makeCharacter()),
       SPELL_CATALOG.map((entry) => entry.spellNo),
@@ -200,7 +200,7 @@ describe('composeCharacterFlags — 비트 소유권 파티션', () => {
 })
 
 // 단독 활성 3케이스는 위 파티션 describe가 이미 *정확일치*로 단언하므로 미소유 비트 미세팅을
-// 함의한다. 여기서는 최대 활성(세 출처 동시) 한 케이스만 명시적으로 고정한다.
+// 뜻한다. 여기서는 최대 활성(세 출처 동시) 한 케이스만 명시적으로 고정한다.
 describe('composeCharacterFlags — 미소유 비트는 어떤 입력에서도 미세팅', () => {
   it('전체 활성: PHIDDN·PDMINV·PWIMPY·PCHAOS·PFAMIL·PUPDMG 미세팅', () => {
     const hex = composeCharacterFlags(makeAllActive(), NOW)
@@ -218,7 +218,7 @@ describe('composeCharacterFlags — 순수 함수(캐시 없음)', () => {
     expect(JSON.parse(JSON.stringify(character))).toEqual(snapshot)
   })
 
-  it('같은 캐릭터라도 now가 바뀌면 결과가 재산출된다(character-only 캐시 부재)', () => {
+  it('같은 캐릭터라도 now가 바뀌면 결과가 재산출된다(character-only 캐시 없음)', () => {
     const character = withAllStatus(makeCharacter())
     expect(composeCharacterFlags(character, NOW)).not.toBe(ZERO16)
     expect(composeCharacterFlags(character, UNTIL + 1)).toBe(ZERO16)

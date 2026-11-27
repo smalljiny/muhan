@@ -57,7 +57,7 @@ function baseInput(over: Partial<MoveGateInput> = {}): MoveGateInput {
   return { exit: makeExit([]), targetRoom: makeRoom([], 0), actor, currentHour: 12, ...over }
 }
 
-// ── 건틀릿 전체: 중립 입력 통과 ───────────────────────────────────────────────
+// ── 게이트 검사 전체: 중립 입력 통과 ───────────────────────────────────────────────
 
 describe('evaluateMoveGates — 중립 입력', () => {
   it('강제 게이트에 걸리지 않는 입력은 통과한다', () => {
@@ -173,7 +173,7 @@ describe('정원 게이트 (17)', () => {
 
 // ── §3.3 순서 검증 ────────────────────────────────────────────────────────────
 
-describe('건틀릿 순서 (§3.3)', () => {
+describe('게이트 검사 순서 (§3.3)', () => {
   it('게이트 순서가 §3.3 표와 일치한다', () => {
     expect(MOVE_GATE_ORDER).toEqual([
       'dangling',

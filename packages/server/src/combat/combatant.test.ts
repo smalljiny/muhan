@@ -6,7 +6,7 @@ import type { PlayerCombatState } from './playerState.js'
 /**
  * Combatant 어댑터 — 플레이어(PlayerCombatState)·몬스터(CreatureInstance)를 통일 operand로 노출한다.
  *
- * 명중·피해 계산이 kind 비대칭(플레이어 파생 스탯 vs 크리처 필드 read)을 흡수한 단일 인터페이스
+ * 명중·피해 계산이 kind 비대칭(플레이어 파생 스탯 vs 몬스터 필드 read)을 흡수한 단일 인터페이스
  * (hpCurrent/armor/thaco/dexterity/flags/kind)로만 읽도록 한다. flags는 양측 hex string으로 통일해
  * F_ISSET(combatant.flags, bit) 단일 관용을 성립시킨다.
  */
@@ -68,7 +68,7 @@ describe('toCombatant', () => {
     expect(c.kind).toBe('player')
   })
 
-  it('크리처를 kind="creature"로 노출한다', () => {
+  it('몬스터를 kind="creature"로 노출한다', () => {
     const c = toCombatant(makeCreature())
     expect(c.kind).toBe('creature')
   })
@@ -82,7 +82,7 @@ describe('toCombatant', () => {
     expect(c.flags).toBe('')
   })
 
-  it('크리처 hpcur를 hpCurrent로 매핑하고 armor/thaco/dexterity/flags를 노출한다', () => {
+  it('몬스터 hpcur를 hpCurrent로 매핑하고 armor/thaco/dexterity/flags를 노출한다', () => {
     const c = toCombatant(makeCreature({ hpcur: 24, armor: 20, thaco: 18, dexterity: 12, flags: '0a' }))
     expect(c.hpCurrent).toBe(24)
     expect(c.armor).toBe(20)
@@ -104,7 +104,7 @@ describe('toCombatant', () => {
     expect(c.kind === 'player' && c.state).toBe(state)
   })
 
-  it('크리처 combatant는 원본 CreatureInstance 참조를 담는다(피해 계산 소비)', () => {
+  it('몬스터 combatant는 원본 CreatureInstance 참조를 담는다(피해 계산 소비)', () => {
     const instance = makeCreature()
     const c = toCombatant(instance)
     expect(c.kind === 'creature' && c.instance).toBe(instance)

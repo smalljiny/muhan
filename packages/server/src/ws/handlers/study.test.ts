@@ -28,8 +28,8 @@ import type { ChannelPort } from '../channelPort.js'
 import type { PermissionPort } from '../permissionPort.js'
 
 /**
- * progress:study 핸들러 스펙 — 소지품 이름 해소(#120)·study() 게이트·비법서 소멸·라이브 교체를
- * 하나의 명령 경로로 배선한다.
+ * progress:study 핸들러 스펙 — 소지품 이름 해석(#120)·study() 게이트·비법서 소멸·라이브 교체를
+ * 하나의 명령 경로로 연결한다.
  *
  * 인스턴스·템플릿 팩토리는 `items/objectFixtures.testutil.ts`(단일 출처)에서 상속하고, 여기서는
  * study 도메인 기본값("연마 가능한 비법서")만 덮어쓴다. 게이트 임계는 magic/learning.test.ts와
@@ -160,7 +160,7 @@ describe('createStudyHandler', () => {
       expect(events[1]).toMatchObject({ type: 'character:stats' })
     })
 
-    it('발화 이벤트가 전부 와이어 계약(serverEventSchema)을 통과한다', () => {
+    it('발생한 이벤트가 전부 와이어 계약(serverEventSchema)을 통과한다', () => {
       const { deps } = makeSuccessDeps()
 
       const events = run(deps, { type: 'progress:study', target: '비법서' })
@@ -177,13 +177,13 @@ describe('createStudyHandler', () => {
 
     /**
      * D10 — 스탯 통지는 `character:stats` 하나로 통일한다. study 핸들러도 **자신이
-     * `liveRegistry.register`에 실은 그 문서**에서 투영한다.
+     * `liveRegistry.register`에 실은 그 문서**에서 변환한다.
      *
      * ⚠ 이 단언은 연마와 달리 "낡은 문서" 변이를 잡지 못한다 — study()는 `spells`만 바꾸고
-     * `character:stats`의 6필드(hp·mp·exp·level)를 하나도 건드리지 않아, 시작 시점 문서로 투영해도
+     * `character:stats`의 6필드(hp·mp·exp·level)를 하나도 건드리지 않아, 시작 시점 문서로 변환해도
      * 같은 값이 나온다. 그 변이를 잡는 지점은 train.test.ts의 레벨 상승 케이스다.
      */
-    it('character:stats가 라이브 엔트리의 확정 문서에서 투영된다', () => {
+    it('character:stats가 라이브 엔트리의 확정 문서에서 변환된다', () => {
       const { deps, registry } = makeSuccessDeps()
 
       const events = run(deps, { type: 'progress:study', target: '비법서' })
@@ -328,7 +328,7 @@ describe('createStudyHandler', () => {
         target: '비법서',
       },
       {
-        // 값역 divergence(#123) 때문에 라이브 데이터에서는 발화하지 않지만, 스키마상 alignment는
+        // 값 범위 divergence(#123) 때문에 라이브 데이터에서는 동작하지 않지만, 스키마상 alignment는
         // 무제한 int라 게이트 자체는 여기서 정확히 재현된다.
         name: 'alignment',
         character: makeChar({ alignment: 200 }),
@@ -349,7 +349,7 @@ describe('createStudyHandler', () => {
         target: '비법서',
       },
       {
-        // 해소 실패 — 소지품 어디에도 그 이름이 없다.
+        // 해석 실패 — 소지품 어디에도 그 이름이 없다.
         name: 'not-found',
         character: makeChar(),
         template: makeTemplate(),
@@ -424,7 +424,7 @@ describe('createStudyHandler', () => {
     })
   })
 
-  describe('배선 격리 (internal)', () => {
+  describe('연결 격리 (internal)', () => {
     it('라이브 미등록 actor면 error{internal}, 두 마킹 모두 미호출', () => {
       const { deps, markCharacterDirty, markObjectDeleted } = makeDeps({})
 

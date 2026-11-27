@@ -143,7 +143,7 @@ describe('FirebaseSessionAuthAdapter (integration)', () => {
     })
 
     it('요약 level은 dev 상수가 아니라 문서 level을 그대로 반영한다', async () => {
-      // level!=1 문서로 toSummary가 doc.level을 투영함을 고정한다(하드코딩 level:1이면 실패).
+      // level!=1 문서로 toSummary가 doc.level을 변환함을 고정한다(하드코딩 level:1이면 실패).
       await characters.insert(makeCharacter({ _id: 'lv5', name: '고렙', accountId: 'uid-1', level: 5 }))
       const summary = (await adapter.listCharacters('uid-1')).find((s) => s.characterId === 'lv5')
       expect(summary?.level).toBe(5)
@@ -274,7 +274,7 @@ describe('FirebaseSessionAuthAdapter (integration)', () => {
       const persisted = await characters.findById('del')
       expect(persisted?.status).toBe('deleted')
       expect(persisted?.deletedAt).toBeInstanceOf(Date)
-      // 논리 부재 측: 목록에서 사라진다(재로그인 차단).
+      // 논리적으로 없는 측: 목록에서 사라진다(재로그인 차단).
       expect(await adapter.listCharacters('uid-1')).toEqual([])
     })
 

@@ -5,18 +5,18 @@ import { projectRoomView } from './roomView.js'
 import { NO_FLAGS, exitFlags, flagsHex, makeExit, makeItem, makeCreature, makeRoom } from './roomFixtures.testutil.js'
 
 /**
- * projectRoomView — 오라클 방 표시 규칙(room.c) 투영 단위 스펙.
+ * projectRoomView — 오라클 방 표시 규칙(room.c) 변환 단위 스펙.
  *
- * 두 flags 표현이 섞인다: 출구는 바이트당 한 원소인 number[](door.ts hasFlag), 아이템·크리처는
+ * 두 flags 표현이 섞인다: 출구는 바이트당 한 원소인 number[](door.ts hasFlag), 아이템·몬스터는
  * 16자 hex string(hexFlags.ts F_ISSET). 픽스처는 손으로 비트를 계산하지 않고 setFlag·F_SET
  * 헬퍼로 만든다(roomFixtures.testutil.ts) — 바이트 오프셋 실수를 원천 차단한다.
  */
 
-/** 모든 characterId를 `이름:<id>`로 해소하는 기본 해소자. */
+/** 모든 characterId를 `이름:<id>`로 해석하는 기본 리졸버. */
 const resolveAll = (characterId: string): string => `이름:${characterId}`
 
-describe('projectRoomView — 비필터 방 전량 투영', () => {
-  it('필터 대상이 없으면 출구·점유자·아이템·크리처를 전부 싣는다', () => {
+describe('projectRoomView — 비필터 방 전량 변환', () => {
+  it('필터 대상이 없으면 출구·점유자·아이템·몬스터를 전부 싣는다', () => {
     const room = makeRoom({
       roomId: 42,
       exits: [makeExit('동'), makeExit('북')],
@@ -61,7 +61,7 @@ describe('projectRoomView — 비필터 방 전량 투영', () => {
     expect(projectRoomView(room, resolveAll).exits).toEqual(['문'])
   })
 
-  it('필터에 걸리지 않는 크리처 플래그(MPERMT)는 제외하지 않는다', () => {
+  it('필터에 걸리지 않는 몬스터 플래그(MPERMT)는 제외하지 않는다', () => {
     const room = makeRoom({
       creatures: [makeCreature('1:m0', '고정몹', { flags: flagsHex(MPERMT) })],
     })
@@ -107,7 +107,7 @@ describe('projectRoomView — 아이템 가시성 필터', () => {
     expect(projectRoomView(room, resolveAll).items).toEqual([{ instanceId: '1:0', name: '동전' }])
   })
 
-  it('컨테이너 중첩 아이템(contains)으로 재귀하지 않는다 — 바닥 오브젝트만 나열', () => {
+  it('컨테이너 중첩 아이템(contains)으로 재귀하지 않는다 — 바닥 아이템만 나열', () => {
     const room = makeRoom({
       items: [makeItem('1:0', '상자', NO_FLAGS, [makeItem('1:0.0', '보석')])],
     })
@@ -116,11 +116,11 @@ describe('projectRoomView — 아이템 가시성 필터', () => {
   })
 })
 
-describe('projectRoomView — 크리처 가시성·생존 필터', () => {
+describe('projectRoomView — 몬스터 가시성·생존 필터', () => {
   it.each([
     ['MHIDDN', MHIDDN],
     ['MINVIS', MINVIS],
-  ])('%s 크리처를 제외한다', (_label, bit) => {
+  ])('%s 몬스터를 제외한다', (_label, bit) => {
     const room = makeRoom({
       creatures: [
         makeCreature('1:m0', '들쥐'),
@@ -136,7 +136,7 @@ describe('projectRoomView — 크리처 가시성·생존 필터', () => {
   it.each([
     ['hpcur = 0', 0],
     ['hpcur < 0', -5],
-  ])('%s 크리처를 제외한다', (_label, hpcur) => {
+  ])('%s 몬스터를 제외한다', (_label, hpcur) => {
     const room = makeRoom({
       creatures: [makeCreature('1:m0', '들쥐'), makeCreature('1:m1', '시체', { hpcur })],
     })
@@ -146,7 +146,7 @@ describe('projectRoomView — 크리처 가시성·생존 필터', () => {
     ])
   })
 
-  it('hpcur = 1 크리처는 그대로 싣는다(경계값)', () => {
+  it('hpcur = 1 몬스터는 그대로 싣는다(경계값)', () => {
     const room = makeRoom({ creatures: [makeCreature('1:m0', '빈사 들쥐', { hpcur: 1 })] })
 
     expect(projectRoomView(room, resolveAll).creatures).toEqual([
@@ -155,8 +155,8 @@ describe('projectRoomView — 크리처 가시성·생존 필터', () => {
   })
 })
 
-describe('projectRoomView — 점유자 이름 해소', () => {
-  it('이름 해소에 실패한(undefined) 점유자를 제외한다', () => {
+describe('projectRoomView — 점유자 이름 해석', () => {
+  it('이름 해석에 실패한(undefined) 점유자를 제외한다', () => {
     const room = makeRoom({ occupants: new Set(['c1', 'ghost', 'c2']) })
     const resolve = (id: string): string | undefined => (id === 'ghost' ? undefined : `이름:${id}`)
 
@@ -166,7 +166,7 @@ describe('projectRoomView — 점유자 이름 해소', () => {
     ])
   })
 
-  it('빈 문자열로 해소된 점유자를 제외한다(와이어 계약 name.min(1))', () => {
+  it('빈 문자열로 해석된 점유자를 제외한다(와이어 계약 name.min(1))', () => {
     const room = makeRoom({ occupants: new Set(['c1', 'nameless']) })
     const resolve = (id: string): string | undefined => (id === 'nameless' ? '' : `이름:${id}`)
 

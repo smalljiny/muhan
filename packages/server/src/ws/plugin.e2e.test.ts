@@ -29,7 +29,7 @@ import { SEED_CHARACTER_ID } from '../auth/seedSessionAuth.testutil.js'
 // 세션 계층 전체 경로를 관찰한다 — 인증 세션 진입(T7.1: characterList·prompt·entered 프레임 상관까지
 // 단언)·create 다단 대화(T7.2: 단계별 promptId 상관)·버전 거부·하트비트 종료·진행 데드라인 close(T7.4).
 // 핸드셰이크 거부(무효 쿠키 401·비허용 Origin 403)의 실 소켓 관측은 auth.gate.test.ts의 "실 소켓 관찰"
-// 블록(waitForUnexpectedResponse)이 이미 소유하므로 여기서 중복하지 않는다(T7.3 완료 기준은 그 테스트가 충족).
+// 블록(waitForUnexpectedResponse)이 이미 담당하므로 여기서 중복하지 않는다(T7.3 완료 기준은 그 테스트가 충족).
 //
 // getConfig()는 연결 핸들러에서 호출되므로 MONGODB_URI를 더미로 채워 fail-fast를 피한다.
 // env를 조작하는 테스트(T7.4)는 process.env 세팅 후 buildApp 전에 resetConfigForTests()로
@@ -37,7 +37,7 @@ import { SEED_CHARACTER_ID } from '../auth/seedSessionAuth.testutil.js'
 describe('WS transport E2E (실 소켓)', () => {
   let savedEnv: NodeJS.ProcessEnv
   // suite-level 추적 — 각 테스트가 만든 실 서버·클라이언트를 등록해 afterEach가 실패 경로에서도
-  // 정리한다(리스닝 소켓 + 비-unref 하트비트 인터벌 누수 방지). 실 listen이라 누수 표면이 크다.
+  // 정리한다(리스닝 소켓 + 비-unref 하트비트 인터벌 누수 방지). 실 listen이라 누수 범위가 크다.
   let apps: FastifyInstance[]
   let clients: WebSocket[]
 
@@ -92,7 +92,7 @@ describe('WS transport E2E (실 소켓)', () => {
    *
    * enterCommandState/enterCreateFlow(testutil)는 characterList·prompt 등 중간 프레임을 소비만 하고
    * 버려 T7.1/T7.2가 요구하는 상관 단언을 못 한다. 따라서 여기서 인라인 walk하되, 그 헬퍼들과 동일한
-   * reader-before-open·before-send 규약을 지킨다 — accept가 characterList+prompt를 한 tick에 동기 발화하므로
+   * reader-before-open·before-send 규약을 지킨다 — accept가 characterList+prompt를 한 tick에 동기 발생시키므로
    * 리더를 open 이전에 걸어야 두 프레임이 유실되지 않는다. hello 소비 후 system:ready를 보내 핸드셰이크를
    * 통과시키고, characterList와 selectCharacter prompt를 차례로 꺼내 반환한다(호출자가 단언·분기).
    */
@@ -109,7 +109,7 @@ describe('WS transport E2E (실 소켓)', () => {
   }
 
   it('T7.1: 인증 세션 전체 경로 — hello→ready→characterList·prompt→선택→entered→command→echo', async () => {
-    // 기본 하트비트 간격(25s)이라 테스트 중 ping이 발화해 간섭하지 않는다.
+    // 기본 하트비트 간격(25s)이라 테스트 중 ping이 실행돼 간섭하지 않는다.
     const url = await startTracked(buildSeededApp())
     const client = trackedClient(url)
 
@@ -118,7 +118,7 @@ describe('WS transport E2E (실 소켓)', () => {
 
     expect(hello).toMatchObject({ type: 'system:hello', protocolVersion: PROTOCOL_VERSION })
 
-    // characterList에 시드 캐릭터가 실려 온다(빈 목록 아님) — accept 직후 서버가 계정 캐릭터를 조회해 발화.
+    // characterList에 시드 캐릭터가 실려 온다(빈 목록 아님) — accept 직후 서버가 계정 캐릭터를 조회해 발생시킴.
     expect(characterList.type).toBe('session:characterList')
     if (characterList.type === 'session:characterList') {
       expect(characterList.characters).toContainEqual(
@@ -143,7 +143,7 @@ describe('WS transport E2E (실 소켓)', () => {
     const echo = await reader.next()
     expect(echo).toMatchObject({ type: 'debug:echo:result', text: '핑', correlationId: 'c1' })
     expect(client.readyState).toBe(client.OPEN)
-    // 서버·클라이언트 정리는 afterEach가 소유한다(실패 경로 포함).
+    // 서버·클라이언트 정리는 afterEach가 담당한다(실패 경로 포함).
   })
 
   it('T7.2: create 다단 — sentinel→8단계 인터뷰→entered→command→echo', async () => {
@@ -154,7 +154,7 @@ describe('WS transport E2E (실 소켓)', () => {
     const { reader, prompt } = await reachCharacterSelect(client)
     expect(prompt).toMatchObject({ type: 'session:prompt', promptId: SELECT_CHARACTER_PROMPT_ID })
 
-    // 각 단계 promptId 상관을 정확히 지켜 왕복한다 — 서버가 발화한 prompt의 promptId로만 다음 reply를 짝짓는다.
+    // 각 단계 promptId 상관을 정확히 지켜 왕복한다 — 서버가 발생시킨 prompt의 promptId로만 다음 reply를 짝짓는다.
     client.send(
       JSON.stringify({ type: 'session:reply', promptId: SELECT_CHARACTER_PROMPT_ID, value: CREATE_SENTINEL }),
     )
@@ -202,12 +202,12 @@ describe('WS transport E2E (실 소켓)', () => {
     client.send(JSON.stringify({ type: 'debug:echo', text: '퐁', id: 'c2' }))
     const echo = await reader.next()
     expect(echo).toMatchObject({ type: 'debug:echo:result', text: '퐁', correlationId: 'c2' })
-    // 정리는 afterEach가 소유한다.
+    // 정리는 afterEach가 담당한다.
   })
 
   it('T7.4: 진행 데드라인 close — characterSelect에서 미진행 시 소켓이 close된다', async () => {
     // 짧은 진행 데드라인(80ms) + 데드라인의 수십 배로 큰 하트비트 간격(2000ms)으로 설정한다. 하트비트
-    // terminate는 ≈ interval×(maxMissed+1) ≈ 8s라 이 창에 절대 발화하지 않으므로, 80ms 근방의 close는
+    // terminate는 ≈ interval×(maxMissed+1) ≈ 8s라 이 창에 절대 실행되지 않으므로, 80ms 근방의 close는
     // 오직 진행 데드라인(graceful close)이 원인임을 타이밍으로 격리한다(하트비트 terminate와 구별).
     // env 세팅 후 buildApp 전에 싱글턴을 초기화해 이 테스트만의 데드라인 튜닝이 적용되게 한다.
     process.env.WS_SESSION_DEADLINE_MS = '80'
@@ -223,12 +223,12 @@ describe('WS transport E2E (실 소켓)', () => {
     expect(prompt).toMatchObject({ type: 'session:prompt', promptId: SELECT_CHARACTER_PROMPT_ID })
 
     // 데드라인 80ms + 넉넉한 close 대기 마진(2000ms)으로 flaky를 피한다. close 이벤트가 오면 데드라인 만료→
-    // close 체인이 실 플러그인 배선을 관통한 것이다. close code로 원인 메커니즘을 자체 검증한다: 진행 데드라인은
+    // close 체인이 실 플러그인 연결을 관통한 것이다. close code로 원인 메커니즘을 자체 검증한다: 진행 데드라인은
     // deadline.socket.close()(상태코드 없는 graceful close)라 1005로 관측되고, 하트비트 terminate는 1006이다.
     // 1005 단언은 이 close가 하트비트가 아니라 진행 데드라인에서 왔음을 타이밍 격리에 더해 코드로도 못박는다.
     const code = await waitForClose(client, 2000)
     expect(code).toBe(1005)
-    // 정리는 afterEach가 소유한다.
+    // 정리는 afterEach가 담당한다.
   })
 
   it('버전 불일치 시 실 클라이언트가 system:reload를 수신하고 소켓이 닫힌다', async () => {
@@ -248,7 +248,7 @@ describe('WS transport E2E (실 소켓)', () => {
 
     const code = await closed
     expect(typeof code).toBe('number')
-    // 정리는 afterEach가 소유한다.
+    // 정리는 afterEach가 담당한다.
   })
 
   it('pong 미응답 시 서버가 실 소켓을 terminate한다 (단일 하트비트-miss)', async () => {
@@ -265,10 +265,10 @@ describe('WS transport E2E (실 소켓)', () => {
     const client = trackedClient(url, { autoPong: false })
     await consumeHello(client)
 
-    // 약 2 인터벌(≈100ms) 뒤 서버가 terminate → 클라이언트 close 이벤트 발화. bounded 2s 대기.
+    // 약 2 인터벌(≈100ms) 뒤 서버가 terminate → 클라이언트 close 이벤트 발생. bounded 2s 대기.
     const closed = waitForClose(client, 2000)
     const code = await closed
     expect(typeof code).toBe('number')
-    // 정리는 afterEach가 소유한다.
+    // 정리는 afterEach가 담당한다.
   })
 })

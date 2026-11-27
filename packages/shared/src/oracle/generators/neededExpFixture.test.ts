@@ -15,7 +15,7 @@ import {
 const FIXED_CLOCK = () => new Date('2026-07-21T00:00:00.000Z')
 
 describe('buildCases — anti-tautology 앵커 (needed_exp)', () => {
-  // 최중요(Layer B): 기대값은 참조 구현을 호출하지 않고 확정 정본 하드 리터럴로 박는다.
+  // 최중요(Layer B): 기대값은 참조 구현을 호출하지 않고 확정 기준 하드 리터럴로 박는다.
   // 참조와 SUT가 같은 오류를 공유해도 여기 리터럴만이 그것을 독립 검출한다.
   const HAND_COMPUTED_EXPECTED = [
     128, 256, 100000, 10000000, 190000000, 110000000, // neededExp 6개
@@ -26,7 +26,7 @@ describe('buildCases — anti-tautology 앵커 (needed_exp)', () => {
     expect(buildCases()).toHaveLength(12)
   })
 
-  it('각 케이스의 expected가 확정 정본 상수와 정확히 일치한다', () => {
+  it('각 케이스의 expected가 확정 기준 상수와 정확히 일치한다', () => {
     const cases = buildCases()
     cases.forEach((testCase, index) => {
       expect(testCase.expected).toBe(HAND_COMPUTED_EXPECTED[index])
@@ -104,8 +104,8 @@ describe('체크인된 needed_exp.json fixture', () => {
     }
   })
 
-  // frozen 아티팩트 drift 가드(Layer B) — 체크인 JSON의 expected가 확정 정본 상수와 일치.
-  it('체크인 JSON의 expected가 확정 정본 상수와 일치한다', () => {
+  // frozen 아티팩트 drift 가드(Layer B) — 체크인 JSON의 expected가 확정 기준 상수와 일치.
+  it('체크인 JSON의 expected가 확정 기준 상수와 일치한다', () => {
     const url = new URL('../fixtures/needed_exp.json', import.meta.url)
     const parsed: unknown = JSON.parse(readFileSync(url, 'utf8'))
     const result = goldenFixtureSchema.safeParse(parsed)

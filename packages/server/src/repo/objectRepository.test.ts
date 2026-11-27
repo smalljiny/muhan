@@ -53,7 +53,7 @@ describe('ObjectRepository (integration)', () => {
     expect(found).toBeNull()
   })
 
-  it('findByOwner는 소유자별로 오브젝트 집합을 분할한다', async () => {
+  it('findByOwner는 소유자별로 아이템 집합을 분할한다', async () => {
     const charA1 = makeObject({ _id: 'a1', owner: { type: 'character', id: 'char-A' } })
     const charA2 = makeObject({ _id: 'a2', owner: { type: 'character', id: 'char-A' } })
     const charB = makeObject({ _id: 'b1', owner: { type: 'character', id: 'char-B' } })
@@ -75,7 +75,7 @@ describe('ObjectRepository (integration)', () => {
   /**
    * OQ2 결정성 — 서수는 플레이어가 관측하는 동작이므로 조회 순서가 계약이어야 한다.
    * Mongo 자연 순서는 계약이 아니라(문서 이동·재사용 공간에 따라 바뀔 수 있다) `_id` 오름차순으로
-   * 고정한다. 오라클 이름 사전순과의 divergence는 `world/liveCharacterEntry.ts` 헤더가 소유한다.
+   * 고정한다. 오라클 이름 사전순과의 divergence는 `world/liveCharacterEntry.ts` 헤더가 담당한다.
    */
   it('findByOwner는 _id 오름차순으로 정렬된 결정적 순서를 반환한다', async () => {
     // 삽입 순서를 역순으로 둬 자연 순서와 정렬 결과가 갈리게 만든다(비-vacuous).
@@ -113,7 +113,7 @@ describe('ObjectRepository (integration)', () => {
   })
 
   it('init()은 구 owner 인덱스를 드롭하지 않는다 — 부팅 경로에 DDL을 두지 않는다', async () => {
-    // 구 형상이 남아 있는 DB(이미 이전 버전으로 init()을 돌린 상황)에서 init()을 돌려도
+    // 구 인덱스 구조가 남아 있는 DB(이미 이전 버전으로 init()을 돌린 상황)에서 init()을 돌려도
     // 기존 인덱스를 건드리지 않아야 한다. 롤링 배포 thrash·부팅 경로 컬렉션 락 차단이 근거다.
     await db.collection('objects').createIndex({ 'owner.type': 1, 'owner.id': 1 })
 

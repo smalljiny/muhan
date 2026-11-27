@@ -90,11 +90,11 @@ describe('BankRepository (integration)', () => {
     expect(found).toBeNull()
   })
 
-  it('hydrateHoldings는 은행 계좌가 보관한 오브젝트만 반환한다', async () => {
+  it('hydrateHoldings는 은행 계좌가 보관한 아이템만 반환한다', async () => {
     const bank = makeBank({ _id: 'bank-A', owner: 'char-A' })
     await repo.insert(bank)
 
-    // 은행 보관 오브젝트의 owner.id 관례: 은행 계좌의 _id(bankAccountId).
+    // 은행 보관 아이템의 owner.id 관례: 은행 계좌의 _id(bankAccountId).
     const held1 = makeObject({ _id: 'o1', owner: { type: 'bank', id: 'bank-A' } })
     const held2 = makeObject({ _id: 'o2', owner: { type: 'bank', id: 'bank-A' } })
     const otherBank = makeObject({ _id: 'o3', owner: { type: 'bank', id: 'bank-B' } })

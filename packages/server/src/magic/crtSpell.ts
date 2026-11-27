@@ -27,18 +27,18 @@ import type { CastContext } from './castContext.js'
  * ## 게이트가 곧 라운드 분기 (magic1.c:820-841 offensive_spell CAST 게이트)
  * 오라클 offensive_spell은 how==CAST일 때 함수 진입부에서 mana(`mpcur<mp`)·knowledge(`!S_ISSET`)를
  * 검사해 실패 시 return(0)한다. 이 포트는 그 게이트를 S4 applyCastGate(mana→class→knowledge)로 분리
- * 배선하고, 통과(마나 소비 발생) 시에만 S5 offensiveSpell(데미지 전용)을 호출한다. 게이트 실패는 곧
+ * 연결하고, 통과(마나 소비 발생) 시에만 S5 offensiveSpell(데미지 전용)을 호출한다. 게이트 실패는 곧
  * 'none'(근접 진행)이라 mana·class·knowledge 어느 게이트가 막든 오라클 return(0)과 동일하게 접힌다.
  *
  * ## 한 pick 규칙 (재추첨 금지, update.c:672-680)
  * 아는 주문에서 **한 번만** 선택한다. 선택된 주문이 비-offensive여도 재추첨하지 않는다 — 오라클은
  * 한 pick → cast 또는 return(0)이다. selectSpell을 순수 헬퍼로 분리해 이 규칙을 단일 지점에 고정한다.
  *
- * ## 비-offensive 분기 (G8 self-cast 치유 + #85 유예 경계)
+ * ## 비-offensive 분기 (G8 self-cast 치유 + #85 보류 경계)
  * offensive 20종은 S5 본체(게이트→데미지)를 탄다. 비-offensive 중 self-target 치유 3종(SVIGOR/SMENDW/
  * SFHEAL)은 G7 healing effect(Story 10 instantEffects)를 재사용해 자기 hp를 회복하고 'cast'(근접 대체)로
  * 접는다(update.c:686 cmnd.num==2). 그 외 비-offensive는 게이트 진입 없이 'none'(근접 진행)으로 접는다 —
- * live delivery/버프 소비는 #106 유예. self-target 판정은 isSelfTargetSpell가 단일 지점에 고정한다.
+ * live delivery/버프 소비는 #106 보류. self-target 판정은 isSelfTargetSpell가 단일 지점에 고정한다.
  */
 
 // ── 주문번호 상수(mtype.h:233-289) ──────────────────────────────────────────
@@ -80,14 +80,14 @@ const SELF_TARGET_SPELLS: ReadonlySet<number> = new Set([SVIGOR, SMENDW, SFHEAL]
 
 /**
  * 공격주문 디스패치 — OSPELL_GRID 20종을 모듈 로드 시 1회 등록한다(정적 격자, per-round hot path는
- * O(1) 조회). spellNo → offensiveSpell 핸들러 해소로 dispatch seam(S3)을 실사용 검증한다.
+ * O(1) 조회). spellNo → offensiveSpell 핸들러 해석으로 dispatch seam(S3)을 실사용 검증한다.
  */
 const offensiveDispatch = new SpellDispatch<OffensiveSpellHandler>()
 registerOffensiveSpells(offensiveDispatch)
 
 /**
  * 즉발 effect 디스패치 — G7 report 핸들러(Story 10 instantEffects)를 모듈 로드 시 1회 등록한다. G8
- * 몬스터 self-cast는 이 인스턴스에서 치유(SVIGOR/SMENDW/SFHEAL) 핸들러를 해소해 회복 공식을 재구현하지
+ * 몬스터 self-cast는 이 인스턴스에서 치유(SVIGOR/SMENDW/SFHEAL) 핸들러를 해석해 회복 공식을 재구현하지
  * 않고 그대로 재사용한다(offensive/buff/debuff dispatch 재사용 금지 — 핸들러 타입 이질성, Story 6 패턴).
  */
 const instantDispatch = new SpellDispatch<InstantEffectHandler>()
@@ -190,10 +190,10 @@ export function crtSpell(
     // 2a. 비-offensive 중 self-target 치유(update.c:686 cmnd.num==2)는 G7 healing effect를 재사용해
     //     자기 hp를 회복하고 'cast'(근접 대체)로 접는다. 그 외 비-offensive는 기존대로 'none'(근접 진행).
     //     ⚠️ 오라클 self-heal(magic2.c vigor)의 두 부수효과를 이식하지 않는다 — 근거가 서로 다르다:
-    //       - 마나 소비(mpcur-=2/4/20): 카탈로그에 치유 주문 mana 정본이 없다(offensive tier grid만 mp 보유).
-    //         날조 없이 이식 불가 → 라이브 게이트가 채우는 #106 유예.
+    //       - 마나 소비(mpcur-=2/4/20): 카탈로그에 치유 주문 mana 기준 값이 없다(offensive tier grid만 mp 보유).
+    //         날조 없이 이식 불가 → 라이브 게이트가 채우는 #106 보류.
     //       - healer-class 게이트(vigor: class!=CLERIC && !=PALADIN && <INVINCIBLE): class·상수 모두 존재해
-    //         이식은 가능하나 T11.1의 무조건 시전 계약(criterion #1)이 범위를 좁혔다 → 스코프 유예(#108).
+    //         이식은 가능하나 T11.1의 무조건 시전 계약(criterion #1)이 범위를 좁혔다 → 스코프 보류(#108).
     //         SMENDW/SFHEAL의 게이트는 미대조라 3종 동일 규칙으로 단정하지 않는다(per-spell 확인은 #108).
     if (isSelfTargetSpell(spellNo)) return castSelfHeal(caster, spellNo, ctx)
     return 'none'
@@ -209,7 +209,7 @@ export function crtSpell(
   )
   if (!gate.passed) return 'none'
 
-  // 4. offensive 시전 — dispatch로 spellNo→핸들러 해소(dispatch seam 검증). CAST 경로는 gated=true.
+  // 4. offensive 시전 — dispatch로 spellNo→핸들러 해석(dispatch seam 검증). CAST 경로는 gated=true.
   const handler = offensiveDispatch.resolve(spellNo)
   if (typeof handler !== 'function') return 'none' // offensive 20종은 전부 등록(방어적 가드).
 

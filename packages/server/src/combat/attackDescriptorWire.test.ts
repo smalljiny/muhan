@@ -6,7 +6,7 @@ import type { AttackDescriptor } from './resolveAttack.js'
  * 와이어 계약 `combat:attacked.attacks` 원소와 서버 `AttackDescriptor`의 대응 강제.
  *
  * 와이어 원소는 `AttackDescriptor`에서 `specialAttack`만 뺀 6필드로 정의돼 있다(D11 — 몬스터
- * 특수공격 마커는 #99 소관). 그런데 `packages/shared`는 `packages/server`를 import할 수 없어
+ * 특수공격 마커는 #99 담당). 그런데 `packages/shared`는 `packages/server`를 import할 수 없어
  * (의존 방향이 server → shared) 그 대응을 shared 쪽에서 강제할 수 없다. 강제는 여기서 한다.
  *
  * `resolveAttack.ts`에 필드가 늘면 이 테스트가 컴파일 타임에 깨진다. 깨지지 않으면 그 필드는

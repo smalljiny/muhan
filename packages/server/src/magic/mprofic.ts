@@ -1,7 +1,7 @@
 import { MAGE, CLERIC, PALADIN, RANGER, INVINCIBLE, CARETAKER, SUB_DM, DM } from '../combat/constants.js'
 
 /**
- * mprofic — realm별 원시 누적경험치(realm[])를 0-110 숙련 백분율로 환산한다(player.c:1204-1261 byte 정본).
+ * mprofic — realm별 원시 누적경험치(realm[])를 0-110 숙련 백분율로 환산한다(player.c:1204-1261 byte 기준).
  *
  * 클래스마다 12칸 임계 테이블(prof_array)이 다르며, n=realm[index-1]이 어느 임계 구간에 드는지로 십분위
  * 숙련(10*i)을 정하고 구간 내 선형 보간을 분수항으로 더한다. 모든 나눗셈은 C 정수 나눗셈=Math.trunc다
@@ -9,14 +9,14 @@ import { MAGE, CLERIC, PALADIN, RANGER, INVINCIBLE, CARETAKER, SUB_DM, DM } from
  *
  * ## read-only (성장 write 금지)
  * realm[]은 **읽기만** 한다 — realm 성장(addrealm, magic1.c:1124 `ply_ptr->realm[...] += addrealm`)은
- * #85 소관이라 이 포트에서 절대 write하지 않는다. 전 몬스터 realm=0이라 #84 라이브 입력은 항상 prof=0이다.
+ * #85 담당이라 이 포트에서 절대 write하지 않는다. 전 몬스터 realm=0이라 #84 라이브 입력은 항상 prof=0이다.
  *
  * ## OOB port 결정 (byte-충실 아닌 정의된 동작)
  * 오라클은 n>=prof_array[11](5억)이면 for가 break 없이 종료해 `prof` 미초기화 + prof_array[12] OOB 읽기(C UB)다.
  * realm=0이라 #84 라이브 도달은 불가하나, 정의된 동작으로 **prof=110 clamp**한다.
  */
 
-// prof_array 클래스별 12칸 임계 테이블 — player.c:1215-1258 독립 전사.
+// prof_array 클래스별 12칸 임계 테이블 — player.c:1215-1258 독립적으로 옮겨 적음.
 const PROF_MAGE = [0, 1024, 2048, 4096, 8192, 16384, 35768, 85536, 140000, 459410, 2073306, 500000000]
 const PROF_CLERIC = [0, 1024, 4092, 8192, 16384, 32768, 70536, 119000, 226410, 709410, 2973307, 500000000]
 const PROF_PALADIN = [0, 1024, 8192, 16384, 32768, 65536, 105000, 165410, 287306, 809410, 3538232, 500000000]

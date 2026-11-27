@@ -11,7 +11,7 @@ import {
 } from '../combat/constants.js'
 
 /**
- * spell_fail — 클래스별 시전 성공/실패 굴림(magic8.c:791-897 byte 정본).
+ * spell_fail — 클래스별 시전 성공/실패 굴림(magic8.c:791-897 byte 기준).
  *
  * ## 굴림 vs 호출 조건의 분리(A6 §3)
  * 두 개념을 별도 함수로 나눈다:
@@ -21,14 +21,14 @@ import {
  *     정규 캐스터(MAGE·CLERIC)의 주문 fn은 spell_fail을 굴리지 않는다. chance 테이블에 MAGE·CLERIC이
  *     있는 것과 호출 여부는 별개다.
  * #84 offensive 데미지 경로(S5)는 spell_fail을 굴리지 않으므로(A6 §4 단계에 없음) 여기 함수는 독립
- * 유닛으로 두고 데미지 파이프에 배선하지 않는다.
+ * 유닛으로 두고 데미지 파이프에 연결하지 않는다.
  */
 
 /**
  * 클래스별 `chance = base*mult + add` 계수 테이블(magic8.c switch의 데이터화). base = L4 + bonus[int].
  * 값 변화는 (배수, 가산항)뿐이라 테이블이 자연스럽다 — MAGE/CLERIC/BARBARIAN 등 6클래스는 배수 5,
  * RANGER만 4, THIEF만 6. 미등록 클래스는 magic8.c `default: return 0`(무조건 성공). 골든 fixture의
- * oracleChance는 이와 독립하게 리터럴 switch로 전사하므로(구조가 다름) anti-tautology 교차검증이 강화된다.
+ * oracleChance는 이와 독립하게 리터럴 switch로 옮겨 적으므로(구조가 다름) anti-tautology 교차검증이 강화된다.
  */
 const CHANCE_COEFFS: ReadonlyMap<number, readonly [mult: number, add: number]> = new Map([
   [ASSASSIN, [5, 30]],

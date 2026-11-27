@@ -23,7 +23,7 @@ function withFixtureWorld(rooms: unknown, run: (worldRoot: string) => void): voi
 }
 
 describe('loadWorldGraph — 실제 번들', () => {
-  it('정본 방 2341개를 Map으로 로드한다', () => {
+  it('기준 방 2341개를 Map으로 로드한다', () => {
     const graph = loadWorldGraph()
     expect(graph.size).toBe(2341)
   })
@@ -111,7 +111,7 @@ describe('loadWorldGraph — 실제 번들', () => {
     )
   })
 
-  it('방 embedded 몬스터를 creatures[]로 물질화한다(템플릿 재인스턴스화 아님, 방135 좀도둑 2마리)', () => {
+  it('방 embedded 몬스터를 creatures[] 인스턴스로 생성한다(템플릿 재인스턴스화 아님, 방135 좀도둑 2마리)', () => {
     const graph = loadWorldGraph()
     const room135 = graph.get(135)
     expect(room135).toBeDefined()
@@ -121,7 +121,7 @@ describe('loadWorldGraph — 실제 번들', () => {
     const thief = room135.creatures[0]
     expect(thief).toBeDefined()
     if (!thief) return
-    // embedded 인라인 데이터로 물질화 → templateId=null(템플릿 링크 재구성 아님).
+    // embedded 인라인 데이터로 인스턴스 생성 → templateId=null(템플릿 링크 재구성 아님).
     expect(thief.templateId).toBeNull()
     expect(thief.name).toBe('좀도둑')
     // 빌더 커스터마이즈 스탯(템플릿 123과 다른 embedded 값)이 그대로 실린다.
@@ -131,7 +131,7 @@ describe('loadWorldGraph — 실제 번들', () => {
     expect(thief.gold).toBe(80)
     expect(thief.flags).toBe('0112000000000000')
     expect(thief.instanceId).toBe('135:c0')
-    // D6: rooms.json monsters[]의 전투 스탯이 물질화 시점에 인스턴스로 옮겨진다(RawMonster → materialize).
+    // D6: rooms.json monsters[]의 전투 스탯이 인스턴스 생성 시점에 인스턴스로 옮겨진다(RawMonster → materialize).
     expect(thief.armor).toBe(90)
     expect(thief.thaco).toBe(17)
     expect(thief.ndice).toBe(1)
@@ -225,7 +225,7 @@ describe('loadWorldGraph — fixture worldRoot 오버라이드', () => {
   })
 
   it('raw 아이템에 keys가 없으면 빈 배열이다(undefined 아님 — 중첩 포함)', () => {
-    // fixtureRooms의 상자·금화는 keys를 갖지 않는다. 정본 JSON은 별칭 없는 아이템도 []를
+    // fixtureRooms의 상자·금화는 keys를 갖지 않는다. 기준 JSON은 별칭 없는 아이템도 []를
     // 실으므로, `?? []` 계약은 이 합성 픽스처가 유일한 방어선이다.
     withFixtureWorld(fixtureRooms, (root) => {
       const box = loadWorldGraph(root).get(1)?.items.find((i) => i.name === '상자')

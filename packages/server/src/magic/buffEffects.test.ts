@@ -173,8 +173,8 @@ describe('resistBuff — buffs until 기록(A6 §6 표준 버프)', () => {
   })
 })
 
-// ── T7.4 저항 플래그 투영(projectResistFlags) ───────────────────────────────────
-describe('projectResistFlags — 활성 저항 버프 → P-flag hex 투영', () => {
+// ── T7.4 저항 플래그 변환(projectResistFlags) ───────────────────────────────────
+describe('projectResistFlags — 활성 저항 버프 → P-flag hex 변환', () => {
   const cases: ReadonlyArray<readonly [number, number]> = [
     [SPELL_NO.SRFIRE, PRFIRE],
     [SPELL_NO.SRMAGI, PRMAGI],
@@ -191,7 +191,7 @@ describe('projectResistFlags — 활성 저항 버프 → P-flag hex 투영', ()
   }
 
   it('만료된 버프는 플래그를 세팅하지 않는다', () => {
-    // until=1000, now=1001 → 만료(tick>until). 플래그 미투영.
+    // until=1000, now=1001 → 만료(tick>until). 플래그 미변환.
     const c = resistBuff(req({ ctx: makeCtx({ now: 500 }) }), SPELL_NO.SRFIRE)
     // 500 + 1200 = 1700 until. now=1701이면 만료.
     const hex = projectResistFlags(c, 1701)
@@ -419,7 +419,7 @@ describe('specialBuff — invis/levit/light(A6 §6 표준 공식 예외)', () =>
   })
 })
 
-// ── T9.4 projectBuffFlags: 활성 Story 9 버프 → P-flag hex 투영 ───────────────────
+// ── T9.4 projectBuffFlags: 활성 Story 9 버프 → P-flag hex 변환 ───────────────────
 describe('projectBuffFlags — 활성 버프/감지 → P-flag hex(projectResistFlags 계약 승계)', () => {
   const cases: ReadonlyArray<readonly [number, number]> = [
     [SPELL_NO.SBLESS, PBLESS],

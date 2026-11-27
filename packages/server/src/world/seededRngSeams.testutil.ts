@@ -8,9 +8,9 @@ import type { CreatureRng } from './creatureFactory.js'
  * (server→shared 정방향 의존, 역방향/순환 없음).
  *
  * 미주입 시 조립 지점 기본 stub은 이 어댑터가 아니라 seam 정의부의 결정적 기본값이다 —
- * `SpawnRng`는 `defaultSpawnRng`(randomSpawn.ts: traffic 게이트 항상 실패로 비발화),
+ * `SpawnRng`는 `defaultSpawnRng`(randomSpawn.ts: traffic 게이트 항상 실패로 실행되지 않음),
  * `CreatureRng`는 `defaultCreatureRng`(creatureFactory.ts: gold identity). 두 기본값은
- * neverFireRng가 아니라 각 seam 파일이 소유한 결정적 no-op 계열이다. 이 어댑터는 그 기본
+ * neverFireRng가 아니라 각 seam 파일이 담당하는 결정적 no-op 계열이다. 이 어댑터는 그 기본
  * 대신 실제 시드 굴림을 원하는 테스트가 명시 주입할 때만 등장한다.
  *
  * 파일명이 `.testutil.ts`라 server build(tsconfig.build.json)·coverage(vitest.config.ts) 양쪽

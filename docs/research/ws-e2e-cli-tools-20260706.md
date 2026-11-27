@@ -4,7 +4,7 @@
 
 ## 요약 (Executive Summary)
 
-WebSocket 서버를 커맨드라인에서 테스트하는 도구는 **목적별로 5개 층위**로 갈린다: (1) 수동 디버깅 CLI 클라이언트(`wscat`·`websocat`), (2) 프로그래매틱 통합/E2E(테스트 러너 + `ws` 클라이언트), (3) 브라우저 E2E(Playwright `routeWebSocket`), (4) 프로토콜 적합성(autobahn-testsuite `wstest`), (5) 부하 테스트(Artillery·k6). **assertion 기반 자동화 E2E**를 원한다면 "전용 CLI 도구"는 없고, 실제 `ws` 서버를 포트 0에 띄우고 실제 `ws` 클라이언트를 붙여 **Vitest/Jest로 구동**(`vitest run`)하는 것이 이 프로젝트(TS+`ws`+Zod) 스택에 가장 정합한 답이다 ([tests.ws Best Practices](https://tests.ws/testing/websocket-testing-best-practices), [ITenthusiasm/testing-websockets](https://github.com/ITenthusiasm/testing-websockets)). `wscat`/`websocat`은 스모크 테스트·수동 프로빙용이고, autobahn은 RFC 6455 적합성 1회 검증용, Artillery/k6는 재연결·동시성 부하 시나리오용으로 상호 보완적이다.
+WebSocket 서버를 커맨드라인에서 테스트하는 도구는 **목적별로 5개 층위**로 갈린다: (1) 수동 디버깅 CLI 클라이언트(`wscat`·`websocat`), (2) 프로그래매틱 통합/E2E(테스트 러너 + `ws` 클라이언트), (3) 브라우저 E2E(Playwright `routeWebSocket`), (4) 프로토콜 적합성(autobahn-testsuite `wstest`), (5) 부하 테스트(Artillery·k6). **assertion 기반 자동화 E2E**를 원한다면 "전용 CLI 도구"는 없고, 실제 `ws` 서버를 포트 0에 띄우고 실제 `ws` 클라이언트를 붙여 **Vitest/Jest로 실행**(`vitest run`)하는 것이 이 프로젝트(TS+`ws`+Zod) 스택에 가장 들어맞는 답이다 ([tests.ws Best Practices](https://tests.ws/testing/websocket-testing-best-practices), [ITenthusiasm/testing-websockets](https://github.com/ITenthusiasm/testing-websockets)). `wscat`/`websocat`은 스모크 테스트·수동 프로빙용이고, autobahn은 RFC 6455 적합성 1회 검증용, Artillery/k6는 재연결·동시성 부하 시나리오용으로 상호 보완적이다.
 
 ## 1. 수동 디버깅 CLI 클라이언트 — `wscat` · `websocat`
 
@@ -19,7 +19,7 @@ WebSocket 서버를 커맨드라인에서 테스트하는 도구는 **목적별�
 
 Node/TS 생태계의 **표준 관행**은 실제 `ws` 서버를 테스트 프로세스 안에서 띄우고 실제 클라이언트로 붙어 메시지 흐름을 검증하는 것이다. `vitest run`/`jest`가 곧 "CLI 실행 진입점"이 된다.
 
-- **패턴** ([tests.ws Best Practices](https://tests.ws/testing/websocket-testing-best-practices)): 테스트 피라미드에 맞춰 ─ 핸들러·직렬화는 유닛, **인프로세스 실제 서버 + 실제 클라이언트는 통합, 풀스택은 E2E**. `beforeAll`에서 서버 기동(**포트 0**으로 랜덤 할당 → 병렬·포트 충돌 회피), `afterAll`에서 정리(소켓·서버 close로 flaky 방지), 이벤트 기반 API를 `connectClient`/`waitForMessage` 프로미스 헬퍼로 감싸 가독성 확보. **재연결 후 상태 복원(`onReconnect`) 테스트**도 이 층에서 다룬다.
+- **패턴** ([tests.ws Best Practices](https://tests.ws/testing/websocket-testing-best-practices)): 테스트 피라미드에 맞춰 ─ 핸들러·직렬화는 유닛, **인프로세스 실제 서버 + 실제 클라이언트는 통합, 풀스택은 E2E**. `beforeAll`에서 서버 시작(**포트 0**으로 랜덤 할당 → 병렬·포트 충돌 회피), `afterAll`에서 정리(소켓·서버 close로 flaky 방지), 이벤트 기반 API를 `connectClient`/`waitForMessage` 프로미스 헬퍼로 감싸 가독성 확보. **재연결 후 상태 복원(`onReconnect`) 테스트**도 이 층에서 다룬다.
 - **레퍼런스 구현** ([ITenthusiasm/testing-websockets](https://github.com/ITenthusiasm/testing-websockets), [Medium: Jest+ws 통합 테스트](https://thomason-isaiah.medium.com/writing-integration-tests-for-websocket-servers-using-jest-and-ws-8e5c61726b2a)): `TestWebSocket` 래퍼로 open/close 타이밍·메시지 이벤트 관리, `waitUntil`·`waitForMessage`·`waitForMessageCount` 헬퍼로 비동기 메시지 assertion. echo·다중 응답(ECHO_TIMES_3) 시나리오 예시 포함.
 - **매처 라이브러리**: `jest-websocket-mock`/`vitest-websocket-mock`은 `.toReceiveMessage()`(비동기, 1초 타임아웃)·`.toHaveReceivedMessages()` 매처와 `verifyClient`(접근 제어 시뮬레이션)·`selectProtocol`(프로토콜 협상) 옵션 제공. **단, `mock-socket` 기반이라 서버를 모킹**하므로 진짜 E2E가 아니라 클라이언트 측 테스트에 적합. Node의 `ws`(비브라우저) 클라이언트와 쓰려면 `__mocks__` 수동 목이 필요하다 ([npm: vitest-websocket-mock](https://www.npmjs.com/package/vitest-websocket-mock), [npm: jest-websocket-mock](https://www.npmjs.com/package/jest-websocket-mock)).
 
@@ -44,7 +44,7 @@ RFC 6455 **프로토콜 적합성·견고성** 전용. 500+ 케이스(프레이�
 재연결·동시 세션·massconnect 같은 **동시성/부하** 시나리오용.
 
 - **Artillery** ([WebSocket Engine](https://www.artillery.io/docs/reference/engines/websocket)): YAML 시나리오에 `engine: ws`. `connect`/`send`/`think`/`loop`/`function` 액션, 서브프로토콜·헤더(`Sec-WebSocket-Protocol`)·프록시 설정, `DEBUG=ws` 디버깅. **YAML 선언형**이라 CI 통합·시나리오 스크립트가 간결.
-- **k6** ([Grafana k6 WebSockets](https://grafana.com/docs/k6/latest/using-k6/protocols/websockets/)): `k6/websockets` 모듈(신규, `k6/ws`는 deprecated), VU별 비동기 이벤트 루프. `ws.connect(url, params, fn)` + `socket.on('open'/'message'/'close'/'error')`, `setInterval`/`setTimeout`. JS 스크립트 기반. autobahn 서버를 띄우고 k6로 구동하는 통합 예시도 존재 ([k6 autobahn_tests](https://fossies.org/linux/k6/internal/js/modules/k6/websockets/autobahn_tests/README.md)).
+- **k6** ([Grafana k6 WebSockets](https://grafana.com/docs/k6/latest/using-k6/protocols/websockets/)): `k6/websockets` 모듈(신규, `k6/ws`는 deprecated), VU별 비동기 이벤트 루프. `ws.connect(url, params, fn)` + `socket.on('open'/'message'/'close'/'error')`, `setInterval`/`setTimeout`. JS 스크립트 기반. autobahn 서버를 띄우고 k6로 실행하는 통합 예시도 존재 ([k6 autobahn_tests](https://fossies.org/linux/k6/internal/js/modules/k6/websockets/autobahn_tests/README.md)).
 
 **판정**: 기능 정합성 아닌 **재연결 폭주·동시 세션 상한** 검증용. E3 초기 스코프보다는 성능 게이트 단계에서 도입. 선언형 CI엔 Artillery, JS 정밀 제어엔 k6.
 

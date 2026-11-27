@@ -17,7 +17,7 @@ import {
 } from './wsTestClient.testutil.js'
 
 // T3.7 — preValidation 인증 게이트. Origin allowlist(403)·세션 쿠키(401)를 upgrade 전에 검증한다.
-// 거부 케이스는 status code뿐 아니라 "소켓 미개방"(wsConnections 미증가 + hello 미발화)을 구조로 단언한다.
+// 거부 케이스는 status code뿐 아니라 "소켓 미개방"(wsConnections 미증가 + hello 발생 없음)을 구조로 단언한다.
 describe('WS 인증 게이트 (preValidation)', () => {
   let savedEnv: NodeJS.ProcessEnv
 
@@ -35,7 +35,7 @@ describe('WS 인증 게이트 (preValidation)', () => {
 
   // ── injectWS(단위): 거부는 promise reject(Unexpected server response: NNN) + wsConnections 미증가 ──
   describe('injectWS 단위 관찰', () => {
-    it('유효 쿠키+허용 Origin은 upgrade에 성공하고 ctx.account에 신원을 배선한다', async () => {
+    it('유효 쿠키+허용 Origin은 upgrade에 성공하고 ctx.account에 신원을 연결한다', async () => {
       const app = buildSeededApp()
       await app.ready()
 
@@ -61,7 +61,7 @@ describe('WS 인증 게이트 (preValidation)', () => {
       await app.close()
     })
 
-    it('쿠키 부재는 401로 거부하고 소켓을 열지 않는다', async () => {
+    it('쿠키가 없으면 401로 거부하고 소켓을 열지 않는다', async () => {
       const app = buildSeededApp()
       await app.ready()
 
@@ -82,7 +82,7 @@ describe('WS 인증 게이트 (preValidation)', () => {
       await app.close()
     })
 
-    it('Origin 부재는 403으로 거부하고 소켓을 열지 않는다 (fail-closed)', async () => {
+    it('Origin이 없으면 403으로 거부하고 소켓을 열지 않는다 (fail-closed)', async () => {
       const app = buildSeededApp()
       await app.ready()
 
@@ -93,7 +93,7 @@ describe('WS 인증 게이트 (preValidation)', () => {
     })
   })
 
-  // ── 실 ws(E2E): 거부는 unexpected-response 이벤트 + open 미발화(hello를 받을 소켓이 없음) ──
+  // ── 실 ws(E2E): 거부는 unexpected-response 이벤트 + open 발생 없음(hello를 받을 소켓이 없음) ──
   describe('실 소켓 관찰 (unexpected-response)', () => {
     let apps: FastifyInstance[]
     let clients: WebSocket[]
@@ -105,7 +105,7 @@ describe('WS 인증 게이트 (preValidation)', () => {
 
     afterEach(async () => {
       // 거부된 클라이언트는 미성립(CONNECTING) 상태라 terminate가 abortHandshake로 'error'를 비동기
-      // 발화한다 — 리스너가 없으면 uncaught가 된다. no-op error 리스너를 붙여 삼킨 뒤 파기한다.
+      // 발생한다 — 리스너가 없으면 uncaught가 된다. no-op error 리스너를 붙여 삼킨 뒤 파기한다.
       for (const client of clients) {
         client.on('error', () => {})
         client.terminate()

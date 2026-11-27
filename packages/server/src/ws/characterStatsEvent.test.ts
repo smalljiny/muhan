@@ -4,9 +4,9 @@ import { makeCharacter } from '../world/characterFixtures.testutil.js'
 import { characterStatsEvent } from './characterStatsEvent.js'
 
 /**
- * `character:stats` 투영 헬퍼 스펙.
+ * `character:stats` 변환 헬퍼 스펙.
  *
- * 이 헬퍼는 여러 명령(공격·연마·훈련)이 공유하는 단일 생산자다 — 각자 투영하면 같은 이벤트의
+ * 이 헬퍼는 여러 명령(공격·연마·훈련)이 공유하는 단일 생산자다 — 각자 변환하면 같은 이벤트의
  * 필드 파생 규칙이 갈린다. 그래서 여기서 고정하는 것은 **어느 값이 문서에서 오고 어느 값이
  * 파생인가**다: 4필드는 캐릭터 문서 그대로, 최대치 2필드는 `resolveHpMax`·`resolveMpMax` 파생이다
  * (저장하지 않는 compute-on-read 계약).
@@ -45,7 +45,7 @@ describe('characterStatsEvent', () => {
     expect(event.mpMax).toBe(600)
   })
 
-  it('발화 이벤트가 와이어 계약(serverEventSchema)을 통과한다', () => {
+  it('발생한 이벤트가 와이어 계약(serverEventSchema)을 통과한다', () => {
     const parsed = serverEventSchema.safeParse(characterStatsEvent(makeCharacter()))
 
     expect(parsed.success).toBe(true)

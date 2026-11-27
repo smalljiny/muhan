@@ -4,7 +4,7 @@ import { spellByNo } from 'shared'
  * 주문번호 → 핸들러 디스패치.
  *
  * ## 범위 (family-agnostic 등록 — #85 G7 enabler)
- * 입력 키는 **주문번호(spellNo)**다 — 한글 주문명 → spellNo 해소는 command router 소관(본 토픽 밖).
+ * 입력 키는 **주문번호(spellNo)**다 — 한글 주문명 → spellNo 해석은 command router 담당(본 토픽 밖).
  * register/resolve는 offensive·비-offensive를 가리지 않는다(family-agnostic):
  *   - 카탈로그 주문(offensive 20 + 비-offensive 36 = 56) → 등록 가능한 핸들러 슬롯.
  *   - 카탈로그 밖 주문 → register가 throw, resolve는 undefined(미등록과 동일 관례).
@@ -38,7 +38,7 @@ export class SpellDispatch<H> {
   }
 
   /**
-   * 주문번호를 핸들러 슬롯으로 해소한다. register가 카탈로그 멤버십을 이미 강제하므로
+   * 주문번호를 핸들러 슬롯으로 해석한다. register가 카탈로그 멤버십을 이미 강제하므로
    * handlers는 항상 유효 주문만 담는다 — 등록 핸들러를 반환하고, 미등록(카탈로그 밖 포함)이면 undefined.
    */
   resolve(spellNo: number): ResolveResult<H> {

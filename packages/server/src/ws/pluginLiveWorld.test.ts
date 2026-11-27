@@ -19,9 +19,9 @@ import {
 } from './wsTestClient.testutil.js'
 
 /**
- * plugin.ts 라이브 월드 결선(Story 7) — buildApp/registerWebsocket에 라이브 월드 의존 묶음이 주입되면
+ * plugin.ts 라이브 월드 연결(Story 7) — buildApp/registerWebsocket에 라이브 월드 의존 묶음이 주입되면
  * 채널·수명 포트가 묶음 파생 어댑터로 세워지고, 명시 포트가 함께 주어지면 명시 포트가 우선한다
- * (explicit > bundle-derived > noop, #2). wsLifecyclePort 데코레이션으로 어느 포트가 배선됐는지 관측한다.
+ * (explicit > bundle-derived > noop, #2). wsLifecyclePort 데코레이션으로 어느 포트가 연결됐는지 관측한다.
  */
 function makeCharacter(id: string, currentRoom: number): Character {
   return {
@@ -98,7 +98,7 @@ function makeBundle(): BundleHarness {
   return { bundle, markDirty, liveRegistry, room }
 }
 
-describe('registerWebsocket 라이브 월드 묶음 결선', () => {
+describe('registerWebsocket 라이브 월드 묶음 연결', () => {
   it('묶음 주입 시 wsLifecyclePort가 묶음 파생 라이브 수명 어댑터로 세워진다', async () => {
     const h = makeBundle()
     const app = buildApp({ liveWorldDeps: h.bundle })
@@ -119,7 +119,7 @@ describe('registerWebsocket 라이브 월드 묶음 결선', () => {
   it('명시 lifecyclePort가 묶음보다 우선한다(explicit > bundle-derived, #2)', async () => {
     const h = makeBundle()
     const explicit: SessionLifecyclePort & { onSessionEnd: ReturnType<typeof vi.fn> } = {
-      onSessionEnd: vi.fn(),
+      onSessionEnd: vi.fn<SessionLifecyclePort['onSessionEnd']>(),
     }
     const app = buildApp({ liveWorldDeps: h.bundle, lifecyclePort: explicit })
     await app.ready()
@@ -152,19 +152,19 @@ describe('registerWebsocket 라이브 월드 묶음 결선', () => {
 // ── evict된 옛 소켓의 라이브 명령 차단(신뢰 경계 회귀) ────────────────────────────────
 // 같은 캐릭터 재로그인은 옛 바인딩을 evict하고 옛 소켓을 close한다. 그러나 `sock.close()`와 소켓
 // 'close' 이벤트 사이에는 창이 있어(teardown은 ctx.state·ctx.boundCharacterId를 되돌리지 않고
-// ctx.closed도 아직 false다), 그 사이 발화하는 버퍼된 프레임이 옛 ctx로 dispatch에 도달할 수 있다.
+// ctx.closed도 아직 false다), 그 사이 발생하는 버퍼된 프레임이 옛 ctx로 dispatch에 도달할 수 있다.
 // liveRegistry는 characterId 키라 그 명령은 **새 세션의** 라이브 엔트리를 변이한다.
-// 아래 스위트는 그 승계 명령이 라이브 상태를 전혀 건드리지 못함을 고정한다.
+// 아래 스위트는 그 밀려난 소켓의 명령이 라이브 상태를 전혀 건드리지 못함을 고정한다.
 
 /** 훈련방 겸 출발 방. 연마(progress:train)와 이동(world:move)을 같은 방에서 순서대로 시도한다. */
 const EVICT_ROOM_TRAIN = 11
-/** 이동 도착 방. 승계 명령이 통과했다면 캐릭터가 이 방으로 옮겨진다. */
+/** 이동 도착 방. 밀려난 소켓의 명령이 통과했다면 캐릭터가 이 방으로 옮겨진다. */
 const EVICT_ROOM_DEST = 12
-/** 연마 전 레벨. 정확히 1레벨분 exp·gold를 실어 승계 명령이 통과하면 결정적으로 상태가 바뀌게 한다. */
+/** 연마 전 레벨. 정확히 1레벨분 exp·gold를 실어 밀려난 소켓의 명령이 통과하면 결정적으로 상태가 바뀌게 한다. */
 const EVICT_LEVEL = 7
 const EVICT_EXP = neededExp(EVICT_LEVEL)
 const EVICT_GOLD = goldToTrain(EVICT_LEVEL)
-/** all-zero flags 출구 — 이동 게이트 건틀릿을 통과한다(liveWorld.e2e 픽스처 미러). */
+/** all-zero flags 출구 — 이동 게이트 검사를 통과한다(liveWorld.e2e 픽스처 미러). */
 const EVICT_EXIT = '동'
 
 interface EvictHarness {
@@ -284,12 +284,12 @@ describe('evict된 소켓의 라이브 명령 차단', () => {
     // 절이 아니라 closed 절만 검증하게 된다) 창 자체를 먼저 단언한다.
     expect(ctxA.closed).toBe(false)
 
-    // evict 자체가 종료 lifecycle에서 markDirty를 1회 부르므로, 승계 명령 관측 전에 계수기를 비운다.
+    // evict 자체가 종료 lifecycle에서 markDirty를 1회 부르므로, 밀려난 소켓의 명령 관측 전에 계수기를 비운다.
     h.markDirty.mockClear()
 
     // ── 3) 옛 소켓으로 라이브 명령 2개를 주입한다 ─────────────────────────────────
     // 실 TCP 타이밍 race('close' 직전에 도착한 버퍼 프레임)는 결정적으로 재현할 수 없으므로, 서버측
-    // 소켓의 'message' 리스너를 직접 구동해 같은 상태(teardown 완료 + ctx.closed=false)에서 프레임이
+    // 소켓의 'message' 리스너를 직접 실행해 같은 상태(teardown 완료 + ctx.closed=false)에서 프레임이
     // 도달하는 상황을 만든다. 검증 대상은 race의 *타이밍*이 아니라 dispatch 경계 *가드의 존재*다.
     // 연마→이동 순서가 load-bearing이다: 이동이 먼저 통과하면 캐릭터가 훈련방을 떠나 연마가 방 게이트에서
     // 거부되므로, 가드가 없을 때 두 명령이 모두 상태를 바꾸도록 순서를 잡는다.
@@ -308,7 +308,7 @@ describe('evict된 소켓의 라이브 명령 차단', () => {
     expect(live?.character.gold).toBe(EVICT_GOLD)
     expect(h.roomTrain.occupants.has(SEED_CHARACTER_ID)).toBe(true)
     expect(h.roomDest.occupants.has(SEED_CHARACTER_ID)).toBe(false)
-    // write-behind 영속 경로도 건드리지 않는다(승계 명령이 저장 큐에 스냅샷을 남기지 않는다).
+    // write-behind 영속 경로도 건드리지 않는다(밀려난 소켓의 명령이 저장 큐에 스냅샷을 남기지 않는다).
     expect(h.markDirty).not.toHaveBeenCalled()
 
     ws2.terminate()

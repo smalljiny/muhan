@@ -33,8 +33,8 @@ import { initiateAttack } from '../../combat/initiateAttack.js'
 import { createAttackHandler, type AttackHandlerDeps } from './attack.js'
 
 /**
- * combat:attack 핸들러 스펙 — 대상 지목 2단(크리처 우선)·쿨다운 게이트·전투상태 재조립·공격 판정·
- * 되쓰기·이벤트 투영을 하나의 명령 경로로 배선한다.
+ * combat:attack 핸들러 스펙 — 대상 지목 2단(몬스터 우선)·쿨다운 게이트·전투상태 재조립·공격 판정·
+ * 되쓰기·이벤트 변환을 하나의 명령 경로로 연결한다.
  *
  * ## 킬 경로는 mock이 아니라 실 구현을 태운다
  * 사망 seam(`assembleDeathSeams`)·원장(`createCreatureLedgers`)·라이브 레지스트리를 전부 실 구현으로
@@ -75,14 +75,14 @@ function attackCommand(
 }
 
 /**
- * 죽일 수 있는 크리처 — hpmax·hpcur 1, exp 100이라 한 대 맞으면 죽고 보상이 정확히 100이다
+ * 죽일 수 있는 몬스터 — hpmax·hpcur 1, exp 100이라 한 대 맞으면 죽고 보상이 정확히 100이다
  * (expdiv = trunc(exp * dmg / hpmax) = 100).
  */
 function makeFragileCreature(overrides: Partial<CreatureInstance> = {}): CreatureInstance {
   return makeCreature('1:c0', '고블린', { hpmax: 1, hpcur: 1, experience: 100, ...overrides })
 }
 
-/** 잘 버티는 크리처 — 한 대로는 죽지 않는다(비-킬 경로 기본). */
+/** 잘 버티는 몬스터 — 한 대로는 죽지 않는다(비-킬 경로 기본). */
 function makeToughCreature(overrides: Partial<CreatureInstance> = {}): CreatureInstance {
   return makeCreature('1:c0', '고블린', { hpmax: 500, hpcur: 500, experience: 100, ...overrides })
 }
@@ -100,7 +100,7 @@ interface SetupOptions {
 
 /**
  * 핸들러 하네스 — 라이브 레지스트리·전투 레지스트리·원장·사망 seam을 실 구현으로 조립하고
- * 관측 지점(마킹·시각·방 해소·라이브 조회)만 spy로 감싼다.
+ * 관측 지점(마킹·시각·방 해석·라이브 조회)만 spy로 감싼다.
  */
 function setup(options: SetupOptions = {}) {
   const now = options.now ?? NOW
@@ -195,9 +195,9 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-// ── 배선 격리 ────────────────────────────────────────────────────────────────
+// ── 연결 격리 ────────────────────────────────────────────────────────────────
 
-describe('createAttackHandler — 배선 격리', () => {
+describe('createAttackHandler — 연결 격리', () => {
   it('라이브 미등록 actor는 error{internal} 1개를 낸다', () => {
     const { handler } = setup({ creatures: [makeToughCreature()] })
 
@@ -211,7 +211,7 @@ describe('createAttackHandler — 배선 격리', () => {
     expect(vi.mocked(initiateAttack)).not.toHaveBeenCalled()
   })
 
-  it('방이 해소되지 않으면 error{internal}을 낸다', () => {
+  it('방이 해석되지 않으면 error{internal}을 낸다', () => {
     const { handler } = setup({ roomless: true })
 
     const events = run(handler, attackCommand('고블린'))
@@ -266,10 +266,10 @@ describe('createAttackHandler — 쿨다운 게이트', () => {
   })
 })
 
-// ── 대상 해소 ────────────────────────────────────────────────────────────────
+// ── 대상 해석 ────────────────────────────────────────────────────────────────
 
-describe('createAttackHandler — 대상 해소', () => {
-  it('크리처가 없고 사람이 잡히면 사람 공격 거부 메시지를 낸다', () => {
+describe('createAttackHandler — 대상 해석', () => {
+  it('몬스터가 없고 사람이 잡히면 사람 공격 거부 메시지를 낸다', () => {
     const { handler } = setup({ others: [makeCharacter({ _id: 'char-2', name: '타이' })] })
 
     const events = run(handler, attackCommand('타이'))
@@ -301,7 +301,7 @@ describe('createAttackHandler — 대상 해소', () => {
     expect(events[0]).toMatchObject({ message: '아직 사람은 공격할 수 없습니다' })
   })
 
-  it('크리처·사람 모두 못 찾으면 미해소 거부 메시지를 낸다', () => {
+  it('몬스터·사람 모두 못 찾으면 미해석 거부 메시지를 낸다', () => {
     const { handler } = setup({ creatures: [makeToughCreature()] })
 
     const events = run(handler, attackCommand('용'))
@@ -314,7 +314,7 @@ describe('createAttackHandler — 대상 해소', () => {
     })
   })
 
-  it('같은 이름의 크리처와 사람이 함께 있으면 크리처를 먼저 고른다', () => {
+  it('같은 이름의 몬스터와 사람이 함께 있으면 몬스터를 먼저 고른다', () => {
     const { handler } = setup({
       others: [makeCharacter({ _id: 'char-2', name: '타이' })],
       creatures: [makeToughCreature({ name: '타이' })],
@@ -325,7 +325,7 @@ describe('createAttackHandler — 대상 해소', () => {
     expect(events[0]).toMatchObject({ type: 'combat:attacked', targetInstanceId: '1:c0' })
   })
 
-  it('ordinal을 해소자에 그대로 넘긴다 (동명 2마리 중 두 번째)', () => {
+  it('ordinal을 리졸버에 그대로 넘긴다 (동명 2마리 중 두 번째)', () => {
     const { handler } = setup({
       creatures: [
         makeToughCreature({ instanceId: '1:c0' }),
@@ -342,7 +342,7 @@ describe('createAttackHandler — 대상 해소', () => {
 // ── 게이트 실패 ──────────────────────────────────────────────────────────────
 
 describe('createAttackHandler — 무적 게이트', () => {
-  it('MUNKIL 크리처는 initiateAttack이 돌려준 사유로 거부한다', () => {
+  it('MUNKIL 몬스터는 initiateAttack이 돌려준 사유로 거부한다', () => {
     const { handler } = setup({ creatures: [makeToughCreature({ flags: flagsHex(MUNKIL) })] })
 
     const events = run(handler, attackCommand('고블린'))
@@ -410,7 +410,7 @@ describe('createAttackHandler — 성공 경로', () => {
     expect(events[1]).toMatchObject({ type: 'character:stats' })
   })
 
-  it('발화 이벤트가 전부 와이어 계약(serverEventSchema)을 통과한다', () => {
+  it('발생한 이벤트가 전부 와이어 계약(serverEventSchema)을 통과한다', () => {
     const { handler } = setup({ creatures: [makeToughCreature()] })
 
     const events = run(handler, attackCommand('고블린'))
@@ -550,7 +550,7 @@ describe('createAttackHandler — 킬 경로', () => {
     expect(liveRegistry.get('char-1')?.character.experience).toBe(130)
   })
 
-  it('사망 시 world:room을 세 번째 이벤트로 덧붙이고 죽은 크리처를 뺀다', () => {
+  it('사망 시 world:room을 세 번째 이벤트로 덧붙이고 죽은 몬스터를 뺀다', () => {
     const { handler } = setup({ creatures: [makeFragileCreature()] })
 
     const events = run(handler, attackCommand('고블린'))
@@ -589,9 +589,9 @@ describe('createAttackHandler — 킬 경로', () => {
   })
 })
 
-// ── 배선 계약 (스냅샷 1회·도달 불가 갈래) ──────────────────────────────────────
+// ── 연결 계약 (스냅샷 1회·도달 불가 갈래) ──────────────────────────────────────
 
-describe('createAttackHandler — 배선 계약', () => {
+describe('createAttackHandler — 연결 계약', () => {
   // flags 1회 단언과 대칭이다. now()를 두 번 부르면 쿨다운 비교와 flags 만료 판정이 서로 다른
   // 시점을 보게 되어, 경계 틱에서 "쿨다운은 지났는데 실명은 아직"처럼 판정이 갈린다.
   it('now()를 명령당 정확히 1회 부른다', () => {
@@ -603,8 +603,8 @@ describe('createAttackHandler — 배선 계약', () => {
     expect(nowFn).toHaveBeenCalledTimes(1)
   })
 
-  // 되쓰기 직전 재조회가 빈손이면 배선 오류다 — 사망 seam이 엔트리를 지우는 경로가 이 토픽에 없다.
-  // 이 갈래를 비워 두면 실제로 그런 배선이 생겼을 때 undefined 역참조로 터진다.
+  // 되쓰기 직전 재조회가 빈손이면 조립 오류다 — 사망 seam이 엔트리를 지우는 경로가 이 토픽에 없다.
+  // 이 갈래를 비워 두면 실제로 그런 연결이 생겼을 때 undefined 역참조로 터진다.
   it('되쓰기 직전 재조회가 빈손이면 error{internal}로 격리한다', () => {
     const { handler, liveRegistry } = setup({ creatures: [makeToughCreature()] })
     // 첫 조회(핸들러 진입)는 통과시키고 두 번째(되쓰기 직전)만 빈손으로 만든다.
@@ -621,9 +621,9 @@ describe('createAttackHandler — 배선 계약', () => {
     expect(events[0]).toMatchObject({ type: 'error', code: 'internal' })
   })
 
-  // firePlayerDeath는 이 토픽에서 구조적으로 도달 불가하다(몬스터 미반격·PvP 미배선).
-  // 그 사실을 회귀로 잠근다 — 도달하면 배선 오류이고 사망 seam이 로그만 남긴다.
-  it('플레이어 사망 seam은 발화하지 않는다 (몬스터가 반격하지 않는다)', () => {
+  // firePlayerDeath는 이 토픽에서 구조적으로 도달 불가하다(몬스터 미반격·PvP 미연결).
+  // 그 사실을 회귀로 잠근다 — 도달하면 조립 오류이고 사망 seam이 로그만 남긴다.
+  it('플레이어 사망 seam은 실행되지 않는다 (몬스터가 반격하지 않는다)', () => {
     const { handler, logger } = setup({ creatures: [makeFragileCreature()] })
 
     run(handler, attackCommand('고블린'))

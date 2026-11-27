@@ -22,6 +22,7 @@ export function makeRoom(overrides: Partial<RoomState> = {}): RoomState {
     occupants: [{ characterId: 'c1', name: '타이' }],
     items: [{ instanceId: 'i1', name: '단검' }],
     creatures: [{ instanceId: 'm1', name: '들쥐', level: 2 }],
+    notices: [],
     ...overrides,
   }
 }
@@ -40,7 +41,11 @@ export function makeEmptyRoom(overrides: Partial<RoomState> = {}): RoomState {
   })
 }
 
-/** 방 스냅샷을 와이어 `world:room` 이벤트로 감싼다(discriminator만 얹는다). */
+/**
+ * 방 스냅샷을 와이어 `world:room` 이벤트로 감싼다 — 클라이언트 전용 `notices`를 떼고 discriminator를
+ * 얹는다(strict 스키마가 잉여 필드를 거부하므로 와이어 형태를 유지해야 한다).
+ */
 export function roomEvent(room: RoomState): Extract<ServerEvent, { type: 'world:room' }> {
-  return { type: 'world:room', ...room }
+  const { notices: _notices, ...wire } = room
+  return { type: 'world:room', ...wire }
 }

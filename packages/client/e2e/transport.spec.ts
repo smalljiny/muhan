@@ -1,16 +1,16 @@
 import { expect, test } from '@playwright/test'
 
-// 전송 왕복 e2e(Story 7, G4 정본 검증) — compose 스택(server+mongo)을 SUT로 실브라우저 왕복을 단언한다.
+// 전송 왕복 e2e(Story 7, G4 기준 검증) — compose 스택(server+mongo)을 SUT로 실브라우저 왕복을 단언한다.
 //
 // 사전 조건(caller가 보장): `docker compose up -d --build`로 server(3000)+mongo가 떠 있어야 한다.
-// Playwright webServer가 호스트 Vite(5173)를 기동하고, Vite가 /game·/dev/login을 서버 3000으로 프록시한다.
+// Playwright webServer가 호스트 Vite(5173)를 실행하고, Vite가 /game·/dev/login을 서버 3000으로 프록시한다.
 // 실행: `docker compose up -d --build` → `pnpm --filter client e2e` → `docker compose down`.
 //
 // CRITICAL 순서: (1) dev 로그인으로 __session 쿠키 세팅 → (2) 앱 페이지 로드 → (3) WS 연결.
 // 앱이 먼저 마운트되면 쿠키 없이 /game upgrade에 접속해 서버 쿠키 게이트에서 401난다. beforeEach가
 // goto('/dev/login')로 쿠키를 먼저 심고, 각 test가 goto('/')로 앱을 로드한다.
 //
-// 관측 표면(UI 단언): 연결 상태 span(aria-label '연결 상태'), 캐릭터 카드의 '선택' 버튼,
+// 관측 접점(UI 단언): 연결 상태 span(aria-label '연결 상태'), 캐릭터 카드의 '선택' 버튼,
 // 이벤트 로그 ul(aria-label '이벤트 로그'), 명령 입력(label '명령')+'보내기' 버튼.
 // 상태 도달은 web-first assertion(자동 재시도)으로 대기한다 — 고정 sleep 금지.
 
@@ -32,8 +32,8 @@ test('전송 왕복: 인증 접속(G1)·버전 협상(G2)·debug:echo 왕복(G3)
   await test.step('G1: 앱 로드 → __session 쿠키로 /game WS 접속 → 캐릭터 선택 → ready 도달', async () => {
     // 쿠키가 심긴 뒤 앱을 로드한다. WsClient가 ws://localhost:5173/game으로 연결하고 쿠키가 첨부된다.
     await page.goto('/')
-    // 진입은 사용자 구동이다(E10이 autoSelect 스텁 제거). 캐릭터 목록이 도착하면 시드 캐릭터를 선택해야
-    // 서버 FSM이 characterSelect→command로 전이하며 session:entered를 발화한다.
+    // 진입은 사용자 조작 기반이다(E10이 autoSelect 스텁 제거). 캐릭터 목록이 도착하면 시드 캐릭터를 선택해야
+    // 서버 FSM이 characterSelect→command로 전이하며 session:entered를 발생시킨다.
     const selectButton = page.getByRole('button', { name: '선택' })
     await expect(selectButton).toBeVisible({ timeout: HANDSHAKE_TIMEOUT })
     await selectButton.click()

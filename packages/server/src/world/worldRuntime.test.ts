@@ -115,7 +115,7 @@ describe('createWorldRuntime — 슬롯 빌드', () => {
     expect(runtime.slots.length).toBeGreaterThan(2)
   })
 
-  it('빌드한 슬롯을 WorldClock에 register하고 구동해도 throw하지 않는다', () => {
+  it('빌드한 슬롯을 WorldClock에 register하고 실행해도 throw하지 않는다', () => {
     const runtime = createWorldRuntime(graphOf(makeRoom({ occupants: new Set(['p1']) })), {
       now: () => 0,
       templates: templates(),
@@ -128,7 +128,7 @@ describe('createWorldRuntime — 슬롯 빌드', () => {
     expect(() => fake.tick(25)).not.toThrow()
   })
 
-  it('invasion 슬롯 발화 시 resolveRoom으로 그래프 방을 찾아 스폰하고 방송한다', () => {
+  it('invasion 슬롯 실행 시 resolveRoom으로 그래프 방을 찾아 스폰하고 방송한다', () => {
     const room = makeRoom({ roomId: 8000 })
     const broadcast = vi.fn()
     const events: InvasionEvent[] = [
@@ -167,7 +167,7 @@ describe('createWorldRuntime — onRoomEntered 훅', () => {
     expect(runtime.activeSet.activatedAt(50)).toBe(42)
   })
 
-  it('due perm 슬롯을 입장 시점에 리스폰한다(activate + respawnPermCreatures 결선)', () => {
+  it('due perm 슬롯을 입장 시점에 리스폰한다(activate + respawnPermCreatures 연결)', () => {
     const room = makeRoom({
       occupants: new Set(['p1']),
       permMon: [permSlot({ ltime: 0, interval: 100 })],
@@ -212,7 +212,7 @@ describe('createWorldRuntime — onRoomEntered 훅', () => {
 
 // ── onRoomLeft 대칭 seam via tryMove (T6.3) ────────────────────────────────────
 
-describe('createWorldRuntime — onRoomLeft를 tryMove leave 경로로 구동', () => {
+describe('createWorldRuntime — onRoomLeft를 tryMove leave 경로로 실행', () => {
   it('방 A→B 이동 시 빈 A는 비활성화, B는 활성화된다', () => {
     const roomA = makeRoom({
       roomId: 100,
@@ -231,7 +231,7 @@ describe('createWorldRuntime — onRoomLeft를 tryMove leave 경로로 구동', 
     runtime.onRoomEntered(roomA, { characterId: 'me', currentRoomId: 100 })
     expect(runtime.activeSet.isActive(100)).toBe(true)
 
-    // 실 deactivate 배선으로 tryMove를 구동한다(onRoomLeft·onRoomEntered 결선).
+    // 실 deactivate 연결로 tryMove를 실행한다(onRoomLeft·onRoomEntered 연결).
     const deps: TryMoveDeps = {
       resolveRoom: (id) => graph.get(id),
       currentHour: () => 12,
@@ -250,11 +250,11 @@ describe('createWorldRuntime — onRoomLeft를 tryMove leave 경로로 구동', 
 
 // ── boot 통합: gameTime·checkExits와 공존 + now 도메인 커플링 (T6.1·회귀) ─────────
 
-describe('createWorldRuntime — boot 통합(기존 슬롯 회귀 + creatureTick 구동)', () => {
+describe('createWorldRuntime — boot 통합(기존 슬롯 회귀 + creatureTick 실행)', () => {
   it('runtime 슬롯이 gameTime·checkExits와 한 클록에 공존하고 creatureTick이 활성 방을 처리한다', async () => {
     const { createGameTime } = await import('./gameTime.js')
     const room = makeRoom({ roomId: 70, occupants: new Set(['p1']) })
-    // 도래(nextActionAt 미설정) 크리처 1마리 — creatureTick이 처리하면 nextActionAt이 세팅된다.
+    // 도래(nextActionAt 미설정) 몬스터 1마리 — creatureTick이 처리하면 nextActionAt이 세팅된다.
     room.creatures.push({
       instanceId: '70:c0',
       templateId: null,
@@ -301,7 +301,7 @@ describe('createWorldRuntime — boot 통합(기존 슬롯 회귀 + creatureTick
     runtime.onRoomEntered(room, { characterId: 'p1', currentRoomId: 70 })
     expect(runtime.activeSet.activatedAt(70)).toBe(3)
 
-    // 다음 tick에 creatureTick이 활성 방의 도래 크리처를 처리해 nextActionAt을 세팅한다.
+    // 다음 tick에 creatureTick이 활성 방의 도래 몬스터를 처리해 nextActionAt을 세팅한다.
     fake.tick(1) // tickSec=4
     expect(room.creatures[0]?.nextActionAt).toBe(4 + 3) // dex 14<20 → cadence 3
   })

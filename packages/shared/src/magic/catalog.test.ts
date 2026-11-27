@@ -12,7 +12,7 @@ import {
   type SpellFamily,
 } from './catalog.js'
 
-// catalog 엔트리의 유일 허용 키 — offensive 유예(#85) 경계 검증에 쓴다.
+// catalog 엔트리의 유일 허용 키 — offensive 보류(#85) 경계 검증에 쓴다.
 // 함수 참조(effect 본체)가 엔트리에 새어들면 이 집합이 깨진다.
 const ALLOWED_ENTRY_KEYS = ['spellNo', 'koreanName', 'family', 'spllv', 'offensive'] as const
 
@@ -30,14 +30,14 @@ const VALID_FAMILIES: readonly SpellFamily[] = [
   'offensive',
 ]
 
-describe('SPELL_CATALOG — spllist 전사', () => {
+describe('SPELL_CATALOG — spllist 옮겨 적기', () => {
   // global.c:575-631의 활성 엔트리는 spellNo 0-55 = 56행이다(SCURSE=56·SNAHAN 제외).
-  // 태스크 문구의 "55"는 최대 인덱스(SCHARM=55)를 개수로 오독한 off-by-one이라, byte 정본을 따른다.
+  // 태스크 문구의 "55"는 최대 인덱스(SCHARM=55)를 개수로 오독한 off-by-one이라, byte 원본을 따른다.
   it('활성 주문 56개를 export한다', () => {
     expect(SPELL_CATALOG).toHaveLength(56)
   })
 
-  it('각 엔트리는 정확히 5개 필드만 가진다(effect 함수 참조 없음, #85 유예 경계)', () => {
+  it('각 엔트리는 정확히 5개 필드만 가진다(effect 함수 참조 없음, #85 보류 경계)', () => {
     for (const entry of SPELL_CATALOG) {
       expect(Object.keys(entry).sort()).toEqual([...ALLOWED_ENTRY_KEYS].sort())
       // 어떤 필드도 함수여선 안 된다 — 비-offensive 36은 메타데이터만 둔다.
@@ -62,7 +62,7 @@ describe('SPELL_CATALOG — spllist 전사', () => {
     expect(nos).toEqual(Array.from({ length: 56 }, (_, i) => i))
   })
 
-  it('앵커 엔트리 3종이 byte 정본과 일치한다', () => {
+  it('앵커 엔트리 3종이 byte 원본과 일치한다', () => {
     const byNo = (no: number): SpellEntry => {
       const found = SPELL_CATALOG.find((e) => e.spellNo === no)
       if (!found) throw new Error(`spellNo ${no} 없음`)
@@ -132,7 +132,7 @@ describe('OSPELL_GRID — realm×tier 격자', () => {
     expect(cells).toEqual(expected)
   })
 
-  it('격자 기본 셀이 byte 정본과 일치한다', () => {
+  it('격자 기본 셀이 byte 원본과 일치한다', () => {
     // WIND tier1(삭풍) — 기본 셀, 예외 없음.
     expect(ospellOf(SPELL_NO.SHURTS)).toEqual({
       spellNo: 1,
@@ -145,7 +145,7 @@ describe('OSPELL_GRID — realm×tier 격자', () => {
     })
   })
 
-  it('예외 셀이 byte 정본과 일치한다', () => {
+  it('예외 셀이 byte 원본과 일치한다', () => {
     // FIRE tier1(화선도) — sdice 8→7, pdice 0→1.
     expect(ospellOf(SPELL_NO.SBURNS)).toEqual({
       spellNo: 27,

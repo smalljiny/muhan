@@ -4,11 +4,11 @@ import { computeHpMax, computeMpMax } from '../stats/derived.js'
 import type { EffectiveStatContext } from '../stats/context.js'
 
 /**
- * class 인덱스(tables.ts:97-98 정본): 2=barbarian(권법가), 4=fighter(검사), 5=mage(도술사),
+ * class 인덱스(tables.ts:97-98 기준): 2=barbarian(권법가), 4=fighter(검사), 5=mage(도술사),
  * 9=invincible, 10=caretaker(초인). 초인 오버라이드는 HP 800·MP 600 고정(레벨 무관).
  */
 
-/** computeHpMax/computeMpMax를 직접 호출하기 위한 폐형 입력 조립(판독 6필드는 더미). */
+/** computeHpMax/computeMpMax를 직접 호출하기 위한 닫힌 식 입력 조립(읽지 않는 6필드는 더미). */
 function closedFormContext(characterClass: number, level: number): EffectiveStatContext {
   return {
     effectiveDexterity: 0,
@@ -23,7 +23,7 @@ function closedFormContext(characterClass: number, level: number): EffectiveStat
 }
 
 describe('resolveHpMax', () => {
-  it('일반직(fighter=4·mage=5·barbarian=2)에서 computeHpMax 폐형값과 동일값을 위임 반환한다', () => {
+  it('일반직(fighter=4·mage=5·barbarian=2)에서 computeHpMax 닫힌 식 값과 동일값을 위임 반환한다', () => {
     for (const characterClass of [4, 5, 2]) {
       for (const level of [10, 50, 100]) {
         expect(resolveHpMax({ class: characterClass, level })).toBe(
@@ -39,7 +39,7 @@ describe('resolveHpMax', () => {
     }
   })
 
-  it('class===9(INVINCIBLE)은 오버라이드가 아니라 폐형값(computeHpMax)을 반환한다', () => {
+  it('class===9(INVINCIBLE)은 오버라이드가 아니라 닫힌 식 값(computeHpMax)을 반환한다', () => {
     for (const level of [1, 50, 127]) {
       expect(resolveHpMax({ class: 9, level })).toBe(computeHpMax(closedFormContext(9, level)))
       // 9와 10 경계 검증: 초인만 800으로 갈린다.
@@ -49,7 +49,7 @@ describe('resolveHpMax', () => {
 })
 
 describe('resolveMpMax', () => {
-  it('일반직(fighter=4·mage=5·barbarian=2)에서 computeMpMax 폐형값과 동일값을 위임 반환한다', () => {
+  it('일반직(fighter=4·mage=5·barbarian=2)에서 computeMpMax 닫힌 식 값과 동일값을 위임 반환한다', () => {
     for (const characterClass of [4, 5, 2]) {
       for (const level of [10, 50, 100]) {
         expect(resolveMpMax({ class: characterClass, level })).toBe(
@@ -65,7 +65,7 @@ describe('resolveMpMax', () => {
     }
   })
 
-  it('class===9(INVINCIBLE)은 오버라이드가 아니라 폐형값(computeMpMax)을 반환한다', () => {
+  it('class===9(INVINCIBLE)은 오버라이드가 아니라 닫힌 식 값(computeMpMax)을 반환한다', () => {
     for (const level of [1, 50, 127]) {
       expect(resolveMpMax({ class: 9, level })).toBe(computeMpMax(closedFormContext(9, level)))
       expect(resolveMpMax({ class: 9, level })).not.toBe(600)

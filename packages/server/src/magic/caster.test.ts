@@ -5,7 +5,7 @@ import { F_SET } from '../world/hexFlags.js'
 import { toCaster } from './caster.js'
 
 /**
- * Caster 계약 경계 테스트 — 몹·플레이어 공유 추상의 6필드와 write-through를 못박는다.
+ * Caster 계약 경계 테스트 — 몬스터·플레이어 공유 추상의 6필드와 write-through를 못박는다.
  *
  * 이 계약은 #85(realm 성장·학습 write)·#86(scroll/potion/wand 본체)이 공유하므로,
  * "정확히 6필드"·"mpCurrent 라이브 write-through"를 런타임으로 잠근다(개별 필드 검증만으로는
@@ -113,7 +113,7 @@ describe('toCaster(CreatureInstance)', () => {
     expect(caster.mpCurrent).toBe(40)
   })
 
-  it('knows는 creature.spells 비트셋을 F_ISSET으로 판독한다', () => {
+  it('knows는 creature.spells 비트셋을 F_ISSET으로 읽는다', () => {
     const creature = makeCreature({ spells: F_SET('0'.repeat(32), 6) })
     const caster = toCaster(creature)
     expect(caster.knows(6)).toBe(true)
@@ -152,7 +152,7 @@ describe('toCaster(PlayerCombatState)', () => {
     expect(caster.intBonus).toBe(bonusOf(14))
   })
 
-  it('knows는 state.spells 비트마스크를 isKnown으로 실판독한다(#85 — 더 이상 false 스텁 아님)', () => {
+  it('knows는 state.spells 비트마스크를 isKnown으로 실제로 읽는다(#85 — 더 이상 false 스텁 아님)', () => {
     const caster = toCaster(makePlayerState({ spells: setKnown(emptySpellStore(), 6) }))
     expect(caster.knows(6)).toBe(true)
     expect(caster.knows(7)).toBe(false)

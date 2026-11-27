@@ -27,7 +27,7 @@ import {
 // FAKE verifier + 인메모리-Mongo AccountRepository·CharacterRepository로 조립한 FirebaseSessionAuthAdapter를
 // buildApp에 주입해, 실제 WS 세션 흐름(select/enter/resume)이 account-character seam을 관통하는지 관찰한다.
 //
-// 대상 컴포넌트(FirebaseSessionAuthAdapter·buildApp)는 Story 5·기존 배선으로 이미 존재하므로 이 테스트는
+// 대상 컴포넌트(FirebaseSessionAuthAdapter·buildApp)는 Story 5·기존 연결로 이미 존재하므로 이 테스트는
 // 첫 실행에 통과한다(RED을 만들지 않는다) — 가치는 seam을 실 WS 흐름으로 관통하는 신규 통합 커버리지다.
 // 방 배치 내부(#74)는 범위 밖 — entered/resumed 결과만 단언하고 room-graph 배치는 검증하지 않는다.
 
@@ -203,7 +203,7 @@ describe('account-character seam 통합 (select/enter/resume)', () => {
     ws1.terminate()
     await waitFor(() => app.wsSessionRegistry.get(SEED_CHARACTER_ID)?.link === 'link-dead')
 
-    // grace 내 새 소켓으로 재접속해 같은 캐릭터를 select → rebind되어 entered가 아니라 resumed가 발화된다.
+    // grace 내 새 소켓으로 재접속해 같은 캐릭터를 select → rebind되어 entered가 아니라 resumed가 발생한다.
     const ws2 = await authedClient(app)
     const reader = createMessageReader(ws2)
     await reader.next() // system:hello

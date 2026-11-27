@@ -7,7 +7,7 @@ import { MTRADE } from '../world/hexFlags.js'
 /**
  * deathDistribution.ts — 몬스터 사망 exp 분배·전리품 드롭 resolver(creature.c:274~341 이식) 테스트.
  *
- * 오라클 실 분배 루프(B 블록)를 정본으로: 데미지비례 exp·MIN(expgroup, 몬스터exp) 캡·멤버십 게이트
+ * 오라클 실 분배 루프(B 블록)를 기준으로: 데미지비례 exp·MIN(expgroup, 몬스터exp) 캡·멤버십 게이트
  * (enemies AND ledger>0)·그룹킬 보너스(기여자 2명+ 결정론, 미초기화 cp 버그 비재현)·MTRADE 인벤토리
  * 게이트·무게이트 골드 드롭을 검증한다. resolver는 무변형·반환 기반이라 dead·room·ledger 불변도 pin한다.
  *
@@ -117,7 +117,7 @@ describe('distributeCreatureDeath', () => {
       expect(result.awards).toEqual([{ playerId: 'p1', exp: 1000, alignmentDelta: 0 }])
     })
 
-    it('정수 절삭(Math.trunc)으로 exp를 계산한다', () => {
+    it('정수 버림(Math.trunc)으로 exp를 계산한다', () => {
       const dead = makeDead({ experience: 1000, hpmax: 300, alignment: 0, enemies: ['p1'] })
       // trunc(1000*100/300) = trunc(333.33) = 333.
       const ledger = ledgerOf([['p1', 100]])
@@ -213,11 +213,11 @@ describe('distributeCreatureDeath', () => {
       expect(result.awards.map((a) => a.alignmentDelta)).toEqual([-100, -100])
     })
 
-    it('음수 alignment는 Math.trunc(0 방향 절삭)로 계산한다(Math.floor 아님)', () => {
+    it('음수 alignment는 Math.trunc(0 방향 버림)로 계산한다(Math.floor 아님)', () => {
       const dead = makeDead({ experience: 1000, hpmax: 100, alignment: -13, enemies: ['p1'] })
       const ledger = ledgerOf([['p1', 40]])
       const result = distributeCreatureDeath(dead, makeRoom(), ledger, {})
-      // -trunc(-13/5) = -trunc(-2.6) = -(-2) = 2. (floor면 -(-3)=3으로 발산.) exp = trunc(1000*40/100)=400.
+      // -trunc(-13/5) = -trunc(-2.6) = -(-2) = 2. (floor면 -(-3)=3으로 달라진다.) exp = trunc(1000*40/100)=400.
       expect(result.awards).toEqual([{ playerId: 'p1', exp: 400, alignmentDelta: 2 }])
     })
 
@@ -362,16 +362,16 @@ describe('distributeCreatureDeath', () => {
   })
 
   /**
-   * ledger 스코핑 계약(#99 라이브 조립 전제) — resolver는 `ledger.get(playerId)`를 이 죽은 크리처에 가해진
+   * ledger 스코핑 계약(#99 라이브 조립 전제) — resolver는 `ledger.get(playerId)`를 이 죽은 몬스터에 가해진
    * 데미지로 신뢰만 하고 검증하지 않는다. DamageLedger = Map<attackerId, number>는 attackerId-only라
-   * defender-agnostic이므로, 다른 크리처에 가한 데미지가 attackerId 단일 키로 합산되면 보상이 인플레된다.
-   * 아래 두 테스트가 이 전제를 실행 가능한 계약으로 pin한다 — 실 per-creature 스코핑 라우팅은 #99 소관.
+   * defender-agnostic이므로, 다른 몬스터에 가한 데미지가 attackerId 단일 키로 합산되면 보상이 인플레된다.
+   * 아래 두 테스트가 이 전제를 실행 가능한 계약으로 pin한다 — 실 per-creature 스코핑 라우팅은 #99 담당.
    */
   describe('ledger 스코핑 계약 (#99 라이브 조립 전제)', () => {
-    it('주어진 ledger 값을 이 크리처 데미지로 신뢰한다 — cross-creature 오염은 보상을 인플레(호출자 스코핑 필요)', () => {
+    it('주어진 ledger 값을 이 몬스터 데미지로 신뢰한다 — cross-creature 오염은 보상을 인플레(호출자 스코핑 필요)', () => {
       // p1이 몬스터 A에 40, 다른 몬스터 B에 60을 준 상황을 attackerId 단일 키(=100)로 합산한 leaky ledger.
       // A만이면 trunc(1000*40/100)=400이어야 하나, 오염 ledger로 trunc(1000*100/100)=1000(캡)이 된다.
-      // #99가 per-creature ledger를 라우팅하지 않으면 발생하는 결함을 계약으로 표면화한다.
+      // #99가 per-creature ledger를 라우팅하지 않으면 발생하는 결함을 계약으로 드러낸다.
       const deadA = makeDead({ instanceId: 'mon-A', experience: 1000, hpmax: 100, alignment: 0, enemies: ['p1'] })
       const crossCreatureLedger = ledgerOf([['p1', 100]]) // 40(A) + 60(B) 오염
       const result = distributeCreatureDeath(deadA, makeRoom(), crossCreatureLedger, {})

@@ -1,9 +1,9 @@
 /**
  * 방어구 착용(wear) 다층 게이트 — 오라클 command3.c wear()(라인 52~194)의 게이트 순서를
- * 글자 그대로 이식한 순수 함수. 실 인벤 이동·객체 파괴는 outcome만 반환하고 배선은 유예한다.
+ * 글자 그대로 이식한 순수 함수. 실 인벤 이동·객체 파괴는 outcome만 반환하고 연결은 보류한다.
  *
  * 게이트는 첫 실패에서 즉시 반환한다. questnum·ONEWEV(flags)를 반드시 스레드해야 소각·레벨
- * 게이트가 정확히 발화한다. 저주(OCURSE)는 게이트에 포함하지 않는다 — 저주는 탈착 시점 판정이다.
+ * 게이트가 정확히 동작한다. 저주(OCURSE)는 게이트에 포함하지 않는다 — 저주는 탈착 시점 판정이다.
  */
 
 import type { ObjectInstance } from 'shared'
@@ -47,7 +47,7 @@ const OTHER_AC_WEIGHT = 5
 const BURN_REASON = '푸른 연기와 함께 사라졌습니다.'
 
 /**
- * 착용 주체 — E6 유예 필드(married·수치 alignment)를 명시 입력으로 받는다.
+ * 착용 주체 — E6 보류 필드(married·수치 alignment)를 명시 입력으로 받는다.
  * gender는 1=남/2=여. race는 mtype.h RACE 인코딩.
  */
 export interface WearActor {
@@ -61,7 +61,7 @@ export interface WearActor {
 
 /**
  * wearGate 입력 — object의 instance + template 스탯 + 점유 슬롯 + 착용 주체.
- * questnum·flags(ONEWEV 포함)를 스레드해야 소각·레벨 게이트가 정확히 발화한다.
+ * questnum·flags(ONEWEV 포함)를 스레드해야 소각·레벨 게이트가 정확히 동작한다.
  */
 export interface WearParams {
   readonly flags: string
@@ -80,8 +80,8 @@ export interface WearParams {
  * 착용 결과 판별 유니온:
  * - equipped: 착용 성공, slot 설정된 새 인스턴스
  * - rejected: 게이트 거부(인벤에 그대로)
- * - burned: 밸런스 소각(파괴 — 배선 유예)
- * - bounced: 정렬 반발로 몸에서 튕겨 바닥 낙하(reject와 별개)
+ * - burned: 밸런스 소각(파괴 — 연결 보류)
+ * - bounced: 성향 반발로 몸에서 튕겨 바닥 낙하(reject와 별개)
  */
 export type WearOutcome =
   | { readonly kind: 'equipped'; readonly object: ObjectInstance }
@@ -97,7 +97,7 @@ export function wearGate(params: WearParams): WearOutcome {
   const { flags, type, wearflag, armor, shotsmax, shotscur, questnum, instance, occupiedSlots, actor } =
     params
 
-  // 0. 라우팅 — wear는 방어구/장신구 전용. 무기(WIELD)·든 물건(HELD)·미착용(0)은 거부.
+  // 0. 라우팅 — wear는 방어구/장신구 전용. 무기(WIELD)·든 아이템(HELD)·미착용(0)은 거부.
   if (wearflag === 0 || wearflag === WIELD || wearflag === HELD) {
     return { kind: 'rejected', reason: '입는 물건이 아닙니다.' }
   }
@@ -156,7 +156,7 @@ export function wearGate(params: WearParams): WearOutcome {
     return { kind: 'rejected', reason: '부서져서 입을 수 없게 되었습니다.' }
   }
 
-  // ⑧ 정렬 — OGOODO+정렬<-50·OEVILO+정렬>50이면 몸에서 튕겨 바닥 낙하(command3.c:132·142).
+  // ⑧ 성향 — OGOODO+성향<-50·OEVILO+성향>50이면 몸에서 튕겨 바닥 낙하(command3.c:132·142).
   if (!alignmentAllowed(flags, actor.alignment)) {
     return { kind: 'bounced', reason: '당신 몸에서 튕겨져 나가 바닥에 떨어집니다.' }
   }
@@ -198,14 +198,14 @@ const PALADIN_RANGER_DMG_RELIEF = 2
 const HELD_DICE_LIMIT = 100
 /** ready 소각 메시지(command3.c:788·795·801). */
 const READY_BURN_REASON = '당신이 무기를 쥐자 푸른 빛을 내며 사라집니다.'
-/** ready 정렬 반발 메시지(command3.c:762·771). */
+/** ready 성향 반발 메시지(command3.c:762·771). */
 const READY_BOUNCE_REASON = '당신의 몸에서 튕겨져 나가 바닥에 떨어집니다.'
-/** hold 정렬 반발 메시지(command3.c:922·931). */
+/** hold 성향 반발 메시지(command3.c:922·931). */
 const HOLD_BOUNCE_REASON = '당신의 손에서 튕겨져 나가 땅에 떨어집니다.'
 
 /**
  * readyGate 입력 — object의 instance + template 무기 스탯 + 점유 슬롯 + 착용 주체 + 소유자 일치 여부.
- * isBoundOwner는 오라클 `strcmp(obj->key[2], ply->name)==0`(command3.c:820)의 명시 입력이다(배선 유예).
+ * isBoundOwner는 오라클 `strcmp(obj->key[2], ply->name)==0`(command3.c:820)의 명시 입력이다(연결 보류).
  */
 export interface ReadyParams {
   readonly flags: string
@@ -241,7 +241,7 @@ export interface HoldParams {
 
 /**
  * 무기 장착(ready) 다층 게이트 — 오라클 command3.c ready()(라인 691~835)의 순서를 글자 그대로 이식한다.
- * 게이트는 첫 실패에서 즉시 반환한다. 실 인벤 이동·객체 파괴는 outcome만 반환하고 배선은 유예한다.
+ * 게이트는 첫 실패에서 즉시 반환한다. 실 인벤 이동·객체 파괴는 outcome만 반환하고 연결은 보류한다.
  */
 export function readyGate(params: ReadyParams): WearOutcome {
   const { flags, type, wearflag, ndice, sdice, pdice, shotsmax, shotscur, questnum, instance, occupiedSlots, actor, isBoundOwner } =
@@ -282,7 +282,7 @@ export function readyGate(params: ReadyParams): WearOutcome {
     return { kind: 'rejected', reason: '당신의 직업에 맞지 않습니다.' }
   }
 
-  // ⑥ 정렬 — OGOODO+정렬<-50·OEVILO+정렬>50이면 몸에서 튕겨 바닥 낙하(command3.c:755-773).
+  // ⑥ 성향 — OGOODO+성향<-50·OEVILO+성향>50이면 몸에서 튕겨 바닥 낙하(command3.c:755-773).
   if (!alignmentAllowed(flags, actor.alignment)) {
     return { kind: 'bounced', reason: READY_BOUNCE_REASON }
   }
@@ -372,7 +372,7 @@ export function holdGate(params: HoldParams): WearOutcome {
     return { kind: 'rejected', reason: '당신의 직업에 맞지 않습니다.' }
   }
 
-  // ⑦ 정렬 — OGOODO+정렬<-50·OEVILO+정렬>50이면 손에서 튕겨 바닥 낙하(command3.c:919-937).
+  // ⑦ 성향 — OGOODO+성향<-50·OEVILO+성향>50이면 손에서 튕겨 바닥 낙하(command3.c:919-937).
   // 플랜 T6.2 요약 초과, 오라클 충실.
   if (!alignmentAllowed(flags, actor.alignment)) {
     return { kind: 'bounced', reason: HOLD_BOUNCE_REASON }

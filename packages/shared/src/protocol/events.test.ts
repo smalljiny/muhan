@@ -286,13 +286,13 @@ describe('serverEventSchema (server→client 봉투)', () => {
       if (parsed.success && parsed.data.type === 'world:room') {
         expect(parsed.data.roomId).toBe(0)
         expect(parsed.data.exits).toEqual([])
-        // 빈 name·longDesc는 정본 월드 데이터에 실재한다(빈 name 97방·빈 longDesc 433방) — 유효값이다.
+        // 빈 name·longDesc는 기준 월드 데이터에 실재한다(빈 name 97방·빈 longDesc 433방) — 유효값이다.
         expect(parsed.data.name).toBe('')
         expect(parsed.data.longDesc).toBe('')
       }
     })
 
-    it('확장 필드 전량(이름·설명·출구·점유자·아이템·크리처)이 있으면 통과한다', () => {
+    it('확장 필드 전량(이름·설명·출구·점유자·아이템·몬스터)이 있으면 통과한다', () => {
       const parsed = serverEventSchema.safeParse({
         ...baseRoom,
         roomId: 5,
@@ -340,7 +340,7 @@ describe('serverEventSchema (server→client 봉투)', () => {
       },
     )
 
-    // 표시 이름은 최소 1자다 — 빈 문자열은 "미해소 점유자" 신호라 와이어에 오르면 안 된다.
+    // 표시 이름은 최소 1자다 — 빈 문자열은 "미해석 점유자" 신호라 와이어에 오르면 안 된다.
     // 식별자(characterId·instanceId)도 빈 문자열을 거부한다.
     it.each([
       ['occupants[].characterId', { occupants: [{ characterId: '', name: '타이' }] }],
@@ -351,9 +351,9 @@ describe('serverEventSchema (server→client 봉투)', () => {
       expect(serverEventSchema.safeParse({ ...baseRoom, ...patch }).success).toBe(false)
     })
 
-    // 표시 이름 최소길이는 occupants에만 요구한다 — 빈 이름이 "미해소 점유자" 신호로 쓰여
-    // projectRoomView가 그 항목을 목록에서 빼기 때문이다. 아이템·크리처엔 그 신호가 없다.
-    it('items[].name·creatures[].name은 빈 문자열도 허용한다 (미해소 신호가 없는 필드)', () => {
+    // 표시 이름 최소길이는 occupants에만 요구한다 — 빈 이름이 "미해석 점유자" 신호로 쓰여
+    // projectRoomView가 그 항목을 목록에서 빼기 때문이다. 아이템·몬스터엔 그 신호가 없다.
+    it('items[].name·creatures[].name은 빈 문자열도 허용한다 (미해석 신호가 없는 필드)', () => {
       expect(
         serverEventSchema.safeParse({
           ...baseRoom,
@@ -391,6 +391,89 @@ describe('serverEventSchema (server→client 봉투)', () => {
       expect(
         serverEventSchema.safeParse({ ...baseRoom, exits: [{ name: '북', locked: true }] }).success,
       ).toBe(false)
+    })
+  })
+
+  describe('world:presence', () => {
+    /** 최소 유효 페이로드 — 케이스별로 필요한 필드만 덮어쓴다. */
+    const basePresence = {
+      type: 'world:presence',
+      roomId: 0,
+      subject: { kind: 'player', characterId: 'char-1', name: '타이' },
+      change: { change: 'entered', announce: true },
+    }
+
+    it('moved-out은 roomId·subject·direction을 그대로 싣고 통과한다', () => {
+      const parsed = serverEventSchema.parse({
+        ...basePresence,
+        roomId: 5,
+        change: { change: 'moved-out', direction: '북', announce: true },
+      })
+      expect(parsed).toEqual({
+        type: 'world:presence',
+        roomId: 5,
+        subject: { kind: 'player', characterId: 'char-1', name: '타이' },
+        change: { change: 'moved-out', direction: '북', announce: true },
+      })
+    })
+
+    it.each([
+      ['moved-in (direction 없음)', { change: 'moved-in', announce: false }],
+      ['entered announce true', { change: 'entered', announce: true }],
+      ['entered announce false', { change: 'entered', announce: false }],
+      ['exited announce false', { change: 'exited', announce: false }],
+    ])('%s는 통과한다', (_label, change) => {
+      expect(serverEventSchema.parse({ ...basePresence, change })).toEqual({
+        ...basePresence,
+        change,
+      })
+    })
+
+    // change 판별 유니온이 조합 규칙을 파싱 단계에서 강제한다 — refine 없이 거부되어야 한다.
+    it.each([
+      ['direction 없는 moved-out', { change: 'moved-out', announce: true }],
+      ['빈 문자열 direction의 moved-out', { change: 'moved-out', direction: '', announce: true }],
+      ['direction이 붙은 moved-in', { change: 'moved-in', direction: '북', announce: true }],
+      ['direction이 붙은 entered', { change: 'entered', direction: '북', announce: true }],
+      ['direction이 붙은 exited', { change: 'exited', direction: '북', announce: false }],
+      ['announce: true인 exited', { change: 'exited', announce: true }],
+      ['알 수 없는 change', { change: 'teleported', announce: true }],
+      ['announce 없는 entered', { change: 'entered' }],
+      ['change 내부의 알 수 없는 필드', { change: 'entered', announce: true, extra: 1 }],
+      [
+        'moved-out 내부의 알 수 없는 필드',
+        { change: 'moved-out', direction: '북', announce: true, extra: 1 },
+      ],
+      ['boolean이 아닌 announce', { change: 'entered', announce: 'yes' }],
+      ['string이 아닌 direction', { change: 'moved-out', direction: 1, announce: true }],
+    ])('%s를 거부한다', (_label, change) => {
+      expect(serverEventSchema.safeParse({ ...basePresence, change }).success).toBe(false)
+    })
+
+    it.each([
+      ['subject.kind가 creature', { kind: 'creature', characterId: 'char-1', name: '타이' }],
+      ['subject.kind 누락', { characterId: 'char-1', name: '타이' }],
+      ['빈 characterId', { kind: 'player', characterId: '', name: '타이' }],
+      ['빈 name', { kind: 'player', characterId: 'char-1', name: '' }],
+      [
+        'subject의 알 수 없는 필드',
+        { kind: 'player', characterId: 'char-1', name: '타이', extra: 1 },
+      ],
+    ])('%s를 거부한다', (_label, subject) => {
+      expect(serverEventSchema.safeParse({ ...basePresence, subject }).success).toBe(false)
+    })
+
+    it.each([-1, 1.5])('roomId %s를 거부한다 (음수·비정수)', (roomId) => {
+      expect(serverEventSchema.safeParse({ ...basePresence, roomId }).success).toBe(false)
+    })
+
+    it('최상위의 알 수 없는 키를 거부한다 (strict)', () => {
+      expect(serverEventSchema.safeParse({ ...basePresence, extra: 1 }).success).toBe(false)
+    })
+
+    it.each(['roomId', 'subject', 'change'] as const)('%s가 없으면 거부한다 (required)', (key) => {
+      const { [key]: _omitted, ...without } = basePresence
+      expect(serverEventSchema.safeParse(without).success).toBe(false)
     })
   })
 
@@ -570,7 +653,7 @@ describe('serverEventSchema (server→client 봉투)', () => {
       type: 'progress:studied',
       spellNo: 7,
       spellName: '화염구',
-      // characterSchema.spells와 동일한 형상 — uint8[16] = 128비트 주문 지식 비트마스크.
+      // characterSchema.spells와 동일한 형태 — uint8[16] = 128비트 주문 지식 비트마스크.
       spells: [128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       consumedObjectId: 'obj-1',
     }
@@ -586,7 +669,7 @@ describe('serverEventSchema (server→client 봉투)', () => {
       }
     })
 
-    /** 첫 원소만 갈아끼운 길이 16 비트마스크 — 원소 값역 케이스의 입력. */
+    /** 첫 원소만 갈아끼운 길이 16 비트마스크 — 원소 값 범위 케이스의 입력. */
     const withFirstSpellByte = (value: number): number[] => [
       value,
       ...new Array<number>(15).fill(0),
@@ -628,13 +711,13 @@ describe('serverEventSchema (server→client 봉투)', () => {
     })
 
     /**
-     * 영속 스키마와의 형상 드리프트 차단 — 와이어 `spells`는 `characterSchema.spells`를 파생하지 않고
+     * 영속 스키마와의 형태 드리프트 차단 — 와이어 `spells`는 `characterSchema.spells`를 파생하지 않고
      * 따로 선언하므로(프로토콜은 schema/와 별개 모듈), **두 스키마를 함께 검사하는 이 테스트만이**
-     * 형상 일치를 실제로 강제한다. 리터럴 16을 리터럴 16과 대조하는 테스트는 이 보장을 주지 못한다.
+     * 형태 일치를 실제로 강제한다. 리터럴 16을 리터럴 16과 대조하는 테스트는 이 보장을 주지 못한다.
      *
      * 같은 입력 집합을 양쪽에 통과시켜 accept/reject가 일치하는지 본다 — 한쪽 폭이 바뀌면 갈라진다.
      */
-    it('spells 형상이 characterSchema.spells와 일치한다 (드리프트 차단)', () => {
+    it('spells 형태가 characterSchema.spells와 일치한다 (드리프트 차단)', () => {
       const spellsField = characterSchema.shape.spells
       const cases: readonly number[][] = [
         new Array<number>(15).fill(0),
