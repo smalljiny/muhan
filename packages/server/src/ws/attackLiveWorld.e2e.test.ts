@@ -57,8 +57,12 @@ import {
 // 형제 스위트는 `onRoomEntered`/`onRoomLeft`를 `vi.fn()` stub으로 채우고 월드 런타임을 조립하지 않는다.
 // 이 스위트는 boot(`index.ts`)와 같이 `createWorldRuntime`을 세워 훅·`spawnTemplates`·`alloc`을 그
 // 산출물에서 가져오고(사망 seam이 실제로 소비하는 원재료다), `WorldClock`에 슬롯을 등록해 1Hz 틱을
-// 수동 실행한다. 그래야 "월드 틱이 도는데도 몬스터가 반격하지 않는다"(#99가 이 토픽 밖)를 회귀로
-// 잠글 수 있다 — 틱이 아예 없으면 그 단언은 공허하다.
+// 수동 실행한다. 단, 이 묶음은 `bindCombatTick`을 싣지 않고 worldRuntime에도 `onCombatTick`을 넘기지 않는
+// **부분 조립**이다. 몬스터 반격의 실제 연결 지점은 `liveWorldWiring.ts`의 combatTick 조립(묶음
+// `bindCombatTick`에 핸들러를 꽂는다)과 `index.ts`의 바인딩 슬롯(`createCombatTickBinding` → worldRuntime
+// `onCombatTick`)이고, 그 프로덕션 조립 경로는 `creatureTickLiveWorld.integration.test.ts`가 검증한다. 여기서는
+// "`bindCombatTick` 미주입 부분 조립은 월드 틱이 돌아도 반격하지 않는다"를 회귀로 잠근다 — 틱이 아예
+// 없으면 그 단언은 공허하다.
 //
 // ⚠ 여기서도 boot의 묶음 조립 자체는 미검증이다 — 이 파일 역시 `LiveWorldWiringBundle` 리터럴을 자체
 // 구성하므로, boot가 각 필드에 무엇을 싣는지는 검출되지 않는다(`index.ts`는 커버리지 제외 연결 코드라
@@ -506,7 +510,9 @@ describe('공격 end-to-end (실 소켓 · 실 월드 틱)', () => {
     expect(h.room.creatures).toHaveLength(0)
   })
 
-  it('월드 틱이 도는 동안에도 몬스터는 반격하지 않는다 (#99 범위 밖 회귀 잠금)', async () => {
+  it('`bindCombatTick` 미주입 부분 조립은 월드 틱이 돌아도 반격하지 않는다', async () => {
+    // 이 하네스는 묶음에 `bindCombatTick`을 싣지 않는다 — 실제 연결(liveWorldWiring의 combatTick 조립 →
+    // index.ts 바인딩 슬롯)이 빠진 부분 조립에서 creatureTick의 `onCombatTick`이 기본 no-op으로 남는지 잠근다.
     const { h, url } = await startTracked(survivorCreature())
 
     const client = trackedClient(url)
@@ -528,8 +534,8 @@ describe('공격 end-to-end (실 소켓 · 실 월드 틱)', () => {
     // ── 3) 틱이 **공허하지 않았다**는 증거 두 가지. ─────────────────────────────────
     //  (a) creatureTick이 이 몬스터를 실제로 처리했다 — next-action이 스케줄됐다.
     //  (b) 적 리스트가 비어 있지 않아 §3.5 조기종료 게이트를 통과했다 = 전투 디스패치 지점까지
-    //      도달했다. 그 지점의 seam(`onCombatTick`)이 프로덕션 기본값 no-op이라는 것이 #99가 아직
-    //      연결되지 않았다는 사실 그 자체다.
+    //      도달했다. 이 부분 조립에서는 그 지점의 seam(`onCombatTick`)이 기본값 no-op이다 — 프로덕션은
+    //      index.ts 바인딩 슬롯에 liveWorldWiring이 combatTick 핸들러를 꽂아 이 지점을 연결한다.
     const live = h.room.creatures[0]
     expect(live?.nextActionAt).toBeGreaterThan(0)
     expect(live?.enemies).toContain(CHAR)
