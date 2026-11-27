@@ -16,7 +16,7 @@
 - `src/App.tsx` — 전송 셸 최상위. `WsClient`를 마운트 동안 단일 인스턴스로 유지하고 스냅샷을 구독해 하위 컴포넌트에 데이터·콜백을 주입한다. 게임 소켓 URL을 `window.location`에서 파생한다(하드코딩 host 없음 — same-origin이라야 쿠키가 upgrade에 첨부된다).
 - `src/main.tsx` — React 마운트 엔트리(`#root`).
 - `src/components/EventLog.tsx` — 수신 `ServerEvent`를 원본(type + 직렬화 payload)으로 순차 렌더하는 순수 표시 컴포넌트.
-- `src/components/CommandInput.tsx` — 텍스트 입력 폼. submit 시 주입된 `onSubmitEcho` 콜백을 호출한다.
+- `src/components/CommandInput.tsx` — 텍스트 입력 폼. submit 시 주입된 `onSubmitEcho` 콜백을 호출한다. `disabled`가 참이면 제출 버튼을 비활성화하고 submit 핸들러도 송신하지 않는다(입력란은 유지). `App`은 전송 `status`가 `ready`가 아닐 때 `disabled`를 넘긴다([`session-entry.md`](session-entry.md)).
 - `src/components/ConnectionStatus.tsx` — 연결 상태 표시 + 수동 재연결 버튼(`onReconnect` 콜백).
 - `vite.config.ts` — React 플러그인, dev 프록시(`/game`·`/dev/login`), `shared`/`shared/protocol` 소스 alias.
 - `vitest.config.ts` — jsdom + React Testing Library 유닛 하네스, 동일 `shared` 소스 alias, 커버리지 80%+ 게이트.

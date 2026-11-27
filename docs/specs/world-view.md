@@ -67,7 +67,7 @@ WsClientSnapshot
 1. `dispatch`의 `world:room` case가 `type`을 뺀 나머지를 `room` 스냅샷으로 **교체**한다(누적이 아니라 치환 — 방을 옮기면 이전 방은 사라진다). 갱신은 전부 새 객체 재할당이다.
 2. `session:entered`·`session:resumed` 양쪽이 `characterId`를 보관한다(본인 제외용).
 3. `App`이 `phase === 'entered' | 'resumed'` 분기에서 `snapshot.room !== null`일 때만 `RoomPanel`을 `EventLog` **위에** 렌더한다.
-4. 출구 버튼 클릭 → `WsClient.move(direction)` → `clientCommandSchema` 검증 → `world:move{direction}` 송신. 검증 실패 시 프레임을 보내지 않고 `false`를 돌려준다.
+4. 출구 버튼 클릭 → `WsClient.move(direction)` → `clientCommandSchema` 검증 → `world:move{direction}` 송신. 검증 실패 시 프레임을 보내지 않고 `false`를 돌려준다. 전송 `status`가 `ready`가 아니면 `App`이 `RoomPanel`에 `disabled`를 넘겨 출구 버튼을 비활성화하므로 이 경로가 시작되지 않는다([`session-entry.md`](session-entry.md) §제약사항).
 5. 서버가 응답 `world:room`을 보내면 1번으로 돌아가 패널이 갱신된다.
 6. `world:presence`는 `transport/presence.ts`의 `applyPresence`가 현재 방 상태에 불변 반영한다. `roomId`가 현재 방과 다르거나 `room === null`이면 무시한다. 점유자 목록은 `announce`와 무관하게 항상 갱신하고(`moved-in`·`entered`는 없을 때만 추가, `moved-out`·`exited`는 제거), `announce: true`인 변화만 원본 문장을 `RoomState.notices`에 덧붙여 최근 `NOTICE_LIMIT`(20)개만 남긴다. 문장은 `<이름>님이 <방향>쪽으로 갔습니다.`(`moved-out`)와 `<이름>님이 도착하였습니다.`(`moved-in`·`entered`)다. 원본이 항상 `님`을 붙이므로 조사를 계산하지 않고, `exited`는 문장이 없다.
 7. `notices`는 같은 방을 가리키는 `world:room`(재조회)에서는 유지하고, 다른 방이면 비운다. `RoomPanel`이 알림 목록을 렌더한다.
@@ -116,7 +116,7 @@ WsClientSnapshot
 - **방향 별칭 단축키 없음** — numpad·자모·대각선은 향후 사용자 커스텀 단축키 기능이 흡수한다.
 - **디자인 시스템 없음** — 기능-우선이며 스타일은 FE-6 담당이다. `RoomPanel`은 `aria-label`만 두고 클래스·스타일을 두지 않는다.
 - **관찰자 비의존 변환** — 점유자 은신 필터·광원/실명 게이트를 구현하지 않는다. 현재 그 상태를 세울 라이브 경로가 없어 누출이 없으나 `magic/`·`combat/` 연결이 전제를 깬다([`movement-rooms.md`](movement-rooms.md)).
-- **오류 배너가 해제되지 않는다** — `lastError`를 세팅하는 경로만 있고 해제 경로가 없다. 출구 버튼이 잠긴 문 거부(`rule_rejected`)를 일상 이벤트로 만들면서, 한 번 거부되면 이후 이동에 성공해도 배너가 남는다. 선재 기전이나 E11의 상호작용 모델에서 드러났다.
+- **오류 배너 수명은 세션 진입 계층이 정한다** — 출구 버튼이 잠긴 문 거부(`rule_rejected`)를 일상 이벤트로 만들지만, 이 오류는 일시(transient) 오류라 이후 이동 성공(`world:room`)이 배너를 지운다. 사용자는 배너의 `닫기`로도 지울 수 있다. 수명 분류·해제 이벤트 집합·교체 규칙은 [`session-entry.md`](session-entry.md) §에러 표면화가 기준이다.
 - **`EventLog` 누적 비용 재정량화** — `world:room`이 세션당 1건에서 **이동 횟수 비례**로, 페이로드도 방 전체 스냅샷으로 커졌다. `recordEvent`가 상한 없이 누적하고 `EventLog`가 매 렌더마다 전량을 `JSON.stringify`한다(메모이제이션 0건). 이 계층은 `EventLog`를 변경하지 않으므로 별도 항목이다.
 
 ## 관련 문서
