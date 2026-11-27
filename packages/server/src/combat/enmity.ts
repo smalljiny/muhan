@@ -28,6 +28,18 @@ export function registerEnemy(creature: CreatureInstance, attackerId: string): v
   creature.enemies.push(attackerId)
 }
 
+/**
+ * 적대 해제 — 오라클 del_enm_crt. 리스트에 있으면 그 항목만 빼고, 없으면 아무것도 하지 않는다.
+ *
+ * `registerEnemy`와 대칭으로 라이브 가변 배열을 in-place splice해 참조를 보존하며, 남은 적의 순서는
+ * 그대로다. 데미지 원장은 건드리지 않는다 — 원장 정리는 이 모듈 범위 밖이다(몬스터 사망 시 폐기).
+ */
+export function removeEnemy(creature: CreatureInstance, characterId: string): void {
+  const index = creature.enemies.indexOf(characterId)
+  if (index < 0) return
+  creature.enemies.splice(index, 1)
+}
+
 /** attackerId별 누적 데미지 원장. */
 export type DamageLedger = Map<string, number>
 

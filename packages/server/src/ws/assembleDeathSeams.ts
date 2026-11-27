@@ -1,6 +1,12 @@
+import type { RoomNode } from 'shared'
+import type { CombatRegistry } from '../combat/combatRegistry.js'
 import type { CreatureLedgers } from '../combat/creatureLedgers.js'
 import type { ResolveContext } from '../combat/resolveAttack.js'
 import { distributeCreatureDeath } from '../combat/deathDistribution.js'
+import { removeEnemy } from '../combat/enmity.js'
+import type { PlayerCombatState } from '../combat/playerState.js'
+import { applyPlayerDeath, DEFAULT_REVIVE_ROOM } from '../progression/death.js'
+import type { MoveActor, TryMoveDeps } from '../world/tryMove.js'
 import { onCreatureDeath, type CreatureDeathDeps } from '../world/creatureDeath.js'
 import type { LiveCharacterRegistry } from '../world/liveCharacterRegistry.js'
 import type { MarkCharacterDirty } from '../world/markCharacterDirty.js'
@@ -50,14 +56,27 @@ import type { MarkCharacterDirty } from '../world/markCharacterDirty.js'
  * 어휘에 방 바닥 아이템을 줍는 수단이 없어서, 넣으면 아무도 회수할 수 없는 아이템만 방마다 쌓인다.
  * 줍기 명령이 연결되는 시점에 이 지점에서 투입한다.
  *
- * ## firePlayerDeath는 로그만 남긴다
- * 이 토픽에서는 구조적으로 도달 불가하다 — 몬스터가 반격하지 않고(몬스터 전투 tick 미연결) PvP도
- * 연결돼 있지 않다. 그래서 호출되면 그 자체가 조립 오류다. 흔적만 남기고 상태는 건드리지 않는다.
+ * ## firePlayerDeath는 상태만 바꾼다 (스펙 §3.5)
+ * 몬스터 반격·시전으로 플레이어 HP가 1 미만이 되면 이 seam이 다음 순서로 상태를 바꾼다:
+ *   0. 부활 방을 `resolveRoom`으로 **먼저** 조회한다. 부팅이 존재를 확인하므로(D9) 실패는 조립
+ *      오류다 — `logger.error`만 남기고 아무것도 바꾸지 않는다. 문서의 방 번호와 점유가 갈라지지 않게
+ *      하려는 선행 조건이다. 라이브 엔트리가 없을 때도 같은 이유로 로그만 남긴다.
+ *   1. 방 안 모든 몬스터의 `enemies`에서 사망자를 뺀다(오라클 `del_enm_crt`). 원장은 그대로 둔다.
+ *   2. 라이브 문서에 `applyPlayerDeath`(경험치 손실·부활 방·hp/mp 풀회복)를 적용한다.
+ *   3. 출발 방과 부활 방이 다르면 점유를 옮기고 `onRoomLeft`·`onRoomEntered` 훅을 부른다.
+ *   4. 풀회복 값으로 **새** 전투상태 객체를 등록한다. 인자 `dead`는 바꾸지 않는다 — 이번 라운드
+ *      보고서의 시전 피해 산출(D5)과 반격 자격 판정이 옛 값을 계속 봐야 한다.
+ *   5. 라이브 레지스트리에 재등록하고 `markCharacterDirty`를 1회 부른다.
  *
- * ⚠ **규칙은 이미 이식돼 있다 — 다시 만들지 마라.** `progression/death.ts`의 `applyPlayerDeath`가
- * exp 손실(레벨대별 공식·하한 클램프)·부활 방 이동·hp/mp 풀회복을 순수 함수로 갖고 있고 단위
- * 테스트도 붙어 있다(non-test caller 0건). 아직 없는 것은 **장비 낙하** 하나다. 여기서 지금 그것을
- * 부르지 않는 이유는 규칙이 없어서가 아니라 이 토픽 범위(스펙 §5)가 아니어서다 — 연결은 #99가 한다.
+ * ## 전송하지 않는다 (D10)
+ * 이 seam은 어떤 이벤트도 보내지 않는다 — deps에 전송 함수 자체가 없다. 시전 치사는 라운드 도중에
+ * 이 seam을 실행하므로 여기서 보내면 `combat:round` → 스탯 → 방 뷰 → 이동 알림 순서가 뒤집힌다.
+ * presence를 포함한 모든 전송은 라운드가 끝난 뒤 통지기가 몰아서 한다. 훅(`onRoomLeft`·
+ * `onRoomEntered`)은 방 활성화·리스폰 같은 월드 상태 훅이지 전송 경로가 아니다.
+ *
+ * ## 장비 낙하·전체 방송은 옮기지 않는다 (D3)
+ * 오라클 `creature.c` die의 장비 낙하는 줍기 명령이 없어 회수할 수 없고(D8과 같은 이유), 사망 전체
+ * 방송은 전역 채널이 없다(E7 #37). 둘 다 알려진 차이로 남긴다.
  */
 
 /** 조립 오류를 기록하는 최소 logger seam(console 금지 — save/logger·EntryLogger 관례 미러). */
@@ -80,6 +99,21 @@ export interface DeathSeamDeps {
   readonly logger: DeathSeamLogger
   /** 몬스터 사망 1건마다 실제로 경험치가 적립된 라이브 플레이어 id 목록을 받는 선택 관찰자(D11). */
   readonly onCreatureDeathAwards?: (awardedPlayerIds: readonly string[]) => void
+  /** 플레이어 사망 처리 의존성(스펙 §3.5). 전송 함수는 의도적으로 없다(D10). */
+  readonly playerDeathDeps: PlayerDeathDeps
+}
+
+/**
+ * 플레이어 사망 seam 의존성. 점유 이동 훅은 `TryMoveDeps`에서 그대로 가져와 시그니처가 어긋나지 않게 한다
+ * (프로덕션 묶음의 훅을 그대로 넘길 수 있다).
+ */
+export interface PlayerDeathDeps extends Pick<TryMoveDeps, 'onRoomEntered' | 'onRoomLeft'> {
+  /** 방 번호 → 라이브 방 노드. 부활 방 조회에 쓴다. */
+  readonly resolveRoom: (roomId: number) => RoomNode | undefined
+  /** 새 전투상태를 등록할 레지스트리 — 공격 핸들러와 같은 인스턴스여야 한다. */
+  readonly combatRegistry: Pick<CombatRegistry, 'register'>
+  /** 부활 방 번호. 미지정 시 `DEFAULT_REVIVE_ROOM`(1008). */
+  readonly reviveRoom?: number
 }
 
 /**
@@ -144,11 +178,78 @@ export function assembleDeathSeams(deps: DeathSeamDeps): DeathSeams {
     },
 
     firePlayerDeath(dead, room, now) {
-      // 도달 불가 경로 — 상태를 바꾸지 않고 흔적만 남긴다(파일 상단 참조, 실 처리는 #99).
-      deps.logger.error(
-        { characterId: dead.characterId, roomId: room.roomId, now },
-        'firePlayerDeath: 플레이어 사망 처리는 아직 이식되지 않았다(조립 오류)',
-      )
+      firePlayerDeathImpl(deps, dead, room, now)
     },
   }
+}
+
+/** 플레이어 사망 seam 본체 — 단계 번호는 파일 상단 "firePlayerDeath는 상태만 바꾼다"와 같다. */
+function firePlayerDeathImpl(
+  deps: DeathSeamDeps,
+  dead: PlayerCombatState,
+  room: RoomNode,
+  now: number,
+): void {
+  const { playerDeathDeps } = deps
+  const reviveRoomId = playerDeathDeps.reviveRoom ?? DEFAULT_REVIVE_ROOM
+  const characterId = dead.characterId
+
+  // (0) 선행 조건 — 부활 방과 라이브 엔트리를 상태 변경 전에 확인한다. 실패하면 아무것도 바꾸지 않는다.
+  const reviveRoom = playerDeathDeps.resolveRoom(reviveRoomId)
+  if (reviveRoom === undefined) {
+    deps.logger.error(
+      { characterId, roomId: room.roomId, reviveRoomId, now },
+      'firePlayerDeath: 부활 방을 찾을 수 없다(조립 오류)',
+    )
+    return
+  }
+  const live = deps.liveRegistry.get(characterId)
+  if (live === undefined) {
+    deps.logger.error(
+      { characterId, roomId: room.roomId, now },
+      'firePlayerDeath: 사망자의 라이브 엔트리가 없다(조립 오류)',
+    )
+    return
+  }
+
+  // (1) 방 안 몬스터 적 목록에서 사망자를 뺀다(del_enm_crt).
+  room.creatures.forEach((creature) => removeEnemy(creature, characterId))
+
+  // (2) 경험치 손실·부활 방·풀회복.
+  const character = applyPlayerDeath(live.character, { reviveRoom: reviveRoomId })
+
+  // (3) 점유 이동 — 같은 방이면 아무것도 하지 않는다.
+  if (room.roomId !== reviveRoom.roomId) {
+    movePlayerToReviveRoom(playerDeathDeps, room, reviveRoom, characterId)
+  }
+
+  // (4) 새 전투상태 — 인자 dead는 바꾸지 않는다(D5·반격 자격 판정이 옛 값을 본다).
+  playerDeathDeps.combatRegistry.register({
+    ...dead,
+    hpCurrent: character.hpCurrent,
+    mpCurrent: character.mpCurrent,
+  })
+
+  // (5) 라이브 재등록 + 영속 마킹. applyPlayerDeath가 최대치로 풀회복했으므로 applyVitals 클램프가 필요 없다.
+  deps.liveRegistry.register({ ...live, character })
+  deps.markCharacterDirty(character._id, character)
+}
+
+/**
+ * 출발 방 점유 제거 → onRoomLeft → 부활 방 점유 추가 → onRoomEntered (점유 가변 carve-out).
+ *
+ * `tryMove`(5b~5d)와 같은 순서·같은 actor 관례를 따른다 — actor는 이동 전 위치(출발 방)를 싣고, 점유
+ * 제거가 `onRoomLeft`보다 먼저여야 빈 방 비활성화가 성립한다.
+ */
+function movePlayerToReviveRoom(
+  playerDeathDeps: PlayerDeathDeps,
+  from: RoomNode,
+  to: RoomNode,
+  characterId: string,
+): void {
+  const actor: MoveActor = { characterId, currentRoomId: from.roomId }
+  from.occupants.delete(characterId)
+  playerDeathDeps.onRoomLeft(from, actor)
+  to.occupants.add(characterId)
+  playerDeathDeps.onRoomEntered(to, actor)
 }

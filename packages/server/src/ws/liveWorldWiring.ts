@@ -392,6 +392,14 @@ export function createLiveWorldWiring(
     markCharacterDirty,
     creatureDeathDeps: { templates: bundle.spawnTemplates, alloc: bundle.alloc },
     logger: bundle.logger,
+    // 플레이어 사망(§3.5) — 공격 핸들러와 같은 전투 레지스트리·방 해석기·이동 훅을 넘긴다. 전송은
+    // 사망 seam이 하지 않는다(D10).
+    playerDeathDeps: {
+      resolveRoom: resolveRoomById,
+      combatRegistry,
+      onRoomEntered: bundle.onRoomEntered,
+      onRoomLeft: bundle.onRoomLeft,
+    },
   })
 
   // 공격 의존 — 신규 원재료는 없다. 사망 seam·원장·전투 레지스트리는 위에서 1회씩 만든 것이고,
