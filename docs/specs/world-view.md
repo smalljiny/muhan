@@ -117,7 +117,7 @@ WsClientSnapshot
 - **디자인 시스템 없음** — 기능-우선이며 스타일은 FE-6 담당이다. `RoomPanel`은 `aria-label`만 두고 클래스·스타일을 두지 않는다.
 - **관찰자 비의존 변환** — 점유자 은신 필터·광원/실명 게이트를 구현하지 않는다. 현재 그 상태를 세울 라이브 경로가 없어 누출이 없으나 `magic/`·`combat/` 연결이 전제를 깬다([`movement-rooms.md`](movement-rooms.md)).
 - **오류 배너 수명은 세션 진입 계층이 정한다** — 출구 버튼이 잠긴 문 거부(`rule_rejected`)를 일상 이벤트로 만들지만, 이 오류는 일시(transient) 오류라 이후 이동 성공(`world:room`)이 배너를 지운다. 사용자는 배너의 `닫기`로도 지울 수 있다. 수명 분류·해제 이벤트 집합·교체 규칙은 [`session-entry.md`](session-entry.md) §에러 표면화가 기준이다.
-- **`EventLog` 누적 비용 재정량화** — `world:room`이 세션당 1건에서 **이동 횟수 비례**로, 페이로드도 방 전체 스냅샷으로 커졌다. `recordEvent`가 상한 없이 누적하고 `EventLog`가 매 렌더마다 전량을 `JSON.stringify`한다(메모이제이션 0건). 이 계층은 `EventLog`를 변경하지 않으므로 별도 항목이다.
+- **`EventLog` 누적 비용 (해소)** — `world:room`은 세션당 1건에서 **이동 횟수 비례**로, 페이로드도 방 전체 스냅샷으로 커졌다. 이제 `WsClient`가 이벤트 기록을 최근 200건으로 상한하고, `EventLog`는 `seq` 키 행 메모로 같은 마운트에서 유지되는 행을 다시 직렬화하지 않아 비용이 일정하다. `world:room`은 원시 JSON 대신 `<방 이름> (#<roomId>)` 한 줄로 표시된다(가상화·디바운스 없음). 기준은 [`transport-shell.md`](transport-shell.md)다.
 
 ## 관련 문서
 

@@ -12,10 +12,12 @@
 
 ### 클라이언트 (`packages/client`)
 
-- `src/transport/wsClient.ts` — 프레임워크 비의존 순수 TS `WsClient`. 연결/해제/수동 재연결, 송신 전 `clientCommandSchema` 검증, 수신 후 `serverEventSchema` parse, hello→ready 버전 협상, `sendEcho(text)` 송신을 제공한다. `SocketFactory`(테스트가 fake `SocketLike`를 주입하는 확장 지점(seam))로 실제 `WebSocket` 생성을 감싸고, 불변 `WsClientSnapshot`을 `subscribe`/`getSnapshot`으로 노출한다(React `useSyncExternalStore` 호환). 세션 진입 서브상태(`session`)와 사용자 조작 기반 명령(`selectCharacter`·`replyPrompt`)은 E10이 확장한다([`session-entry.md`](session-entry.md)).
+- `src/transport/wsClient.ts` — 프레임워크 비의존 순수 TS `WsClient`. 연결/해제/수동 재연결, 송신 전 `clientCommandSchema` 검증, 수신 후 `serverEventSchema` parse, hello→ready 버전 협상, `sendEcho(text)` 송신을 제공한다. `SocketFactory`(테스트가 fake `SocketLike`를 주입하는 확장 지점(seam))로 실제 `WebSocket` 생성을 감싸고, 불변 `WsClientSnapshot`을 `subscribe`/`getSnapshot`으로 노출한다(React `useSyncExternalStore` 호환). 세션 진입 서브상태(`session`)와 사용자 조작 기반 명령(`selectCharacter`·`replyPrompt`)은 E10이 확장한다([`session-entry.md`](session-entry.md)). 수신 이벤트 기록 `events`는 `LoggedEvent { seq, event }`의 최근 `EVENT_LOG_LIMIT`(200)건만 유지한다 — `seq`는 인스턴스 단위로 0부터 단조 증가하며 재연결에도 이어지고(로그도 비우지 않는다), 상한으로 앞 항목이 빠져도 남은 항목의 `seq`·참조는 바뀌지 않는다. 전송 오류 `errors`는 최근 `TRANSPORT_ERROR_LIMIT`(50)건만 들어온 순서대로 유지한다. 상태 갱신(`dispatch`)은 원본 `ServerEvent`를 받는다.
+- `src/transport/appendBounded.ts` — 끝에 항목을 덧붙이고 최근 `limit`건만 남긴 새 배열을 돌려주는 순수 헬퍼(입력 불변, `limit`이 1 이상 정수가 아니면 `RangeError`). `events`·`errors` 기록과 `presence.ts`의 통지 목록이 공유한다.
 - `src/App.tsx` — 전송 셸 최상위. `WsClient`를 마운트 동안 단일 인스턴스로 유지하고 스냅샷을 구독해 하위 컴포넌트에 데이터·콜백을 주입한다. 게임 소켓 URL을 `window.location`에서 파생한다(하드코딩 host 없음 — same-origin이라야 쿠키가 upgrade에 첨부된다).
 - `src/main.tsx` — React 마운트 엔트리(`#root`).
-- `src/components/EventLog.tsx` — 수신 `ServerEvent`를 원본(type + 직렬화 payload)으로 순차 렌더하는 순수 표시 컴포넌트.
+- `src/components/EventLog.tsx` — `WsClient`가 기록한 최근 200건의 `LoggedEvent`를 순차 렌더하는 순수 표시 컴포넌트. 행은 `seq`를 키로 쓰는 `React.memo` 행(`EventLogRow`)이고 표시 문자열은 `useMemo`로 계산해, 같은 마운트에서 유지되는 행은 새 이벤트가 덧붙어도 다시 직렬화하지 않는다(`App`의 `entered`/`resumed` 분기를 벗어났다 돌아와 재마운트되는 경우는 보장 밖). 각 행은 `<span>type</span> <code>표시 문자열</code>`이다.
+- `src/components/describeEvent.ts` — 행 표시 문자열을 만드는 순수 함수. `world:room`은 `<방 이름> (#<roomId>)` 한 줄로 요약하고(직렬화하지 않음), 그 밖의 타입은 원시 JSON(`JSON.stringify(event)`)을 돌려준다.
 - `src/components/CommandInput.tsx` — 텍스트 입력 폼. submit 시 주입된 `onSubmitEcho` 콜백을 호출한다. `disabled`가 참이면 제출 버튼을 비활성화하고 submit 핸들러도 송신하지 않는다(입력란은 유지). `App`은 전송 `status`가 `ready`가 아닐 때 `disabled`를 넘긴다([`session-entry.md`](session-entry.md)).
 - `src/components/ConnectionStatus.tsx` — 연결 상태 표시 + 수동 재연결 버튼(`onReconnect` 콜백).
 - `vite.config.ts` — React 플러그인, dev 프록시(`/game`·`/dev/login`), `shared`/`shared/protocol` 소스 alias.
@@ -64,9 +66,9 @@ Vite 프록시(`vite.config.ts`)는 CSWSH를 브라우저 실제 Origin으로 �
 
 ### G3 — 프로토콜 왕복
 
-`WsClient`는 모든 송신 `ClientCommand`를 `clientCommandSchema.safeParse`로, 모든 수신 프레임을 `serverEventSchema.safeParse`로 검증한다. 검증에 실패하면 throw하지 않고 관측 가능한 `WsClientSnapshot.errors`에 누적한다 — 상태 전이·이벤트 기록에 도달하지 않으므로 실패가 무증상으로 묻히지 않는다.
+`WsClient`는 모든 송신 `ClientCommand`를 `clientCommandSchema.safeParse`로, 모든 수신 프레임을 `serverEventSchema.safeParse`로 검증한다. 검증에 실패하면 throw하지 않고 관측 가능한 `WsClientSnapshot.errors`에 누적한다(최근 `TRANSPORT_ERROR_LIMIT`건) — 상태 전이·이벤트 기록에 도달하지 않으므로 실패가 무증상으로 묻히지 않는다.
 
-서버 세션 FSM([`auth-session.md`](auth-session.md))은 `command` 상태에 도달해야 `debug:echo`를 라우팅한다. E9-1은 이 경로를 성립시키려 `session:characterList` 수신 시 첫 캐릭터를 1회 자동 선택하는 스텁을 두었으나, E10이 이를 사용자 조작 기반 캐릭터 선택·생성 UI로 대체했다([`session-entry.md`](session-entry.md)) — 목록 렌더·선택·생성/재개는 이제 그 계층이 담당한다. `session:entered`/`session:resumed` 수신 시 상태를 `ready`로 전환한다(echo 가능). `EventLog`는 수신 이벤트를 원본으로 표시하는 진입 후 placeholder 셸의 일부다.
+서버 세션 FSM([`auth-session.md`](auth-session.md))은 `command` 상태에 도달해야 `debug:echo`를 라우팅한다. E9-1은 이 경로를 성립시키려 `session:characterList` 수신 시 첫 캐릭터를 1회 자동 선택하는 스텁을 두었으나, E10이 이를 사용자 조작 기반 캐릭터 선택·생성 UI로 대체했다([`session-entry.md`](session-entry.md)) — 목록 렌더·선택·생성/재개는 이제 그 계층이 담당한다. `session:entered`/`session:resumed` 수신 시 상태를 `ready`로 전환한다(echo 가능). `EventLog`는 수신 이벤트를 type + 원시 JSON으로 표시하는(`world:room`만 한 줄 요약) 진입 후 placeholder 셸의 일부다.
 
 `ready` 상태에서 `CommandInput`이 텍스트를 `sendEcho(text)`로 넘기면 `debug:echo` ClientCommand가 송신되고, 서버가 되돌린 `debug:echo:result`가 `EventLog`에 나타나 왕복을 증명한다.
 
