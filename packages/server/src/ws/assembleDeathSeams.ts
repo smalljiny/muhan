@@ -45,6 +45,12 @@ import type { MarkCharacterDirty } from '../world/markCharacterDirty.js'
  * 경험치는 이미 올라가 있다. 이 seam은 여전히 아무것도 전송하지 않는다 — 수령자에게 스탯을 보내는
  * 일은 관찰자를 소비하는 쪽(라운드 통지기)이 맡는다. 관찰자를 주지 않으면 동작은 이전과 같다.
  *
+ * 오프너(`ws/handlers/attack.ts`)와 combatTick은 **같은** seam 인스턴스를 쓰므로 오프너 처치에서도
+ * 관찰자가 실행된다. 프로덕션 관찰자는 tick 범위 수집기(`ws/tickAwardCollector.ts`의 `record`)이고,
+ * 수집기는 wiring의 combatTick 래퍼가 `begin()`~`end()`로 켠 동안에만 기록한다. 오프너 처치 시점에는
+ * 수집기가 꺼져 있어 기록이 남지 않는다 — 다음 tick 라운드의 통지기가 오프너 수령자에게 `character:stats`를
+ * 덧보내지 않는다. 오프너 처치의 통지는 지금처럼 공격 핸들러 반환이 맡는다(스펙 §3.4).
+ *
  * ## alignmentDelta를 적용하지 않는다 (D7)
  * `DeathAward.alignmentDelta`는 계산해 받지만 캐릭터에 더하지 않는다. 오라클의 alignment 값 범위는
  * `-1000..+1000`인데 현 구현의 `Character.alignment`는 `[0,2]`이고(#123), 학습 게이트 등이 그 1|2
