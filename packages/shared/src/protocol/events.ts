@@ -50,6 +50,18 @@ const occupantRefShape = {
 }
 
 /**
+ * 한 번의 타격 결과 필드 — combat:round의 근접 피격(`received` melee)과 반격(`counter`)이 같은 형태를
+ * 쓰도록 한 곳에서 정의한다(occupantRefShape 관용구). 필드 의미·damage 하한 미설정은 combat:attacked의
+ * 같은 이름 필드를 따른다.
+ */
+const strikeResultShape = {
+  hit: z.boolean(),
+  damage: z.int(),
+  critical: z.boolean(),
+  fumble: z.boolean(),
+}
+
+/**
  * server→client 이벤트 봉투 — 판별 유니온의 단일 출처.
  *
  * top-level `type` 리터럴로 이벤트를 판별한다(objectOwnerSchema 관용구와 동일). 각 variant는
@@ -257,6 +269,33 @@ export const serverEventSchema = z.discriminatedUnion('type', [
         weaponDropped: z.boolean(),
       }),
     ),
+  }),
+  // 몬스터 tick 라운드 결과 통지 — 몬스터가 행동한 라운드마다 라운드 수신자(표적·반격자) 각자에게
+  // 1건씩 발생시킨다. correlationId는 싣지 않는다(조작 응답이 아닌 tick 통지 — 상태 이벤트).
+  //
+  // 와이어 계약은 **수신자별 투영**이다 — 같은 라운드라도 수신자마다 값이 다르다. 서버 통지기가
+  // 라운드 보고서의 표적 id·반격 목록으로 수신자마다 received·counter·youDied를 만든다.
+  // - received: 수신자가 표적이 아니면(반격만 한 플레이어) null. 표적이면 몬스터 행동 — 근접은
+  //   kind 'melee'(빗맞음은 hit false·damage 0, 사망 취소 상태 표적도 damage 0), 시전은 kind 'cast'에
+  //   표적이 실제로 잃은 HP(피해 없는 시전은 0)만 싣는다.
+  // - counter: 수신자가 이번 라운드에 반격을 굴리지 않았으면 null.
+  // - monsterDied: 이번 라운드에 몬스터가 죽었는지. youDied: 수신자가 이번 라운드에 사망 seam을 거쳤는지.
+  //
+  // combat:attacked(플레이어 공격 명령에 대한 오프너 응답)와는 별개 이벤트다(D2) — 몬스터 쪽 라운드를
+  // 한 메시지로 묶어 순서와 사망 표시를 맞춘다. 몬스터 식별은 combat:attacked와 같은 instanceId·표시
+  // 이름 관용구이고, damage에 하한을 두지 않는 것도 combat:attacked 선례다(값 범위 해석은 전투 규칙).
+  z.strictObject({
+    type: z.literal('combat:round'),
+    creatureInstanceId: z.string().min(1),
+    creatureName: z.string().min(1),
+    received: z.union([
+      z.null(),
+      z.strictObject({ kind: z.literal('melee'), ...strikeResultShape }),
+      z.strictObject({ kind: z.literal('cast'), damage: z.int() }),
+    ]),
+    counter: z.strictObject(strikeResultShape).nullable(),
+    monsterDied: z.boolean(),
+    youDied: z.boolean(),
   }),
   // 스탯 스냅샷 통지 — 전투·회복으로 바뀐 자원과 성장 수치를 본인에게 발생시킨다. 델타가 아니라 스냅샷이라
   // 놓친 이벤트가 있어도 다음 통지에서 상태가 수렴한다(world:room 선례).

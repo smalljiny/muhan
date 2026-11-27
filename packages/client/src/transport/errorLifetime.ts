@@ -43,6 +43,8 @@ export const CLEARS_TRANSIENT_ERROR: Readonly<Record<ServerEvent['type'], boolea
   'chat:said': false,
   // 재생 틱 등 조작과 무관한 경로에서도 오는 상태 동기화다. 공격 성공은 함께 오는 combat:attacked가 해제를 맡는다.
   'character:stats': false,
+  // 몬스터 tick이 일으키는 라운드 결과 통지다. 자신의 조작에 대한 응답이 아니다.
+  'combat:round': false,
   // 핸드셰이크 응답이다.
   'system:hello': false,
   // 재연결·재동기 지시 통지다.
