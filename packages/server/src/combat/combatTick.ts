@@ -5,6 +5,8 @@ import type { CreatureLedgers } from './creatureLedgers.js'
 import type { PlayerCombatState } from './playerState.js'
 import {
   resolveAttack,
+  rollHit,
+  noDamageOutcome,
   fireDeath,
   type ResolveContext,
   type AttackOutcome,
@@ -54,6 +56,14 @@ import {
  * 끝낸다. 다른 적의 반격도 없다(오라클 update.c: crt_spell 뒤 표적 재조회 실패 → end_enm_crt 후 continue).
  * 시전 피해는 castSpell 전후 표적 전투상태 객체의 hpCurrent 차이다(D5 — 사망 seam은 옛 객체를 바꾸지
  * 않으므로 시전 치사여도 실제 차감량과 같다).
+ *
+ * ## 사망 취소 상태 표적 (D8)
+ * 반격으로 몬스터가 죽어 사망이 취소된 표적은 HP<1인 채 생존한다. 라운드 시작 hpCurrent<1인 표적에게는
+ * 근접 대신 명중 판정(rollHit) 굴림 1개만 소비한다 — 피해 차감·원장 누적 없음, resolveAttack의
+ * DEAD_DEFENDER_NOOP 가드는 그대로다. 명중했고 몬스터가 반격으로 죽지 않았을 때만 라운드 끝에 사망
+ * seam을 1회 실행한다(반격 처치 시 다시 취소). MMAGIC 'cast'면 근접이 없어 그 라운드엔 사망하지 않는다.
+ * 이 표적은 반격하지 않는다(aliveAtStart). 오라클 사망 판정(update.c `if(att_ptr->hpcur < 1) die()`)이
+ * 명중 분기 안에 있는 것을 따른다.
  */
 
 /** 주문 시전 결과 — 'cast'=주문이 그 라운드 근접을 대체(근접 스킵), 'none'=근접 진행(update.c:348 return 1/0). */
@@ -105,6 +115,33 @@ export interface CombatRoundReport {
 
 /** 기본 주문 seam — 항상 'none'(근접 진행). A6 마법 연결이 대체한다. */
 const defaultCastSpell: CastSpellSeam = () => 'none'
+
+/** 표적에 대한 몬스터 행동 결과 + 라운드 끝 표적 사망 대기 여부. */
+interface TargetAction {
+  readonly incoming: IncomingAction
+  readonly pendingTargetDeath: boolean
+}
+
+/**
+ * 표적 근접 단계 — 시전했으면 그대로 넘기고(근접 없음, 사망 대기 없음), 아니면 근접을 굴린다.
+ * 사망 취소 상태 표적(D8)은 resolveAttack 대신 rollHit 굴림 1개만 소비해 피해 0 결과를 만들고, 명중이
+ * 곧 사망 대기다. 일반 표적은 resolveAttack(fire-free)의 died가 사망 대기다. 굴림 위치는 기존 근접과 같다.
+ */
+function targetAction(
+  castIncoming: IncomingAction | null,
+  creature: CreatureInstance,
+  target: PlayerCombatState,
+  ctx: ResolveContext,
+  deathCancelled: boolean,
+): TargetAction {
+  if (castIncoming !== null) return { incoming: castIncoming, pendingTargetDeath: false }
+  if (deathCancelled) {
+    const hit = rollHit(toCombatant(creature), toCombatant(target), ctx.rng)
+    return { incoming: { kind: 'melee', outcome: noDamageOutcome(hit) }, pendingTargetDeath: hit }
+  }
+  const outcome = resolveAttack(toCombatant(creature), toCombatant(target), ctx)
+  return { incoming: { kind: 'melee', outcome }, pendingTargetDeath: outcome.died }
+}
 
 /** createCombatTick 의존성 — 팩토리가 클로저로 바인딩한다. */
 export interface CombatTickDeps {
@@ -177,7 +214,8 @@ export function createCombatTick(deps: CombatTickDeps): OnCombatTick {
     // resolveAttack(player→monster)를 굴리는데 DEAD_DEFENDER_NOOP는 defender(몬스터)만 검사하므로,
     // 죽은 플레이어가 몬스터에 데미지·ledger 크레딧·심지어 킬까지 하는 결함이 생긴다. 틱 시작 생존
     // 스냅샷으로 이번 라운드 근접에 죽는 target(시작 시 생존 → 반격 유지, attack_crt attacker-HP 가드
-    // 없음)과 stale-dead(시작 시 사망 → 반격 자격 박탈)를 구분한다.
+    // 없음)과 stale-dead(시작 시 사망 → 반격 자격 박탈)를 구분한다. 사망 seam이 부활 처리를 끝내므로
+    // stale-dead 대상은 사망 취소 상태(D8 — 반격 처치로 사망이 취소돼 HP<1인 채 생존) 하나만 남는다.
     const aliveAtStart = new Map<PlayerCombatState, boolean>(
       presentEnemies.map((p) => [p, p.hpCurrent >= 1]),
     )
@@ -250,15 +288,12 @@ export function createCombatTick(deps: CombatTickDeps): OnCombatTick {
     }
 
     // 몬스터 근접(target melee) — fire-free. target이 HP<1로 떨어져도 즉시 발생시키지 않고 pending으로
-    // 남긴다(end-of-round 지연). meleeOutcome.died가 "이번 라운드에 target이 근접으로 죽었는가"의
-    // 신호다 — stale-dead(이전 틱 사망) target은 resolveAttack DEAD_DEFENDER_NOOP로 died=false라
-    // end-of-round에서 재실행되지 않는다. 시전 치사는 위 D7 분기에서 이미 끝났으므로 여기 오는 'cast'는
-    // 비치사 시전뿐이고, 그때 meleeOutcome=null이라 end-of-round 사망도 없다.
-    const incoming: IncomingAction = castIncoming ?? {
-      kind: 'melee',
-      outcome: resolveAttack(toCombatant(creature), toCombatant(target), ctx),
-    }
-    const meleeOutcome = incoming.kind === 'melee' ? incoming.outcome : null
+    // 남긴다(end-of-round 지연). action.pendingTargetDeath가 "이번 라운드 끝에 target이 죽는가"의 신호다 —
+    // 일반 target은 근접 died, 사망 취소 상태 target(D8, 라운드 시작 HP<1)은 rollHit 명중이다.
+    // 시전 치사는 위 D7 분기에서 이미 끝났으므로 여기 오는 'cast'는 비치사 시전뿐이고, 그때 근접이
+    // 없어 end-of-round 사망도 없다.
+    const deathCancelled = aliveAtStart.get(target) !== true // 라운드 시작(시전 전) HP<1
+    const action = targetAction(castIncoming, creature, target, ctx, deathCancelled)
 
     // counter 역순(update.c:501~530): OTHER enemies(presentEnemies[1..]) 먼저, TARGET(presentEnemies[0])
     // 마지막. attack_crt엔 attacker-HP 가드가 없으므로 근접에 죽어가는 target도 last에 반격을 날린다.
@@ -291,12 +326,12 @@ export function createCombatTick(deps: CombatTickDeps): OnCombatTick {
     }
 
     // end-of-round target 사망 판정(update.c:522 att_ptr->hpcur<1 → die) — 몬스터가 counter에 죽지
-    // 않았고(취소 안 됨) target이 이번 라운드 근접으로 죽었을 때만 1회 발생시킨다.
-    if (!monsterDied && meleeOutcome?.died === true) {
+    // 않았고(취소 안 됨) target이 이번 라운드 근접으로 죽었을 때만 1회 발생시킨다(D8 명중 포함).
+    if (!monsterDied && action.pendingTargetDeath) {
       fireDeath(toCombatant(target), ctx)
     }
 
     // 모든 상태 변경(end-of-round 사망 실행 포함) 뒤 보고 1회.
-    report(incoming, monsterDied)
+    report(action.incoming, monsterDied)
   }
 }

@@ -214,13 +214,23 @@ function hitRollMax(attacker: Combatant): number {
 }
 
 /**
+ * 명중 판정 — 굴림 rng(1, 상한) 1개를 소비해 hitThreshold 이상이면 명중(command5.c:236 / update.c:383).
+ * 피해·원장·사망 seam·defender HP 가드와 무관하다(굴림 1개 소비 외에 상태를 바꾸지 않는다). performStrike의 첫 단계이며, combatTick이
+ * 사망 취소 상태 표적(HP<1 — resolveAttack은 DEAD_DEFENDER_NOOP로 막는다)에게 피해 없이 명중 판정만
+ * 굴릴 때 재사용한다(D8).
+ */
+export function rollHit(attacker: Combatant, defender: Combatant, rng: CombatRng): boolean {
+  const threshold = hitThreshold(attacker, defender)
+  return rng(1, hitRollMax(attacker)) >= threshold
+}
+
+/**
  * 단일 타격 처리 — 명중 판정 → 피해 산출 → 내구도 → in-place 차감 → ledger 누적. 사망은 상위 루프가
  * HP 읽기로 감지한다(내구도 굴림은 사망 판정보다 먼저, command5.c:308<341).
  */
 function performStrike(attacker: Combatant, defender: Combatant, ctx: ResolveContext): AttackDescriptor {
   const { rng } = ctx
-  const threshold = hitThreshold(attacker, defender)
-  if (rng(1, hitRollMax(attacker)) < threshold) return MISS
+  if (!rollHit(attacker, defender, rng)) return MISS
 
   const strike = computeStrike(attacker, defender, rng)
   const n = strike.damage
@@ -272,6 +282,18 @@ const DEAD_DEFENDER_NOOP: AttackOutcome = {
   died: false,
   specialAttack: null,
   messageInputs: { attacks: [] },
+}
+
+/** 피해 없는 명중 결과 — {@link noDamageOutcome} 참고. */
+const NO_DAMAGE_HIT: AttackOutcome = { ...DEAD_DEFENDER_NOOP, hit: true }
+
+/**
+ * 피해 없는 판정 결과 — 사망 취소 상태 표적(D8)처럼 명중 여부만 굴리고 피해·원장·사망을 건드리지 않을 때
+ * 쓴다. 빗맞음은 DEAD_DEFENDER_NOOP과 같은 값이다. 명중이어도 `messageInputs.attacks`는 비어 있다 —
+ * 타격 기술자를 만들지 않았으므로 이 결과의 소비자는 `hit`·`damage` 등 집계 필드만 읽는다(공유 상수).
+ */
+export function noDamageOutcome(hit: boolean): AttackOutcome {
+  return hit ? NO_DAMAGE_HIT : DEAD_DEFENDER_NOOP
 }
 
 /**
