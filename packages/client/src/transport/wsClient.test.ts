@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import type { ServerEvent } from 'shared'
 import { PROTOCOL_VERSION, serverEventSchema } from 'shared'
-import { WsClient, type SocketLike, type WsClientSnapshot } from './wsClient.js'
+import { WsClient, type WsClientSnapshot } from './wsClient.js'
 import { makeRoom, makeEmptyRoom, roomEvent } from '../test/roomFixtures.testutil.js'
 import { makeHarness, sentFrames } from '../test/wsHarness.testutil.js'
 
