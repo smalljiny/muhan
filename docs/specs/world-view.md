@@ -37,7 +37,7 @@ CP1("걸어볼 수 있는 무한")이 요구하는 "방 설명을 읽고 이동�
 | `longDesc` | `string` | 빈 문자열 유효(433방, 18.5%) — 클라 fallback |
 | `occupants` | `{ characterId, name }[]` | **본인 포함** — 제외는 클라 책임 |
 | `items` | `{ instanceId, name }[]` | 바닥 아이템 |
-| `creatures` | `{ instanceId, name, level }[]` | #99 미연결이라 정적 스냅샷 |
+| `creatures` | `{ instanceId, name, level }[]` | 스냅샷. 몬스터가 죽은 라운드에 당사자에게 `world:room`이 다시 온다 |
 
 `shortDesc`는 싣지 않는다 — 2341방 중 2327방(99.4%)이 빈 문자열이라 정보량이 0이다. 문 상태(`XLOCKD`/`XCLOSD`)도 싣지 않는다 — `exits`는 `string[]`을 유지하고, 잠긴 문은 눌렀을 때 서버가 기존 `error{rule_rejected}`로 답한다.
 
@@ -108,7 +108,7 @@ WsClientSnapshot
 ## 제약사항
 
 - **`occupants`는 스냅샷 + `world:presence` 델타다** — `world:room`은 진입·이동 성공 두 곳에서만 발생하지만, 다른 사람의 입·퇴장은 `world:presence`가 목록을 갱신하고 `notices`에 알림 문장을 남긴다. `notices`는 최근 20개 상한의 방 상태 필드이며 같은 방 스냅샷에서 유지된다. 몬스터·아이템은 여전히 델타가 없다. 알림은 관찰자와 무관한 이동자 플래그로만 억제된다(수신자별 가시성은 #129).
-- **`creatures`는 정적** — 몬스터 실시간 이동·전투(**#99**) 미연결. `name`·`level`만 싣는다(hp·전투 스탯은 E12 **#61**).
+- **`creatures`는 스냅샷이며 델타가 없다** — 몬스터 전투 tick은 연결됐다. 몬스터가 죽은 라운드에는 라운드 통지기가 당사자에게 그 방의 `world:room`을 보내며(사망 seam이 이미 몬스터를 뺀 상태), 클라이언트는 `combat:round`로 방 목록을 고치지 않고 `world:room`으로 통째로 교체한다. 다른 점유자에게는 사망 뷰가 전파되지 않는다(**#186**). 몬스터 실시간 이동도 방 뷰에 반영되지 않는다. `name`·`level`만 싣는다(hp·전투 스탯은 E12 **#61**).
 - **몬스터 표시 문구가 근사** — 오라클 방 표시는 몬스터를 `description`으로 출력하고 동명 개체를 `(xN)`으로 묶는다. 이 계층은 `name`을 쓴다 — `CreatureInstance`에 `description` 필드가 없어 월드 로더·타입 변경이 동반되기 때문이다. 오라클 이식이 아니라 근사다.
 - **`items`는 표시 전용** — 집기·버리기는 **#120**.
 - **automap 없음** — 현재 방만 렌더한다. 좌표 합성은 서버는 그래프+방향 힌트만 기준으로 삼으므로 별도 파생이 필요하다.
@@ -124,4 +124,4 @@ WsClientSnapshot
 - 선행: [`live-world-foundation.md`](live-world-foundation.md)(라이브 상태원·`tryMove` 연결) · [`movement-rooms.md`](movement-rooms.md)(월드 그래프·문 상태머신·가시성 필터) · [`transport-protocol.md`](transport-protocol.md)(와이어 계약·버전 협상)
 - 지목 경로: [`name-matching.md`](name-matching.md)(표시와 다른 가시성 게이트 — 위 대조표)
 - 클라이언트 선례: [`transport-shell.md`](transport-shell.md)(E9) · [`session-entry.md`](session-entry.md)(E10)
-- 이슈: **#60**(E11 본 계층) · **#116**(이동 방송·점유자 델타) · **#99**(몬스터 tick) · **#120**(아이템 라이브화) · **#61**(E12 스탯·전투·인벤 패널)
+- 이슈: **#60**(E11 본 계층) · **#116**(이동 방송·점유자 델타) · **#186**(방 관찰자 통지) · **#120**(아이템 라이브화) · **#61**(E12 스탯·전투·인벤 패널)

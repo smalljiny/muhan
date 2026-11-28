@@ -23,7 +23,8 @@ E4 월드 상태 엔진의 세 번째 토픽이다. E4-1a(`runtime-foundation.md
 | `creatureFactory.ts` | 템플릿·embedded 데이터 → 라이브 인스턴스. `fromEmbedded`(방 내장 몬스터의 전체 필드), `fromTemplate`(몬스터 번호 조회). `creatureInstanceId(roomId, idx)` 결정적 ID 규약, `CreatureRng` gold 랜덤화 seam |
 | `activeSet.ts` | 점유 이벤트 기반 활성/비활성(`activate`/`deactivate`), 활성 방 조회(`activeRooms`) |
 | `nextAction.ts` | `cadenceSec(dexterity)`(민첩<20→3초, 그 외 2초), `scheduleNextAction`, `isDue` |
-| `creatureTick.ts` | `WorldTickSlot`(1s). 도래한 몬스터에 autonomic을 실행하고 `onCombatTick` seam을 호출 |
+| `creatureTick.ts` | `WorldTickSlot`(1s). 도래한 몬스터에 autonomic을 실행하고 `onCombatTick` seam을 호출. 몬스터마다 `isActive`를 확인해 tick 도중 비활성화된 방을 동결 |
+| `combatTickBinding.ts` | 전투 tick 지연 바인딩 슬롯(`createCombatTickBinding`). `onCombatTick` 디스패치(바인딩 전 no-op)와 1회만 허용하는 `bind(handler)` |
 | `autonomic.ts` | `runAutonomic` 순수 함수. 만료, 재생, scavenge, wander-out(A9 §3.1~3.5), `AutonomicRng` seam |
 | `spawn.ts` | perm 리스폰(`respawnPermCreatures`), `InstanceIdAllocator`(방별 monotonic idx), 스폰 템플릿 인덱스 로드 |
 | `randomSpawn.ts` | random 배회 슬롯(`intervalSec=20`), `SpawnRng` seam, `RPLWAN=23` |
@@ -90,7 +91,9 @@ E4 월드 상태 엔진의 세 번째 토픽이다. E4-1a(`runtime-foundation.md
 | §3.5 | 조기종료 게이트(적이 없고 공격형이 아니면 종료) | 구현 (절단선) |
 | §3.6~7 | 전투·어그로·특수공격 | `onCombatTick` seam → **E6** |
 
-재생 소급은 활성화 시각을 기준으로 한다. 동결 구간(관측되지 않은 시간)은 소급하지 않는다. `onCombatTick`은 §3.5를 통과한 몬스터(적이 있거나 공격형)에만 호출되며, E4-2의 기본 구현은 no-op이다.
+재생 소급은 활성화 시각을 기준으로 한다. 동결 구간(관측되지 않은 시간)은 소급하지 않는다. `onCombatTick`은 §3.5를 통과한 몬스터(적이 있거나 공격형)에만 호출된다. 주입이 없을 때의 기본 구현은 no-op이며, 프로덕션 boot는 지연 바인딩 슬롯으로 전투 핸들러를 연결한다(§컴포지션 루트).
+
+**tick 도중 비활성화된 방은 동결한다.** 앞 몬스터의 전투 처리(사망 seam의 부활 이동 → `onRoomLeft` 훅의 `deactivate`)로 방이 비면, 같은 tick의 그 방 나머지 몬스터는 autonomic·재스케줄·전투 디스패치를 받지 않는다. `activeRooms()`와 `room.creatures`를 스냅샷으로 순회하므로 이 전이가 보이지 않는다. 그래서 몬스터마다 `isActive(roomId)`를 다시 확인하고, 비활성이면 그 방의 순회를 멈춘다(빈 방=시간 정지).
 
 ### 스폰 3트리거
 
@@ -114,7 +117,9 @@ perm은 스케줄러를 쓰지 않고 입장 시점에 lazy하게 재계산한�
 
 ### 컴포지션 루트 (`createWorldRuntime`)
 
-`worldRuntime.ts`가 슬롯을 조립하고 훅을 연결한다. `index.ts`는 `now: () => worldClock.currentTick()` 하나만 주입하고, 반환된 `slots`를 register한다. `onRoomEntered`/`onRoomLeft` 훅은 구성돼 있다. 하지만 프로덕션에서 `tryMove`를 실제로 호출하는 쪽(movement 에픽)이 아직 없어 dormant 상태다. `alloc`과 `templates`는 E6 death 연결에서 재사용하도록 노출한다.
+`worldRuntime.ts`가 슬롯을 조립하고 훅을 연결한다. `index.ts`는 `now: () => worldClock.currentTick()` 하나만 주입하고, 반환된 `slots`를 register한다. `onRoomEntered`/`onRoomLeft` 훅은 세션 진입/퇴장과 `tryMove` 경로가 공유해 같은 활성 집합을 갱신한다. `alloc`과 `templates`는 사망 seam 조립에서 재사용하도록 노출한다.
+
+`onCombatTick`은 지연 바인딩 슬롯(`combatTickBinding.ts`)을 거친다. 실 전투 핸들러는 세션·전송 계층이 갖춰지는 조립 단계에서야 만들 수 있고, 월드 런타임은 그보다 먼저 만들어지기 때문이다. `index.ts`가 슬롯을 프로세스당 **1회** 만들어 `slot.onCombatTick`을 `createWorldRuntime({ onCombatTick })`에 넘기고, `slot.bind`를 `bindCombatTick`으로 live-world wiring 묶음에 싣는다. wiring이 전투 핸들러를 만들어 `bindCombatTick`으로 꽂는다([`live-world-foundation.md`](live-world-foundation.md)). 슬롯의 `onCombatTick`은 바인딩 전후로 같은 함수 참조이며, creatureTick이 생성 시점에 그 참조를 캡처한다. 바인딩 전(boot부터 wiring 조립까지)에는 플레이어 세션이 없어 전투 대상이 없으므로 no-op 디스패치로 잃는 라운드가 없다. 두 번째 `bind`는 조립 오류로 throw한다. world 레이어는 전투 레이어를 import하지 않고 `creatureTick.ts`의 `OnCombatTick` 타입만 쓴다.
 
 ## 제약사항
 
@@ -122,7 +127,7 @@ perm은 스케줄러를 쓰지 않고 입장 시점에 lazy하게 재계산한�
   - invasion은 확률 게이트 없이 주기마다 무조건 `count`만큼 스폰한다. 그래서 기본 stub(항상 min)을 쓰면 고정된 방(8000·3601)에 결정적으로 누적된다. E4-2에는 전투 정리도, 해당 방 활성화도 없다.
   - 슬롯 자체는 조립되고 테스트된다. E8-2가 범위 분산 rng를 주입하면 바로 활성화된다.
 - **RNG seam 결정적 stub**: 스폰 확률(traffic), scavenge 15%, wander-out, gold 랜덤화는 주입 seam이다. E4-2 기본값은 결정적이다(동작하지 않거나 identity). `spawnRng`를 주입하지 않으면 random 슬롯은 아무것도 하지 않는다. 실제 확률과 시드 규약은 E8-2 RNG가 이 seam으로 주입한다.
-- **dormant 경계**: `onCombatTick`, broadcast, `onCreatureDeath`, entry/leave 훅은 모두 기본이 no-op인 주입 seam이다. 프로덕션에서 실제로 동작하는 것은 (게이트를 통과한 경우) invasion 슬롯뿐이다.
+- **dormant 경계**: `onCombatTick`은 프로덕션 boot가 지연 바인딩 슬롯으로 전투 핸들러에 연결한다. 방 활성화·비활성화(entry/leave 훅)도 세션 진입·이동 경로가 연결한다. `onCreatureDeath`는 사망 seam이 호출한다. 몬스터 단위 예외는 wiring의 핸들러 래퍼가 격리한다(한 몬스터의 예외가 그 tick의 나머지를 건너뛰게 하지 않는다). 기본이 no-op인 주입 seam으로 남은 것은 broadcast이고, invasion 슬롯은 `invasionRng`가 주입될 때만 동작한다.
 - **전투·전술 판정 범위 밖**: 전투 실행, 어그로 타깃(piety 역가중), 특수공격(breath, 드레인, 상태이상, 아이템파괴), 주문 시전, HP<1 사망 판정은 E6이 맡는다. 사망 보상(경험치, gold 드롭, 인벤 드롭)은 E6/E8이 맡는다.
 - **명령·특수 디스패치 범위 밖**: 플레이어 WS 명령 연결, object/room `special` 디스패치, interactive talk는 명령 에픽/E5/E7이 맡는다.
 - **데드 스캐폴드 미구현**: 몬스터 도주(MFLEER)와 주기 발화(MSAYTLK)는 출시본(as-shipped)에서도 동작하지 않는 데드 코드다. 그래서 그대로 재현한다(구현하지 않음). 되살릴지는 별도 결정 게이트에서 정한다.

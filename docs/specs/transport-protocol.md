@@ -26,9 +26,10 @@
 
 `shared`의 기존 `schema/`(영속·도메인)와는 **별개 모듈**이다. 프로토콜은 와이어 메시지 계약이고, `schema/`는 저장 도메인 모델이다. 모든 TS 타입은 `z.infer`로만 파생하며 병렬로 손으로 쓴 타입을 두지 않는다. `index.ts` 배럴이 스키마, 타입, `PROTOCOL_VERSION`을 함께 재노출하고, `shared/src/index.ts`가 이를 `export *`로 상위에 노출한다. 파생 타입 이름은 DOM 전역(`Event`·`Command`)과 충돌하지 않도록 `ClientCommand`·`ServerEvent`로 한정한다.
 
-**`version.ts`** — `PROTOCOL_VERSION = 7`. 계약이 하위 비호환으로 바뀔 때마다 1씩 단조 증가시키는 정수다. semver는 쓰지 않는다. 와이어 호환성만 판단하면 되므로 정수 동등 비교가 더 단순하기 때문이다. 핸드셰이크가 이 값을 실어 보내, client와 server가 같은 계약 세대를 쓰는지 대조한다.
+**`version.ts`** — `PROTOCOL_VERSION = 8`. 계약이 하위 비호환으로 바뀔 때마다 1씩 단조 증가시키는 정수다. semver는 쓰지 않는다. 와이어 호환성만 판단하면 되므로 정수 동등 비교가 더 단순하기 때문이다. 핸드셰이크가 이 값을 실어 보내, client와 server가 같은 계약 세대를 쓰는지 대조한다.
 
-- 직전 bump(6 → 7)는 `world:presence` 이벤트 신설이다. 같은 방 점유자에게 다른 사람의 입·퇴장 델타를 보내는 variant라, 구버전 클라가 신규 `type`을 `unknown_type`으로 거부하지 않도록 올렸다.
+- 직전 bump(7 → 8)는 `combat:round` 이벤트 신설이다. 몬스터 tick 라운드 결과를 수신자별로 보내는 variant라, 구버전 클라가 신규 `type`을 `unknown_type`으로 거부하지 않도록 올렸다.
+- 그 전 bump(6 → 7)는 `world:presence` 이벤트 신설이다. 같은 방 점유자에게 다른 사람의 입·퇴장 델타를 보내는 variant라, 구버전 클라가 신규 `type`을 `unknown_type`으로 거부하지 않도록 올렸다.
 - 그 전 bump(5 → 6)는 #121의 `combat:attack` 명령과 `combat:attacked`·`character:stats` 이벤트 신설이다. 판별 union에 variant를 더하면 구버전 서버가 신규 `type`을 `unknown_type`으로 거부하기 때문에 올렸다.
 - 그 전 bump는 #120의 `progress:study` 명령·`progress:studied` 이벤트 신설(4 → 5)이었다.
 - 그 전은 E11(#60)의 `world:room` 페이로드 확장이었다. 기존 variant가 `z.strictObject`라 required 필드를 추가하면 구버전 클라의 `safeParse`가 깨진다.
@@ -117,11 +118,21 @@
   - 형태가 어긋나면 `events.test.ts`의 `characterSchema.spells` 교차 드리프트 테스트가 잡는다.
   - 기준은 [`magic-progression.md`](magic-progression.md)다.
 
-- `{ type: 'combat:attacked', targetName: string(min 1), targetInstanceId: int(min 0), hit: boolean, damage: int(min 0), critical: boolean, fumble: boolean, died: boolean, attacks: {hit, damage, critical, fumble, durabilityHit, weaponDropped}[] }` — 공격 결과 통지(#121). 공격한 본인에게 1회 보낸다.
+- `{ type: 'combat:attacked', targetName: string(min 1), targetInstanceId: string(min 1), hit: boolean, damage: int, critical: boolean, fumble: boolean, died: boolean, attacks: {hit, damage, critical, fumble, durabilityHit, weaponDropped}[] }` — 공격 결과 통지(#121). 공격한 본인에게 1회 보낸다.
   - `world:room` 선례를 따라 **`correlationId`를 싣지 않는다**(상태 이벤트).
   - `targetInstanceId`를 이름과 함께 싣는 이유는, 같은 이름의 몬스터가 방에 여럿일 때 클라가 어느 개체를 맞혔는지 짝지어야 하기 때문이다.
   - `attacks`는 타격별 배열이다. 지금은 `PUPDMG`가 영속되지 않아 항상 원소가 1개다(다중공격은 구조상 동작하지 않음). 그래도 배열 형태를 지금 고정해 두면, #61이 타격별 연출을 붙일 때 version bump를 다시 하지 않아도 된다.
   - 서버측 원천은 `combat/resolveAttack.ts`의 `AttackDescriptor`다. shared는 server를 import할 수 없으므로, 일치 여부는 반대편(`combat/attackDescriptorWire.test.ts` 컴파일타임 대조)에서 강제한다.
+  - 기준은 [`combat.md`](combat.md)다.
+- `{ type: 'combat:round', creatureInstanceId: string(min 1), creatureName: string(min 1), received: null | { kind: 'melee', hit: boolean, damage: int, critical: boolean, fumble: boolean } | { kind: 'cast', damage: int }, counter: { hit: boolean, damage: int, critical: boolean, fumble: boolean } | null, monsterDied: boolean, youDied: boolean }` — 몬스터 tick 라운드 결과 통지. 몬스터가 행동한 라운드마다 라운드 수신자(표적·반격자) 각자에게 1건씩 보낸다.
+  - 와이어 계약은 **수신자별 투영**이다. 같은 라운드라도 수신자마다 `received`·`counter`·`youDied`가 다르다.
+  - `creatureInstanceId`·`creatureName`은 `combat:attacked`의 `targetInstanceId`·`targetName`과 같은 관용구(인스턴스 id와 표시 이름)로 몬스터를 식별한다.
+  - `received`는 수신자가 이번 라운드의 표적이 아니면(반격만 한 플레이어) `null`이다. 표적이면 몬스터의 행동을 싣는다. `kind: 'melee'`는 근접 타격 결과이며 빗맞음은 `hit: false`·`damage: 0`이다. 사망 취소 상태 표적이 받는 근접도 `damage: 0`이다. `kind: 'cast'`는 시전이며 표적이 실제로 잃은 HP만 `damage`로 싣는다(피해 없는 시전은 0).
+  - `counter`는 수신자가 이번 라운드에 반격을 굴렸을 때만 채워지고, 굴리지 않았으면 `null`이다. 필드 형태는 `received`의 `melee`와 같다(`strikeResultShape` 공유).
+  - `monsterDied`는 이번 라운드에 몬스터가 죽었는지, `youDied`는 수신자가 이번 라운드에 사망 seam을 거쳤는지다.
+  - `damage`에 하한을 두지 않는 것은 `combat:attacked`와 같다(값 범위 해석은 전투 규칙이 담당).
+  - **`correlationId`를 싣지 않는다.** 조작 응답이 아닌 tick 통지(상태 이벤트)다.
+  - `combat:attacked`(플레이어 공격 명령에 대한 오프너 응답)와는 별개 이벤트다. 몬스터 쪽 라운드를 한 메시지로 묶어 순서와 사망 표시를 맞춘다.
   - 기준은 [`combat.md`](combat.md)다.
 - `{ type: 'character:stats', hpCurrent: int(min 0), hpMax: int, mpCurrent: int(min 0), mpMax: int, experience: int(min 0), level: int(min 1) }` — 스탯 스냅샷(#121).
   - `combat:attack`·`progress:train`·`progress:study` **세 명령 모두** 성공하면 이 이벤트를 함께 보낸다. 스탯 변화 통지 경로를 하나로 통일해, 클라이언트가 이벤트 한 종만 보고 패널을 갱신하게 한다.
@@ -315,13 +326,14 @@ E3 하드닝(#54)은 자원 한도 필드 3개(`WS_MAX_CONNECTIONS`·`WS_MAX_CON
 - **`debug:echo`는 무권한 노출** — 진단과 파이프라인 검증 전용이다. 프로덕션 빌드에서 제거할지, 플래그로 게이트할지는 후속 하드닝에서 다시 검토한다.
 - **`WS_HEARTBEAT_PONG_TIMEOUT_MS`는 미소비 예약 seam** — 현재 단일 인터벌 모델에서 pong별 실질 마감은 `PING_INTERVAL`이다. 이 필드를 낮춰도 종료 타이밍은 바뀌지 않는다.
 - **TLS는 TLS-ready pass-through만** — `buildApp`이 `https` 서버 옵션을 Fastify로 그대로 넘겨 `wss`를 지원한다. dev는 평문 loopback `ws`를 쓴다. 프로덕션 TLS 종단 지점(Fastify https vs 리버스 프록시)과 하트비트 인터벌 확정값(프록시 idle timeout 75% 규칙)은 배포/인프라 토픽에서 다시 조정한다.
-- **`protocolVersion` bump 정책 미확정** — 형식은 단조 증가 정수로 확정했다(현재 `7`). 지금까지의 변경 이력은 다음과 같다.
+- **`protocolVersion` bump 정책 미확정** — 형식은 단조 증가 정수로 확정했다(현재 `8`). 지금까지의 변경 이력은 다음과 같다.
   - 1→2: 라이브 월드 foundation의 `world:move`·`world:room`·`chat:said` 신설
   - 2→3: `progress:train` 명령·`progress:trained` 이벤트 신설
   - 3→4: E11 `world:room` 페이로드 확장
   - 4→5: #120 `progress:study` 명령·`progress:studied` 이벤트 신설
   - 5→6: #121 `combat:attack` 명령과 `combat:attacked`·`character:stats` 이벤트 신설
   - 6→7: `world:presence` 이벤트 신설
+  - 7→8: `combat:round` 이벤트 신설
 
   *언제* 올리는가(호환 불가 변경의 기준과 문서화)는 프로토콜이 커질 때 따로 정한다. 지금까지의 실제 관행은 "`strictObject` variant에 required 필드가 늘거나 variant가 신설되면 올린다"이다.
 - **한글 자유 텍스트 파서 없음** — E3-4가 자유채팅 입력을 `ChannelPort`로 넘기는 seam을 더했다([`freechat-permission-seam.md`](freechat-permission-seam.md)). 라이브 월드 foundation이 실제 방 채널 어댑터를 연결해, 같은 방 안 전파는 동작한다([`live-world-foundation.md`](live-world-foundation.md)). 나머지는 다른 토픽이 맡는다.

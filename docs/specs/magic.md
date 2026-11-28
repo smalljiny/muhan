@@ -157,7 +157,10 @@ MMAGIC 몬스터의 시전 seam으로, combat `CastSpellSeam` 시그니처 `(cas
 
 ### combatTick 연결
 
-combat `createCombatTick`의 `castSpell?` 의존에 `crtSpell`을 주입한다. 트리거(`MMAGIC && !MCHARM && rng(1,100) <= 20`)·라운드 순서는 [combat](combat.md)이 담당하며, 이 계층은 seam 반환값(`'cast'`=근접 대체 / `'none'`)만 결정한다. `'cast'`면 그 라운드 근접만 스킵하고 반격은 유지한다.
+combat `createCombatTick`의 `castSpell?` 의존에 `crtSpell`을 주입한다. 프로덕션에서는 `ws/liveWorldWiring.ts`가 조립하는 몬스터 전투 tick의 `castSpell`이 `crtSpell`이며, boot가 그 tick을 `onCombatTick`에 연결한다([live-world-foundation.md](live-world-foundation.md) §몬스터 전투 tick 조립). 트리거(`MMAGIC && !MCHARM && rng(1,100) <= 20`)·라운드 순서는 [combat](combat.md)이 담당하며, 이 계층은 seam 반환값(`'cast'`=근접 대체 / `'none'`)만 결정한다. `'cast'`면 그 라운드 근접만 스킵하고 반격은 유지한다.
+
+- **시전 피해는 시전 전후 표적 HP 차이다.** 라운드 보고의 시전 피해는 `castSpell` 호출 전후의 표적 HP를 비교해 산출한다. `crtSpell`의 반환 계약(`'cast' | 'none'`)은 바뀌지 않는다.
+- **시전 치사 시 라운드가 끝난다.** `castSpell` 안에서 표적의 사망 seam이 실행되면(`offensiveSpell`이 사망 seam을 즉시 실행하는 경로), 그 라운드는 근접·반격 없이 끝나고 보고서를 넘긴다. 오라클 `update.c`가 `crt_spell` 뒤 표적 재조회에 실패하면 `end_enm_crt` 후 `continue`하는 것과 같다. 다른 적의 반격도 없다.
 
 ## 제약사항 / 범위 밖
 
@@ -173,7 +176,6 @@ combat `createCombatTick`의 `castSpell?` 의존에 `crtSpell`을 주입한다. 
 ### 오라클과 다른 구현 (as-built)
 
 - **spell_fail이 offensive 경로에 미연결(#100 추적)**: 오라클은 `offensive_spell` 안에서 마나 소비 後·데미지 前 `spell_fail`을 굴리지만(magic1.c:1089), 이 포트의 시전 경로(`crtSpell → applyCastGate → offensiveSpell`)는 굴리지 않는다. `spellFail` 모듈은 standalone fixture-lock돼 있다. 실재 12개 전사계 MMAGIC offensive 캐스터의 fizzle-after-consume은 미재현이며, 게이트-타이밍 재설계와 얽힌 비-trivial 작업이라 후속 토픽(#100)으로 미룬다.
-- **몬스터 시전이 production boot에 미연결(#99 추적)**: `crtSpell`은 `createCombatTick` 주입 테스트로 end-to-end 검증되나, 근접 tick을 포함한 combat tick 전체가 라이브 world runtime boot(`index.ts`)에 아직 composition되지 않았다(Non-goals의 라이브 라우팅 보류). production combat tick 연결(registry/ledger/death/broadcast 포함)은 combat 라이브화 후속 토픽(#99)이 담당한다.
 - **방 상성 gated 접기**: 오라클은 방 상성 블록을 게이트 밖에 둬 아이템 경로에도 약화(-5)를 적용하나, 이 포트는 상성까지 gated로 접는다. #84엔 아이템 caster가 없어(realm=[0,0,0,0] seam) 그 edge는 관측 불가하며, 아이템-경로 상성은 #86이 실 delivery와 함께 정밀화한다.
 - **PINVIS 해제 미이식**: 오라클은 시전 시 caster PINVIS를 해제하나, #84 caster는 몬스터이고 flags가 immutable hex라 cosmetic no-op다(#85 담당).
 
@@ -183,4 +185,4 @@ combat `createCombatTick`의 `castSpell?` 의존에 `crtSpell`을 주입한다. 
 - 의존 스펙: [combat.md](combat.md)(`CastSpellSeam`·death seam·`CreatureInstance` operand) · [stats-core.md](stats-core.md)(파생 스탯·`bonusOf`) · [progression.md](progression.md)(MP 재생 — #84는 소비만) · [golden-fixture-harness.md](golden-fixture-harness.md)(오라클 fixture 규약)
 - 이름 조회: [name-matching.md](name-matching.md)(`spellByName` 규칙 본체 — 완전일치 우선·모호 거부)
 - 확장 계층: [magic-progression.md](magic-progression.md)(E6b-2 #85 — spell store·학습·성장·타이머·비-offensive effect·몬스터 self-heal)
-- 후속: #86(E6d-1 아이템 delivery) · #99(combat production boot 연결) · #100(전사계 spell_fail 연결) · #106(라이브 command 라우팅) · #108(self-heal healer-class 게이트)
+- 후속: #86(E6d-1 아이템 delivery) · #100(전사계 spell_fail 연결) · #106(라이브 command 라우팅) · #108(self-heal healer-class 게이트)
