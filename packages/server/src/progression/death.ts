@@ -1,9 +1,10 @@
 import { neededExp, resolveHpMax, resolveMpMax, type Character } from 'shared'
 
 /**
- * progression/death — PvE 사망 페널티 seam(applyPlayerDeath). HP<1 사망 판정(실행은 #82 전투
- * 담당)이 호출하는 순수 소비자를 **정의만** 한다 — E4-2에는 전투 코드가 없어 어떤 호출부도 이
- * 함수를 부르지 않는다(test-driven, creatureDeath.ts 선례). index.ts 연결 대상도 아니다.
+ * progression/death — PvE 사망 페널티(applyPlayerDeath)와 부활 방 존재 확인(assertReviveRoom).
+ * applyPlayerDeath는 플레이어 사망 seam(assembleDeathSeams.firePlayerDeath)이 호출하는 순수
+ * 소비자다. assertReviveRoom은 부팅(index.ts)이 월드 그래프 로드 직후 호출해 부활 방이 없으면
+ * fail-fast로 중단시킨다(D9) — 런타임 부활 방 조회 실패를 조립 오류로 좁힌다.
  *
  * 오라클 creature.c:371-466 PLAYER 사망 분기(PvE·자살) 담당 부분:
  *   1. exp 손실 — level<20: 5%(exp/20), level≥20: exp/15(10만 캡). 이후 max(0, exp).
@@ -20,8 +21,8 @@ import { neededExp, resolveHpMax, resolveMpMax, type Character } from 'shared'
  * 입력 char를 변형하지 않는다 — 새 Character(distinct 참조)를 반환한다(train.ts·levelUp.ts 선례).
  */
 
-/** 사망 후 부활 방 기본값(D8). opts.reviveRoom 미지정 시 사용한다. */
-const DEFAULT_REVIVE_ROOM = 1008
+/** 사망 후 부활 방 기본값(D8). opts.reviveRoom 미지정 시·부팅 검증(D9)에 사용한다. */
+export const DEFAULT_REVIVE_ROOM = 1008
 
 /** level≥20 사망 exp 손실 상한(creature.c:445 — 10만 캡). */
 const HIGH_LEVEL_EXP_LOSS_CAP = 100_000
@@ -62,8 +63,7 @@ function expFloor(level: number): number {
 /**
  * PvE 사망 페널티를 적용한 새 Character를 반환한다 — exp 손실·레벨 유지·하한 클램프·부활·풀회복.
  *
- * 입력 char는 변형하지 않는다(순수). 호출자 없는 seam 정의(creatureDeath.ts 선례) — 프로덕션
- * 호출부는 #82 전투 에픽이 연결한다. index.ts 연결 대상 아님.
+ * 입력 char는 변형하지 않는다(순수). 플레이어 사망 seam(firePlayerDeath)이 호출한다.
  */
 export function applyPlayerDeath(char: Character, opts?: PlayerDeathOptions): Character {
   const reviveRoom = opts?.reviveRoom ?? DEFAULT_REVIVE_ROOM
@@ -81,5 +81,20 @@ export function applyPlayerDeath(char: Character, opts?: PlayerDeathOptions): Ch
     currentRoom: reviveRoom,
     hpCurrent: resolveHpMax(char),
     mpCurrent: resolveMpMax(char),
+  }
+}
+
+/**
+ * 부활 방이 월드 그래프에 존재하는지 확인한다(D9). 없으면 방 번호를 담은 메시지로 throw한다.
+ *
+ * 부팅 시 그래프 로드 직후 호출해 실패를 기존 boot fail-fast 경로로 넘긴다. 그래프는 `has`만
+ * 필요하므로 Map 대신 최소 구조 타입으로 받는다.
+ */
+export function assertReviveRoom(
+  rooms: { has(roomId: number): boolean },
+  reviveRoom = DEFAULT_REVIVE_ROOM,
+): void {
+  if (!rooms.has(reviveRoom)) {
+    throw new Error(`부활 방 ${reviveRoom}번이 월드 그래프에 없습니다`)
   }
 }

@@ -2,12 +2,7 @@ import type { CreatureInstance, RoomNode } from 'shared'
 import type { WorldTickSlot } from './worldClock.js'
 import type { ActiveSet } from './activeSet.js'
 import { isDue, scheduleNextAction } from './nextAction.js'
-import {
-  runAutonomic,
-  neverFireRng,
-  type AutonomicRng,
-  type AutonomicResult,
-} from './autonomic.js'
+import { runAutonomic, neverFireRng, type AutonomicRng, type AutonomicResult } from './autonomic.js'
 import { F_ISSET, MAGGRE, MGAGGR, MEAGGR } from './hexFlags.js'
 
 /**
@@ -19,6 +14,11 @@ import { F_ISSET, MAGGRE, MGAGGR, MEAGGR } from './hexFlags.js'
  *   3. wander-out으로 소멸하지 않았으면 §3.5 조기종료 게이트를 평가하고, 통과(적 있거나 공격형)한
  *      몬스터에 대해서만 `onCombatTick` seam을 호출한다(E4-2 기본 no-op, 전투·어그로는 E6).
  *   4. next-action을 `now+cadence`로 재스케줄한다.
+ *
+ * tick 도중 비활성화된 방은 그 시점부터 동결한다: 앞 몬스터의 전투 처리(사망 seam의 부활 이동 →
+ * onRoomLeft 훅의 deactivate)로 방이 비활성화되면, 같은 tick의 그 방 후속 몬스터는 autonomic·재스케줄·
+ * 전투 디스패치를 받지 않는다(빈 방=시간 정지 규칙). `activeRooms()`·`room.creatures` 스냅샷 순회가
+ * 이 전이를 보지 못하므로 몬스터마다 `isActive`를 다시 확인한다.
  *
  * clock seam은 WorldClock이 담당하므로 이 슬롯은 tick 트리거를 알지 못한다(gameTime 선례). `now`는
  * WorldClock이 넘기는 tickSec다 — activeSet의 activatedAt도 동일 clock(tickSec) 기준으로 세팅돼야
@@ -34,7 +34,7 @@ export const defaultOnCombatTick: OnCombatTick = () => undefined
 /** creatureTick 슬롯 의존성. */
 export interface CreatureTickDeps {
   /** 활성 방·활성화 시각 조회 seam(activeSet). */
-  readonly activeSet: Pick<ActiveSet, 'activeRooms' | 'activatedAt'>
+  readonly activeSet: Pick<ActiveSet, 'activeRooms' | 'activatedAt' | 'isActive'>
   /** scavenge/wander 확률 굴림 seam(기본 neverFireRng — 결정적으로 실행되지 않음). */
   readonly rng?: AutonomicRng
   /** §3.5 게이트 통과 몬스터 전투 디스패치(기본 no-op). */
@@ -50,7 +50,12 @@ function isAggressive(flags: string): boolean {
  * autonomic 결과를 방 상태에 적용한다(carve-out — tick 계층이 담당하는 in-place 변형).
  * 원본(`original`) 몬스터 객체를 방 배열에서 찾아 교체/제거한다.
  */
-function applyResult(room: RoomNode, original: CreatureInstance, result: AutonomicResult, now: number): void {
+function applyResult(
+  room: RoomNode,
+  original: CreatureInstance,
+  result: AutonomicResult,
+  now: number,
+): void {
   const idx = room.creatures.indexOf(original)
   if (result.wanderOut) {
     // wander-out: 방·활성 시뮬레이션에서 몬스터 소멸(원본 free_crt). 활성집합은 방 단위라 별도 처리 불요.
@@ -80,6 +85,8 @@ export function createCreatureTick(deps: CreatureTickDeps): WorldTickSlot {
         const activatedAt = deps.activeSet.activatedAt(room.roomId) ?? now
         // 스냅샷 순회 — wander-out이 room.creatures를 변형하므로 원본 배열을 직접 순회하지 않는다.
         for (const creature of [...room.creatures]) {
+          // tick 도중 비활성화된 방은 그 시점부터 동결한다(헤더 참조).
+          if (!deps.activeSet.isActive(room.roomId)) break
           if (!isDue(creature, now)) continue
           const result = runAutonomic(creature, { now, activatedAt, room, rng })
           applyResult(room, creature, result, now)

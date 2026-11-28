@@ -14,10 +14,12 @@ import { SaveEngine } from './save/saveEngine.js'
 import type { SaveLogger } from './save/logger.js'
 import { loadObjectTemplates } from './items/objectTemplate.js'
 import { loadWorldGraph } from './world/worldGraph.js'
+import { assertReviveRoom } from './progression/death.js'
 import { WorldClock, type WorldTickLogger } from './world/worldClock.js'
 import { createGameTime } from './world/gameTime.js'
 import { createCheckExitsSlot } from './world/checkExits.js'
 import { createWorldRuntime } from './world/worldRuntime.js'
+import { createCombatTickBinding } from './world/combatTickBinding.js'
 import { createLiveCharacterRegistry } from './world/liveCharacterRegistry.js'
 import type { LiveWorldWiringBundle } from './ws/liveWorldWiring.js'
 
@@ -41,7 +43,9 @@ async function boot(): Promise<void> {
   await Promise.all([objects.init(), characters.init(), accounts.init(), bank.init()])
 
   // 기준 방 번들을 인메모리 그래프로 로드한다(부팅 스코프에 보관). 템플릿·리스폰은 E4 범위.
+  // 부활 방(1008)이 없으면 throw해 boot().catch fail-fast로 부팅을 중단한다(D9).
   const worldGraph = loadWorldGraph()
+  assertReviveRoom(worldGraph)
 
   // 기준 object 템플릿 인덱스를 1회 로드한다(근거: LiveWorldWiringBundle.objectTemplates doc).
   const objectTemplates = loadObjectTemplates()
@@ -75,7 +79,14 @@ async function boot(): Promise<void> {
   // (활성화·리스폰)과 P-flag 합성이 같은 기준선을 봐야 만료 판정이 갈리지 않는데, 두 번 만들면 나중에
   // 한쪽만 다른 시계로 갈아끼워도 타입·테스트가 잡지 못한다(둘 다 `() => number`다).
   const now = (): number => worldClock.currentTick()
-  const worldRuntime = createWorldRuntime(worldGraph, { now })
+  // 몬스터 전투 tick 지연 바인딩 슬롯 — **1회** 만든다. `onCombatTick`은 creatureTick(worldRuntime)에,
+  // `bind`는 라이브 월드 묶음에 싣는다. 실 핸들러는 전송 함수가 생기는 registerWebsocket 조립 단계에서
+  // createLiveWorldWiring이 꽂는다(바인딩 전 구간은 세션이 없어 no-op이 안전하다 — combatTickBinding.ts 헤더).
+  const combatTickBinding = createCombatTickBinding()
+  const worldRuntime = createWorldRuntime(worldGraph, {
+    now,
+    onCombatTick: combatTickBinding.onCombatTick,
+  })
 
   // 라이브 월드 의존 묶음 — buildApp/registerWebsocket이 진입·이동(world:move)·세션 수명·방 채널 어댑터를
   // 파생한다. markDirty는 SaveEngine 메서드라 this 바인딩을 유지하도록 화살표로 감싼다. currentHour·
@@ -100,6 +111,8 @@ async function boot(): Promise<void> {
     now,
     onRoomEntered: worldRuntime.onRoomEntered,
     onRoomLeft: worldRuntime.onRoomLeft,
+    // 위 슬롯의 bind — wiring이 공격 핸들러와 같은 인스턴스로 조립한 전투 tick을 1회 꽂는다.
+    bindCombatTick: (handler) => combatTickBinding.bind(handler),
     logger: {
       warn: (context, message) => app.log.warn(context, message),
       error: (context, message) => app.log.error(context, message),
@@ -187,7 +200,7 @@ async function boot(): Promise<void> {
 }
 
 boot().catch((err: unknown) => {
-  // env·DB 연결 fail-fast 경로. 자격증명(URI)이 로그로 새지 않도록 메시지만 출력한다.
+  // env·DB 연결·월드 데이터 검증(부활 방) fail-fast 경로. 자격증명(URI)이 로그로 새지 않도록 메시지만 출력한다.
   console.error('부팅 실패:', err instanceof Error ? err.message : err)
   process.exit(1)
 })

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { serverEventSchema } from './events.js'
 
 /**
- * 전투 이벤트(`combat:attacked`) 계약 테스트.
+ * 전투 이벤트(`combat:attacked`·`combat:round`) 계약 테스트.
  *
  * events.test.ts에서 떼어 낸 파일이다 — 이 이벤트를 더하자 그 파일이 프로젝트 상한(800줄)을
  * 넘겼고, 후속 토픽(#37 채널 이벤트·#122 cast)이 이벤트를 더 붙일 예정이라 갈랐다. 분리 축은
@@ -100,6 +100,95 @@ describe('serverEventSchema (전투 이벤트)', () => {
       // targetInstanceId는 대상 짝짓기의 유일한 키라 optional이 아니다 — 누락도 거부된다.
       const { targetInstanceId: _instanceId, ...withoutInstanceId } = validAttacked
       expect(serverEventSchema.safeParse(withoutInstanceId).success).toBe(false)
+    })
+  })
+
+  describe('combat:round', () => {
+    /** 근접 피격 형태의 received. */
+    const meleeReceived = { kind: 'melee', hit: true, damage: 12, critical: false, fumble: false }
+    /** 시전 피격 형태의 received. */
+    const castReceived = { kind: 'cast', damage: 9 }
+    /** 반격 결과. */
+    const validCounter = { hit: true, damage: 5, critical: false, fumble: false }
+
+    /** 몬스터 tick 라운드 통지의 최소 유효 payload. 각 케이스가 필요한 필드만 덮어쓴다. */
+    const validRound = {
+      type: 'combat:round',
+      creatureInstanceId: '3001:c7',
+      creatureName: '고블린',
+      received: meleeReceived,
+      counter: validCounter,
+      monsterDied: false,
+      youDied: false,
+    }
+
+    it('근접 피격·반격이 담긴 라운드를 통과시킨다', () => {
+      const parsed = serverEventSchema.safeParse(validRound)
+      expect(parsed.success).toBe(true)
+      if (parsed.success && parsed.data.type === 'combat:round') {
+        expect(parsed.data.creatureInstanceId).toBe('3001:c7')
+        expect(parsed.data.received).toEqual(meleeReceived)
+        expect(parsed.data.counter).toEqual(validCounter)
+      }
+    })
+
+    // received 세 형태: 반격만 한 수신자(null)·근접 표적·시전 표적.
+    it.each([
+      ['null (반격만 한 수신자)', null],
+      ['melee 명중', meleeReceived],
+      ['melee 빗맞음 (damage 0)', { ...meleeReceived, hit: false, damage: 0 }],
+      ['cast', castReceived],
+      ['cast damage 0 (표적 피해 없는 시전)', { kind: 'cast', damage: 0 }],
+    ])('received가 %s이면 통과한다', (_label, received) => {
+      expect(serverEventSchema.safeParse({ ...validRound, received }).success).toBe(true)
+    })
+
+    it.each([
+      ['null (반격을 굴리지 않음)', null],
+      ['객체', validCounter],
+    ])('counter가 %s이면 통과한다', (_label, counter) => {
+      expect(serverEventSchema.safeParse({ ...validRound, counter }).success).toBe(true)
+    })
+
+    it('몬스터 사망·수신자 사망 라운드를 통과시킨다', () => {
+      expect(
+        serverEventSchema.safeParse({ ...validRound, monsterDied: true, youDied: true }).success,
+      ).toBe(true)
+    })
+
+    const { kind: _kind, ...meleeWithoutKind } = meleeReceived
+    const { critical: _critical, ...meleeWithoutCritical } = meleeReceived
+
+    // 거부 케이스는 형식이 같아 표로 묶는다(combat:attacked 선례).
+    it.each([
+      ['creatureInstanceId 빈 문자열', { creatureInstanceId: '' }],
+      ['creatureName 빈 문자열', { creatureName: '' }],
+      ['received의 kind 누락', { received: meleeWithoutKind }],
+      ['received melee의 critical 누락', { received: meleeWithoutCritical }],
+      ['received의 kind가 알 수 없는 값', { received: { ...castReceived, kind: 'breath' } }],
+      ['received melee에 여분 필드', { received: { ...meleeReceived, extra: true } }],
+      ['received cast에 근접 필드 동승', { received: { ...castReceived, hit: true } }],
+      ['received damage 비정수', { received: { ...castReceived, damage: 1.5 } }],
+      ['counter에 여분 필드', { counter: { ...validCounter, kind: 'melee' } }],
+      ['counter damage 비정수', { counter: { ...validCounter, damage: 1.5 } }],
+      ['monsterDied가 boolean이 아님', { monsterDied: 'yes' }],
+      ['youDied가 boolean이 아님', { youDied: 1 }],
+      // 상태 이벤트라 상관 키를 싣지 않는다(combat:attacked 선례) — strict가 막는다.
+      ['correlationId 동승', { correlationId: 'c1' }],
+      ['알 수 없는 키', { extra: true }],
+    ])('%s이면 거부한다', (_label, patch) => {
+      expect(serverEventSchema.safeParse({ ...validRound, ...patch }).success).toBe(false)
+    })
+
+    it('필수 필드가 빠지면 거부한다', () => {
+      const { youDied: _youDied, ...withoutYouDied } = validRound
+      expect(serverEventSchema.safeParse(withoutYouDied).success).toBe(false)
+
+      // received·counter는 nullable이지 optional이 아니다 — 누락은 거부된다.
+      const { received: _received, ...withoutReceived } = validRound
+      expect(serverEventSchema.safeParse(withoutReceived).success).toBe(false)
+      const { counter: _counter, ...withoutCounter } = validRound
+      expect(serverEventSchema.safeParse(withoutCounter).success).toBe(false)
     })
   })
 })

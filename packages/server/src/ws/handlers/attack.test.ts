@@ -132,6 +132,13 @@ function setup(options: SetupOptions = {}) {
       alloc: createInstanceIdAllocator(),
     },
     logger,
+    // 플레이어 사망 경로는 이 핸들러 테스트의 관심사가 아니다 — 부활 방 없는 스텁(조회 실패 시 로그만).
+    playerDeathDeps: {
+      resolveRoom: () => undefined,
+      combatRegistry,
+      onRoomEntered: vi.fn(),
+      onRoomLeft: vi.fn(),
+    },
   })
   const resolveCharacterName = (characterId: string): string | undefined =>
     liveRegistry.get(characterId)?.character.name

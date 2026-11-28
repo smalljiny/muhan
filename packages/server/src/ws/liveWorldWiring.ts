@@ -10,8 +10,11 @@ import type { InstanceIdAllocator, SpawnTemplateIndex } from '../world/spawn.js'
 import { composeCharacterFlags } from '../character/flags.js'
 import { assemblePlayerCombatState, toCarry } from '../combat/assemblePlayerCombatState.js'
 import { createCombatRegistry, type CombatRegistry } from '../combat/combatRegistry.js'
-import { createCreatureLedgers } from '../combat/creatureLedgers.js'
+import { createCreatureLedgers, type CreatureLedgers } from '../combat/creatureLedgers.js'
 import { defaultCombatRng } from '../combat/dice.js'
+import { createCombatTick } from '../combat/combatTick.js'
+import { crtSpell } from '../magic/crtSpell.js'
+import type { OnCombatTick } from '../world/creatureTick.js'
 import {
   CHARACTERS_COLLECTION,
   createMarkCharacterDirty,
@@ -29,9 +32,11 @@ import type { MoveHandlerDeps } from './handlers/move.js'
 import type { TrainHandlerDeps } from './handlers/train.js'
 import type { StudyHandlerDeps } from './handlers/study.js'
 import { createRoomChannelAdapter } from './roomChannelAdapter.js'
-import { createPresenceBroadcaster } from './presenceBroadcaster.js'
+import { createPresenceBroadcaster, safeLogError } from './presenceBroadcaster.js'
 import { createLiveSessionLifecycleAdapter } from './liveSessionLifecycleAdapter.js'
-import { assembleDeathSeams } from './assembleDeathSeams.js'
+import { assembleDeathSeams, type DeathSeams } from './assembleDeathSeams.js'
+import { createTickAwardCollector, type TickAwardCollector } from './tickAwardCollector.js'
+import { createCombatRoundNotifier, type CombatRoundNotifierDeps } from './combatRoundNotifier.js'
 import type { AttackHandlerDeps } from './handlers/attack.js'
 import type { LiveWorldBinding } from './liveWorldBinding.js'
 import type { ChannelPort, ChannelDeliveryContext } from './channelPort.js'
@@ -59,6 +64,12 @@ import type { ConnectionContext } from './connection.js'
  * 리졸버(resolveCharacterName)도 1회 생성해 진입·이동 두 world:room 생산자가 같은 참조를 공유한다.
  * 방 스코프 플레이어 리졸버(resolveRoomPlayer)는 그 이름 리졸버를 **재사용해** 1회 생성한다 — 지목 경로가
  * 표시 경로와 다른 클로저를 배후에 두면 "보이는 이름"과 "지목되는 이름"이 갈린다.
+ *
+ * 몬스터 전투 tick(combatTick)도 같은 불변식 아래 1회 조립한다. 공격 핸들러(attackDeps)와 **같은 인스턴스**를
+ * 공유하는 대상은 전투 레지스트리(combatRegistry)·몬스터별 원장 라우터(ledgers)·사망 seam(deathSeams)·
+ * 굴림 seam(defaultCombatRng)·시계(bundle.now)다. 라운드 통지기는 presence 방송기·이름 리졸버·방 리졸버·
+ * markCharacterDirty·전송 함수를 진입·이동 경로와 같은 참조로 받는다. 원장이 갈리면 반격 피해가 오프너
+ * 처치 보상에서 빠지고, 레지스트리가 갈리면 반격으로 깎인 hp가 공격 핸들러·세션 종료에 보이지 않는다.
  *
  * 이 불변식은 **이 팩토리를 거친 묶음 파생 경로에 한정**된다. `plugin.ts`가 진입 seam을
  * `liveWorld ?? wiring?.liveWorldBinding`로 해석하므로, 호출자가 `liveWorld`와 `liveWorldDeps`를 함께
@@ -136,6 +147,14 @@ export interface LiveWorldWiringBundle {
   readonly onRoomLeft: (room: RoomNode, actor: MoveActor) => void
   /** 진입 로거(orphan currentRoom 폴백 경고 등). */
   readonly logger: LiveWorldLogger
+  /**
+   * 몬스터 전투 tick 지연 바인딩 슬롯의 `bind`(선택). 팩토리가 조립한 전투 tick 핸들러를 1회 꽂는다.
+   *
+   * boot가 `createCombatTickBinding()`으로 슬롯을 **1회** 만들어 `onCombatTick`은 worldRuntime에,
+   * `bind`는 여기에 싣는다. 슬롯은 두 번째 `bind`에 throw하므로 같은 묶음으로 wiring을 두 번 만들지
+   * 말 것. 없으면(단위 테스트·부분 조립) 핸들러를 만들지만 아무 데도 꽂지 않는다 — 몬스터가 반격하지 않는다.
+   */
+  readonly bindCombatTick?: (handler: OnCombatTick) => void
 }
 
 /**
@@ -246,12 +265,16 @@ export function createLiveWorldWiring(
     return live === undefined ? '' : composeCharacterFlags(live.character, bundle.now())
   }
 
+  // 전송 함수 — **1회** 계산해 presence 방송기와 라운드 통지기가 같은 참조를 쓴다(#3). 전송 인자가 없으면
+  // 둘 다 아무것도 보내지 않는다.
+  const sendToCharacter = transport?.sendToCharacter ?? sendNothing
+
   // presence 방송기 — **1회** 생성해 진입 코어(entered·exited)와 이동 seam(moved-out·moved-in)이 같은
   // 참조를 쓴다. 방송기는 예외를 밖으로 던지지 않으므로 점유 상태 갱신 경로를 끊지 않는다.
   const presence = createPresenceBroadcaster({
     resolveCharacterName,
     resolveActorFlags,
-    sendToCharacter: transport?.sendToCharacter ?? sendNothing,
+    sendToCharacter,
     logger: bundle.logger,
   })
 
@@ -384,14 +407,28 @@ export function createLiveWorldWiring(
   // 기여자 게이트(`ledger.get(id) > 0`)가 전부 탈락하고 보상이 조용히 0이 된다(assembleDeathSeams 헤더).
   const ledgers = createCreatureLedgers()
 
+  // tick 범위 경험치 수령자 수집기 — **1회** 생성한다. 사망 seam의 관찰자로 꽂히지만 전투 tick 래퍼가
+  // begin/end로 켠 동안만 기록하므로, 같은 seam을 쓰는 오프너 처치는 아무것도 남기지 않는다(D11).
+  const awardCollector = createTickAwardCollector()
+
   // 사망 seam — **1회** 조립한다. 소환·리스폰이 쓰는 alloc·templates는 묶음이 실어 준 worldRuntime
   // 인스턴스를 그대로 넘긴다(bundle.alloc JSDoc — instanceId 충돌 방지).
   const deathSeams = assembleDeathSeams({
     liveRegistry: bundle.liveRegistry,
     ledgers,
     markCharacterDirty,
+    // 수집기 인터페이스가 메서드 선언이라 화살표로 감싸 this 분리를 피한다(동작은 record 그대로).
+    onCreatureDeathAwards: (ids) => awardCollector.record(ids),
     creatureDeathDeps: { templates: bundle.spawnTemplates, alloc: bundle.alloc },
     logger: bundle.logger,
+    // 플레이어 사망(§3.5) — 공격 핸들러와 같은 전투 레지스트리·방 해석기·이동 훅을 넘긴다. 전송은
+    // 사망 seam이 하지 않는다(D10).
+    playerDeathDeps: {
+      resolveRoom: resolveRoomById,
+      combatRegistry,
+      onRoomEntered: bundle.onRoomEntered,
+      onRoomLeft: bundle.onRoomLeft,
+    },
   })
 
   // 공격 의존 — 신규 원재료는 없다. 사망 seam·원장·전투 레지스트리는 위에서 1회씩 만든 것이고,
@@ -413,6 +450,25 @@ export function createLiveWorldWiring(
     markCharacterDirty,
   }
 
+  assembleAndBindCombatTick(bundle, {
+    combatRegistry,
+    ledgers,
+    deathSeams,
+    awardCollector,
+    notifierDeps: {
+      liveRegistry: bundle.liveRegistry,
+      combatRegistry,
+      markCharacterDirty,
+      // presence 방송기와 같은 참조 — 통지기와 방송기가 같은 전송 함수를 봐야 한다.
+      sendToCharacter,
+      resolveRoomById,
+      resolveCharacterName,
+      presence,
+      awardedPlayerIds: () => awardCollector.current(),
+      logger: bundle.logger,
+    },
+  })
+
   return {
     liveWorldBinding,
     moveDeps,
@@ -427,6 +483,58 @@ export function createLiveWorldWiring(
     resolveRoomCreature,
     resolveRoomPlayer,
   }
+}
+
+/** 전투 tick 조립 재료 — `createLiveWorldWiring`이 공격 핸들러용으로 1회씩 만든 인스턴스들이다(#3). */
+interface CombatTickParts {
+  readonly combatRegistry: CombatRegistry
+  readonly ledgers: CreatureLedgers
+  readonly deathSeams: DeathSeams
+  readonly awardCollector: TickAwardCollector
+  readonly notifierDeps: CombatRoundNotifierDeps
+}
+
+/**
+ * 몬스터 전투 tick을 1회 조립해 묶음의 슬롯에 꽂는다(스펙 §3.3).
+ *
+ * 공격 핸들러와 같은 레지스트리·원장 라우터·사망 seam·굴림 seam·시계로 combatTick을 만들고, 라운드 보고는
+ * 통지기로 보낸다. 핸들러는 수집기 래퍼로 감싼다 — 호출 시작에 `begin()`, `finally`에서 `end()`라 tick이
+ * throw해도 수집기가 켜진 채 남지 않는다(남으면 다음 오프너 처치의 수령자가 다음 tick 통지에 섞인다).
+ *
+ * 예외는 **몬스터 단위로 격리**한다 — 래퍼가 잡아 `{ err, creatureInstanceId, roomId }`를 로그로 남기고
+ * 삼킨다. creatureTick은 `onCombatTick`을 try/catch 없이 부르므로, 올리면 한 몬스터의 예외가 그 tick의
+ * 나머지 방·몬스터(autonomic·전투) 전체를 건너뛰게 하고 WorldClock 슬롯 catch는 어느 몬스터인지 남기지
+ * 않는다. 로깅 자체의 실패도 `safeLogError`가 삼킨다.
+ *
+ * 한계: 사망 seam 도중 throw하면 그 몬스터의 상태 변경이 반쯤 적용된 채 남을 수 있다(롤백 없음 — 이번 범위 밖).
+ */
+function assembleAndBindCombatTick(bundle: LiveWorldWiringBundle, parts: CombatTickParts): void {
+  const tick = createCombatTick({
+    rng: defaultCombatRng,
+    registry: parts.combatRegistry,
+    ledgers: parts.ledgers,
+    fireCreatureDeath: parts.deathSeams.fireCreatureDeath,
+    firePlayerDeath: parts.deathSeams.firePlayerDeath,
+    now: bundle.now,
+    castSpell: crtSpell,
+    onRoundResolved: createCombatRoundNotifier(parts.notifierDeps),
+  })
+  const collector = parts.awardCollector
+  const logError = safeLogError(bundle.logger)
+  const handler: OnCombatTick = (creature, room) => {
+    collector.begin()
+    try {
+      tick(creature, room)
+    } catch (err) {
+      logError(
+        { err, creatureInstanceId: creature.instanceId, roomId: room.roomId },
+        '몬스터 전투 tick 실패 — 이 몬스터만 건너뛴다',
+      )
+    } finally {
+      collector.end()
+    }
+  }
+  bundle.bindCombatTick?.(handler)
 }
 
 /** assembleRoomChannelPort 의존 seam — 발화자 방 리졸버 + 세션 색인 + 소켓 리졸버 + 안전 전송. */

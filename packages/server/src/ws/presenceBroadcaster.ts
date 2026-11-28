@@ -87,17 +87,26 @@ function toWireChange(
   }
 }
 
-export function createPresenceBroadcaster(deps: PresenceBroadcasterDeps): PresenceBroadcaster {
-  const { logger } = deps
+/** 절대 던지지 않는 error 로거 — `safeLogError`가 만든다. */
+export type SafeLogError = (fields: Record<string, unknown>, msg: string) => void
 
-  // 로깅 자체의 실패도 호출자(점유 상태 갱신 경로)로 새지 않게 삼킨다.
-  const logError = (fields: Record<string, unknown>, msg: string): void => {
+/**
+ * 로깅 자체의 실패도 호출자로 새지 않게 삼키는 error 로거를 만든다. "절대 던지지 않는다" 계약을 진
+ * 전송 경로(presence 방송기·라운드 통지기)와 전투 tick 래퍼(몬스터 단위 격리 로그)가 공유한다.
+ */
+export function safeLogError(logger: PresenceBroadcasterLogger): SafeLogError {
+  return (fields, msg) => {
     try {
       logger.error(fields, msg)
     } catch {
-      // 의도적으로 무시 — 방송기는 어떤 경우에도 던지지 않는다.
+      // 의도적으로 무시 — 호출자는 어떤 경우에도 던지지 않는다.
     }
   }
+}
+
+export function createPresenceBroadcaster(deps: PresenceBroadcasterDeps): PresenceBroadcaster {
+  // 로깅 자체의 실패도 호출자(점유 상태 갱신 경로)로 새지 않게 삼킨다.
+  const logError = safeLogError(deps.logger)
 
   // 이름·플래그 조회 → 이벤트 생성. 조회 실패·이름 미해석이면 undefined(방송 생략).
   const prepare = (

@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, expectTypeOf } from 'vitest'
 import * as combat from './index.js'
+import type { CombatRoundReport, CombatTickDeps, IncomingAction } from './index.js'
 import { maxRollRng } from './dice.testutil.js'
 
 /**
@@ -69,6 +70,13 @@ describe('combat 배럴', () => {
     expect(combat.MONSTER_SPELL_CAST_CHANCE).toBe(20)
     expect(combat.ATTACK_COOLDOWN_INTERVAL).toBe(1)
     expect(combat.ATTACK_COOLDOWN_BLIND).toBe(6)
+  })
+
+  it('combatTick 라운드 보고 타입(CombatRoundReport·IncomingAction)을 재export한다', () => {
+    expectTypeOf<CombatRoundReport['incoming']>().toEqualTypeOf<IncomingAction>()
+    expectTypeOf<NonNullable<CombatTickDeps['onRoundResolved']>>().toEqualTypeOf<
+      (report: CombatRoundReport) => void
+    >()
   })
 
   it('initiateAttack 오프너를 재export한다', () => {

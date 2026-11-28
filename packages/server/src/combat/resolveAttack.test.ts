@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { CreatureInstance, RoomNode } from 'shared'
-import { resolveAttack, type ResolveContext } from './resolveAttack.js'
+import { resolveAttack, rollHit, noDamageOutcome, type ResolveContext } from './resolveAttack.js'
 import { toCombatant } from './combatant.js'
 import type { PlayerCombatState } from './playerState.js'
 import type { DamageLedger } from './enmity.js'
@@ -600,5 +600,71 @@ describe('resolveAttack — 몬스터 특수공격 연결 (Story 9)', () => {
     expect(out.specialAttack).toBeNull()
     expect(out.messageInputs.attacks[0]?.specialAttack).toBeNull()
     expect(creature.hpcur).toBe(25)
+  })
+})
+
+/**
+ * rollHit — performStrike 첫 단계(명중 판정)를 추출한 판정(D8 재사용 지점, 굴림 1개 외 상태 불변). 굴림 rng(1, 상한)
+ * 1개만 소비하고 굴림 >= hitThreshold면 명중이다. 피해·원장·사망 seam·HP 가드와 무관하다 —
+ * combatTick이 사망 취소 상태 표적(HP<1)에게 피해 없이 명중 판정만 굴릴 때 쓴다.
+ */
+describe('rollHit — 명중 판정 단독 굴림(D8)', () => {
+  // 몬스터 attacker thaco=10 vs 플레이어 armor=0 → threshold = max(1, 10 - 0) = 10.
+  it('굴림이 threshold-1이면 빗맞음(false)', () => {
+    const monster = makeCreature({ thaco: 10 })
+    const player = makePlayer({ armor: 0 })
+
+    expect(rollHit(toCombatant(monster), toCombatant(player), seqRng([9]))).toBe(false)
+  })
+
+  it('굴림이 threshold와 같으면 명중(true)', () => {
+    const monster = makeCreature({ thaco: 10 })
+    const player = makePlayer({ armor: 0 })
+
+    expect(rollHit(toCombatant(monster), toCombatant(player), seqRng([10]))).toBe(true)
+  })
+
+  it('굴림을 정확히 1개 소비한다 — 몬스터 상한 d20', () => {
+    const monster = makeCreature({ thaco: 10 })
+    const player = makePlayer({ armor: 0 })
+    const rng = vi.fn(seqRng([15]))
+
+    rollHit(toCombatant(monster), toCombatant(player), rng)
+
+    expect(rng).toHaveBeenCalledTimes(1)
+    expect(rng).toHaveBeenCalledWith(1, 20)
+  })
+
+  it('플레이어 attacker는 상한 d30으로 1개 굴린다', () => {
+    const player = makePlayer({ thaco: 10 })
+    const creature = makeCreature({ armor: 0 })
+    const rng = vi.fn(seqRng([10]))
+
+    expect(rollHit(toCombatant(player), toCombatant(creature), rng)).toBe(true)
+    expect(rng).toHaveBeenCalledTimes(1)
+    expect(rng).toHaveBeenCalledWith(1, 30)
+  })
+
+  it('HP<1 defender에도 HP 가드 없이 판정만 하고 피해·상태를 바꾸지 않는다', () => {
+    const monster = makeCreature({ thaco: 10 })
+    const deadPlayer = makePlayer({ hpCurrent: -3, armor: 0 })
+
+    expect(rollHit(toCombatant(monster), toCombatant(deadPlayer), seqRng([20]))).toBe(true)
+    expect(deadPlayer.hpCurrent).toBe(-3)
+  })
+})
+
+describe('noDamageOutcome — 피해 없는 판정 결과(D8)', () => {
+  it('hit 여부만 다르고 피해·치명·사망·타격 기술자는 모두 비어 있다', () => {
+    const empty = {
+      damage: 0,
+      critical: false,
+      fumble: false,
+      died: false,
+      specialAttack: null,
+      messageInputs: { attacks: [] },
+    }
+    expect(noDamageOutcome(true)).toEqual({ hit: true, ...empty })
+    expect(noDamageOutcome(false)).toEqual({ hit: false, ...empty })
   })
 })

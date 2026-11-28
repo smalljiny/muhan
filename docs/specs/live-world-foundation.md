@@ -160,18 +160,31 @@ fan-out 대상 결정은 `createRoomChannelAdapter`(발화자 현재 방의 occu
 
 부트는 `onRoomEntered`/`onRoomLeft`를 월드 런타임 훅에 위임해 이동과 세션 진입/퇴장이 **동일 활성 집합**을 갱신하게 한다 — 이전까지 dormant였던 활성 집합 경계가 여기서 해소된다.
 
+### 몬스터 전투 tick 조립
+
+묶음의 선택 필드 `bindCombatTick?: (handler: OnCombatTick) => void`는 boot가 만든 전투 tick 지연 바인딩 슬롯의 `bind`다([`creature-spawn.md`](creature-spawn.md) §컴포지션 루트). `createLiveWorldWiring`은 공격 핸들러가 쓰는 인스턴스를 재사용해 몬스터 전투 tick을 **1회** 조립하고 `bindCombatTick`으로 꽂는다. 슬롯이 두 번째 `bind`에 throw하므로 같은 묶음으로 wiring을 두 번 만들지 않는다. 필드가 없으면(단위 테스트·부분 조립) 핸들러를 만들지만 꽂지 않아 몬스터가 반격하지 않는다.
+
+조립 요소와 공유 인스턴스는 다음과 같다.
+
+- **combatTick** — `createCombatTick`에 굴림 seam(`rng`)·전투 레지스트리·몬스터별 원장 라우터·사망 seam(`fireCreatureDeath`·`firePlayerDeath`)·`now`·`castSpell`(`crtSpell`, [`magic.md`](magic.md))·`onRoundResolved`(라운드 통지기)를 넣는다.
+- **라운드 통지기**(`ws/combatRoundNotifier.ts`) — 라운드 보고를 당사자에게 전송한다. 몬스터가 죽은 라운드에는 당사자에게 그 방의 `world:room`을 보낸다([`world-view.md`](world-view.md)).
+- **tick 범위 경험치 수집기**(`ws/tickAwardCollector.ts`) — 사망 seam의 `onCreatureDeathAwards` 관찰자로 꽂힌다. 핸들러 래퍼가 `begin()`~`end()`로 켠 동안만 수령자를 기록하므로, 같은 seam을 쓰는 오프너 처치는 기록을 남기지 않는다. 통지기가 수령자 목록(`awardedPlayerIds`)을 읽어 `character:stats`를 보낸다.
+- **몬스터 단위 예외 격리** — 핸들러 래퍼가 예외를 잡아 `{ err, creatureInstanceId, roomId }`를 로그로 남기고 삼킨다. creatureTick이 `onCombatTick`을 try/catch 없이 부르므로, 격리하지 않으면 한 몬스터의 예외가 그 tick의 나머지 방·몬스터를 건너뛰게 한다. 사망 seam 도중 예외가 나면 그 몬스터의 상태 변경이 반쯤 적용된 채 남을 수 있다(롤백 없음).
+
+공격 핸들러(`attackDeps`)와 combatTick이 **같은 인스턴스**를 공유한다: 전투 레지스트리, 원장 라우터, 사망 seam, rng, `now`, 전송 함수, presence 방송기, 이름 리졸버. 원장 라우터가 둘로 갈리면 사망 시점에 읽는 원장이 비어 보상이 조용히 0이 된다. `sendToCharacter`는 `transport?.sendToCharacter ?? sendNothing`으로 **한 번** 계산해 presence 방송기와 라운드 통지기가 같은 참조를 쓴다. 전송 인자가 없으면 둘 다 아무것도 보내지 않는다.
+
 ## 제약사항
 
 - **입·퇴장 통지는 `world:presence`로 연결됨** — `createLiveWorldWiring(bundle, transport?)`가 presence 방송기(`ws/presenceBroadcaster.ts`)를 **1회** 생성해 진입 코어(`entered`·`exited`)와 `tryMove` seam(`moved-out`·`moved-in`)의 `broadcastJoin`/`broadcastLeave`에 같은 참조로 넣는다. 전송은 `ws/plugin.ts`가 `createSendToCharacter`로 만든 `sendToCharacter`를 `transport`로 주입하며, 주지 않으면 방송기는 아무것도 보내지 않는다. 방송기는 이동자를 제외한 방 점유자에게 보내고, 이름을 해석하지 못하면 이벤트를 생략하며, 예외를 밖으로 던지지 않아 점유 갱신 경로를 끊지 않는다. 이동자 플래그는 `resolveActorFlags`가 라이브 레지스트리 문서로 합성한다([`character-flags.md`](character-flags.md)). 방 채팅 전파는 여전히 채널 포트가 담당한다.
 - **규칙 명령은 `train`·`study`·`attack` 셋이 연결됨** — 이 foundation 위에 `progress:train`(디스패처 패턴 확립 + 레벨·경험치·gold·능력치 변이), `progress:study`(#120 — 소지품 이름 해석 + 주문 지식 변이 + 비법서 소멸), `combat:attack`(#121 — 방 스코프 대상 지목 + 전투 판정 + 몬스터 사망·경험치 분배)이 얹혔다. 남은 규칙 명령은 `teach`(#119)·`cast`(#122)다. **장비 슬롯 스탯 파이프는 #121이 열었다** — `assemblePlayerCombatState`가 `pairObjects` → `projectEquipStats` → `toPlayerCombatState`로 착용 장비를 유효 전투 스탯에 반영한다.
 - **인벤 서수 기준이 오라클과 다르다** — 오라클 `add_obj_crt`(`legacy/muhan/src/player.c:857-898`)는 EUC-KR `strcmp` 이름 사전순(동명 시 `adjustment` 순) 삽입으로 인벤 순서를 유지하지만, 포트는 `findByOwner`의 `_id` 오름차순이다. KS X 1001 완성형 배열이 Unicode Hangul Syllables 배열과 달라 JS 문자열 비교로 재현되지 않는 것이 원인이며, 방 대상 서수 divergence(#137)와 같은 성격이다. `_id` 정렬은 **결정적 순서를 보장하기 위한 것**이지 오라클 재현이 아니다(Mongo 자연 순서는 계약이 아니라 같은 인벤이 조회마다 다른 서수를 낼 수 있다). 추적 이슈 [#142](https://github.com/smalljiny/muhan/issues/142), 근거는 `world/liveCharacterEntry.ts` 헤더가 담당한다.
 - **인벤 변경의 영속 경로는 삭제뿐** — `study`의 비법서 소멸만 `markObjectDeleted`로 write-behind에 실린다. 착용 토글·`shotscur` 감소·줍기 같은 비-삭제 인벤 변경은 라이브 메모리에만 남고 영속되지 않는다. 해당 명령들이 연결될 때 함께 온다.
-- **pending overlay는 캐릭터 문서에 한한다(#124)** — hydrate가 합성하는 것은 `characters` 스냅샷뿐이고 `objectDeletions`는 합성하지 않는다. 그래서 grace 만료 재접속 시 삭제 마킹됐지만 아직 flush되지 않은 비법서가 인벤에 **유령으로 남는다**. 현재 무해하다 — 재연마 시 `setKnown`·`markObjectDeleted` 모두 멱등해 수렴하고, 줍기·버리기·건네주기 경로가 0건이라 복제 경로가 없다. #121(attack)은 전리품을 방에 드롭하지 않기로 결정해(주울 수단이 없다) 이 경로를 열지 않았다. #119(teach)가 건네주기를 열거나 #99가 전리품 드롭을 붙이면 재평가가 필요하다. 인벤 자체의 재접속 revert(위 항목)는 여전히 열려 있다 — 캐릭터 문서 쪽만 닫혔고 인벤은 닫히지 않았다.
+- **pending overlay는 캐릭터 문서에 한한다(#124)** — hydrate가 합성하는 것은 `characters` 스냅샷뿐이고 `objectDeletions`는 합성하지 않는다. 그래서 grace 만료 재접속 시 삭제 마킹됐지만 아직 flush되지 않은 비법서가 인벤에 **유령으로 남는다**. 현재 무해하다 — 재연마 시 `setKnown`·`markObjectDeleted` 모두 멱등해 수렴하고, 줍기·버리기·건네주기 경로가 0건이라 복제 경로가 없다. #121(attack)은 전리품을 방에 드롭하지 않기로 결정해(주울 수단이 없다) 이 경로를 열지 않았다. 몬스터 전투 tick 연결도 전리품을 방에 드롭하지 않는다. 그래서 이 경로는 여전히 닫혀 있다. #119(teach)가 건네주기를 열거나 전리품 드롭이 붙으면 재평가가 필요하다. 인벤 자체의 재접속 revert(위 항목)는 여전히 열려 있다 — 캐릭터 문서 쪽만 닫혔고 인벤은 닫히지 않았다.
 - **`world:room`은 스냅샷이고 입·퇴장 델타는 `world:presence`가 담당한다** — `world:room`은 발생 시점이 진입·이동 성공 두 곳뿐이다. 내가 가만히 있는 동안 다른 사람이 들어오거나 나가는 변화는 `world:presence`가 점유자 목록과 알림에 반영하고, 다음 `world:room`에서 목록이 다시 수렴한다. 몬스터·아이템 변화는 여전히 델타가 없다.
 - **스폰 정책 미완결** — orphan `currentRoom`은 `DEFAULT_START_ROOM = 1` 단일 폴백으로만 방어한다. 레벨·종족·소속별 시작지 정책은 별도다.
 - **채널 fan-out에 가시성 필터 없음** — 방 채널 fan-out은 occupants 전 멤버 대상이며 발화자 자신도 제외하지 않는다. PINVIS·어둠·투명 필터는 E5가 담당한다. (방 **표시**의 가시성 필터는 E11에서 별도로 들어왔다 — [`movement-rooms.md`](movement-rooms.md) §방 표시 가시성 필터. 두 필터는 다른 관심사다.)
 - **broadcast·yell 채널 미분화** — 실 방 어댑터가 붙었으므로 `broadcast`·`yell`도 방 단위로만 전달된다(전서버 방송·1홉 인접 전파 아님). 전역 fan-out과 `minLevel` 게이트 강제는 소셜·채널 에픽(#37)이 함께 담당한다.
-- **몬스터 측 live-ization 없음** — 몬스터 틱 부트 연결·마나 재생은 별도 토픽이다.
+- **몬스터 측 live-ization은 전투 tick까지다** — 몬스터 전투 tick은 boot에 연결됐다(위 §몬스터 전투 tick 조립). 플레이어 HP·MP 재생 펄스·특수공격 상태·DoT 배선은 연결되지 않았다(후속 #189).
 
 ## 관련 문서
 

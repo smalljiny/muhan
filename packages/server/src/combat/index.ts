@@ -43,6 +43,12 @@ export type { CreatureLedgers } from './creatureLedgers.js'
 export { resolveAttack } from './resolveAttack.js'
 export type { ResolveContext, AttackOutcome } from './resolveAttack.js'
 export { createCombatTick } from './combatTick.js'
-export type { CombatTickDeps, CastSpellSeam, SpellCastResult } from './combatTick.js'
+export type {
+  CombatTickDeps,
+  CastSpellSeam,
+  SpellCastResult,
+  CombatRoundReport,
+  IncomingAction,
+} from './combatTick.js'
 export { initiateAttack } from './initiateAttack.js'
 export type { InitiateContext, InitiateResult } from './initiateAttack.js'

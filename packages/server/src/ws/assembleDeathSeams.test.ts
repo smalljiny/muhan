@@ -1,6 +1,13 @@
-import { describe, it, expect, vi } from 'vitest'
-import type { Character, CreatureInstance, ObjectInstance } from 'shared'
-import { assembleDeathSeams } from './assembleDeathSeams.js'
+import { describe, it, expect, expectTypeOf, vi } from 'vitest'
+import {
+  resolveHpMax,
+  resolveMpMax,
+  type Character,
+  type CreatureInstance,
+  type ObjectInstance,
+  type RoomNode,
+} from 'shared'
+import { assembleDeathSeams, type DeathSeamDeps } from './assembleDeathSeams.js'
 import { makeCreature, makeItem, makeRoom } from '../world/roomFixtures.testutil.js'
 import { makeCharacter } from '../world/characterFixtures.testutil.js'
 import { makeObjectInstance } from '../items/objectFixtures.testutil.js'
@@ -9,6 +16,8 @@ import { buildSpawnTemplateIndex, createInstanceIdAllocator } from '../world/spa
 import { createCreatureLedgers } from '../combat/creatureLedgers.js'
 import { accumulateDamage } from '../combat/enmity.js'
 import type { PlayerCombatState } from '../combat/playerState.js'
+import { createCombatRegistry } from '../combat/combatRegistry.js'
+import type { MoveActor } from '../world/tryMove.js'
 
 /**
  * 사망 seam 조립기 테스트.
@@ -33,13 +42,39 @@ function makeDead(overrides: Partial<CreatureInstance> = {}): CreatureInstance {
   })
 }
 
-function setup() {
+interface SetupOptions {
+  readonly onCreatureDeathAwards?: (ids: readonly string[]) => void
+  /** `resolveRoom`이 찾을 수 있는 방. 기본은 부활 방(1008) 하나다. */
+  readonly rooms?: readonly RoomNode[]
+}
+
+function setup(options: SetupOptions = {}) {
   const liveRegistry = createLiveCharacterRegistry()
   const ledgers = createCreatureLedgers()
+  const combatRegistry = createCombatRegistry()
   const markCharacterDirty = vi.fn()
   const logger = { error: vi.fn() }
   const register = vi.spyOn(liveRegistry, 'register')
   const discard = vi.spyOn(ledgers, 'discard')
+  const combatRegister = vi.spyOn(combatRegistry, 'register')
+
+  const reviveRoom = makeRoom({ roomId: 1008, name: '부활의 방' })
+  const rooms = new Map<number, RoomNode>(
+    (options.rooms ?? [reviveRoom]).map((room) => [room.roomId, room]),
+  )
+
+  // 훅 호출 순서와 그 시점의 점유 여부를 함께 기록한다 — 점유 이동과 훅의 상대 순서까지 고정한다.
+  const calls: string[] = []
+  const onRoomLeft = vi.fn((room: RoomNode, actor: MoveActor) => {
+    calls.push(
+      `left:${room.roomId}:${actor.currentRoomId}:${room.occupants.has(actor.characterId)}`,
+    )
+  })
+  const onRoomEntered = vi.fn((room: RoomNode, actor: MoveActor) => {
+    calls.push(
+      `entered:${room.roomId}:${actor.currentRoomId}:${room.occupants.has(actor.characterId)}`,
+    )
+  })
 
   const seams = assembleDeathSeams({
     liveRegistry,
@@ -50,9 +85,30 @@ function setup() {
       alloc: createInstanceIdAllocator(),
     },
     logger,
+    onCreatureDeathAwards: options.onCreatureDeathAwards,
+    playerDeathDeps: {
+      resolveRoom: (roomId) => rooms.get(roomId),
+      combatRegistry,
+      onRoomEntered,
+      onRoomLeft,
+    },
   })
 
-  return { liveRegistry, ledgers, markCharacterDirty, logger, register, discard, seams }
+  return {
+    liveRegistry,
+    ledgers,
+    combatRegistry,
+    markCharacterDirty,
+    logger,
+    register,
+    discard,
+    combatRegister,
+    reviveRoom,
+    calls,
+    onRoomEntered,
+    onRoomLeft,
+    seams,
+  }
 }
 
 /**
@@ -198,6 +254,77 @@ describe('assembleDeathSeams — fireCreatureDeath 방·원장 처리', () => {
   })
 })
 
+describe('assembleDeathSeams — fireCreatureDeath 경험치 수령자 관찰자(D11)', () => {
+  /** 라이브 기여자 2명 + 미등록 기여자 1명이 같은 몬스터를 나눠 잡은 상태를 만든다. */
+  function seedGroupKill(ctx: ReturnType<typeof setup>) {
+    place(ctx.liveRegistry, makeCharacter({ _id: 'char-1', experience: 0 }))
+    place(ctx.liveRegistry, makeCharacter({ _id: 'char-2', name: '타이', experience: 0 }))
+    const dead = makeDead({ enemies: ['char-1', 'char-gone', 'char-2'] })
+    const room = makeRoom({ roomId: 50, creatures: [dead] })
+    const ledger = ctx.ledgers.for(dead.instanceId)
+    accumulateDamage(ledger, 'char-1', 3)
+    accumulateDamage(ledger, 'char-gone', 3)
+    accumulateDamage(ledger, 'char-2', 4)
+    return { dead, room }
+  }
+
+  it('실제로 적립된 라이브 기여자 id만 1회 넘긴다 — 미등록 기여자는 빠진다', () => {
+    const observer = vi.fn<(ids: readonly string[]) => void>()
+    const ctx = setup({ onCreatureDeathAwards: observer })
+    const { dead, room } = seedGroupKill(ctx)
+
+    ctx.seams.fireCreatureDeath(dead, room, 500)
+
+    expect(observer).toHaveBeenCalledTimes(1)
+    const [ids] = observer.mock.calls[0] ?? []
+    expect([...(ids ?? [])].sort()).toEqual(['char-1', 'char-2'])
+  })
+
+  it('관찰자 호출 시점에 수령자 경험치가 이미 레지스트리에 적립돼 있다', () => {
+    const seen: Record<string, number | undefined> = {}
+    const ctx = setup({
+      onCreatureDeathAwards: (ids) => {
+        for (const id of ids) seen[id] = ctx.liveRegistry.get(id)?.character.experience
+      },
+    })
+    const { dead, room } = seedGroupKill(ctx)
+
+    ctx.seams.fireCreatureDeath(dead, room, 500)
+
+    // 관찰 시점 값이 최종 값과 같고 0보다 크다 — 적립이 관찰자보다 먼저 끝났다.
+    expect(seen['char-1']).toBeGreaterThan(0)
+    expect(seen['char-2']).toBeGreaterThan(0)
+    expect(seen['char-1']).toBe(ctx.liveRegistry.get('char-1')?.character.experience)
+    expect(seen['char-2']).toBe(ctx.liveRegistry.get('char-2')?.character.experience)
+  })
+
+  it('적립된 수령자가 없어도 사망 1건당 빈 목록으로 1회 호출한다', () => {
+    const observer = vi.fn<(ids: readonly string[]) => void>()
+    const ctx = setup({ onCreatureDeathAwards: observer })
+    const dead = makeDead({ enemies: ['char-gone'] })
+    const room = makeRoom({ roomId: 50, creatures: [dead] })
+    accumulateDamage(ctx.ledgers.for(dead.instanceId), 'char-gone', 10)
+
+    ctx.seams.fireCreatureDeath(dead, room, 500)
+
+    expect(observer).toHaveBeenCalledTimes(1)
+    expect(observer).toHaveBeenCalledWith([])
+  })
+
+  it('관찰자 미주입 시 적립·방 제거·원장 폐기가 그대로다', () => {
+    const ctx = setup()
+    const { dead, room } = seedGroupKill(ctx)
+
+    expect(() => ctx.seams.fireCreatureDeath(dead, room, 500)).not.toThrow()
+
+    expect(ctx.liveRegistry.get('char-1')?.character.experience).toBeGreaterThan(0)
+    expect(ctx.liveRegistry.get('char-2')?.character.experience).toBeGreaterThan(0)
+    expect(ctx.markCharacterDirty).toHaveBeenCalledTimes(2)
+    expect(room.creatures).toEqual([])
+    expect(ctx.discard).toHaveBeenCalledWith('50:c0')
+  })
+})
+
 describe('assembleDeathSeams — 적용하지 않는 결정(D7·D8)', () => {
   it('alignmentDelta를 적용하지 않는다 — 기여자 alignment가 사망 전후 동일하다(D7)', () => {
     const ctx = setup()
@@ -230,8 +357,9 @@ describe('assembleDeathSeams — 적용하지 않는 결정(D7·D8)', () => {
   })
 })
 
-describe('assembleDeathSeams — firePlayerDeath 스텁', () => {
-  const player: PlayerCombatState = {
+/** 사망한 플레이어의 전투상태 — hp 0, 쿨다운 등 비활력 필드는 보존 단언용으로 0이 아닌 값을 싣는다. */
+function makeDeadPlayer(overrides: Partial<PlayerCombatState> = {}): PlayerCombatState {
+  return {
     characterId: 'char-1',
     hpCurrent: 0,
     mpCurrent: 3,
@@ -247,25 +375,169 @@ describe('assembleDeathSeams — firePlayerDeath 스텁', () => {
     flags: '0'.repeat(16),
     alignment: 1,
     weapon: null,
-    nextAttackAt: 0,
+    nextAttackAt: 777,
+    ...overrides,
+  }
+}
+
+describe('assembleDeathSeams — firePlayerDeath 상태 처리(§3.5)', () => {
+  /** 출발 방(50)에 사망자를 점유시키고 라이브·전투 레지스트리에 등록한다. */
+  function arrange(ctx: ReturnType<typeof setup>, roomId = 50) {
+    const seed = makeCharacter({ _id: 'char-1', experience: 100_000, currentRoom: roomId })
+    place(ctx.liveRegistry, seed)
+    const dead = makeDeadPlayer()
+    ctx.combatRegistry.register(dead)
+    ctx.register.mockClear()
+    ctx.combatRegister.mockClear()
+    return { seed, dead }
   }
 
-  it('logger.error를 1회 남기고 레지스트리·방 상태를 바꾸지 않는다', () => {
+  it('방 안 모든 몬스터 enemies에서 사망자만 빼고 다른 적은 순서 그대로 남긴다', () => {
     const ctx = setup()
-    const seed = makeCharacter({ _id: 'char-1', experience: 30 })
-    place(ctx.liveRegistry, seed)
-    ctx.register.mockClear()
-    const survivor = makeCreature('50:c1', '살아있는몹')
-    const floor = makeItem('50:o1', '돌멩이')
-    const room = makeRoom({ roomId: 50, creatures: [survivor], items: [floor] })
+    const { dead } = arrange(ctx)
+    const a = makeCreature('50:c0', '몹A', { enemies: ['char-2', 'char-1', 'char-3'] })
+    const b = makeCreature('50:c1', '몹B', { enemies: ['char-1'] })
+    const c = makeCreature('50:c2', '몹C', { enemies: ['char-3', 'char-2'] })
+    const room = makeRoom({ roomId: 50, creatures: [a, b, c], occupants: new Set(['char-1']) })
 
-    ctx.seams.firePlayerDeath(player, room, 500)
+    ctx.seams.firePlayerDeath(dead, room, 500)
+
+    expect(a.enemies).toEqual(['char-2', 'char-3'])
+    expect(b.enemies).toEqual([])
+    expect(c.enemies).toEqual(['char-3', 'char-2'])
+  })
+
+  it('라이브 문서에 경험치 손실·부활 방 1008·hp/mp 풀회복을 적용한다', () => {
+    const ctx = setup()
+    const { seed, dead } = arrange(ctx)
+    const room = makeRoom({ roomId: 50, occupants: new Set(['char-1']) })
+
+    ctx.seams.firePlayerDeath(dead, room, 500)
+
+    const revived = ctx.liveRegistry.get('char-1')?.character
+    // level 7(<20) → 5% 손실: 100000 - 5000 = 95000(레벨 하한보다 크므로 클램프 없음).
+    expect(revived?.experience).toBe(95_000)
+    expect(revived?.currentRoom).toBe(1008)
+    expect(revived?.hpCurrent).toBe(resolveHpMax(seed))
+    expect(revived?.mpCurrent).toBe(resolveMpMax(seed))
+  })
+
+  it('출발 방 ≠ 부활 방이면 출발 방 점유 제거 → onRoomLeft → 부활 방 점유 추가 → onRoomEntered 순서다', () => {
+    const ctx = setup()
+    const { dead } = arrange(ctx)
+    const room = makeRoom({ roomId: 50, occupants: new Set(['char-1', 'char-2']) })
+
+    ctx.seams.firePlayerDeath(dead, room, 500)
+
+    // 각 훅 시점에 이미 점유가 옮겨져 있어야 한다(left 시점 출발 방 false, entered 시점 부활 방 true).
+    expect(ctx.calls).toEqual(['left:50:50:false', 'entered:1008:50:true'])
+    expect(ctx.onRoomLeft).toHaveBeenCalledWith(room, { characterId: 'char-1', currentRoomId: 50 })
+    // actor는 tryMove 관례대로 이동 전 위치(출발 방)를 싣는다.
+    expect(ctx.onRoomEntered).toHaveBeenCalledWith(ctx.reviveRoom, {
+      characterId: 'char-1',
+      currentRoomId: 50,
+    })
+    expect([...room.occupants]).toEqual(['char-2'])
+    expect(ctx.reviveRoom.occupants.has('char-1')).toBe(true)
+  })
+
+  it('부활 방에서 죽으면 점유·훅은 건드리지 않고 풀회복만 한다', () => {
+    const ctx = setup()
+    const { seed, dead } = arrange(ctx, 1008)
+    ctx.reviveRoom.occupants.add('char-1')
+
+    ctx.seams.firePlayerDeath(dead, ctx.reviveRoom, 500)
+
+    expect(ctx.onRoomLeft).not.toHaveBeenCalled()
+    expect(ctx.onRoomEntered).not.toHaveBeenCalled()
+    expect([...ctx.reviveRoom.occupants]).toEqual(['char-1'])
+    expect(ctx.liveRegistry.get('char-1')?.character.hpCurrent).toBe(resolveHpMax(seed))
+  })
+
+  it('새 전투상태를 등록한다 — hp/mp만 풀회복, 나머지 필드는 dead와 같고 인자 dead는 불변이다', () => {
+    const ctx = setup()
+    const { seed, dead } = arrange(ctx)
+    const room = makeRoom({ roomId: 50, occupants: new Set(['char-1']) })
+
+    ctx.seams.firePlayerDeath(dead, room, 500)
+
+    const next = ctx.combatRegistry.get('char-1')
+    expect(next).not.toBe(dead)
+    expect(ctx.combatRegister).toHaveBeenCalledTimes(1)
+    expect(next).toEqual({
+      ...makeDeadPlayer(),
+      hpCurrent: resolveHpMax(seed),
+      mpCurrent: resolveMpMax(seed),
+    })
+    expect(next?.nextAttackAt).toBe(dead.nextAttackAt)
+    // 옛 객체 보존(D5·반격 자격 판정 근거).
+    expect(dead).toEqual(makeDeadPlayer())
+    expect(dead.hpCurrent).toBe(0)
+  })
+
+  it('liveRegistry에 재등록하고 markCharacterDirty를 부활 문서로 1회 부른다', () => {
+    const ctx = setup()
+    const inventory = [makeObjectInstance({ _id: 'inv-1' })]
+    const seed = makeCharacter({ _id: 'char-1', experience: 1000, currentRoom: 50 })
+    place(ctx.liveRegistry, seed, inventory)
+    ctx.register.mockClear()
+    const room = makeRoom({ roomId: 50, occupants: new Set(['char-1']) })
+
+    ctx.seams.firePlayerDeath(makeDeadPlayer(), room, 500)
+
+    const live = ctx.liveRegistry.get('char-1')
+    expect(ctx.register).toHaveBeenCalledTimes(1)
+    expect(live?.inventory).toBe(inventory)
+    expect(ctx.markCharacterDirty).toHaveBeenCalledTimes(1)
+    expect(ctx.markCharacterDirty).toHaveBeenCalledWith('char-1', live?.character)
+    expect(seed.currentRoom).toBe(50) // 입력 문서는 바꾸지 않는다.
+    expect(ctx.logger.error).not.toHaveBeenCalled()
+  })
+
+  it('부활 방 조회에 실패하면 logger.error 1회만 남기고 상태를 하나도 바꾸지 않는다', () => {
+    const ctx = setup({ rooms: [] })
+    const { seed, dead } = arrange(ctx)
+    const crt = makeCreature('50:c0', '몹A', { enemies: ['char-1', 'char-2'] })
+    const room = makeRoom({ roomId: 50, creatures: [crt], occupants: new Set(['char-1']) })
+
+    ctx.seams.firePlayerDeath(dead, room, 500)
 
     expect(ctx.logger.error).toHaveBeenCalledTimes(1)
+    expect(crt.enemies).toEqual(['char-1', 'char-2'])
+    expect(ctx.liveRegistry.get('char-1')?.character).toBe(seed)
     expect(ctx.register).not.toHaveBeenCalled()
     expect(ctx.markCharacterDirty).not.toHaveBeenCalled()
-    expect(ctx.liveRegistry.get('char-1')?.character).toBe(seed)
-    expect(room.creatures).toEqual([survivor])
-    expect(room.items).toEqual([floor])
+    expect([...room.occupants]).toEqual(['char-1'])
+    expect(ctx.onRoomLeft).not.toHaveBeenCalled()
+    expect(ctx.onRoomEntered).not.toHaveBeenCalled()
+    expect(ctx.combatRegister).not.toHaveBeenCalled()
+    expect(ctx.combatRegistry.get('char-1')).toBe(dead)
+  })
+
+  it('라이브 엔트리가 없으면 logger.error를 남기고 상태를 바꾸지 않는다', () => {
+    const ctx = setup()
+    const dead = makeDeadPlayer()
+    ctx.combatRegistry.register(dead)
+    ctx.combatRegister.mockClear()
+    const crt = makeCreature('50:c0', '몹A', { enemies: ['char-1'] })
+    const room = makeRoom({ roomId: 50, creatures: [crt], occupants: new Set(['char-1']) })
+
+    ctx.seams.firePlayerDeath(dead, room, 500)
+
+    expect(ctx.logger.error).toHaveBeenCalledTimes(1)
+    expect(crt.enemies).toEqual(['char-1'])
+    expect(ctx.register).not.toHaveBeenCalled()
+    expect(ctx.markCharacterDirty).not.toHaveBeenCalled()
+    expect([...room.occupants]).toEqual(['char-1'])
+    expect(ctx.reviveRoom.occupants.size).toBe(0)
+    expect(ctx.onRoomLeft).not.toHaveBeenCalled()
+    expect(ctx.onRoomEntered).not.toHaveBeenCalled()
+    expect(ctx.combatRegister).not.toHaveBeenCalled()
+  })
+
+  it('playerDeathDeps에는 전송 seam이 없다(D10 — 타입으로 고정)', () => {
+    expectTypeOf<keyof DeathSeamDeps['playerDeathDeps']>().toEqualTypeOf<
+      'resolveRoom' | 'combatRegistry' | 'onRoomEntered' | 'onRoomLeft' | 'reviveRoom'
+    >()
   })
 })

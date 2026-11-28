@@ -39,6 +39,7 @@ const NON_CLEARING_TYPES: ReadonlyArray<ServerEvent['type']> = [
   'world:presence',
   'chat:said',
   'character:stats',
+  'combat:round',
   'system:hello',
   'system:reload',
   'debug:echo:result',

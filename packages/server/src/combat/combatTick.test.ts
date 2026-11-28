@@ -1,7 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { CreatureInstance, RoomNode } from 'shared'
-import { createCombatTick, type CombatTickDeps, type CastSpellSeam } from './combatTick.js'
+import {
+  createCombatTick,
+  type CombatTickDeps,
+  type CastSpellSeam,
+  type CombatRoundReport,
+} from './combatTick.js'
 import { createCombatRegistry, type CombatRegistry } from './combatRegistry.js'
+import { createCreatureLedgers } from './creatureLedgers.js'
 import type { PlayerCombatState } from './playerState.js'
 import type { DamageLedger } from './enmity.js'
 import { seqRng } from './dice.testutil.js'
@@ -110,25 +116,33 @@ interface DepsHarness {
 
 function makeDeps(
   values: readonly number[],
-  opts: { now?: number; castSpell?: CastSpellSeam } = {},
+  opts: {
+    now?: number
+    clock?: { now: number }
+    castSpell?: CastSpellSeam
+    ledgers?: CombatTickDeps['ledgers']
+    onRoundResolved?: CombatTickDeps['onRoundResolved']
+  } = {},
 ): DepsHarness {
   const registry = createCombatRegistry()
   const ledger: DamageLedger = new Map<string, number>()
   const creatureDeaths: DeathCall[] = []
   const playerDeaths: DeathCall[] = []
-  const now = opts.now ?? 1000
+  const clock = opts.clock ?? { now: opts.now ?? 1000 }
   const deps: CombatTickDeps = {
-    rng: seqRng(values),
+    // 굴림 소비 횟수를 단언할 수 있도록 spy로 감싼다(seqRng 순서·예산은 그대로).
+    rng: vi.fn(seqRng(values)),
     registry,
-    ledger,
+    ledgers: opts.ledgers ?? { for: () => ledger },
     fireCreatureDeath: (dead, r, n) => {
       creatureDeaths.push([dead, r, n])
     },
     firePlayerDeath: (dead, r, n) => {
       playerDeaths.push([dead, r, n])
     },
-    now: () => now,
+    now: () => clock.now,
     ...(opts.castSpell !== undefined ? { castSpell: opts.castSpell } : {}),
+    ...(opts.onRoundResolved !== undefined ? { onRoundResolved: opts.onRoundResolved } : {}),
   }
   return { deps, registry, ledger, creatureDeaths, playerDeaths }
 }
@@ -235,7 +249,10 @@ describe('createCombatTick — 근접 + 반격', () => {
     const room = makeRoom(['p1'])
     // 근접 [15,5]: p1 3-5=-2 (pending death, fire-free). 죽어가는 target p1이 last 반격 [20,5,50,50,2]:
     // creature 100-5=95. 몬스터 생존 → end-of-round에서 target death 1회 발생.
-    const { deps, registry, playerDeaths, creatureDeaths, ledger } = makeDeps([15, 5, 20, 5, 50, 50, 2], { now: 1000 })
+    const { deps, registry, playerDeaths, creatureDeaths, ledger } = makeDeps(
+      [15, 5, 20, 5, 50, 50, 2],
+      { now: 1000 },
+    )
     registry.register(player)
 
     createCombatTick(deps)(creature, room)
@@ -254,7 +271,9 @@ describe('createCombatTick — 근접 + 반격', () => {
     const room = makeRoom(['p1'])
     // 근접 [15,5]: p1 3-5=-2 (pending). target p1 last 반격 [20,5,50,50,2]: creature 3-5=-2 사망 →
     // fireCreatureDeath 1회 + p1 pending death 취소(막타 생존, update.c goto crt_died→continue).
-    const { deps, registry, playerDeaths, creatureDeaths } = makeDeps([15, 5, 20, 5, 50, 50, 2], { now: 1000 })
+    const { deps, registry, playerDeaths, creatureDeaths } = makeDeps([15, 5, 20, 5, 50, 50, 2], {
+      now: 1000,
+    })
     registry.register(player)
 
     createCombatTick(deps)(creature, room)
@@ -265,24 +284,24 @@ describe('createCombatTick — 근접 + 반격', () => {
     expect(playerDeaths).toHaveLength(0) // ★ target death 발생 안 함 — 막타 생존
   })
 
-  it('stale-dead target(HP<1로 진입)은 반격도·end-of-round death도 하지 않는다 (틱시작 생존 스냅샷, #91)', () => {
-    // D2/#99 사망 제거 보류로 이전 틱에 죽은 target이 방·레지스트리에 잔존해 재진입할 수 있다. 틱 시작 시
-    // 이미 사망(hpCurrent<1)이므로 counter 자격이 없다 — 이번 라운드 근접에 죽는 target(시작 시 생존 →
-    // 반격 유지, test 230/249)과 구분된다. 근접은 DEAD_DEFENDER_NOOP·meleeOutcome.died=false라 end-of-round
-    // 재실행도 없다(`target.hpCurrent<1`로 판정하면 cross-tick 중복 실행이 재유입되므로 이 케이스가 그 lock).
-    const player = makePlayer({ characterId: 'p1', hpCurrent: -3, nextAttackAt: 0 }) // 이미 사망 상태로 진입
+  it('사망 취소 상태 표적: 명중 굴림 1개만 소비하고 빗맞으면 반격·사망 없음(D8)', () => {
+    // 반격으로 몬스터가 죽어 사망이 취소된 표적은 HP<1인 채 생존해 재진입한다(사망 seam이 부활 처리를
+    // 끝내므로 stale-dead 대상은 이 상태 하나만 남는다). 틱 시작 시 HP<1이라 counter 자격이 없고(aliveAtStart),
+    // 근접은 피해 없이 명중 판정 굴림 1개만 소비한다. 빗맞으면 end-of-round 사망도 없다.
+    const player = makePlayer({ characterId: 'p1', hpCurrent: -3, nextAttackAt: 0 }) // 사망 취소 상태로 진입
     const creature = makeCreature({ hpcur: 100, enemies: ['p1'] })
     const room = makeRoom(['p1'])
-    // seq [] — stale-dead는 근접(NOOP)·counter(스킵) 어느 것도 굴림을 소비하지 않는다. counter가 굴려지면
-    // seqRng([]) throw로 즉시 드러난다(자격 박탈 증명).
-    const { deps, registry, playerDeaths, creatureDeaths, ledger } = makeDeps([], { now: 1000 })
+    // seq [1] — 근접 명중 굴림 1(thr 2 미달) → 빗맞음. counter가 굴려지면 seqRng throw로 드러난다.
+    const { deps, registry, playerDeaths, creatureDeaths, ledger } = makeDeps([1], { now: 1000 })
     registry.register(player)
 
     createCombatTick(deps)(creature, room)
 
-    expect(creature.hpcur).toBe(100) // stale-dead target은 반격 안 함 — 몬스터 무피해
+    expect(deps.rng).toHaveBeenCalledTimes(1) // 명중 굴림 1개만 소비(큐 잔여 0)
+    expect(creature.hpcur).toBe(100) // 사망 취소 표적은 반격 안 함 — 몬스터 무피해
+    expect(player.hpCurrent).toBe(-3) // 피해 차감 없음
     expect(ledger.size).toBe(0) // 데미지·크레딧 없음
-    expect(playerDeaths).toHaveLength(0) // meleeOutcome.died=false → 재실행 없음
+    expect(playerDeaths).toHaveLength(0) // 빗맞음 → end-of-round 사망 없음
     expect(creatureDeaths).toHaveLength(0)
     expect(player.nextAttackAt).toBe(0) // 반격 안 함 → 쿨다운 미설정
   })
@@ -294,7 +313,9 @@ describe('createCombatTick — 근접 + 반격', () => {
     const room = makeRoom(['p1', 'p2'])
     // 근접 target p1: [15,5] → p1 45. counter 역순: p2(OTHER)는 stale-dead → 스킵(굴림 없음), p1(TARGET)만
     // 반격 [20,5,50,50,2] → creature 95. p2가 스킵 안 되면 seq 소비가 어긋나 실패한다.
-    const { deps, registry, ledger, creatureDeaths } = makeDeps([15, 5, 20, 5, 50, 50, 2], { now: 1000 })
+    const { deps, registry, ledger, creatureDeaths } = makeDeps([15, 5, 20, 5, 50, 50, 2], {
+      now: 1000,
+    })
     registry.register(p1)
     registry.register(p2)
 
@@ -315,7 +336,9 @@ describe('createCombatTick — 근접 + 반격', () => {
     const creature = makeCreature({ hpcur: -2, enemies: ['p1'] }) // 이전 틱 사망분이 미제거로 재진입
     const room = makeRoom(['p1'])
     // seq [15,5]는 가드 없을 때 근접이 소비하는 굴림. 가드가 있으면 조기 return으로 미소비(under-consume 무해).
-    const { deps, registry, creatureDeaths, playerDeaths, ledger } = makeDeps([15, 5], { now: 1000 })
+    const { deps, registry, creatureDeaths, playerDeaths, ledger } = makeDeps([15, 5], {
+      now: 1000,
+    })
     registry.register(player)
 
     createCombatTick(deps)(creature, room)
@@ -507,5 +530,554 @@ describe('createCombatTick — death seam 1회 + break', () => {
     expect(p2.hpCurrent).toBe(50) // OTHER는 공격자라 무피해
     expect(p2.nextAttackAt).toBe(1001) // OTHER가 killing counter를 날림
     expect(p1.nextAttackAt).toBe(0) // TARGET은 last라 break로 반격 못 함
+  })
+})
+
+describe('createCombatTick — 몬스터별 원장 라우터(OQ4)', () => {
+  it('두 몬스터의 반격 데미지가 ledgers.for(instanceId)에 각각 따로 쌓인다', () => {
+    // 같은 플레이어 p1이 m1·m2를 차례로 반격한다 — 단일 원장이면 attackerId 'p1' 키로 합산(5+3=8)된다.
+    const player = makePlayer({ characterId: 'p1', hpCurrent: 50, nextAttackAt: 0 })
+    const m1 = makeCreature({ instanceId: 'm1', hpcur: 100, enemies: ['p1'] })
+    const m2 = makeCreature({ instanceId: 'm2', hpcur: 100, enemies: ['p1'] })
+    const room = makeRoom(['p1'])
+    const clock = { now: 1000 }
+    // m1 라운드: 근접 [15,5] + 반격 [20,5,50,50,2]=dmg5. m2 라운드: 근접 [15,5] + 반격 [20,3,50,50,2]=dmg3.
+    const ledgers = createCreatureLedgers()
+    const { deps, registry } = makeDeps([15, 5, 20, 5, 50, 50, 2, 15, 5, 20, 3, 50, 50, 2], {
+      clock,
+      ledgers,
+    })
+    registry.register(player)
+    const tick = createCombatTick(deps)
+
+    tick(m1, room)
+    clock.now = 1002 // p1 반격 쿨다운(now+1) 도래
+    tick(m2, room)
+
+    expect(m1.hpcur).toBe(95)
+    expect(m2.hpcur).toBe(97)
+    expect(ledgers.for('m1')).toEqual(new Map([['p1', 5]]))
+    expect(ledgers.for('m2')).toEqual(new Map([['p1', 3]]))
+  })
+
+  it.each([
+    ['enemies 빈 몬스터', makeCreature({ enemies: [] }), makeRoom(['p1'])],
+    ['이미 사망(hpcur<1)한 몬스터', makeCreature({ hpcur: 0, enemies: ['p1'] }), makeRoom(['p1'])],
+    ['present 적이 없는 몬스터', makeCreature({ enemies: ['p1'] }), makeRoom([])],
+  ])('조기 반환 경로(%s)에서는 ledgers.for를 호출하지 않는다', (_label, creature, room) => {
+    const forSpy = vi.fn(() => new Map<string, number>())
+    // 다층 가드: 검증 대상이 아닌 가드는 통과하도록 p1을 생존 상태로 등록한다(빈 레지스트리면 사망 몬스터
+    // 케이스가 present 적 없음 경로로 새어 hpcur<1 가드를 따로 고정하지 못한다).
+    const { deps, registry } = makeDeps([], { ledgers: { for: forSpy } })
+    registry.register(makePlayer({ characterId: 'p1', hpCurrent: 50, nextAttackAt: 0 }))
+
+    createCombatTick(deps)(creature, room)
+
+    expect(forSpy).toHaveBeenCalledTimes(0)
+  })
+})
+
+/** 표적을 HP<1로 만들고 사망 seam을 즉시 실행하는 시전 스텁(offensiveSpell 치사 경로 모사). */
+const lethalCast: CastSpellSeam = (_caster, target, ctx) => {
+  target.hpCurrent -= 30
+  ctx.firePlayerDeath(target, ctx.room, ctx.now)
+  return 'cast'
+}
+
+/** 보고 수집기 — onRoundResolved로 넘어온 보고서를 순서대로 쌓는다. */
+function collectReports(): {
+  readonly reports: CombatRoundReport[]
+  readonly onRoundResolved: (report: CombatRoundReport) => void
+} {
+  const reports: CombatRoundReport[] = []
+  return { reports, onRoundResolved: (report) => reports.push(report) }
+}
+
+describe('createCombatTick — 라운드 보고 seam(§3.2) 보고 조건', () => {
+  it.each([
+    ['적 없음', makeCreature({ enemies: [] }), makeRoom(['p1'])],
+    ['몬스터 사망(hpcur<1)', makeCreature({ hpcur: 0, enemies: ['p1'] }), makeRoom(['p1'])],
+    ['present 적 없음', makeCreature({ enemies: ['p1'] }), makeRoom([])],
+  ])('행동 전 종료 경로(%s)에서는 보고하지 않는다', (_label, creature, room) => {
+    const { reports, onRoundResolved } = collectReports()
+    // 다층 가드: 검증 대상이 아닌 가드는 통과하도록 생존 p1을 등록한다.
+    const { deps, registry } = makeDeps([], { onRoundResolved })
+    registry.register(makePlayer({ characterId: 'p1', hpCurrent: 50, nextAttackAt: 0 }))
+
+    createCombatTick(deps)(creature, room)
+
+    expect(reports).toHaveLength(0)
+  })
+
+  it('근접 라운드는 1회 보고한다 — incoming melee·counters·statsBefore', () => {
+    const player = makePlayer({ characterId: 'p1', hpCurrent: 50, mpCurrent: 7, nextAttackAt: 0 })
+    const creature = makeCreature({ hpcur: 100, enemies: ['p1'] })
+    const room = makeRoom(['p1'])
+    const { reports, onRoundResolved } = collectReports()
+    const { deps, registry } = makeDeps([15, 5, 20, 5, 50, 50, 2], { now: 1000, onRoundResolved })
+    registry.register(player)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(reports).toHaveLength(1)
+    const report = reports[0]!
+    expect(report.creature).toBe(creature)
+    expect(report.room).toBe(room)
+    expect(report.targetId).toBe('p1')
+    expect(report.incoming.kind).toBe('melee')
+    if (report.incoming.kind !== 'melee') throw new Error('melee 아님')
+    expect(report.incoming.outcome.hit).toBe(true)
+    expect(report.incoming.outcome.damage).toBe(5)
+    expect(report.counters.map((c) => c.characterId)).toEqual(['p1'])
+    expect(report.counters[0]!.outcome.damage).toBe(5)
+    expect(report.monsterDied).toBe(false)
+    expect(report.playerDeaths).toEqual([])
+    expect(report.statsBefore.get('p1')).toEqual({ hpCurrent: 50, mpCurrent: 7 })
+  })
+
+  it('빗맞은 근접 라운드도 1회 보고한다 (incoming.outcome.hit=false)', () => {
+    const player = makePlayer({ characterId: 'p1', hpCurrent: 50, nextAttackAt: 5000 })
+    const creature = makeCreature({ hpcur: 100, enemies: ['p1'] })
+    const room = makeRoom(['p1'])
+    const { reports, onRoundResolved } = collectReports()
+    // 근접 명중 굴림 1(thr 2 미달) → 빗맞음. 반격 쿨다운 미도래 → 굴림 없음.
+    const { deps, registry } = makeDeps([1], { now: 1000, onRoundResolved })
+    registry.register(player)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(reports).toHaveLength(1)
+    const incoming = reports[0]!.incoming
+    if (incoming.kind !== 'melee') throw new Error('melee 아님')
+    expect(incoming.outcome.hit).toBe(false)
+    expect(incoming.outcome.damage).toBe(0)
+    expect(reports[0]!.counters).toEqual([])
+  })
+
+  it('반격으로 몬스터가 죽은 라운드: monsterDied=true, playerDeaths=[] (막타 생존)', () => {
+    const player = makePlayer({ characterId: 'p1', hpCurrent: 3, nextAttackAt: 0 })
+    const creature = makeCreature({ hpcur: 3, enemies: ['p1'] })
+    const room = makeRoom(['p1'])
+    const { reports, onRoundResolved } = collectReports()
+    const { deps, registry } = makeDeps([15, 5, 20, 5, 50, 50, 2], { now: 1000, onRoundResolved })
+    registry.register(player)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(reports).toHaveLength(1)
+    expect(reports[0]!.monsterDied).toBe(true)
+    expect(reports[0]!.playerDeaths).toEqual([])
+  })
+
+  it('근접 치사 라운드: playerDeaths=[target] (end-of-round 사망 실행 뒤 보고)', () => {
+    const player = makePlayer({ characterId: 'p1', hpCurrent: 3, nextAttackAt: 0 })
+    const creature = makeCreature({ hpcur: 100, enemies: ['p1'] })
+    const room = makeRoom(['p1'])
+    const { reports, onRoundResolved } = collectReports()
+    const { deps, registry, playerDeaths } = makeDeps([15, 5, 20, 5, 50, 50, 2], {
+      now: 1000,
+      onRoundResolved,
+    })
+    registry.register(player)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(playerDeaths).toHaveLength(1)
+    expect(reports).toHaveLength(1)
+    expect(reports[0]!.monsterDied).toBe(false)
+    expect(reports[0]!.playerDeaths).toEqual(['p1'])
+  })
+
+  it('statsBefore는 presentEnemies 전원의 라운드 시작 hp·mp 스냅샷이다 (근접 차감 이전 값)', () => {
+    const p1 = makePlayer({ characterId: 'p1', hpCurrent: 50, mpCurrent: 7, nextAttackAt: 5000 })
+    const p2 = makePlayer({ characterId: 'p2', hpCurrent: 40, mpCurrent: 3, nextAttackAt: 5000 })
+    const creature = makeCreature({ hpcur: 100, enemies: ['p1', 'p2', 'ghost'] })
+    const room = makeRoom(['p1', 'p2'])
+    const { reports, onRoundResolved } = collectReports()
+    const { deps, registry } = makeDeps([15, 5], { now: 1000, onRoundResolved })
+    registry.register(p1)
+    registry.register(p2)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(p1.hpCurrent).toBe(45)
+    const stats = reports[0]!.statsBefore
+    expect(stats.size).toBe(2)
+    expect(stats.get('p1')).toEqual({ hpCurrent: 50, mpCurrent: 7 })
+    expect(stats.get('p2')).toEqual({ hpCurrent: 40, mpCurrent: 3 })
+  })
+
+  it('counters는 실제 굴린 반격만 굴린 순서대로 담는다 (쿨다운 미도래·stale-dead 제외)', () => {
+    const p1 = makePlayer({ characterId: 'p1', hpCurrent: 50, nextAttackAt: 0 }) // target
+    const p2 = makePlayer({ characterId: 'p2', hpCurrent: 50, nextAttackAt: 0 }) // OTHER
+    const p3 = makePlayer({ characterId: 'p3', hpCurrent: 50, nextAttackAt: 5000 }) // 쿨다운 미도래
+    const p4 = makePlayer({ characterId: 'p4', hpCurrent: -1, nextAttackAt: 0 }) // stale-dead
+    const creature = makeCreature({ hpcur: 100, armor: 0, enemies: ['p1', 'p2', 'p3', 'p4'] })
+    const room = makeRoom(['p1', 'p2', 'p3', 'p4'])
+    const { reports, onRoundResolved } = collectReports()
+    // 근접 p1 [15,5]. 반격 역순: p2 [20,6,50,50,2]=6, p3·p4 스킵, p1 [20,3,50,50,2]=3.
+    const { deps, registry } = makeDeps([15, 5, 20, 6, 50, 50, 2, 20, 3, 50, 50, 2], {
+      now: 1000,
+      onRoundResolved,
+    })
+    for (const p of [p1, p2, p3, p4]) registry.register(p)
+
+    createCombatTick(deps)(creature, room)
+
+    const counters = reports[0]!.counters
+    expect(counters.map((c) => c.characterId)).toEqual(['p2', 'p1'])
+    expect(counters.map((c) => c.outcome.damage)).toEqual([6, 3])
+  })
+})
+
+describe('createCombatTick — 시전 incoming(D5)과 시전 치사 라운드 종료(D7)', () => {
+  /** 표적 hp를 amount만큼 깎고 'cast'를 반환하는 시전 스텁. */
+  function damagingCast(amount: number): CastSpellSeam {
+    return (_caster, target) => {
+      target.hpCurrent -= amount
+      return 'cast'
+    }
+  }
+
+  it("시전이 표적 hp를 7 깎으면 incoming = {kind:'cast', damage:7}, 근접 없음·반격 진행", () => {
+    const player = makePlayer({ characterId: 'p1', hpCurrent: 50, nextAttackAt: 0 })
+    const creature = makeCreature({ hpcur: 100, enemies: ['p1'], flags: flagsWith(MMAGIC) })
+    const room = makeRoom(['p1'])
+    const { reports, onRoundResolved } = collectReports()
+    // MMAGIC=10 시전 → 근접 굴림 없음. 반격 [20,5,50,50,2].
+    const { deps, registry } = makeDeps([10, 20, 5, 50, 50, 2], {
+      now: 1000,
+      castSpell: damagingCast(7),
+      onRoundResolved,
+    })
+    registry.register(player)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(player.hpCurrent).toBe(43)
+    expect(creature.hpcur).toBe(95)
+    expect(reports).toHaveLength(1)
+    expect(reports[0]!.incoming).toEqual({ kind: 'cast', damage: 7 })
+    expect(reports[0]!.counters.map((c) => c.characterId)).toEqual(['p1'])
+  })
+
+  it('표적을 건드리지 않는 시전(자기 회복 등)은 damage: 0으로 보고한다', () => {
+    const player = makePlayer({ characterId: 'p1', hpCurrent: 50, nextAttackAt: 0 })
+    const creature = makeCreature({ hpcur: 100, enemies: ['p1'], flags: flagsWith(MMAGIC) })
+    const room = makeRoom(['p1'])
+    const { reports, onRoundResolved } = collectReports()
+    const { deps, registry } = makeDeps([10, 20, 5, 50, 50, 2], {
+      now: 1000,
+      castSpell: () => 'cast',
+      onRoundResolved,
+    })
+    registry.register(player)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(reports).toHaveLength(1)
+    expect(reports[0]!.incoming).toEqual({ kind: 'cast', damage: 0 })
+  })
+
+  it('시전 치사: 근접·반격 없이 라운드를 끝내고 1회 보고한다 (사망 seam 1회)', () => {
+    const p1 = makePlayer({ characterId: 'p1', hpCurrent: 20, nextAttackAt: 0 }) // target
+    const p2 = makePlayer({ characterId: 'p2', hpCurrent: 50, nextAttackAt: 0 }) // OTHER도 반격 없음
+    const creature = makeCreature({
+      hpcur: 100,
+      enemies: ['p1', 'p2'],
+      flags: flagsWith(MMAGIC),
+    })
+    const room = makeRoom(['p1', 'p2'])
+    const { reports, onRoundResolved } = collectReports()
+    // 굴림 예산 = MMAGIC 시전 굴림 1개뿐. 근접·반격이 굴리면 seqRng throw.
+    const { deps, registry, playerDeaths, creatureDeaths, ledger } = makeDeps([10], {
+      now: 1000,
+      castSpell: lethalCast,
+      onRoundResolved,
+    })
+    registry.register(p1)
+    registry.register(p2)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(playerDeaths).toHaveLength(1)
+    expect(playerDeaths[0]![0]).toBe(p1)
+    expect(creatureDeaths).toHaveLength(0)
+    expect(creature.hpcur).toBe(100)
+    expect(ledger.size).toBe(0)
+    expect(p1.nextAttackAt).toBe(0)
+    expect(p2.nextAttackAt).toBe(0)
+    expect(reports).toHaveLength(1)
+    const report = reports[0]!
+    expect(report.incoming).toEqual({ kind: 'cast', damage: 30 }) // 20 - (-10) = 실제 차감량
+    expect(report.counters).toEqual([])
+    expect(report.playerDeaths).toEqual(['p1'])
+    expect(report.monsterDied).toBe(false)
+    expect(report.statsBefore.get('p1')).toEqual({ hpCurrent: 20, mpCurrent: 0 })
+  })
+})
+
+describe('createCombatTick — onRoundResolved 주입·미주입 동등성', () => {
+  interface Scenario {
+    readonly label: string
+    readonly rolls: readonly number[]
+    readonly creatureFlags: string
+    readonly castSpell?: CastSpellSeam
+    readonly targetHp: number
+  }
+
+  const scenarios: readonly Scenario[] = [
+    {
+      label: '시전 치사',
+      rolls: [10],
+      creatureFlags: flagsWith(MMAGIC),
+      castSpell: lethalCast,
+      targetHp: 20,
+    },
+    {
+      label: '근접 + 반격',
+      rolls: [15, 5, 20, 6, 50, 50, 2, 20, 3, 50, 50, 2],
+      creatureFlags: '',
+      targetHp: 50,
+    },
+    {
+      label: '근접 치사',
+      rolls: [15, 5, 20, 6, 50, 50, 2, 20, 3, 50, 50, 2],
+      creatureFlags: '',
+      targetHp: 3,
+    },
+  ]
+
+  function runScenario(s: Scenario, withReport: boolean) {
+    const p1 = makePlayer({
+      characterId: 'p1',
+      hpCurrent: s.targetHp,
+      mpCurrent: 4,
+      nextAttackAt: 0,
+    })
+    const p2 = makePlayer({ characterId: 'p2', hpCurrent: 50, mpCurrent: 2, nextAttackAt: 0 })
+    const creature = makeCreature({ hpcur: 100, enemies: ['p1', 'p2'], flags: s.creatureFlags })
+    const room = makeRoom(['p1', 'p2'])
+    const { reports, onRoundResolved } = collectReports()
+    const { deps, registry, ledger, playerDeaths, creatureDeaths } = makeDeps(s.rolls, {
+      now: 1000,
+      ...(s.castSpell !== undefined ? { castSpell: s.castSpell } : {}),
+      ...(withReport ? { onRoundResolved } : {}),
+    })
+    registry.register(p1)
+    registry.register(p2)
+
+    createCombatTick(deps)(creature, room)
+
+    const snapshot = {
+      players: [p1, p2].map((p) => ({
+        id: p.characterId,
+        hp: p.hpCurrent,
+        mp: p.mpCurrent,
+        nextAttackAt: p.nextAttackAt,
+      })),
+      creatureHp: creature.hpcur,
+      ledger: [...ledger.entries()],
+      playerDeaths: playerDeaths.map(([dead, r, n]) => [
+        (dead as PlayerCombatState).characterId,
+        r.roomId,
+        n,
+      ]),
+      creatureDeaths: creatureDeaths.map(([dead, r, n]) => [
+        (dead as CreatureInstance).instanceId,
+        r.roomId,
+        n,
+      ]),
+    }
+    return { snapshot, reports }
+  }
+
+  it.each(scenarios)('$label: 콜백 주입 여부와 무관하게 상태·사망 seam 호출이 같다', (s) => {
+    const injected = runScenario(s, true)
+    const bare = runScenario(s, false)
+
+    expect(injected.reports).toHaveLength(1)
+    expect(bare.reports).toHaveLength(0)
+    expect(injected.snapshot).toEqual(bare.snapshot)
+  })
+
+  it('미주입 시전 치사도 근접·반격 0회 (굴림 예산 1개로 고정)', () => {
+    const { snapshot } = runScenario(scenarios[0]!, false)
+
+    expect(snapshot.playerDeaths).toHaveLength(1)
+    expect(snapshot.creatureHp).toBe(100)
+    expect(snapshot.ledger).toEqual([])
+    expect(snapshot.players.map((p) => p.nextAttackAt)).toEqual([0, 0])
+  })
+})
+
+/**
+ * D8 — 사망 취소 상태 표적(라운드 시작 hpCurrent<1). 반격으로 몬스터가 죽어 사망이 취소되면 표적은 HP<1인
+ * 채 생존한다. 이후 표적이 된 라운드에서 근접은 피해 없이 명중 판정(rollHit)만 굴리고, 명중했고 몬스터가
+ * 반격으로 죽지 않았을 때만 라운드 끝에 사망 seam을 1회 실행한다. MMAGIC 'cast'면 근접이 없어 사망하지
+ * 않는다. 이 표적은 반격하지 않는다(aliveAtStart).
+ *
+ * 굴림 기준: 몬스터 thaco 10 vs 플레이어 armor 70 → threshold max(1, 10-8)=2. 15=명중, 1=빗맞음.
+ */
+describe('createCombatTick — 사망 취소 상태 표적(D8)', () => {
+  const D8_MELEE_HIT = {
+    hit: true,
+    damage: 0,
+    critical: false,
+    fumble: false,
+    died: false,
+    specialAttack: null,
+    messageInputs: { attacks: [] },
+  }
+
+  it('명중하고 몬스터가 살아 있으면 라운드 끝에 사망 seam 1회 (피해·원장 불변, 굴림 1개)', () => {
+    const player = makePlayer({ characterId: 'p1', hpCurrent: 0, nextAttackAt: 0 })
+    const creature = makeCreature({ hpcur: 100, enemies: ['p1'] })
+    const room = makeRoom(['p1'])
+    const { reports, onRoundResolved } = collectReports()
+    const { deps, registry, playerDeaths, creatureDeaths, ledger } = makeDeps([15], {
+      now: 1000,
+      onRoundResolved,
+    })
+    registry.register(player)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(deps.rng).toHaveBeenCalledTimes(1)
+    expect(player.hpCurrent).toBe(0)
+    expect(ledger.size).toBe(0)
+    expect(creature.hpcur).toBe(100)
+    expect(creatureDeaths).toHaveLength(0)
+    expect(playerDeaths).toHaveLength(1)
+    expect(playerDeaths[0]![0]).toBe(player)
+    expect(player.nextAttackAt).toBe(0) // 반격 안 함
+    expect(reports).toHaveLength(1)
+    const report = reports[0]!
+    expect(report.incoming).toEqual({ kind: 'melee', outcome: D8_MELEE_HIT })
+    expect(report.playerDeaths).toEqual(['p1'])
+    expect(report.monsterDied).toBe(false)
+    expect(report.counters).toEqual([])
+  })
+
+  it('빗맞으면 사망 seam 0회 — incoming hit:false·damage:0, 원장 기록 없음', () => {
+    const player = makePlayer({ characterId: 'p1', hpCurrent: 0, nextAttackAt: 0 })
+    const creature = makeCreature({ hpcur: 100, enemies: ['p1'] })
+    const room = makeRoom(['p1'])
+    const { reports, onRoundResolved } = collectReports()
+    const { deps, registry, playerDeaths, ledger } = makeDeps([1], { now: 1000, onRoundResolved })
+    registry.register(player)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(deps.rng).toHaveBeenCalledTimes(1)
+    expect(playerDeaths).toHaveLength(0)
+    expect(ledger.size).toBe(0)
+    expect(player.hpCurrent).toBe(0)
+    expect(reports).toHaveLength(1)
+    const incoming = reports[0]!.incoming
+    if (incoming.kind !== 'melee') throw new Error('melee 아님')
+    expect(incoming.outcome.hit).toBe(false)
+    expect(incoming.outcome.damage).toBe(0)
+    expect(incoming.outcome.died).toBe(false)
+    expect(reports[0]!.playerDeaths).toEqual([])
+  })
+
+  it('근접이 명중해도 다른 플레이어 반격이 몬스터를 죽이면 사망은 다시 취소된다', () => {
+    const p1 = makePlayer({ characterId: 'p1', hpCurrent: 0, nextAttackAt: 0 }) // 사망 취소 표적
+    const p2 = makePlayer({ characterId: 'p2', hpCurrent: 50, nextAttackAt: 0 }) // OTHER
+    const creature = makeCreature({ hpcur: 3, armor: 0, enemies: ['p1', 'p2'] })
+    const room = makeRoom(['p1', 'p2'])
+    const { reports, onRoundResolved } = collectReports()
+    // 근접 명중 판정 [15] → 반격 p2 [20,5,50,50,2]: creature 3-5=-2 사망. p1은 반격 자격 없음.
+    const { deps, registry, playerDeaths, creatureDeaths } = makeDeps([15, 20, 5, 50, 50, 2], {
+      now: 1000,
+      onRoundResolved,
+    })
+    registry.register(p1)
+    registry.register(p2)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(deps.rng).toHaveBeenCalledTimes(6)
+    expect(creatureDeaths).toHaveLength(1)
+    expect(playerDeaths).toHaveLength(0) // ★ 재취소
+    expect(p1.hpCurrent).toBe(0)
+    expect(reports).toHaveLength(1)
+    const report = reports[0]!
+    expect(report.incoming).toEqual({ kind: 'melee', outcome: D8_MELEE_HIT })
+    expect(report.monsterDied).toBe(true)
+    expect(report.playerDeaths).toEqual([])
+    expect(report.counters.map((c) => c.characterId)).toEqual(['p2'])
+  })
+
+  it("MMAGIC 시전 확률 통과 + castSpell 'cast'면 근접 굴림 없이 사망 0회", () => {
+    const player = makePlayer({ characterId: 'p1', hpCurrent: 0, nextAttackAt: 0 })
+    const creature = makeCreature({ hpcur: 100, enemies: ['p1'], flags: flagsWith(MMAGIC) })
+    const room = makeRoom(['p1'])
+    const { reports, onRoundResolved } = collectReports()
+    // 공격 주문은 HP<1 대상에 no-op(offensiveSpell) — 표적을 건드리지 않는 'cast'로 모사.
+    // 굴림 예산 = 시전 확률 굴림 1개뿐. 근접 명중 판정이 굴리면 seqRng throw.
+    const { deps, registry, playerDeaths } = makeDeps([10], {
+      now: 1000,
+      castSpell: () => 'cast',
+      onRoundResolved,
+    })
+    registry.register(player)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(playerDeaths).toHaveLength(0)
+    expect(player.hpCurrent).toBe(0)
+    expect(reports).toHaveLength(1)
+    expect(reports[0]!.incoming).toEqual({ kind: 'cast', damage: 0 })
+    expect(reports[0]!.playerDeaths).toEqual([])
+    expect(reports[0]!.counters).toEqual([])
+  })
+
+  it("MMAGIC 시전 결과가 'none'이면 근접 명중 판정으로 진행한다 (명중 시 사망 1회)", () => {
+    const player = makePlayer({ characterId: 'p1', hpCurrent: 0, nextAttackAt: 0 })
+    const creature = makeCreature({ hpcur: 100, enemies: ['p1'], flags: flagsWith(MMAGIC) })
+    const room = makeRoom(['p1'])
+    const { reports, onRoundResolved } = collectReports()
+    // 시전 확률 굴림 10 → 'none' → 근접 명중 판정 15.
+    const { deps, registry, playerDeaths } = makeDeps([10, 15], {
+      now: 1000,
+      castSpell: () => 'none',
+      onRoundResolved,
+    })
+    registry.register(player)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(deps.rng).toHaveBeenCalledTimes(2)
+    expect(playerDeaths).toHaveLength(1)
+    expect(reports[0]!.incoming).toEqual({ kind: 'melee', outcome: D8_MELEE_HIT })
+    expect(reports[0]!.playerDeaths).toEqual(['p1'])
+  })
+
+  it('사망 취소 표적은 반격하지 않고 다른 적은 평소대로 반격한다 (counters에 없음)', () => {
+    const p1 = makePlayer({ characterId: 'p1', hpCurrent: -2, nextAttackAt: 0 }) // 사망 취소 표적
+    const p2 = makePlayer({ characterId: 'p2', hpCurrent: 50, nextAttackAt: 0 })
+    const creature = makeCreature({ hpcur: 100, armor: 0, enemies: ['p1', 'p2'] })
+    const room = makeRoom(['p1', 'p2'])
+    const { reports, onRoundResolved } = collectReports()
+    // 근접 명중 판정 [15] → 반격 p2 [20,5,50,50,2] → creature 95. p1 반격은 굴림 없음.
+    const { deps, registry, ledger, playerDeaths } = makeDeps([15, 20, 5, 50, 50, 2], {
+      now: 1000,
+      onRoundResolved,
+    })
+    registry.register(p1)
+    registry.register(p2)
+
+    createCombatTick(deps)(creature, room)
+
+    expect(creature.hpcur).toBe(95)
+    expect(ledger.has('p1')).toBe(false)
+    expect(ledger.get('p2')).toBe(5)
+    expect(p1.nextAttackAt).toBe(0)
+    expect(p2.nextAttackAt).toBe(1001)
+    expect(reports[0]!.counters.map((c) => c.characterId)).toEqual(['p2'])
+    expect(playerDeaths).toHaveLength(1) // 명중 + 몬스터 생존 → 라운드 끝 사망 1회
+    expect(reports[0]!.playerDeaths).toEqual(['p1'])
   })
 })

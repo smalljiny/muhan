@@ -3,8 +3,9 @@
 > 서버 전투 계층이다. 무한에서 4곳에 인라인으로 복제돼 있던 근접 전투를 단일 `resolveAttack` 파이프로
 > 통합했다(#82, E6a-1). 여기에 다음을 더했다(#83, E6a-2): 몬스터 특수공격 6종, 상태이상 DoT, 몬스터 사망
 > 후처리(exp, 성향, 전리품), 전투 AI의 타깃 선정과 도주, #91 라운드 순서의 충실한 재현.
-> **플레이어 오프너(`combat:attack`)는 #121이 라이브 세션에 연결했다.** 몬스터 틱 기반 라운드, 특수공격
-> 마커, DoT 조립은 여전히 #99가 담당한다.
+> **플레이어 오프너(`combat:attack`)는 #121이 라이브 세션에 연결했다.** 몬스터 틱 기반 라운드와 사망 seam은
+> #99가 프로덕션 월드 런타임에 연결했다(`ws/liveWorldWiring.ts`). 특수공격 마커의 status 실적용, DoT·재생
+> 조립은 연결되지 않았다(#189).
 
 ## 개요
 
@@ -32,10 +33,10 @@
 런타임을 그대로 쓴다.
 
 **순수 로직·확장 지점(seam) 수준의 경계**: 이 계층은 규칙(확률 게이트, 공식, 순서, 데이터 계약)까지만
-구현한다. production boot에서 이 seam들을 조립하는 일은 전부 #99가 담당한다. 조립할 것은 health-pulse xor
-접합, 특수공격 status 실적용, exp/성향 실누적, 전리품의 방 floor push, flee/aggro dispatch다. 각 함수는
-무엇을 반환하는지로 자기 계약을 표현한다. 호출부가 없는 것은 결함이 아니라 설계다(`creatureDeath.ts`·`progression/death.ts`
-선례).
+구현한다. 몬스터 전투 tick과 사망 seam(`fireCreatureDeath`·`firePlayerDeath`)은 production boot에서 조립돼
+있다(아래 "프로덕션 연결"). 아직 조립되지 않은 것은 health-pulse xor 접합, 특수공격 status 실적용, 성향 실누적,
+전리품의 방 floor push, flee/aggro dispatch다. 각 함수는 무엇을 반환하는지로 자기 계약을 표현한다. 호출부가
+없는 것은 결함이 아니라 설계다(`creatureDeath.ts`·`progression/death.ts` 선례).
 
 위치는 `packages/server/src/combat/`이다. 라이브 인스턴스(`CreatureInstance`), RNG, stats-core를 소비하므로
 server에 두고, 순수 공식 하위 모듈로 나눠 테스트하기 쉽게 한다. flag 상수는
@@ -61,12 +62,12 @@ server에 두고, 순수 공식 하위 모듈로 나눠 테스트하기 쉽게 �
 | `deathDistribution.ts` | `distributeCreatureDeath(dead, room, ledger, deps)`. 데미지 비례 exp 분배, 성향 보정, 전리품/골드 드롭을 순수하게 계산해 반환한다. |
 | `aggro.ts` | `selectAggroTarget`/`dexEvades`/`resolveAggro`. 선공 대상을 가중 랜덤으로 고르고 민첩 회피를 판정한다. |
 | `flee.ts` | `decideFlee`. PWIMPY/PFEARS 도주를 결정한다(순수, boolean 반환). |
-| `combatTick.ts` | `createCombatTick(deps)`. `onCombatTick` 핸들러 팩토리다(몬스터 근접, MMAGIC seam, 적 플레이어 반격, #91 라운드 순서). |
+| `combatTick.ts` | `createCombatTick(deps)`. `onCombatTick` 핸들러 팩토리다(몬스터 근접, MMAGIC seam, 적 플레이어 반격, #91 라운드 순서, 라운드 보고 seam `onRoundResolved`). `CombatRoundReport`·`IncomingAction` 타입도 여기서 정의한다. |
 | `initiateAttack.ts` | 플레이어 오프너 `initiateAttack`. 개시 게이트(pre/post 무적 분해), `resolveAttack` 1회, death ripple, 적대 등록을 묶는다. **#121이 `ws/handlers/attack.ts`에서 라이브로 호출한다.** |
 | `assemblePlayerCombatState.ts` | `LiveCharacter` → `PlayerCombatState` 조립기(순수, #121). 장비 페어링, `projectEquipStats` 변환, WIELD 무기 해석을 묶어 전투 입력을 만든다. `flags`는 합성하지 않고 주입받는다. 다음 조립으로 넘길 3필드를 만드는 `toCarry`도 함께 export한다. |
 | `applyVitals.ts` | 전투상태의 hp·mp를 캐릭터 문서에 병합한다(순수, #121). 하한 0 클램프를 담당한다. `combatant.ts`의 피해 차감에는 클램프가 없어 음수가 될 수 있다. 그런데 `characterSchema`와 와이어 `character:stats`가 둘 다 `min(0)`이라 음수 값은 조용한 flush 실패로 이어진다. 되쓰기 지점이 둘(공격 핸들러, 세션 종료)이라 별도 모듈로 뺐다. |
 | `creatureLedgers.ts` | `createCreatureLedgers()`. `Map<instanceId, DamageLedger>` 라우터다(#121). 아래 "ledger per-creature 스코핑" 문제를 해결한다. |
-| `index.ts` | 공개 배럴. dice(+`defaultCombatRng`)/constants/playerState/combatRegistry/combatant/attackStats/pvp/enmity/resolveAttack/combatTick/initiateAttack에 #121이 더한 assemblePlayerCombatState·applyVitals·creatureLedgers를 내보낸다. specialAttack·statusEffects·dot·aggro·flee는 여전히 내부에서만 쓴다(#99 대기). |
+| `index.ts` | 공개 배럴. dice(+`defaultCombatRng`)/constants/playerState/combatRegistry/combatant/attackStats/pvp/enmity/resolveAttack/combatTick/initiateAttack에 #121이 더한 assemblePlayerCombatState·applyVitals·creatureLedgers를 내보낸다. `combatTick` 계열은 `createCombatTick`과 타입 `CombatTickDeps`·`CastSpellSeam`·`SpellCastResult`·`CombatRoundReport`·`IncomingAction`을 내보낸다. `rollHit`·`noDamageOutcome`은 `resolveAttack.ts`에서 export하지만 배럴에는 없다(`combatTick.ts`가 파일에서 직접 import). specialAttack·statusEffects·dot·aggro·flee는 여전히 내부에서만 쓴다(소비처 조립은 후속). |
 
 이 토픽에서 두 모듈에 새 상수를 추가했다.
 
@@ -161,8 +162,8 @@ stale 공격이나 재진입 공격이 사망 뒤에 death seam을 다시 실행
 | 특수공격 | M-flag | 확률 게이트 | 효과 | 적용 여부 |
 |---|---|---|---|---|
 | 브레스(4타입) | MBRETH(+MBRWP1/2) | `rng(1,30)<5` | 침(`dice(q,3,0)`), 악취+독(`dice(q,2,1)`), 냉기(`dice(q,4/2,0)`, PRCOLD면 반감), 화염(`dice(q,4/2,0)`, PRFIRE면 반감). `q=trunc((level+3)/4)` | **적용**. breath-replace(`??` lazy)로 normal melee를 대체하고, MBEFUD면 breath에도 `/3` |
-| 에너지드레인 | MENEDR | `rng(1,100)<10`(브레스가 발동하지 않았을 때만, XOR) | `dice(q,5,q*5)`로 흡수량을 내고 defender.experience로 상한을 둠 | 흡수량 계산만 함. 실제 exp 차감은 substrate gap(#99, `PlayerCombatState`에 experience 필드 없음) |
-| 중독 | MPOISS | `rng(1,100)<=15` | poison 마커 | 마커만. 실제 status 부여는 #99 |
+| 에너지드레인 | MENEDR | `rng(1,100)<10`(브레스가 발동하지 않았을 때만, XOR) | `dice(q,5,q*5)`로 흡수량을 내고 defender.experience로 상한을 둠 | 흡수량 계산만 함. 실제 exp 차감은 substrate gap(`PlayerCombatState`에 experience 필드 없음. 후속) |
+| 중독 | MPOISS | `rng(1,100)<=15` | poison 마커 | 마커만. 실제 status 부여는 연결되지 않았다(#189) |
 | 질병 | MDISEA | `rng(1,100)<=10` | disease 마커 | 마커만 |
 | 실명 | MBLNDR | `rng(1,100)<=10` | blind 마커 | 마커만 |
 | 장비용해 | MDISIT | `rng(1,100)<=15` | dissolveItemRolled 마커 | 굴림만, 효과 미적용(Non-goal, #86 substrate 없음) |
@@ -170,7 +171,7 @@ stale 공격이나 재진입 공격이 사망 뒤에 death seam을 다시 실행
 브레스만 바로 피해에 반영된다. 나머지 5종은 `SpecialAttackResult` 마커로 `AttackOutcome.specialAttack`에
 드러날 뿐 defender를 바꾸지 않는다. `resolveSpecialAttack`은 순수 함수라 throwaway
 `{flags, experience: MAX_SAFE_INTEGER}` defender shape로 굴린다. 이렇게 하면 실제 exp 기준 상한이 사실상
-걸리지 않는다. 상태 부여, exp 차감, 장비용해 적용은 전부 #99가 이 마커를 읽어 수행한다. 플레이어 attacker
+걸리지 않는다. 상태 부여, exp 차감, 장비용해 적용은 이 마커를 읽어 수행해야 하지만 아직 연결되지 않았다(상태 부여는 #189). 플레이어 attacker
 경로는 특수공격을 호출하지 않는다(몬스터 한정).
 
 ### 상태이상 데이터 모델·변환
@@ -192,8 +193,9 @@ stale 공격이나 재진입 공격이 사망 뒤에 death seam을 다시 실행
 
 `projectStatusFlags(character, now)`는 활성 명명 필드를 combat flag hex 뷰(PPOISN/PDISEA/PBLIND)로
 바꾼다. 덕분에 combat이 이미 쓰던 `F_ISSET(flags, PBLIND)` 관용을 깨지 않고 유지한다. Character에는 combat
-flags 필드가 없으므로 병합하지 않고, ZERO_FLAGS에서 활성 비트만 세팅한 새 hex를 반환한다. 이 변환 함수를
-실제로 쓰는 일(라이브 `PlayerCombatState.flags`와 접합)은 #99로 미룬다.
+flags 필드가 없으므로 병합하지 않고, ZERO_FLAGS에서 활성 비트만 세팅한 새 hex를 반환한다. 이 변환 함수는
+`character/flags.ts`의 `composeCharacterFlags`가 호출한다. 다만 몬스터 특수공격 마커가 `statusEffects`에
+상태를 부여하는 경로는 연결되지 않았다(#189).
 
 ### 플레이어 DoT
 
@@ -207,25 +209,27 @@ flags 필드가 없으므로 병합하지 않고, ZERO_FLAGS에서 활성 비트
 - **위험방**(`room.flags`, `hasFlag`): RPHARM이 진입 게이트다. 그 안에서 RPMPDR은 mp를 `-= min(mp,3)`만큼 깎는다.
   realm(REARTH/RWINDR/RFIRER/RWATER)이거나 저항 없는 순수 RPHARM이면 `hp -= 8 - min(con,2)` 무형 피해를 준다.
   저항 게이트(PRFIRE/PBRWAT/PSSHLD/PRCOLD)는 `PlayerCombatState` substrate가 없어 걸지 않았다. 그래서
-  realm 피해는 항상 저항 없이 발동한다(#99로 미룸). RPBEFU 쿨다운은 combat-state 담당이라 이식하지 않았다.
+  realm 피해는 항상 저항 없이 발동한다(후속). RPBEFU 쿨다운은 combat-state 담당이라 이식하지 않았다.
 - **사망 판정**: 클램프 전 raw 값이 `hp<1`이면 `died=true`다. 반환하는 `character.hpCurrent`는 스키마
-  `min(0)`에 맞추려고 0으로 클램프한다. 사망 seam 실행은 연결되지 않았다(#99).
+  `min(0)`에 맞추려고 0으로 클램프한다. `resolvePlayerDot`은 어떤 호출부에도 연결돼 있지 않아 사망 seam을
+실행하지 않는다(#189).
 - **재생 xor 계약**: `dotApplied`는 이번 틱에 hp/mp 차감이 일어났는지 알린다. DoT와 progression 재생은
   **같은 LT_HEALS 슬롯을 공유하며 서로 배타적**이다. 이 xor 의미론을 반환값으로 확정한다.
   `dotApplied===true`인 틱에는 재생을 건너뛰어야 한다. 실제 펄스 조립(DoT resolver와 재생 provider를 누가
-  xor로 접합하는가)은 #99(또는 progression 슬롯 개정)가 담당한다.
+  xor로 접합하는가)은 연결되지 않았다(#189).
 
 ### 몬스터 사망 exp 분배·전리품 드롭
 
 `distributeCreatureDeath(dead, room, ledger, deps)`는 순수 함수로 `{ awards, drops }`를 계산해
 **반환만** 한다(dead, room, ledger를 바꾸지 않음). `ledger`는 명시적 파라미터로 받으며 `fireCreatureDeath`
-시그니처는 바꾸지 않았다. 라이브 조립(사망 seam에서 이 함수를 누가 호출하는가)은 #99가 담당한다.
+시그니처는 바꾸지 않았다. 라이브 조립에서는 `ws/assembleDeathSeams.ts`의 `fireCreatureDeath`가 몬스터별
+원장으로 이 함수를 호출한다.
 
 - **기여자 집합**: `dead.enemies`에 속하고 `ledger.get(id) > 0`인 플레이어다(순서는 `enemies` 배열
   순서). 이 필터로 오라클의 적 리스트 멤버십 게이트를 분배 시점에 재현한다(§오라클과 다른 구현 참조).
 - **exp**: `expdiv = trunc(exp * dmg / max(hpmax,1))`. 그룹킬(기여자 2명 이상)이면
   `expdiv + trunc(exp/10)`이고, `min(., exp)`로 상한을 둔다.
-- **성향**: 기여자마다 `alignmentDelta = -trunc(alignment/5)`를 준다(delta만 반환하고, 누적과 ±1000 클램프는 #99).
+- **성향**: 기여자마다 `alignmentDelta = -trunc(alignment/5)`를 준다(delta만 반환한다. 라이브 사망 seam은 적용하지 않고, 누적과 ±1000 클램프는 #123을 기다린다).
 - **전리품**: MTRADE 몬스터는 인벤토리를 떨어뜨리지 않는다(creature.c:311). 그 외에는 `dead.inventory`를 그대로
   drops에 넣는다. **골드는 MTRADE와 관계없이 항상 떨어진다**(creature.c:325, 루프 밖이고 게이트 없음).
   골드는 `ItemInstance(instanceId=\`${dead.instanceId}:gold\`, name=\`${gold}냥\`, value=gold)`로 만든다.
@@ -252,8 +256,8 @@ flags 필드가 없으므로 병합하지 않고, ZERO_FLAGS에서 활성 비트
 `decideFlee(player, rng)`는 PWIMPY(`hpCurrent <= wimpyValue`, 굴림 없음)를 먼저 보고, 아니면
 PFEARS(`ff` 공식 굴림)를 보는 else-if 체인으로 도주 여부를 boolean으로 정한다(PFEARS 공식 정정은 §오라클과 다른 구현 참조).
 
-두 모듈 모두 결정 로직까지만 제공한다. 실제 aggro 등록(`registerEnemy`)과 flee 이동 dispatch는 #99로
-미룬다. MDINVI 은신 플레이어 탐지는 substrate가 없고, 몬스터 자체 도주(MFLEER)는 오라클에서 dead code라서
+두 모듈 모두 결정 로직까지만 제공한다. 실제 aggro 등록(`registerEnemy`)과 flee 이동 dispatch는 연결되지
+않았다(후속). MDINVI 은신 플레이어 탐지는 substrate가 없고, 몬스터 자체 도주(MFLEER)는 오라클에서 dead code라서
 둘 다 이식하지 않았다.
 
 ### 몬스터 기반 틱(`onCombatTick`) — #91 라운드순서
@@ -261,7 +265,13 @@ PFEARS(`ff` 공식 굴림)를 보는 else-if 체인으로 도주 여부를 boole
 `createCombatTick(deps)`는 deps를 클로저로 묶어 creature-spawn의 `onCombatTick` 핸들러를 만든다.
 `resolveAttack`이 fire-free가 되면서(위 절) 오라클의 근접 라운드 순서를 충실히 재현할 수 있게 됐다.
 
-1. 적이 없으면(`enemies.length===0`) 바로 끝낸다(선공 타깃 선정 dispatch는 #99).
+deps는 다음과 같다. `rng`·`registry`·`now`·`fireCreatureDeath`·`firePlayerDeath`는 필수이고 `castSpell`·
+`onRoundResolved`는 선택이다. 데미지 원장은 단일 `ledger`가 아니라 몬스터별 라우터 `ledgers`(`Pick<CreatureLedgers,
+'for'>`)로 받는다. 라운드마다 `ledgers.for(creature.instanceId)`로 이번 몬스터의 원장을 얻고, 조기 반환
+경로(적 없음·몬스터 사망·present 적 없음)에서는 `for()`를 부르지 않는다. 공격 핸들러와 같은 라우터 인스턴스를
+주입해야 반격 피해가 오프너 처치 보상에 합산된다.
+
+1. 적이 없으면(`enemies.length===0`) 바로 끝낸다(선공 타깃 선정 dispatch는 연결되지 않았다. 후속).
 2. **stale-dead 가드**: 몬스터가 이미 HP<1이면 바로 끝낸다. 사망 제거가 커넥션 계층으로 미뤄져 있어 다시
    디스패치될 수 있기 때문이다. 이 가드가 death seam 재실행을 막는다.
 3. **present 적 해석**: `enemies` 순서를 지키면서, 방 `occupants`에 있고 레지스트리에 등록된 플레이어만
@@ -269,22 +279,72 @@ PFEARS(`ff` 공식 굴림)를 보는 else-if 체인으로 도주 여부를 boole
    `aliveAtStart`로 스냅샷한다. 이것은 counter 자격의 범위를 정한다. 이번 라운드 근접에 죽는 target은
    시작 시점에 살아 있었으므로 자격을 유지하고, stale-dead만 빠진다.
 4. **MMAGIC 분기**: `MMAGIC && !MCHARM`이고 `rng(1,100) <= 20`(`MONSTER_SPELL_CAST_CHANCE`)을 통과하면
-   `castSpell` seam을 호출한다. 결과가 `'cast'`면 그 라운드의 근접만 건너뛴다(반격은 유지).
-5. **몬스터 근접(target melee)**: `doMelee`면 `resolveAttack(creature, target, ctx)`을 부른다. fire-free이므로
-   target이 HP<1로 떨어져도 바로 실행하지 않고 `meleeOutcome.died`로 보류해 둔다.
+   `castSpell` seam을 호출한다. 결과가 `'cast'`면 그 라운드의 근접만 건너뛴다(반격은 유지). 시전 피해는
+   `castSpell` 전후 표적 전투상태 객체의 `hpCurrent` 차이다(`IncomingAction`의 `cast.damage`).
+   **시전 치사(D7)**: `castSpell` 안에서 표적의 사망 seam이 실행되면(offensiveSpell 치사 경로) 근접·반격 없이
+   라운드를 끝낸다. 다른 적의 반격도 없다(오라클: `crt_spell` 뒤 표적 재조회 실패 → `end_enm_crt` 후 `continue`).
+5. **몬스터 근접(target melee)**: 시전하지 않았으면 표적을 근접한다. fire-free이므로 target이 HP<1로
+   떨어져도 바로 실행하지 않고 사망 대기(`pendingTargetDeath`)로 보류해 둔다. 일반 표적은
+   `resolveAttack(creature, target, ctx)`의 `died`가 사망 대기다.
+   **사망 취소 상태 표적(D8)**: 반격으로 몬스터가 죽어 사망이 취소된 표적은 HP<1인 채 생존한다. 라운드 시작
+   `hpCurrent<1`인 표적에게는 `resolveAttack` 대신 `rollHit` 굴림 1개만 소비하고, 피해 차감·원장 누적 없이
+   `noDamageOutcome(hit)`(피해 0)을 근접 결과로 쓴다. `resolveAttack`의 `DEAD_DEFENDER_NOOP` 가드는 그대로다.
+   명중이 곧 사망 대기다(오라클 사망 판정이 명중 분기 안에 있다). 이 표적은 `aliveAtStart`가 false라 반격하지
+   않는다. MMAGIC `'cast'`면 근접이 없어 그 라운드엔 사망하지 않는다.
 6. **counter 역순**: `[...presentEnemies.slice(1), target]` 순서다. 나머지 적(OTHER enemies)이 먼저, TARGET이 마지막이다.
    `attack_crt`에는 attacker-HP 가드가 없으므로 근접에 죽어가는 target도 마지막에 반격한다.
    `aliveAtStart`가 false인(stale-dead) 플레이어는 반격 자격이 없다. 몬스터가 어떤 counter에 죽으면
    그 자리에서 `fireDeath`를 1회 실행하고 `monsterDied=true`로 break한다. 오라클의 `goto crt_died; if(rtn)
    continue`가 target 사망 체크를 건너뛰는 것과 같아서, **막타를 치면 target이 산다**(보류된 death를
-   취소).
-7. **라운드 끝 target 사망 판정**: `!monsterDied && meleeOutcome?.died===true`일 때만 `fireDeath`를
-   1회 실행한다.
+   취소). 반격으로 몬스터를 처치하면 사망 취소 상태 표적(D8)의 대기 중인 사망도 다시 취소된다.
+7. **라운드 끝 target 사망 판정**: `!monsterDied && pendingTargetDeath`일 때만 `fireDeath`를
+   1회 실행한다(D8 명중 포함).
+8. **라운드 보고**: `deps.onRoundResolved`가 있으면 모든 상태 변경(라운드 끝 사망 실행 포함) 뒤에
+   `CombatRoundReport`를 1회 넘긴다. 몬스터가 표적에게 시전이나 근접으로 행동한 라운드마다 정확히 1회이며,
+   시전 치사(D7)도 보고한다. 행동 전에 끝나는 경로(적 없음·몬스터 사망·present 적 없음)는 보고하지 않는다.
+   콜백 주입 여부는 라운드 진행에 영향을 주지 않는다.
+
+`CombatRoundReport`는 `creature`·`room`·`targetId`·`incoming`·`counters`·`monsterDied`·`playerDeaths`·
+`statsBefore`를 담는다. `incoming`은 `IncomingAction`으로 `{ kind: 'melee', outcome: AttackOutcome }` 또는
+`{ kind: 'cast', damage }`다. `counters`는 실제로 굴린 반격만 굴린 순서대로 담고(쿨다운 미도래·stale-dead는
+빠진다), `playerDeaths`는 사망 seam이 실행된 플레이어의 characterId를 실행 순서대로 담으며, `statsBefore`는
+라운드 시작 시 present 적 전원의 hp·mp 스냅샷이다. 콜백은 **throw하지 않는 것이 계약**이다(전송 실패는 콜백
+안에서 격리한다). `createCombatTick`은 try/catch를 하지 않고, 프로덕션 조립의 래퍼가 몬스터 단위로 잡는다.
+콜백은 모든 상태 변경 뒤에 불리므로 그 시점의 예외는 통지 누락으로만 나타난다.
 
 death seam은 근접과 반격 전체를 통틀어 정확히 1회 실행된다. 몬스터는 counter kill 시점에, target은 취소되지
 않았을 때만 end-of-round 시점에 실행된다. `onCombatTick`은 몬스터 케이던스(`nextActionAt`)를 절대 읽거나
 쓰지 않는다. 재스케줄은 `creatureTick` 슬롯이 담당하고, 플레이어 반격 쿨다운은 `nextAttackAt` 필드로만
-관리한다. 실제로 연결할 때는 `creatureTick`과 같은 monotonic tick 소스(`deps.now`)를 읽어야 한다.
+관리한다. `deps.now`는 `creatureTick`과 같은 monotonic tick 소스를 읽어야 한다.
+
+### 프로덕션 연결 — `ws/liveWorldWiring.ts`
+
+`createLiveWorldWiring`이 `combatTick`을 1회 조립한다. 공격 핸들러와 **같은 인스턴스**를 공유하는 대상은
+전투 레지스트리(`combatRegistry`), 몬스터별 원장 라우터(`ledgers`), 사망 seam(`deathSeams`), 굴림 seam
+(`defaultCombatRng`), 시계(`bundle.now`)다. 원장이 갈리면 반격 피해가 오프너 처치 보상에서 빠지고, 레지스트리가
+갈리면 반격으로 깎인 hp가 공격 핸들러와 세션 종료에 보이지 않는다. 시전 seam은 `crtSpell`이고, 라운드 보고는
+라운드 통지기(`ws/combatRoundNotifier.ts`)가 받아 수신자별로 `combat:round`·`character:stats` 등을 보낸다
+(수신자 투영은 `ws/combatRoundProjection.ts`, 와이어 계약은 [transport-protocol.md](transport-protocol.md)).
+
+- **지연 바인딩 슬롯**: 조립한 핸들러는 `world/combatTickBinding.ts`의 슬롯에 `bindCombatTick`으로 1회
+  꽂혀 world runtime의 `onCombatTick`에 연결된다. boot가 슬롯을 1회 만들어 `onCombatTick`은 worldRuntime에,
+  `bind`는 wiring 묶음에 싣는다. 슬롯은 두 번째 `bind`에 throw한다. `bindCombatTick`이 없으면(단위 테스트·부분
+  조립) 핸들러를 만들지만 어디에도 꽂지 않아 몬스터가 반격하지 않는다.
+- **몬스터 단위 예외 격리**: 핸들러 래퍼가 tick 호출을 try/catch로 감싸 `{ err, creatureInstanceId, roomId }`를
+  로그로 남기고 삼킨다. `creatureTick`이 `onCombatTick`을 try/catch 없이 부르므로, 격리가 없으면 한 몬스터의
+  예외가 그 tick의 나머지 방·몬스터를 건너뛰게 한다. 사망 seam 도중 예외가 나면 그 몬스터의 상태 변경이 반쯤
+  적용된 채 남을 수 있다(롤백 없음).
+- **tick 범위 경험치 수집기**: 래퍼가 호출 시작에 수집기 `begin()`, `finally`에서 `end()`를 부른다. 수집기가 켜진
+  동안 사망 seam의 경험치 수령자 관찰자(`onCreatureDeathAwards`)가 기록하고, 통지기가 라운드 수신자 밖의
+  기여자에게도 `character:stats`를 보낸다. 오프너 처치 시점에는 꺼져 있어 오프너 처치의 통지는 공격 핸들러
+  반환이 맡는다.
+- **사망 seam(`firePlayerDeath`) 실처리**: `ws/assembleDeathSeams.ts`가 상태만 바꾸고 아무것도 전송하지 않는다.
+  순서는 (0) 부활 방(`DEFAULT_REVIVE_ROOM` 1008 또는 주입값)과 라이브 엔트리를 먼저 확인(실패하면 `logger.error`만
+  남기고 아무것도 바꾸지 않음), (1) 방 안 모든 몬스터의 `enemies`에서 사망자를 `removeEnemy`(오라클
+  `del_enm_crt`, 원장은 건드리지 않음), (2) `applyPlayerDeath`(경험치 손실·부활 방·hp/mp 풀회복), (3) 출발 방과
+  부활 방이 다르면 점유 이동과 `onRoomLeft`·`onRoomEntered` 훅, (4) 풀회복 값으로 **새** 전투상태 객체 등록
+  (인자 `dead`는 바꾸지 않아 이번 라운드 보고서의 시전 피해 산출과 반격 자격 판정이 옛 값을 본다), (5) 라이브
+  레지스트리 재등록과 `markCharacterDirty` 1회다. 장비 낙하와 사망 전체 방송은 옮기지 않았다.
 
 ### 개시 게이트(`initiateAttack` / pvp)
 
@@ -340,18 +400,22 @@ death ripple → 적대 등록을 차례로 묶은 것이다.
 | 소비 | stats-core `computeThaco`/`computeAc`/`bonusOf`/`proficDivisorOf`/`resolveHpMax` + 테이블 | 플레이어 파생 전투 스탯, hp 상한 |
 | 소비 | creature-spawn `CreatureInstance`·`nextAction` 케이던스·`activeSet` | 몬스터 operand, 틱 케이던스, 활성 집합 |
 | 채움 | creature-spawn `onCombatTick(creature, room)` | 몬스터 라운드 실행 |
-| 실행 | creature-spawn `onCreatureDeath`, 플레이어 사망 seam(#81) | HP<1을 감지하면 호출자(`combatTick`/`initiateAttack`)가 실행. 제거와 `distributeCreatureDeath` 접합은 #99 |
+| 실행 | creature-spawn `onCreatureDeath`, 플레이어 사망 seam(#81) | HP<1을 감지하면 호출자(`combatTick`/`initiateAttack`)가 실행. 프로덕션에서는 `ws/assembleDeathSeams.ts`가 몬스터 제거·`distributeCreatureDeath` 접합과 플레이어 사망 처리를 수행한다 |
 | 공유 | `resolveAttack.fireDeath`·`combatant.combatantHp`/`applyCombatantDamage` | [magic](magic.md) offensive 데미지가 재사용(auto-hit이라 hit path를 건너뛰고, 사망은 1회 실행). fire-free로 바꾼 뒤에도 seam 시그니처는 그대로 |
 | 제공 | `castSpell` seam([magic](magic.md)이 `crtSpell`로 소비) | 몬스터 시전 게이트 |
-| 제공 | `resolveSpecialAttack`·`resolvePlayerDot`·`distributeCreatureDeath`·`selectAggroTarget`/`dexEvades`·`decideFlee` | #99 라이브 조립이 소비할 순수 resolver와 마커 계약 |
+| 제공 | `resolveSpecialAttack`·`resolvePlayerDot`·`distributeCreatureDeath`·`selectAggroTarget`/`dexEvades`·`decideFlee` | `distributeCreatureDeath`는 라이브 사망 seam이 소비한다. 나머지는 순수 resolver와 마커 계약이며 라이브 소비처 조립은 후속이다 |
 
 ## 제약사항 / 범위 밖
 
-**#99(production boot 연결)로 미룬 것**:
-- MMAGIC 시전 seam은 채워졌다(magic). 하지만 다음은 이 토픽이 계산까지만 하고 연결하지 않는다: 특수공격
-  마커(status 부여, exp 차감, 장비용해), DoT 재생 xor 조립, aggro 실제 등록, flee 실제 이동 dispatch.
-- `distributeCreatureDeath`의 **exp 실제 누적은 #121이 연결했다**(`ws/assembleDeathSeams.ts`가 라이브
-  레지스트리에 반영). `alignmentDelta`는 아직 적용하지 않는다. 현재 `alignment` 값 범위가 `[0,2]`(#123)라
+**연결되지 않은 것(후속)**:
+- 몬스터 전투 tick과 사망 seam(몬스터·플레이어)은 production boot에 연결돼 있다(위 "프로덕션 연결").
+  MMAGIC 시전 seam도 채워졌다(magic). 하지만 다음은 계산까지만 하고 연결하지 않는다.
+  - 특수공격 마커의 status 부여, 플레이어 HP·MP 재생 펄스, DoT(`resolvePlayerDot`)와 재생의 xor 조립은
+    #189가 맡는다.
+  - 에너지드레인 exp 차감, aggro 실제 등록(`registerEnemy`)과 선공 타깃 선정 dispatch, flee 실제 이동
+    dispatch(PWIMPY/PFEARS)는 후속이다(flee는 이슈 번호 미정).
+- `distributeCreatureDeath`의 **exp 실제 누적은 연결돼 있다**(`ws/assembleDeathSeams.ts`가 라이브
+  레지스트리에 반영하며, 오프너 처치와 tick 처치가 같은 seam을 쓴다). `alignmentDelta`는 아직 적용하지 않는다. 현재 `alignment` 값 범위가 `[0,2]`(#123)라
   델타를 더하면 학습 게이트가 쓰는 1|2 인코딩이 깨진다. ±1000 클램프도 #123을 기다린다. `drops`를
   `room.items`에 push하는 일은 일부러 연결하지 않았다. 방 바닥 아이템을 주울 방법이 없어서(`objectOwnerSchema`에
   room owner 없음) 넣으면 못 줍는 아이템만 쌓인다.
@@ -359,13 +423,12 @@ death ripple → 적대 등록을 차례로 묶은 것이다.
   연결 코드가 `creatureLedgers.ts`(`Map<instanceId, DamageLedger>`)로 라우팅한다. `distributeCreatureDeath`는
   전달받은 ledger를 "이 죽은 몬스터에 한정된 데미지"로 믿는다. 이 전제는 그대로이며, 이제 호출자가 실제로
   지킨다. 타입 자체를 defender-scoped로 바꾸면 `enmity`, `resolveAttack`, `combatTick`까지 영향이 가므로
-  여전히 #99가 담당한다.
+  바꾸지 않았다. `combatTick`은 `ledgers.for(creature.instanceId)`로 라우팅한다.
 
   남은 갭: `discard`를 부르는 곳이 사망 경로 하나뿐이다. 그래서 공격받다가 **배회로 방을 떠난** 몬스터의
   원장은 회수되지 않는다(`instanceId`가 방별 monotonic이라 키를 재사용하지도 않아 Map이 계속 커진다). 사망이
   아닌 소멸을 알리는 seam이 없어 지금은 해결할 수 없고, **#147**이 담당한다.
-- 건강 펄스(health-pulse) xor를 어디서 조립할지(`resolvePlayerDot`과 progression 재생 provider를 누가
-  접합하는가)는 #99 또는 progression 슬롯 개정이 정한다.
+- 건강 펄스(health-pulse) xor(`resolvePlayerDot`과 progression 재생 provider의 접합)는 연결되지 않았다(#189).
 
 **Non-goal(다른 토픽 담당)**:
 - 장비 용해(MDISIT)와 명중 후 방어구 마모 → #86(착용 슬롯·내구도 substrate 없음).
@@ -404,8 +467,14 @@ death ripple → 적대 등록을 차례로 묶은 것이다.
 - **기여자 기준 divergence(오라클보다 좁음)**: 오라클 분배 루프의 게이트는 `find_who(ep->enemy)`다. 즉 그 자리에
   있는지(present)만 보고 데미지는 보지 않는다. 그래서 present인 0-데미지 적도 exp(버림 후 0), 성향 페널티,
   groupkill 카운트를 받는다. 이 포트는 기여자를 `damage > 0`으로 좁혀 그런 적을 뺀다. 즉 awards, groupkill,
-  alignment가 present 기준이 아니라 damage 기준으로 게이팅된다. 라이브 조립(#99)에서 이 기준을 present
-  기준으로 다시 검토할 수 있다.
+  alignment가 present 기준이 아니라 damage 기준으로 게이팅된다. 라이브 조립에서도 이 기준을 그대로 쓴다.
+  present 기준으로의 재검토는 열려 있다.
+- **플레이어 사망 뒤 원장에 사망자 항목이 남는다**: `firePlayerDeath`는 몬스터 `enemies`에서만 사망자를
+  빼고(`removeEnemy`) 데미지 원장은 건드리지 않는다. 오라클 `del_enm_crt`와 다르며, 같은 몬스터와 다시 교전하면
+  이전 교전의 누적 피해가 남아 처치 보상이 부풀 수 있다.
+- **플레이어 재생이 연결되지 않아 사망 취소 상태가 남는다**: 반격으로 몬스터가 죽어 사망이 취소된 플레이어는
+  HP<1인 채 생존하고, 문서에는 `applyVitals`가 0으로 맞춰 저장한다. 재생 펄스가 없어 이 상태는 재접속 뒤에도
+  남으며, 이후 표적이 된 라운드에서 근접이 명중해 사망 seam이 실행되는 경로 외에 해소 경로가 없다(#189).
 - **골드 드롭 표현**: 별도 room 필드 없이 골드를 `ItemInstance(value=금액)`로 만들어 `room.items[]`에
   떨어뜨린다(`RoomNode.items`의 실제 원소 타입은 `ObjectInstance`가 아니라 `ItemInstance`다). roomState
   스키마는 넓히지 않는다.
@@ -416,5 +485,5 @@ death ripple → 적대 등록을 차례로 묶은 것이다.
 ## 관련 문서
 
 - 오라클: `docs/notes/game-analysis-20260625/a5-combat.md` §5~7·§9
-- 의존 스펙: [stats-core.md](stats-core.md)(파생 thaco/AC·테이블·hp 상한) · [creature-spawn.md](creature-spawn.md)(활성 집합·`onCombatTick`/`onCreatureDeath` seam·`CreatureInstance`) · [persistence.md](persistence.md)(`characterSchema` 영속 필드·`statusEffects` v4) · [runtime-foundation.md](runtime-foundation.md)(1Hz `WorldClock`) · [progression.md](progression.md)(`applyPlayerDeath`·재생 슬롯 — DoT xor·사망 분배가 접합할 경계)
-- 후속: #99(전투/마법 tick production boot 연결 — ledger per-creature 라우팅·특수공격 실적용·DoT xor 조립·사망 분배 실누적·aggro/flee dispatch) · #86(아이템·장비 — 장비용해·마모 substrate) · #100(offensive spell_fail 연결) · [magic.md](magic.md)(마법 코어 — `castSpell`·`fireDeath` seam 소비)
+- 의존 스펙: [stats-core.md](stats-core.md)(파생 thaco/AC·테이블·hp 상한) · [creature-spawn.md](creature-spawn.md)(활성 집합·`onCombatTick`/`onCreatureDeath` seam·`CreatureInstance`) · [persistence.md](persistence.md)(`characterSchema` 영속 필드·`statusEffects` v4) · [runtime-foundation.md](runtime-foundation.md)(1Hz `WorldClock`) · [progression.md](progression.md)(`applyPlayerDeath`·재생 슬롯 — DoT xor가 접합할 경계)
+- 후속: #189(플레이어 재생·특수공격 상태 부여·DoT) · aggro/flee dispatch(이슈 번호 미정) · #186(방 관찰자 통지) · #86(아이템·장비 — 장비용해·마모 substrate) · #100(offensive spell_fail 연결) · [magic.md](magic.md)(마법 코어 — `castSpell`·`fireDeath` seam 소비)

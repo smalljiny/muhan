@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { CreatureInstance } from 'shared'
-import { registerEnemy, createDamageLedger, accumulateDamage } from './enmity.js'
+import { registerEnemy, removeEnemy, createDamageLedger, accumulateDamage } from './enmity.js'
 
 /**
  * enmity 단위 테스트 — 오라클 creature.c add_enm_crt(:70, dedup) / add_enm_dmg(:213, per-attacker
@@ -36,6 +36,28 @@ function makeCreature(overrides: Partial<CreatureInstance> = {}): CreatureInstan
     ...overrides,
   }
 }
+
+describe('removeEnemy', () => {
+  it('존재하는 characterId만 제거하고 다른 적의 순서는 유지한다(del_enm_crt)', () => {
+    const crt = makeCreature({ enemies: ['char-A', 'char-B', 'char-C'] })
+    removeEnemy(crt, 'char-B')
+    expect(crt.enemies).toEqual(['char-A', 'char-C'])
+  })
+
+  it('없는 characterId는 아무것도 바꾸지 않는다', () => {
+    const crt = makeCreature({ enemies: ['char-A'] })
+    removeEnemy(crt, 'char-Z')
+    expect(crt.enemies).toEqual(['char-A'])
+  })
+
+  it('enemies 배열을 in-place 변경한다(라이브 가변 참조 보존 — registerEnemy 대칭)', () => {
+    const crt = makeCreature({ enemies: ['char-A'] })
+    const ref = crt.enemies
+    removeEnemy(crt, 'char-A')
+    expect(crt.enemies).toBe(ref)
+    expect(ref).toEqual([])
+  })
+})
 
 describe('registerEnemy', () => {
   it('신규 attackerId를 enemies에 추가한다(add_enm_crt 신규 경로)', () => {
