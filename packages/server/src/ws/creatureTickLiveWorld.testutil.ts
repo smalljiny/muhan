@@ -143,6 +143,11 @@ export interface LiveWorldHarness {
   readonly markDirty: ReturnType<
     typeof vi.fn<(collection: string, id: string, snapshot: unknown) => void>
   >
+  /** 묶음 logger spy — 몬스터 단위 격리 로그를 단언한다. */
+  readonly logger: {
+    readonly warn: ReturnType<typeof vi.fn>
+    readonly error: ReturnType<typeof vi.fn>
+  }
   now(): number
   setNow(tick: number): void
   /** hydrate → place로 세션 진입을 재현한다. */
@@ -203,6 +208,7 @@ export function buildHarness(options: HarnessOptions): LiveWorldHarness {
   const liveRegistry = createLiveCharacterRegistry()
   const markDirty = vi.fn<(collection: string, id: string, snapshot: unknown) => void>()
   const send = vi.fn<(characterId: string, event: ServerEvent) => void>()
+  const logger = { warn: vi.fn(), error: vi.fn() }
   const bundle: LiveWorldWiringBundle = {
     worldGraph,
     liveRegistry,
@@ -220,7 +226,7 @@ export function buildHarness(options: HarnessOptions): LiveWorldHarness {
     onRoomEntered: worldRuntime.onRoomEntered,
     onRoomLeft: worldRuntime.onRoomLeft,
     bindCombatTick: (handler) => combatTickBinding.bind(handler),
-    logger: { warn: vi.fn(), error: vi.fn() },
+    logger,
   }
   const wiring = createLiveWorldWiring(bundle, { sendToCharacter: send })
   const slot = creatureTickSlot(worldRuntime)
@@ -232,6 +238,7 @@ export function buildHarness(options: HarnessOptions): LiveWorldHarness {
     revive,
     send,
     markDirty,
+    logger,
     now,
     setNow: (tick) => {
       clock = tick

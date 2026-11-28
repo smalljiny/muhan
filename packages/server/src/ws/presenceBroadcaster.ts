@@ -92,7 +92,7 @@ export type SafeLogError = (fields: Record<string, unknown>, msg: string) => voi
 
 /**
  * 로깅 자체의 실패도 호출자로 새지 않게 삼키는 error 로거를 만든다. "절대 던지지 않는다" 계약을 진
- * 전송 경로(presence 방송기·라운드 통지기)가 공유한다.
+ * 전송 경로(presence 방송기·라운드 통지기)와 전투 tick 래퍼(몬스터 단위 격리 로그)가 공유한다.
  */
 export function safeLogError(logger: PresenceBroadcasterLogger): SafeLogError {
   return (fields, msg) => {

@@ -610,7 +610,7 @@ describe('createLiveWorldWiring — 몬스터 전투 tick 조립', () => {
     )
   })
 
-  it('combatTick이 throw해도 래퍼가 finally로 수집기를 끈다(다음 begin() 이전 시점)', () => {
+  it('combatTick이 throw하면 래퍼가 몬스터 단위로 격리해 로그만 남기고, finally로 수집기를 끈다', () => {
     let nowThrows = false
     const now = (): number => {
       if (nowThrows) throw new Error('시계 실패')
@@ -622,8 +622,21 @@ describe('createLiveWorldWiring — 몬스터 전투 tick 조립', () => {
     if (collector === undefined) throw new Error('수집기 미생성')
 
     nowThrows = true
-    expect(() => handler(creature, room)).toThrow('시계 실패')
+    // 예외가 creatureTick으로 새면 그 tick의 나머지 방·몬스터 처리가 끊긴다 — 래퍼가 삼켜야 한다.
+    expect(() => handler(creature, room)).not.toThrow()
     nowThrows = false
+
+    // 어느 몬스터가 실패했는지 남는다(WorldClock 슬롯 catch는 slot 이름만 남긴다).
+    const logError = vi.mocked(h.bundle.logger.error)
+    expect(logError).toHaveBeenCalledTimes(1)
+    expect(logError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        err: new Error('시계 실패'),
+        creatureInstanceId: creature.instanceId,
+        roomId: room.roomId,
+      }),
+      expect.any(String),
+    )
 
     // 다음 tick(begin()) 없이 오프너 경로로 사망 관찰자를 실행한다. 수집기가 켜진 채 남았다면 기록된다.
     accumulateDamage(wiring.attackDeps.ledgers.for(creature.instanceId), 'char-1', 10)
@@ -631,6 +644,25 @@ describe('createLiveWorldWiring — 몬스터 전투 tick 조립', () => {
 
     expect(h.liveRegistry.get('char-1')?.character.experience).toBeGreaterThan(0)
     expect(collector.current().size).toBe(0)
+  })
+
+  it('로거 자체가 throw해도 핸들러는 throw하지 않는다', () => {
+    let nowThrows = false
+    const now = (): number => {
+      if (nowThrows) throw new Error('시계 실패')
+      return NOW_TICK
+    }
+    const logger = {
+      warn: vi.fn(),
+      error: vi.fn(() => {
+        throw new Error('로거 실패')
+      }),
+    }
+    const { handler, room, creature } = setup(makeTarget(), { now, logger })
+
+    nowThrows = true
+    expect(() => handler(creature, room)).not.toThrow()
+    expect(logger.error).toHaveBeenCalledTimes(1)
   })
 
   it('라운드 결과가 transport.sendToCharacter로 combat:round를 보낸다', () => {

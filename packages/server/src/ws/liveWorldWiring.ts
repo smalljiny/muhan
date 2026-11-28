@@ -32,7 +32,7 @@ import type { MoveHandlerDeps } from './handlers/move.js'
 import type { TrainHandlerDeps } from './handlers/train.js'
 import type { StudyHandlerDeps } from './handlers/study.js'
 import { createRoomChannelAdapter } from './roomChannelAdapter.js'
-import { createPresenceBroadcaster } from './presenceBroadcaster.js'
+import { createPresenceBroadcaster, safeLogError } from './presenceBroadcaster.js'
 import { createLiveSessionLifecycleAdapter } from './liveSessionLifecycleAdapter.js'
 import { assembleDeathSeams, type DeathSeams } from './assembleDeathSeams.js'
 import { createTickAwardCollector, type TickAwardCollector } from './tickAwardCollector.js'
@@ -500,7 +500,13 @@ interface CombatTickParts {
  * 공격 핸들러와 같은 레지스트리·원장 라우터·사망 seam·굴림 seam·시계로 combatTick을 만들고, 라운드 보고는
  * 통지기로 보낸다. 핸들러는 수집기 래퍼로 감싼다 — 호출 시작에 `begin()`, `finally`에서 `end()`라 tick이
  * throw해도 수집기가 켜진 채 남지 않는다(남으면 다음 오프너 처치의 수령자가 다음 tick 통지에 섞인다).
- * 예외는 삼키지 않고 그대로 올린다(WorldClock 슬롯 격리가 담당).
+ *
+ * 예외는 **몬스터 단위로 격리**한다 — 래퍼가 잡아 `{ err, creatureInstanceId, roomId }`를 로그로 남기고
+ * 삼킨다. creatureTick은 `onCombatTick`을 try/catch 없이 부르므로, 올리면 한 몬스터의 예외가 그 tick의
+ * 나머지 방·몬스터(autonomic·전투) 전체를 건너뛰게 하고 WorldClock 슬롯 catch는 어느 몬스터인지 남기지
+ * 않는다. 로깅 자체의 실패도 `safeLogError`가 삼킨다.
+ *
+ * 한계: 사망 seam 도중 throw하면 그 몬스터의 상태 변경이 반쯤 적용된 채 남을 수 있다(롤백 없음 — 이번 범위 밖).
  */
 function assembleAndBindCombatTick(bundle: LiveWorldWiringBundle, parts: CombatTickParts): void {
   const tick = createCombatTick({
@@ -514,10 +520,16 @@ function assembleAndBindCombatTick(bundle: LiveWorldWiringBundle, parts: CombatT
     onRoundResolved: createCombatRoundNotifier(parts.notifierDeps),
   })
   const collector = parts.awardCollector
+  const logError = safeLogError(bundle.logger)
   const handler: OnCombatTick = (creature, room) => {
     collector.begin()
     try {
       tick(creature, room)
+    } catch (err) {
+      logError(
+        { err, creatureInstanceId: creature.instanceId, roomId: room.roomId },
+        '몬스터 전투 tick 실패 — 이 몬스터만 건너뛴다',
+      )
     } finally {
       collector.end()
     }

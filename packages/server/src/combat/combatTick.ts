@@ -168,8 +168,10 @@ export interface CombatTickDeps {
   readonly castSpell?: CastSpellSeam
   /**
    * 라운드 보고 seam(옵셔널) — 몬스터가 행동한 라운드마다 모든 상태 변경 뒤 1회 호출된다.
-   * 미주입이어도 라운드 진행(D7 포함)은 같다. 콜백은 throw하지 않아야 한다 — creatureTick이 try/catch
-   * 없이 호출하므로 예외가 그 틱의 나머지 몬스터 처리를 끊는다(전송 실패는 콜백 안에서 격리한다).
+   * 미주입이어도 라운드 진행(D7 포함)은 같다. 콜백은 throw하지 않아야 한다(계약 — 전송 실패는 콜백 안에서
+   * 격리한다). creatureTick은 try/catch 없이 호출하지만 프로덕션 조립(`liveWorldWiring`의 전투 tick 래퍼)이
+   * 몬스터 단위로 잡아 로그를 남기므로, 계약 위반은 그 몬스터의 라운드만 끊고 나머지 몬스터는 진행한다.
+   * 다만 콜백은 모든 상태 변경 뒤에 불리므로 그때의 예외는 통지 누락으로만 나타난다.
    */
   readonly onRoundResolved?: (report: CombatRoundReport) => void
 }
