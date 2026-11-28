@@ -184,7 +184,7 @@ fan-out 대상 결정은 `createRoomChannelAdapter`(발화자 현재 방의 occu
 - **스폰 정책 미완결** — orphan `currentRoom`은 `DEFAULT_START_ROOM = 1` 단일 폴백으로만 방어한다. 레벨·종족·소속별 시작지 정책은 별도다.
 - **채널 fan-out에 가시성 필터 없음** — 방 채널 fan-out은 occupants 전 멤버 대상이며 발화자 자신도 제외하지 않는다. PINVIS·어둠·투명 필터는 E5가 담당한다. (방 **표시**의 가시성 필터는 E11에서 별도로 들어왔다 — [`movement-rooms.md`](movement-rooms.md) §방 표시 가시성 필터. 두 필터는 다른 관심사다.)
 - **broadcast·yell 채널 미분화** — 실 방 어댑터가 붙었으므로 `broadcast`·`yell`도 방 단위로만 전달된다(전서버 방송·1홉 인접 전파 아님). 전역 fan-out과 `minLevel` 게이트 강제는 소셜·채널 에픽(#37)이 함께 담당한다.
-- **몬스터 측 live-ization은 전투 tick까지다** — 몬스터 전투 tick은 boot에 연결됐다(위 §몬스터 전투 tick 조립). 플레이어 HP·MP 재생 펄스·특수공격 상태·DoT 배선은 연결되지 않았다(후속 #189).
+- **몬스터 측 live-ization은 전투 tick까지다** — 몬스터 전투 tick은 boot에 연결됐다(위 §몬스터 전투 tick 조립). 플레이어 HP·MP 재생 펄스·특수공격 상태·DoT 연결은 연결되지 않았다(후속 #189).
 
 ## 관련 문서
 
